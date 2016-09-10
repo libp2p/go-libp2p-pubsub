@@ -1,11 +1,10 @@
-package dumbsub
+package floodsub
 
 import (
 	"context"
-	"fmt"
 
-	ma "github.com/jbenet/go-multiaddr"
-	inet "github.com/libp2p/go-libp2p/p2p/net"
+	ma "gx/ipfs/QmYzDkkgAEmrcNzFCiYo6L1dTX4EAG1gZkbtdbd9trL4vd/go-multiaddr"
+	inet "gx/ipfs/Qmf4ETeAWXuThBfWwonVyFqGFSgTWepUDEr1txcctvpTXS/go-libp2p/p2p/net"
 )
 
 var _ inet.Notifiee = (*PubSub)(nil)
@@ -19,7 +18,6 @@ func (p *PubSub) ClosedStream(n inet.Network, s inet.Stream) {
 }
 
 func (p *PubSub) Connected(n inet.Network, c inet.Conn) {
-	fmt.Printf("got connection! %s -> %s\n", c.LocalPeer(), c.RemotePeer())
 	s, err := p.host.NewStream(context.Background(), c.RemotePeer(), ID)
 	if err != nil {
 		log.Error("opening new stream to peer: ", err)

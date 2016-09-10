@@ -1,4 +1,4 @@
-package dumbsub
+package floodsub
 
 import (
 	"bytes"
@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	host "github.com/libp2p/go-libp2p/p2p/host"
-	netutil "github.com/libp2p/go-libp2p/p2p/test/util"
+	host "gx/ipfs/Qmf4ETeAWXuThBfWwonVyFqGFSgTWepUDEr1txcctvpTXS/go-libp2p/p2p/host"
+	netutil "gx/ipfs/Qmf4ETeAWXuThBfWwonVyFqGFSgTWepUDEr1txcctvpTXS/go-libp2p/p2p/test/util"
 )
 
 func getNetHosts(t *testing.T, n int) []host.Host {
@@ -43,12 +43,12 @@ func connectAll(t *testing.T, hosts []host.Host) {
 	}
 }
 
-func TestBasicDumbsub(t *testing.T) {
-	hosts := getNetHosts(t, 10)
+func TestBasicFloodsub(t *testing.T) {
+	hosts := getNetHosts(t, 20)
 
 	var psubs []*PubSub
 	for _, h := range hosts {
-		psubs = append(psubs, NewDumbSub(h))
+		psubs = append(psubs, NewFloodSub(h))
 	}
 
 	var msgs []<-chan *Message
