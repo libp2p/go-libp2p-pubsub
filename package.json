@@ -12,11 +12,17 @@
       "hash": "Qmf4ETeAWXuThBfWwonVyFqGFSgTWepUDEr1txcctvpTXS",
       "name": "go-libp2p",
       "version": "3.4.1"
+    },
+    {
+      "author": "whyrusleeping",
+      "hash": "QmZ4Qi3GaRbjcx28Sme5eMH7RQjGkt8wHxt2a65oLaeFEV",
+      "name": "gogo-protobuf",
+      "version": "0.0.0"
     }
   ],
   "gxVersion": "0.9.0",
   "language": "go",
   "license": "",
   "name": "floodsub",
-  "version": "0.1.0"
+  "version": "0.2.0"
 }

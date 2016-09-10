@@ -1,23 +1,21 @@
 package floodsub
 
 import (
+	"bufio"
 	"fmt"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	pb "github.com/whyrusleeping/go-floodsub/pb"
 
 	ggio "github.com/gogo/protobuf/io"
 	proto "github.com/gogo/protobuf/proto"
-	logging "gx/ipfs/QmSpJByNKFX1sCsHBEp3R73FL4NF6FnQTEGyNAXHm2GS52/go-log"
-	peer "gx/ipfs/QmWtbQU15LaB5B1JC2F7TV9P4K88vD3PpA4AJrwfCjhML8/go-libp2p-peer"
-	host "gx/ipfs/Qmf4ETeAWXuThBfWwonVyFqGFSgTWepUDEr1txcctvpTXS/go-libp2p/p2p/host"
-	inet "gx/ipfs/Qmf4ETeAWXuThBfWwonVyFqGFSgTWepUDEr1txcctvpTXS/go-libp2p/p2p/net"
-	protocol "gx/ipfs/Qmf4ETeAWXuThBfWwonVyFqGFSgTWepUDEr1txcctvpTXS/go-libp2p/p2p/protocol"
+	peer "github.com/ipfs/go-libp2p-peer"
+	logging "github.com/ipfs/go-log"
+	host "github.com/libp2p/go-libp2p/p2p/host"
+	inet "github.com/libp2p/go-libp2p/p2p/net"
+	protocol "github.com/libp2p/go-libp2p/p2p/protocol"
 )
-
-var messageCount uint64
 
 const ID = protocol.ID("/floodsub/1.0.0")
 
@@ -113,16 +111,24 @@ func (p *PubSub) handleNewStream(s inet.Stream) {
 
 func (p *PubSub) handleSendingMessages(s inet.Stream, in <-chan *RPC) {
 	var dead bool
-	wc := ggio.NewDelimitedWriter(s)
+	bufw := bufio.NewWriter(s)
+	wc := ggio.NewDelimitedWriter(bufw)
 	defer wc.Close()
 	for rpc := range in {
 		if dead {
 			continue
 		}
 
-		atomic.AddUint64(&messageCount, 1)
-
 		err := wc.WriteMsg(&rpc.RPC)
+		if err != nil {
+			log.Errorf("writing message to %s: %s", s.Conn().RemotePeer(), err)
+			dead = true
+			go func() {
+				p.peerDead <- s.Conn().RemotePeer()
+			}()
+		}
+
+		err = bufw.Flush()
 		if err != nil {
 			log.Errorf("writing message to %s: %s", s.Conn().RemotePeer(), err)
 			dead = true

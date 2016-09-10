@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	host "gx/ipfs/Qmf4ETeAWXuThBfWwonVyFqGFSgTWepUDEr1txcctvpTXS/go-libp2p/p2p/host"
-	netutil "gx/ipfs/Qmf4ETeAWXuThBfWwonVyFqGFSgTWepUDEr1txcctvpTXS/go-libp2p/p2p/test/util"
+	host "github.com/libp2p/go-libp2p/p2p/host"
+	netutil "github.com/libp2p/go-libp2p/p2p/test/util"
 )
 
 func getNetHosts(t *testing.T, n int) []host.Host {
@@ -94,6 +94,4 @@ func TestBasicFloodsub(t *testing.T) {
 			}
 		}
 	}
-
-	fmt.Println("Total Sent Messages: ", messageCount)
 }
