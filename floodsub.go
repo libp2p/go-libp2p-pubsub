@@ -2,7 +2,9 @@ package floodsub
 
 import (
 	"bufio"
+	"context"
 	"fmt"
+	"io"
 	"sync"
 	"time"
 
@@ -43,6 +45,8 @@ type PubSub struct {
 	lastMsg map[peer.ID]uint64
 
 	addSub chan *addSub
+
+	ctx context.Context
 }
 
 type Message struct {
@@ -60,9 +64,10 @@ type RPC struct {
 	from peer.ID
 }
 
-func NewFloodSub(h host.Host) *PubSub {
+func NewFloodSub(ctx context.Context, h host.Host) *PubSub {
 	ps := &PubSub{
 		host:     h,
+		ctx:      ctx,
 		incoming: make(chan *RPC, 32),
 		outgoing: make(chan *RPC),
 		newPeers: make(chan inet.Stream),
@@ -77,7 +82,7 @@ func NewFloodSub(h host.Host) *PubSub {
 	h.SetStreamHandler(ID, ps.handleNewStream)
 	h.Network().Notify(ps)
 
-	go ps.processLoop()
+	go ps.processLoop(ctx)
 
 	return ps
 }
@@ -99,47 +104,63 @@ func (p *PubSub) handleNewStream(s inet.Stream) {
 		rpc := new(RPC)
 		err := r.ReadMsg(&rpc.RPC)
 		if err != nil {
-			log.Errorf("error reading rpc from %s: %s", s.Conn().RemotePeer(), err)
-			// TODO: cleanup of some sort
+			if err != io.EOF {
+				log.Errorf("error reading rpc from %s: %s", s.Conn().RemotePeer(), err)
+			}
 			return
 		}
 
 		rpc.from = s.Conn().RemotePeer()
-		p.incoming <- rpc
+		select {
+		case p.incoming <- rpc:
+		case <-p.ctx.Done():
+			return
+		}
 	}
 }
 
-func (p *PubSub) handleSendingMessages(s inet.Stream, in <-chan *RPC) {
+func (p *PubSub) handleSendingMessages(ctx context.Context, s inet.Stream, in <-chan *RPC) {
 	var dead bool
 	bufw := bufio.NewWriter(s)
 	wc := ggio.NewDelimitedWriter(bufw)
+
+	writeMsg := func(msg proto.Message) error {
+		err := wc.WriteMsg(msg)
+		if err != nil {
+			return err
+		}
+
+		return bufw.Flush()
+	}
+
 	defer wc.Close()
-	for rpc := range in {
-		if dead {
-			continue
-		}
+	for {
+		select {
+		case rpc, ok := <-in:
+			if !ok {
+				return
+			}
+			if dead {
+				// continue in order to drain messages
+				continue
+			}
 
-		err := wc.WriteMsg(&rpc.RPC)
-		if err != nil {
-			log.Errorf("writing message to %s: %s", s.Conn().RemotePeer(), err)
-			dead = true
-			go func() {
-				p.peerDead <- s.Conn().RemotePeer()
-			}()
-		}
+			err := writeMsg(&rpc.RPC)
+			if err != nil {
+				log.Errorf("writing message to %s: %s", s.Conn().RemotePeer(), err)
+				dead = true
+				go func() {
+					p.peerDead <- s.Conn().RemotePeer()
+				}()
+			}
 
-		err = bufw.Flush()
-		if err != nil {
-			log.Errorf("writing message to %s: %s", s.Conn().RemotePeer(), err)
-			dead = true
-			go func() {
-				p.peerDead <- s.Conn().RemotePeer()
-			}()
+		case <-ctx.Done():
+			return
 		}
 	}
 }
 
-func (p *PubSub) processLoop() {
+func (p *PubSub) processLoop(ctx context.Context) {
 
 	for {
 		select {
@@ -153,12 +174,11 @@ func (p *PubSub) processLoop() {
 			}
 
 			messages := make(chan *RPC, 32)
-			go p.handleSendingMessages(s, messages)
+			go p.handleSendingMessages(ctx, s, messages)
 			messages <- p.getHelloPacket()
 
 			p.peers[pid] = messages
 
-			fmt.Println("added peer: ", pid)
 		case pid := <-p.peerDead:
 			delete(p.peers, pid)
 		case sub := <-p.addSub:
@@ -186,6 +206,9 @@ func (p *PubSub) processLoop() {
 					log.Error("publishing message: ", err)
 				}
 			}
+		case <-ctx.Done():
+			log.Info("pubsub processloop shutting down")
+			return
 		}
 	}
 }
