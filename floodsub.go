@@ -2,6 +2,7 @@ package floodsub
 
 import (
 	"bufio"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"sync"
@@ -51,7 +52,7 @@ type Message struct {
 
 func (m *Message) MarshalJSON() ([]byte, error) {
 	return json.Marshal(map[string]interface{}{
-		"from":      m.From.Pretty(),
+		"from":      base64.RawStdEncoding.EncodeToString([]byte(m.From)),
 		"data":      m.Data,
 		"timestamp": m.Timestamp,
 		"topic":     m.Topic,
@@ -70,14 +71,15 @@ func (m *Message) UnmarshalJSON(data []byte) error {
 		return err
 	}
 
-	m.Data = mp.Data
-	m.Timestamp = mp.Timestamp
-	m.Topic = mp.Topic
-	from, err := peer.IDB58Decode(mp.From)
+	pid, err := base64.RawStdEncoding.DecodeString(mp.From)
 	if err != nil {
 		return err
 	}
-	m.From = from
+
+	m.Data = mp.Data
+	m.Timestamp = mp.Timestamp
+	m.Topic = mp.Topic
+	m.From = peer.ID(pid)
 	return nil
 }
 
