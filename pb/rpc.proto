@@ -1,0 +1,20 @@
+package floodsub.pb;
+
+message RPC {
+	optional string type = 1;
+
+	repeated string topics = 2;
+
+	optional Message msg = 3;
+}
+
+message Message {
+	optional string from = 1;
+
+	optional bytes data = 2;
+
+	optional uint64 seqno = 3;
+
+	optional string topic = 4;
+}
+

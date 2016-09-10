@@ -1,23 +1,27 @@
 package floodsub
 
 import (
-	"bufio"
-	"encoding/base64"
-	"encoding/json"
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"time"
 
-	peer "github.com/ipfs/go-libp2p-peer"
-	logging "github.com/ipfs/go-log"
-	host "github.com/libp2p/go-libp2p/p2p/host"
-	inet "github.com/libp2p/go-libp2p/p2p/net"
-	protocol "github.com/libp2p/go-libp2p/p2p/protocol"
+	pb "github.com/whyrusleeping/go-floodsub/pb"
+
+	ggio "github.com/gogo/protobuf/io"
+	proto "github.com/gogo/protobuf/proto"
+	logging "gx/ipfs/QmSpJByNKFX1sCsHBEp3R73FL4NF6FnQTEGyNAXHm2GS52/go-log"
+	peer "gx/ipfs/QmWtbQU15LaB5B1JC2F7TV9P4K88vD3PpA4AJrwfCjhML8/go-libp2p-peer"
+	host "gx/ipfs/Qmf4ETeAWXuThBfWwonVyFqGFSgTWepUDEr1txcctvpTXS/go-libp2p/p2p/host"
+	inet "gx/ipfs/Qmf4ETeAWXuThBfWwonVyFqGFSgTWepUDEr1txcctvpTXS/go-libp2p/p2p/net"
+	protocol "gx/ipfs/Qmf4ETeAWXuThBfWwonVyFqGFSgTWepUDEr1txcctvpTXS/go-libp2p/p2p/protocol"
 )
+
+var messageCount uint64
 
 const ID = protocol.ID("/floodsub/1.0.0")
 
-const (
+var (
 	AddSubMessageType = "sub"
 	UnsubMessageType  = "unsub"
 	PubMessageType    = "pub"
@@ -44,49 +48,15 @@ type PubSub struct {
 }
 
 type Message struct {
-	From      peer.ID
-	Data      []byte
-	Timestamp uint64
-	Topic     string
+	*pb.Message
 }
 
-func (m *Message) MarshalJSON() ([]byte, error) {
-	return json.Marshal(map[string]interface{}{
-		"from":      base64.RawStdEncoding.EncodeToString([]byte(m.From)),
-		"data":      m.Data,
-		"timestamp": m.Timestamp,
-		"topic":     m.Topic,
-	})
-}
-
-func (m *Message) UnmarshalJSON(data []byte) error {
-	mp := struct {
-		Data      []byte
-		Timestamp uint64
-		Topic     string
-		From      string
-	}{}
-	err := json.Unmarshal(data, &mp)
-	if err != nil {
-		return err
-	}
-
-	pid, err := base64.RawStdEncoding.DecodeString(mp.From)
-	if err != nil {
-		return err
-	}
-
-	m.Data = mp.Data
-	m.Timestamp = mp.Timestamp
-	m.Topic = mp.Topic
-	m.From = peer.ID(pid)
-	return nil
+func (m *Message) GetFrom() peer.ID {
+	return peer.ID(m.Message.GetFrom())
 }
 
 type RPC struct {
-	Type   string
-	Msg    *Message
-	Topics []string
+	pb.RPC
 
 	// unexported on purpose, not sending this over the wire
 	from peer.ID
@@ -98,16 +68,15 @@ func NewFloodSub(h host.Host) *PubSub {
 		incoming: make(chan *RPC, 32),
 		outgoing: make(chan *RPC),
 		newPeers: make(chan inet.Stream),
+		peerDead: make(chan peer.ID),
+		addSub:   make(chan *addSub),
 		myTopics: make(map[string]chan *Message),
 		topics:   make(map[string]map[peer.ID]struct{}),
 		peers:    make(map[peer.ID]chan *RPC),
 		lastMsg:  make(map[peer.ID]uint64),
-		peerDead: make(chan peer.ID),
-		addSub:   make(chan *addSub),
 	}
 
 	h.SetStreamHandler(ID, ps.handleNewStream)
-
 	h.Network().Notify(ps)
 
 	go ps.processLoop()
@@ -120,21 +89,19 @@ func (p *PubSub) getHelloPacket() *RPC {
 	for t, _ := range p.myTopics {
 		rpc.Topics = append(rpc.Topics, t)
 	}
-	rpc.Type = AddSubMessageType
+	rpc.Type = &AddSubMessageType
 	return &rpc
 }
 
 func (p *PubSub) handleNewStream(s inet.Stream) {
 	defer s.Close()
 
-	scan := bufio.NewScanner(s)
-	for scan.Scan() {
+	r := ggio.NewDelimitedReader(s, 1<<20)
+	for {
 		rpc := new(RPC)
-
-		err := json.Unmarshal(scan.Bytes(), rpc)
+		err := r.ReadMsg(&rpc.RPC)
 		if err != nil {
 			log.Errorf("error reading rpc from %s: %s", s.Conn().RemotePeer(), err)
-			log.Error("data: ", scan.Text())
 			// TODO: cleanup of some sort
 			return
 		}
@@ -146,12 +113,16 @@ func (p *PubSub) handleNewStream(s inet.Stream) {
 
 func (p *PubSub) handleSendingMessages(s inet.Stream, in <-chan *RPC) {
 	var dead bool
+	wc := ggio.NewDelimitedWriter(s)
+	defer wc.Close()
 	for rpc := range in {
 		if dead {
 			continue
 		}
 
-		err := writeRPC(s, rpc)
+		atomic.AddUint64(&messageCount, 1)
+
+		err := wc.WriteMsg(&rpc.RPC)
 		if err != nil {
 			log.Errorf("writing message to %s: %s", s.Conn().RemotePeer(), err)
 			dead = true
@@ -192,7 +163,7 @@ func (p *PubSub) processLoop() {
 				log.Error("handling RPC: ", err)
 			}
 		case rpc := <-p.outgoing:
-			switch rpc.Type {
+			switch rpc.GetType() {
 			case AddSubMessageType, UnsubMessageType:
 				for _, mch := range p.peers {
 					mch <- rpc
@@ -215,7 +186,9 @@ func (p *PubSub) processLoop() {
 func (p *PubSub) handleSubscriptionChange(sub *addSub) {
 	ch, ok := p.myTopics[sub.topic]
 	out := &RPC{
-		Topics: []string{sub.topic},
+		RPC: pb.RPC{
+			Topics: []string{sub.topic},
+		},
 	}
 
 	if sub.cancel {
@@ -225,7 +198,7 @@ func (p *PubSub) handleSubscriptionChange(sub *addSub) {
 
 		close(ch)
 		delete(p.myTopics, sub.topic)
-		out.Type = UnsubMessageType
+		out.Type = &UnsubMessageType
 	} else {
 		if ok {
 			// we don't allow multiple subs per topic at this point
@@ -236,7 +209,7 @@ func (p *PubSub) handleSubscriptionChange(sub *addSub) {
 		resp := make(chan *Message, 16)
 		p.myTopics[sub.topic] = resp
 		sub.resp <- resp
-		out.Type = AddSubMessageType
+		out.Type = &AddSubMessageType
 	}
 
 	go func() {
@@ -245,16 +218,16 @@ func (p *PubSub) handleSubscriptionChange(sub *addSub) {
 }
 
 func (p *PubSub) recvMessage(rpc *RPC) error {
-	subch, ok := p.myTopics[rpc.Msg.Topic]
+	subch, ok := p.myTopics[rpc.Msg.GetTopic()]
 	if ok {
 		//fmt.Println("writing out to subscriber!")
-		subch <- rpc.Msg
+		subch <- &Message{rpc.Msg}
 	}
 	return nil
 }
 
 func (p *PubSub) handleIncomingRPC(rpc *RPC) error {
-	switch rpc.Type {
+	switch rpc.GetType() {
 	case AddSubMessageType:
 		for _, t := range rpc.Topics {
 			tmap, ok := p.topics[t]
@@ -278,19 +251,22 @@ func (p *PubSub) handleIncomingRPC(rpc *RPC) error {
 			return fmt.Errorf("nil pub message")
 		}
 
+		msg := &Message{rpc.Msg}
+
 		// Note: Obviously this is an incredibly insecure way of
 		// filtering out "messages we've already seen". But it works for a
 		// cool demo, so i'm not gonna waste time thinking about it any more
-		if p.lastMsg[rpc.Msg.From] >= rpc.Msg.Timestamp {
+		if p.lastMsg[msg.GetFrom()] >= msg.GetSeqno() {
 			//log.Error("skipping 'old' message")
 			return nil
 		}
 
-		if rpc.Msg.From == p.host.ID() {
+		if msg.GetFrom() == p.host.ID() {
+			log.Error("skipping message from self")
 			return nil
 		}
 
-		p.lastMsg[rpc.Msg.From] = rpc.Msg.Timestamp
+		p.lastMsg[msg.GetFrom()] = msg.GetSeqno()
 
 		if err := p.recvMessage(rpc); err != nil {
 			log.Error("error receiving message: ", err)
@@ -305,13 +281,13 @@ func (p *PubSub) handleIncomingRPC(rpc *RPC) error {
 }
 
 func (p *PubSub) publishMessage(rpc *RPC) error {
-	tmap, ok := p.topics[rpc.Msg.Topic]
+	tmap, ok := p.topics[rpc.Msg.GetTopic()]
 	if !ok {
 		return nil
 	}
 
 	for pid, _ := range tmap {
-		if pid == rpc.from || pid == rpc.Msg.From {
+		if pid == rpc.from || pid == peer.ID(rpc.Msg.GetFrom()) {
 			continue
 		}
 
@@ -355,25 +331,17 @@ func (p *PubSub) Unsub(topic string) {
 }
 
 func (p *PubSub) Publish(topic string, data []byte) error {
+	seqno := uint64(time.Now().UnixNano())
 	p.outgoing <- &RPC{
-		Msg: &Message{
-			Data:      data,
-			Topic:     topic,
-			From:      p.host.ID(),
-			Timestamp: uint64(time.Now().UnixNano()),
+		RPC: pb.RPC{
+			Msg: &pb.Message{
+				Data:  data,
+				Topic: &topic,
+				From:  proto.String(string(p.host.ID())),
+				Seqno: &seqno,
+			},
+			Type: &PubMessageType,
 		},
-		Type: PubMessageType,
 	}
 	return nil
-}
-
-func writeRPC(s inet.Stream, rpc *RPC) error {
-	data, err := json.Marshal(rpc)
-	if err != nil {
-		return err
-	}
-
-	data = append(data, '\n')
-	_, err = s.Write(data)
-	return err
 }
