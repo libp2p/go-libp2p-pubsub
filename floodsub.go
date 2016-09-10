@@ -8,11 +8,11 @@ import (
 	"sync"
 	"time"
 
-	logging "gx/ipfs/QmSpJByNKFX1sCsHBEp3R73FL4NF6FnQTEGyNAXHm2GS52/go-log"
-	peer "gx/ipfs/QmWtbQU15LaB5B1JC2F7TV9P4K88vD3PpA4AJrwfCjhML8/go-libp2p-peer"
-	host "gx/ipfs/Qmf4ETeAWXuThBfWwonVyFqGFSgTWepUDEr1txcctvpTXS/go-libp2p/p2p/host"
-	inet "gx/ipfs/Qmf4ETeAWXuThBfWwonVyFqGFSgTWepUDEr1txcctvpTXS/go-libp2p/p2p/net"
-	protocol "gx/ipfs/Qmf4ETeAWXuThBfWwonVyFqGFSgTWepUDEr1txcctvpTXS/go-libp2p/p2p/protocol"
+	peer "github.com/ipfs/go-libp2p-peer"
+	logging "github.com/ipfs/go-log"
+	host "github.com/libp2p/go-libp2p/p2p/host"
+	inet "github.com/libp2p/go-libp2p/p2p/net"
+	protocol "github.com/libp2p/go-libp2p/p2p/protocol"
 )
 
 const ID = protocol.ID("/floodsub/1.0.0")
