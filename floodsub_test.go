@@ -207,3 +207,28 @@ func assertReceive(t *testing.T, ch <-chan *Message, exp []byte) {
 		t.Fatal("timed out waiting for message of: ", exp)
 	}
 }
+
+func TestNoConnection(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	hosts := getNetHosts(t, ctx, 10)
+
+	psubs := getPubsubs(ctx, hosts)
+
+	ch, err := psubs[5].Subscribe("foobar")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = psubs[0].Publish("foobar", []byte("TESTING"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	select {
+	case <-ch:
+		t.Fatal("shouldnt have gotten a message")
+	case <-time.After(time.Millisecond * 200):
+	}
+}
