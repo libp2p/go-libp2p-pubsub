@@ -3,6 +3,7 @@ package floodsub
 import (
 	"bufio"
 	"context"
+	"encoding/binary"
 	"fmt"
 	"io"
 	"sync"
@@ -17,6 +18,7 @@ import (
 	host "github.com/libp2p/go-libp2p/p2p/host"
 	inet "github.com/libp2p/go-libp2p/p2p/net"
 	protocol "github.com/libp2p/go-libp2p/p2p/protocol"
+	timecache "github.com/whyrusleeping/timecache"
 )
 
 const ID = protocol.ID("/floodsub/1.0.0")
@@ -33,16 +35,16 @@ type PubSub struct {
 	host host.Host
 
 	incoming chan *RPC
-	outgoing chan *RPC
+	publish  chan *Message
 	newPeers chan inet.Stream
 	peerDead chan peer.ID
 
 	myTopics map[string]chan *Message
 	pubsubLk sync.Mutex
 
-	topics  map[string]map[peer.ID]struct{}
-	peers   map[peer.ID]chan *RPC
-	lastMsg map[peer.ID]uint64
+	topics       map[string]map[peer.ID]struct{}
+	peers        map[peer.ID]chan *RPC
+	seenMessages *timecache.TimeCache
 
 	addSub chan *addSub
 
@@ -66,17 +68,17 @@ type RPC struct {
 
 func NewFloodSub(ctx context.Context, h host.Host) *PubSub {
 	ps := &PubSub{
-		host:     h,
-		ctx:      ctx,
-		incoming: make(chan *RPC, 32),
-		outgoing: make(chan *RPC),
-		newPeers: make(chan inet.Stream),
-		peerDead: make(chan peer.ID),
-		addSub:   make(chan *addSub),
-		myTopics: make(map[string]chan *Message),
-		topics:   make(map[string]map[peer.ID]struct{}),
-		peers:    make(map[peer.ID]chan *RPC),
-		lastMsg:  make(map[peer.ID]uint64),
+		host:         h,
+		ctx:          ctx,
+		incoming:     make(chan *RPC, 32),
+		publish:      make(chan *Message),
+		newPeers:     make(chan inet.Stream),
+		peerDead:     make(chan peer.ID),
+		addSub:       make(chan *addSub),
+		myTopics:     make(map[string]chan *Message),
+		topics:       make(map[string]map[peer.ID]struct{}),
+		peers:        make(map[peer.ID]chan *RPC),
+		seenMessages: timecache.NewTimeCache(time.Second * 30),
 	}
 
 	h.SetStreamHandler(ID, ps.handleNewStream)
@@ -90,9 +92,12 @@ func NewFloodSub(ctx context.Context, h host.Host) *PubSub {
 func (p *PubSub) getHelloPacket() *RPC {
 	var rpc RPC
 	for t, _ := range p.myTopics {
-		rpc.Topics = append(rpc.Topics, t)
+		as := &pb.RPC_SubOpts{
+			Topicid:   proto.String(t),
+			Subscribe: proto.Bool(true),
+		}
+		rpc.Subscriptions = append(rpc.Subscriptions, as)
 	}
-	rpc.Type = &AddSubMessageType
 	return &rpc
 }
 
@@ -188,23 +193,15 @@ func (p *PubSub) processLoop(ctx context.Context) {
 			if err != nil {
 				log.Error("handling RPC: ", err)
 			}
-		case rpc := <-p.outgoing:
-			switch rpc.GetType() {
-			case AddSubMessageType, UnsubMessageType:
-				for _, mch := range p.peers {
-					mch <- rpc
-				}
-			case PubMessageType:
-				//fmt.Println("publishing outgoing message")
-				err := p.recvMessage(rpc)
-				if err != nil {
-					log.Error("error receiving message: ", err)
-				}
+		case msg := <-p.publish:
+			err := p.recvMessage(msg.Message)
+			if err != nil {
+				log.Error("error receiving message: ", err)
+			}
 
-				err = p.publishMessage(rpc)
-				if err != nil {
-					log.Error("publishing message: ", err)
-				}
+			err = p.publishMessage(p.host.ID(), msg.Message)
+			if err != nil {
+				log.Error("publishing message: ", err)
 			}
 		case <-ctx.Done():
 			log.Info("pubsub processloop shutting down")
@@ -213,22 +210,14 @@ func (p *PubSub) processLoop(ctx context.Context) {
 	}
 }
 func (p *PubSub) handleSubscriptionChange(sub *addSub) {
-	ch, ok := p.myTopics[sub.topic]
-	out := &RPC{
-		RPC: pb.RPC{
-			Topics: []string{sub.topic},
-		},
+
+	subopt := pb.RPC_SubOpts{
+		Topicid:   &sub.topic,
+		Subscribe: &sub.sub,
 	}
 
-	if sub.cancel {
-		if !ok {
-			return
-		}
-
-		close(ch)
-		delete(p.myTopics, sub.topic)
-		out.Type = &UnsubMessageType
-	} else {
+	ch, ok := p.myTopics[sub.topic]
+	if sub.sub {
 		if ok {
 			// we don't allow multiple subs per topic at this point
 			sub.resp <- nil
@@ -238,27 +227,58 @@ func (p *PubSub) handleSubscriptionChange(sub *addSub) {
 		resp := make(chan *Message, 16)
 		p.myTopics[sub.topic] = resp
 		sub.resp <- resp
-		out.Type = &AddSubMessageType
+	} else {
+		if !ok {
+			return
+		}
+
+		close(ch)
+		delete(p.myTopics, sub.topic)
 	}
 
-	go func() {
-		p.outgoing <- out
-	}()
+	out := &RPC{
+		RPC: pb.RPC{
+			Subscriptions: []*pb.RPC_SubOpts{
+				&subopt,
+			},
+		},
+	}
+
+	for _, peer := range p.peers {
+		peer <- out
+	}
 }
 
-func (p *PubSub) recvMessage(rpc *RPC) error {
-	subch, ok := p.myTopics[rpc.Msg.GetTopic()]
+func (p *PubSub) recvMessage(msg *pb.Message) error {
+	if len(msg.GetTopicIDs()) > 1 {
+		return fmt.Errorf("Dont yet handle multiple topics per message")
+	}
+	if len(msg.GetTopicIDs()) == 0 {
+		return fmt.Errorf("no topic on received message")
+	}
+
+	topic := msg.GetTopicIDs()[0]
+	subch, ok := p.myTopics[topic]
 	if ok {
-		//fmt.Println("writing out to subscriber!")
-		subch <- &Message{rpc.Msg}
+		subch <- &Message{msg}
+	} else {
+		log.Error("received message we we'rent subscribed to")
 	}
 	return nil
 }
 
+func (p *PubSub) seenMessage(id string) bool {
+	return p.seenMessages.Has(id)
+}
+
+func (p *PubSub) markSeen(id string) {
+	p.seenMessages.Add(id)
+}
+
 func (p *PubSub) handleIncomingRPC(rpc *RPC) error {
-	switch rpc.GetType() {
-	case AddSubMessageType:
-		for _, t := range rpc.Topics {
+	for _, subopt := range rpc.GetSubscriptions() {
+		t := subopt.GetTopicid()
+		if subopt.GetSubscribe() {
 			tmap, ok := p.topics[t]
 			if !ok {
 				tmap = make(map[peer.ID]struct{})
@@ -266,28 +286,22 @@ func (p *PubSub) handleIncomingRPC(rpc *RPC) error {
 			}
 
 			tmap[rpc.from] = struct{}{}
-		}
-	case UnsubMessageType:
-		for _, t := range rpc.Topics {
+		} else {
 			tmap, ok := p.topics[t]
 			if !ok {
-				return nil
+				continue
 			}
 			delete(tmap, rpc.from)
 		}
-	case PubMessageType:
-		if rpc.Msg == nil {
-			return fmt.Errorf("nil pub message")
-		}
+	}
 
-		msg := &Message{rpc.Msg}
+	for _, pmsg := range rpc.GetPublish() {
+		msg := &Message{pmsg}
 
-		// Note: Obviously this is an incredibly insecure way of
-		// filtering out "messages we've already seen". But it works for a
-		// cool demo, so i'm not gonna waste time thinking about it any more
-		if p.lastMsg[msg.GetFrom()] >= msg.GetSeqno() {
-			//log.Error("skipping 'old' message")
-			return nil
+		id := msg.Message.GetFrom() + string(msg.GetSeqno())
+
+		if p.seenMessage(id) {
+			continue
 		}
 
 		if msg.GetFrom() == p.host.ID() {
@@ -295,13 +309,13 @@ func (p *PubSub) handleIncomingRPC(rpc *RPC) error {
 			return nil
 		}
 
-		p.lastMsg[msg.GetFrom()] = msg.GetSeqno()
+		p.markSeen(id)
 
-		if err := p.recvMessage(rpc); err != nil {
+		if err := p.recvMessage(pmsg); err != nil {
 			log.Error("error receiving message: ", err)
 		}
 
-		err := p.publishMessage(rpc)
+		err := p.publishMessage(rpc.from, pmsg)
 		if err != nil {
 			log.Error("publish message: ", err)
 		}
@@ -309,14 +323,20 @@ func (p *PubSub) handleIncomingRPC(rpc *RPC) error {
 	return nil
 }
 
-func (p *PubSub) publishMessage(rpc *RPC) error {
-	tmap, ok := p.topics[rpc.Msg.GetTopic()]
+func (p *PubSub) publishMessage(from peer.ID, msg *pb.Message) error {
+	if len(msg.GetTopicIDs()) != 1 {
+		return fmt.Errorf("don't support publishing to multiple topics in a single message")
+	}
+
+	tmap, ok := p.topics[msg.GetTopicIDs()[0]]
 	if !ok {
 		return nil
 	}
 
+	out := &RPC{RPC: pb.RPC{Publish: []*pb.Message{msg}}}
+
 	for pid, _ := range tmap {
-		if pid == rpc.from || pid == peer.ID(rpc.Msg.GetFrom()) {
+		if pid == from || pid == peer.ID(msg.GetFrom()) {
 			continue
 		}
 
@@ -325,23 +345,38 @@ func (p *PubSub) publishMessage(rpc *RPC) error {
 			continue
 		}
 
-		go func() { mch <- rpc }()
+		go func() { mch <- out }()
 	}
 
 	return nil
 }
 
 type addSub struct {
-	topic  string
-	cancel bool
-	resp   chan chan *Message
+	topic string
+	sub   bool
+	resp  chan chan *Message
 }
 
 func (p *PubSub) Subscribe(topic string) (<-chan *Message, error) {
+	return p.SubscribeComplicated(&pb.TopicDescriptor{
+		Name: proto.String(topic),
+	})
+}
+
+func (p *PubSub) SubscribeComplicated(td *pb.TopicDescriptor) (<-chan *Message, error) {
+	if td.GetAuth().GetMode() != pb.TopicDescriptor_AuthOpts_NONE {
+		return nil, fmt.Errorf("Auth method not yet supported")
+	}
+
+	if td.GetEnc().GetMode() != pb.TopicDescriptor_EncOpts_NONE {
+		return nil, fmt.Errorf("Encryption method not yet supported")
+	}
+
 	resp := make(chan chan *Message)
 	p.addSub <- &addSub{
-		topic: topic,
+		topic: td.GetName(),
 		resp:  resp,
+		sub:   true,
 	}
 
 	outch := <-resp
@@ -354,22 +389,21 @@ func (p *PubSub) Subscribe(topic string) (<-chan *Message, error) {
 
 func (p *PubSub) Unsub(topic string) {
 	p.addSub <- &addSub{
-		topic:  topic,
-		cancel: true,
+		topic: topic,
+		sub:   false,
 	}
 }
 
 func (p *PubSub) Publish(topic string, data []byte) error {
-	seqno := uint64(time.Now().UnixNano())
-	p.outgoing <- &RPC{
-		RPC: pb.RPC{
-			Msg: &pb.Message{
-				Data:  data,
-				Topic: &topic,
-				From:  proto.String(string(p.host.ID())),
-				Seqno: &seqno,
-			},
-			Type: &PubMessageType,
+	seqno := make([]byte, 8)
+	binary.BigEndian.PutUint64(seqno, uint64(time.Now().UnixNano()))
+
+	p.publish <- &Message{
+		&pb.Message{
+			Data:     data,
+			TopicIDs: []string{topic},
+			From:     proto.String(string(p.host.ID())),
+			Seqno:    seqno,
 		},
 	}
 	return nil

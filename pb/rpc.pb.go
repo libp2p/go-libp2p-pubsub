@@ -11,6 +11,7 @@ It is generated from these files:
 It has these top-level messages:
 	RPC
 	Message
+	TopicDescriptor
 */
 package floodsub_pb
 
@@ -23,44 +24,132 @@ var _ = proto.Marshal
 var _ = fmt.Errorf
 var _ = math.Inf
 
+type TopicDescriptor_AuthOpts_AuthMode int32
+
+const (
+	TopicDescriptor_AuthOpts_NONE TopicDescriptor_AuthOpts_AuthMode = 0
+	TopicDescriptor_AuthOpts_KEY  TopicDescriptor_AuthOpts_AuthMode = 1
+	TopicDescriptor_AuthOpts_WOT  TopicDescriptor_AuthOpts_AuthMode = 2
+)
+
+var TopicDescriptor_AuthOpts_AuthMode_name = map[int32]string{
+	0: "NONE",
+	1: "KEY",
+	2: "WOT",
+}
+var TopicDescriptor_AuthOpts_AuthMode_value = map[string]int32{
+	"NONE": 0,
+	"KEY":  1,
+	"WOT":  2,
+}
+
+func (x TopicDescriptor_AuthOpts_AuthMode) Enum() *TopicDescriptor_AuthOpts_AuthMode {
+	p := new(TopicDescriptor_AuthOpts_AuthMode)
+	*p = x
+	return p
+}
+func (x TopicDescriptor_AuthOpts_AuthMode) String() string {
+	return proto.EnumName(TopicDescriptor_AuthOpts_AuthMode_name, int32(x))
+}
+func (x *TopicDescriptor_AuthOpts_AuthMode) UnmarshalJSON(data []byte) error {
+	value, err := proto.UnmarshalJSONEnum(TopicDescriptor_AuthOpts_AuthMode_value, data, "TopicDescriptor_AuthOpts_AuthMode")
+	if err != nil {
+		return err
+	}
+	*x = TopicDescriptor_AuthOpts_AuthMode(value)
+	return nil
+}
+
+type TopicDescriptor_EncOpts_EncMode int32
+
+const (
+	TopicDescriptor_EncOpts_NONE      TopicDescriptor_EncOpts_EncMode = 0
+	TopicDescriptor_EncOpts_SHAREDKEY TopicDescriptor_EncOpts_EncMode = 1
+	TopicDescriptor_EncOpts_WOT       TopicDescriptor_EncOpts_EncMode = 2
+)
+
+var TopicDescriptor_EncOpts_EncMode_name = map[int32]string{
+	0: "NONE",
+	1: "SHAREDKEY",
+	2: "WOT",
+}
+var TopicDescriptor_EncOpts_EncMode_value = map[string]int32{
+	"NONE":      0,
+	"SHAREDKEY": 1,
+	"WOT":       2,
+}
+
+func (x TopicDescriptor_EncOpts_EncMode) Enum() *TopicDescriptor_EncOpts_EncMode {
+	p := new(TopicDescriptor_EncOpts_EncMode)
+	*p = x
+	return p
+}
+func (x TopicDescriptor_EncOpts_EncMode) String() string {
+	return proto.EnumName(TopicDescriptor_EncOpts_EncMode_name, int32(x))
+}
+func (x *TopicDescriptor_EncOpts_EncMode) UnmarshalJSON(data []byte) error {
+	value, err := proto.UnmarshalJSONEnum(TopicDescriptor_EncOpts_EncMode_value, data, "TopicDescriptor_EncOpts_EncMode")
+	if err != nil {
+		return err
+	}
+	*x = TopicDescriptor_EncOpts_EncMode(value)
+	return nil
+}
+
 type RPC struct {
-	Type             *string  `protobuf:"bytes,1,opt,name=type" json:"type,omitempty"`
-	Topics           []string `protobuf:"bytes,2,rep,name=topics" json:"topics,omitempty"`
-	Msg              *Message `protobuf:"bytes,3,opt,name=msg" json:"msg,omitempty"`
-	XXX_unrecognized []byte   `json:"-"`
+	Subscriptions    []*RPC_SubOpts `protobuf:"bytes,1,rep,name=subscriptions" json:"subscriptions,omitempty"`
+	Publish          []*Message     `protobuf:"bytes,2,rep,name=publish" json:"publish,omitempty"`
+	XXX_unrecognized []byte         `json:"-"`
 }
 
 func (m *RPC) Reset()         { *m = RPC{} }
 func (m *RPC) String() string { return proto.CompactTextString(m) }
 func (*RPC) ProtoMessage()    {}
 
-func (m *RPC) GetType() string {
-	if m != nil && m.Type != nil {
-		return *m.Type
+func (m *RPC) GetSubscriptions() []*RPC_SubOpts {
+	if m != nil {
+		return m.Subscriptions
+	}
+	return nil
+}
+
+func (m *RPC) GetPublish() []*Message {
+	if m != nil {
+		return m.Publish
+	}
+	return nil
+}
+
+type RPC_SubOpts struct {
+	Subscribe        *bool   `protobuf:"varint,1,opt,name=subscribe" json:"subscribe,omitempty"`
+	Topicid          *string `protobuf:"bytes,2,opt,name=topicid" json:"topicid,omitempty"`
+	XXX_unrecognized []byte  `json:"-"`
+}
+
+func (m *RPC_SubOpts) Reset()         { *m = RPC_SubOpts{} }
+func (m *RPC_SubOpts) String() string { return proto.CompactTextString(m) }
+func (*RPC_SubOpts) ProtoMessage()    {}
+
+func (m *RPC_SubOpts) GetSubscribe() bool {
+	if m != nil && m.Subscribe != nil {
+		return *m.Subscribe
+	}
+	return false
+}
+
+func (m *RPC_SubOpts) GetTopicid() string {
+	if m != nil && m.Topicid != nil {
+		return *m.Topicid
 	}
 	return ""
 }
 
-func (m *RPC) GetTopics() []string {
-	if m != nil {
-		return m.Topics
-	}
-	return nil
-}
-
-func (m *RPC) GetMsg() *Message {
-	if m != nil {
-		return m.Msg
-	}
-	return nil
-}
-
 type Message struct {
-	From             *string `protobuf:"bytes,1,opt,name=from" json:"from,omitempty"`
-	Data             []byte  `protobuf:"bytes,2,opt,name=data" json:"data,omitempty"`
-	Seqno            *uint64 `protobuf:"varint,3,opt,name=seqno" json:"seqno,omitempty"`
-	Topic            *string `protobuf:"bytes,4,opt,name=topic" json:"topic,omitempty"`
-	XXX_unrecognized []byte  `json:"-"`
+	From             *string  `protobuf:"bytes,1,opt,name=from" json:"from,omitempty"`
+	Data             []byte   `protobuf:"bytes,2,opt,name=data" json:"data,omitempty"`
+	Seqno            []byte   `protobuf:"bytes,3,opt,name=seqno" json:"seqno,omitempty"`
+	TopicIDs         []string `protobuf:"bytes,4,rep,name=topicIDs" json:"topicIDs,omitempty"`
+	XXX_unrecognized []byte   `json:"-"`
 }
 
 func (m *Message) Reset()         { *m = Message{} }
@@ -81,21 +170,108 @@ func (m *Message) GetData() []byte {
 	return nil
 }
 
-func (m *Message) GetSeqno() uint64 {
-	if m != nil && m.Seqno != nil {
-		return *m.Seqno
+func (m *Message) GetSeqno() []byte {
+	if m != nil {
+		return m.Seqno
 	}
-	return 0
+	return nil
 }
 
-func (m *Message) GetTopic() string {
-	if m != nil && m.Topic != nil {
-		return *m.Topic
+func (m *Message) GetTopicIDs() []string {
+	if m != nil {
+		return m.TopicIDs
+	}
+	return nil
+}
+
+// topicID = hash(topicDescriptor); (not the topic.name)
+type TopicDescriptor struct {
+	Name             *string                   `protobuf:"bytes,1,opt,name=name" json:"name,omitempty"`
+	Auth             *TopicDescriptor_AuthOpts `protobuf:"bytes,2,opt,name=auth" json:"auth,omitempty"`
+	Enc              *TopicDescriptor_EncOpts  `protobuf:"bytes,3,opt,name=enc" json:"enc,omitempty"`
+	XXX_unrecognized []byte                    `json:"-"`
+}
+
+func (m *TopicDescriptor) Reset()         { *m = TopicDescriptor{} }
+func (m *TopicDescriptor) String() string { return proto.CompactTextString(m) }
+func (*TopicDescriptor) ProtoMessage()    {}
+
+func (m *TopicDescriptor) GetName() string {
+	if m != nil && m.Name != nil {
+		return *m.Name
 	}
 	return ""
 }
 
+func (m *TopicDescriptor) GetAuth() *TopicDescriptor_AuthOpts {
+	if m != nil {
+		return m.Auth
+	}
+	return nil
+}
+
+func (m *TopicDescriptor) GetEnc() *TopicDescriptor_EncOpts {
+	if m != nil {
+		return m.Enc
+	}
+	return nil
+}
+
+type TopicDescriptor_AuthOpts struct {
+	Mode             *TopicDescriptor_AuthOpts_AuthMode `protobuf:"varint,1,opt,name=mode,enum=floodsub.pb.TopicDescriptor_AuthOpts_AuthMode" json:"mode,omitempty"`
+	Keys             [][]byte                           `protobuf:"bytes,2,rep,name=keys" json:"keys,omitempty"`
+	XXX_unrecognized []byte                             `json:"-"`
+}
+
+func (m *TopicDescriptor_AuthOpts) Reset()         { *m = TopicDescriptor_AuthOpts{} }
+func (m *TopicDescriptor_AuthOpts) String() string { return proto.CompactTextString(m) }
+func (*TopicDescriptor_AuthOpts) ProtoMessage()    {}
+
+func (m *TopicDescriptor_AuthOpts) GetMode() TopicDescriptor_AuthOpts_AuthMode {
+	if m != nil && m.Mode != nil {
+		return *m.Mode
+	}
+	return TopicDescriptor_AuthOpts_NONE
+}
+
+func (m *TopicDescriptor_AuthOpts) GetKeys() [][]byte {
+	if m != nil {
+		return m.Keys
+	}
+	return nil
+}
+
+type TopicDescriptor_EncOpts struct {
+	Mode             *TopicDescriptor_EncOpts_EncMode `protobuf:"varint,1,opt,name=mode,enum=floodsub.pb.TopicDescriptor_EncOpts_EncMode" json:"mode,omitempty"`
+	KeyHashes        [][]byte                         `protobuf:"bytes,2,rep,name=keyHashes" json:"keyHashes,omitempty"`
+	XXX_unrecognized []byte                           `json:"-"`
+}
+
+func (m *TopicDescriptor_EncOpts) Reset()         { *m = TopicDescriptor_EncOpts{} }
+func (m *TopicDescriptor_EncOpts) String() string { return proto.CompactTextString(m) }
+func (*TopicDescriptor_EncOpts) ProtoMessage()    {}
+
+func (m *TopicDescriptor_EncOpts) GetMode() TopicDescriptor_EncOpts_EncMode {
+	if m != nil && m.Mode != nil {
+		return *m.Mode
+	}
+	return TopicDescriptor_EncOpts_NONE
+}
+
+func (m *TopicDescriptor_EncOpts) GetKeyHashes() [][]byte {
+	if m != nil {
+		return m.KeyHashes
+	}
+	return nil
+}
+
 func init() {
 	proto.RegisterType((*RPC)(nil), "floodsub.pb.RPC")
+	proto.RegisterType((*RPC_SubOpts)(nil), "floodsub.pb.RPC.SubOpts")
 	proto.RegisterType((*Message)(nil), "floodsub.pb.Message")
+	proto.RegisterType((*TopicDescriptor)(nil), "floodsub.pb.TopicDescriptor")
+	proto.RegisterType((*TopicDescriptor_AuthOpts)(nil), "floodsub.pb.TopicDescriptor.AuthOpts")
+	proto.RegisterType((*TopicDescriptor_EncOpts)(nil), "floodsub.pb.TopicDescriptor.EncOpts")
+	proto.RegisterEnum("floodsub.pb.TopicDescriptor_AuthOpts_AuthMode", TopicDescriptor_AuthOpts_AuthMode_name, TopicDescriptor_AuthOpts_AuthMode_value)
+	proto.RegisterEnum("floodsub.pb.TopicDescriptor_EncOpts_EncMode", TopicDescriptor_EncOpts_EncMode_name, TopicDescriptor_EncOpts_EncMode_value)
 }
