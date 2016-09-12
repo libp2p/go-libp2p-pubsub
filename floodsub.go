@@ -82,7 +82,7 @@ func NewFloodSub(ctx context.Context, h host.Host) *PubSub {
 	}
 
 	h.SetStreamHandler(ID, ps.handleNewStream)
-	h.Network().Notify(ps)
+	h.Network().Notify((*PubSubNotif)(ps))
 
 	go ps.processLoop(ctx)
 
@@ -109,6 +109,9 @@ func (p *PubSub) processLoop(ctx context.Context) {
 
 		case pid := <-p.peerDead:
 			delete(p.peers, pid)
+			for _, t := range p.topics {
+				delete(t, pid)
+			}
 		case sub := <-p.addSub:
 			p.handleSubscriptionChange(sub)
 		case rpc := <-p.incoming:
@@ -118,13 +121,7 @@ func (p *PubSub) processLoop(ctx context.Context) {
 				continue
 			}
 		case msg := <-p.publish:
-			p.notifySubs(msg.Message)
-
-			err := p.publishMessage(p.host.ID(), msg.Message)
-			if err != nil {
-				log.Error("publishing message: ", err)
-				continue
-			}
+			p.maybePublishMessage(p.host.ID(), msg.Message)
 		case <-ctx.Done():
 			log.Info("pubsub processloop shutting down")
 			return
@@ -222,10 +219,7 @@ func (p *PubSub) handleIncomingRPC(rpc *RPC) error {
 }
 
 func (p *PubSub) maybePublishMessage(from peer.ID, pmsg *pb.Message) {
-	msg := &Message{pmsg}
-
-	id := msg.Message.GetFrom() + string(msg.GetSeqno())
-
+	id := string(pmsg.GetFrom()) + string(pmsg.GetSeqno())
 	if p.seenMessage(id) {
 		return
 	}
@@ -241,18 +235,20 @@ func (p *PubSub) maybePublishMessage(from peer.ID, pmsg *pb.Message) {
 }
 
 func (p *PubSub) publishMessage(from peer.ID, msg *pb.Message) error {
-	if len(msg.GetTopicIDs()) != 1 {
-		return fmt.Errorf("don't support publishing to multiple topics in a single message")
+	tosend := make(map[peer.ID]struct{})
+	for _, topic := range msg.GetTopicIDs() {
+		tmap, ok := p.topics[topic]
+		if !ok {
+			continue
+		}
+
+		for p, _ := range tmap {
+			tosend[p] = struct{}{}
+		}
 	}
 
-	tmap, ok := p.topics[msg.GetTopicIDs()[0]]
-	if !ok {
-		return nil
-	}
-
-	out := &RPC{RPC: pb.RPC{Publish: []*pb.Message{msg}}}
-
-	for pid := range tmap {
+	out := rpcWithMessages(msg)
+	for pid := range tosend {
 		if pid == from || pid == peer.ID(msg.GetFrom()) {
 			continue
 		}

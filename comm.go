@@ -76,7 +76,7 @@ func (p *PubSub) handleSendingMessages(ctx context.Context, s inet.Stream, outgo
 
 			err := writeMsg(&rpc.RPC)
 			if err != nil {
-				log.Errorf("writing message to %s: %s", s.Conn().RemotePeer(), err)
+				log.Warningf("writing message to %s: %s", s.Conn().RemotePeer(), err)
 				dead = true
 				go func() {
 					p.peerDead <- s.Conn().RemotePeer()
@@ -95,4 +95,8 @@ func rpcWithSubs(subs ...*pb.RPC_SubOpts) *RPC {
 			Subscriptions: subs,
 		},
 	}
+}
+
+func rpcWithMessages(msgs ...*pb.Message) *RPC {
+	return &RPC{RPC: pb.RPC{Publish: msgs}}
 }

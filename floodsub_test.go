@@ -67,6 +67,17 @@ func getPubsubs(ctx context.Context, hs []host.Host) []*PubSub {
 	return psubs
 }
 
+func assertReceive(t *testing.T, ch <-chan *Message, exp []byte) {
+	select {
+	case msg := <-ch:
+		if !bytes.Equal(msg.GetData(), exp) {
+			t.Fatalf("got wrong message, expected %s but got %s", string(exp), string(msg.GetData()))
+		}
+	case <-time.After(time.Second * 5):
+		t.Fatal("timed out waiting for message of: ", string(exp))
+	}
+}
+
 func TestBasicFloodsub(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -152,7 +163,7 @@ func TestReconnects(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	hosts := getNetHosts(t, ctx, 10)
+	hosts := getNetHosts(t, ctx, 3)
 
 	psubs := getPubsubs(ctx, hosts)
 
@@ -180,7 +191,9 @@ func TestReconnects(t *testing.T) {
 	assertReceive(t, A, msg)
 	assertReceive(t, B, msg)
 
-	hosts[2].Close()
+	psubs[2].Unsub("cats")
+
+	time.Sleep(time.Millisecond * 50)
 
 	msg2 := []byte("potato")
 	err = psubs[0].Publish("cats", msg2)
@@ -189,25 +202,32 @@ func TestReconnects(t *testing.T) {
 	}
 
 	assertReceive(t, A, msg2)
+	select {
+	case _, ok := <-B:
+		if ok {
+			t.Fatal("shouldnt have gotten data on this channel")
+		}
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for B chan to be closed")
+	}
+
+	ch2, err := psubs[2].Subscribe("cats")
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	time.Sleep(time.Millisecond * 50)
-	_, ok := psubs[0].peers[hosts[2].ID()]
-	if ok {
-		t.Fatal("shouldnt have this peer anymore")
+
+	nextmsg := []byte("ifps is kul")
+	err = psubs[0].Publish("cats", nextmsg)
+	if err != nil {
+		t.Fatal(err)
 	}
+
+	assertReceive(t, ch2, nextmsg)
 }
 
-func assertReceive(t *testing.T, ch <-chan *Message, exp []byte) {
-	select {
-	case msg := <-ch:
-		if !bytes.Equal(msg.GetData(), exp) {
-			t.Fatalf("got wrong message, expected %s but got %s", string(exp), string(msg.GetData()))
-		}
-	case <-time.After(time.Second * 5):
-		t.Fatal("timed out waiting for message of: ", exp)
-	}
-}
-
+// make sure messages arent routed between nodes who arent subscribed
 func TestNoConnection(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -231,4 +251,35 @@ func TestNoConnection(t *testing.T) {
 		t.Fatal("shouldnt have gotten a message")
 	case <-time.After(time.Millisecond * 200):
 	}
+}
+
+func TestSelfReceive(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	host := getNetHosts(t, ctx, 1)[0]
+
+	psub := NewFloodSub(ctx, host)
+
+	msg := []byte("hello world")
+
+	err := psub.Publish("foobar", msg)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	time.Sleep(time.Millisecond * 10)
+
+	ch, err := psub.Subscribe("foobar")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	msg2 := []byte("goodbye world")
+	err = psub.Publish("foobar", msg2)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	assertReceive(t, ch, msg2)
 }
