@@ -20,7 +20,7 @@ func (p *PubSubNotif) ClosedStream(n inet.Network, s inet.Stream) {
 func (p *PubSubNotif) Connected(n inet.Network, c inet.Conn) {
 	s, err := p.host.NewStream(context.Background(), c.RemotePeer(), ID)
 	if err != nil {
-		log.Error("opening new stream to peer: ", err, c.LocalPeer(), c.RemotePeer())
+		log.Warning("opening new stream to peer: ", err, c.LocalPeer(), c.RemotePeer())
 		return
 	}
 
