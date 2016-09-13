@@ -5,7 +5,7 @@ import (
 	"context"
 	"io"
 
-	pb "github.com/whyrusleeping/go-floodsub/pb"
+	pb "github.com/libp2p/go-floodsub/pb"
 
 	ggio "github.com/gogo/protobuf/io"
 	proto "github.com/gogo/protobuf/proto"

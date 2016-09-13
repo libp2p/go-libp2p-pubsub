@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"time"
 
-	pb "github.com/whyrusleeping/go-floodsub/pb"
+	pb "github.com/libp2p/go-floodsub/pb"
 
 	proto "github.com/gogo/protobuf/proto"
 	peer "github.com/ipfs/go-libp2p-peer"
