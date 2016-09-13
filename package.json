@@ -1,10 +1,10 @@
 {
   "author": "whyrusleeping",
   "bugs": {
-    "url": "https://github.com/whyrusleeping/go-floodsub"
+    "url": "https://github.com/libp2p/go-floodsub"
   },
   "gx": {
-    "dvcsimport": "github.com/whyrusleeping/go-floodsub"
+    "dvcsimport": "github.com/libp2p/go-floodsub"
   },
   "gxDependencies": [
     {
