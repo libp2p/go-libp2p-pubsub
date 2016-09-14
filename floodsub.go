@@ -33,6 +33,9 @@ type PubSub struct {
 	// addSub is a control channel for us to add and remove subscriptions
 	addSub chan *addSub
 
+	//
+	getTopics chan *topicReq
+
 	// a notification channel for incoming streams from other peers
 	newPeers chan inet.Stream
 
@@ -75,6 +78,7 @@ func NewFloodSub(ctx context.Context, h host.Host) *PubSub {
 		newPeers:     make(chan inet.Stream),
 		peerDead:     make(chan peer.ID),
 		addSub:       make(chan *addSub),
+		getTopics:    make(chan *topicReq),
 		myTopics:     make(map[string]chan *Message),
 		topics:       make(map[string]map[peer.ID]struct{}),
 		peers:        make(map[peer.ID]chan *RPC),
@@ -112,6 +116,12 @@ func (p *PubSub) processLoop(ctx context.Context) {
 			for _, t := range p.topics {
 				delete(t, pid)
 			}
+		case treq := <-p.getTopics:
+			var out []string
+			for t := range p.myTopics {
+				out = append(out, t)
+			}
+			treq.resp <- out
 		case sub := <-p.addSub:
 			p.handleSubscriptionChange(sub)
 		case rpc := <-p.incoming:
@@ -270,10 +280,20 @@ type addSub struct {
 	resp  chan chan *Message
 }
 
-func (p *PubSub) Subscribe(topic string) (<-chan *Message, error) {
+func (p *PubSub) Subscribe(ctx context.Context, topic string) (<-chan *Message, error) {
 	return p.SubscribeComplicated(&pb.TopicDescriptor{
 		Name: proto.String(topic),
 	})
+}
+
+type topicReq struct {
+	resp chan []string
+}
+
+func (p *PubSub) GetTopics() []string {
+	out := make(chan []string, 1)
+	p.getTopics <- &topicReq{resp: out}
+	return <-out
 }
 
 func (p *PubSub) SubscribeComplicated(td *pb.TopicDescriptor) (<-chan *Message, error) {

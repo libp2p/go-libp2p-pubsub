@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"math/rand"
+	"sort"
 	"testing"
 	"time"
 
@@ -359,4 +360,59 @@ func TestTreeTopology(t *testing.T) {
 	time.Sleep(time.Millisecond * 50)
 
 	checkMessageRouting(t, "fizzbuzz", []*PubSub{psubs[9], psubs[3]}, chs)
+}
+
+func assertHasTopics(t *testing.T, ps *PubSub, exptopics ...string) {
+	topics := ps.GetTopics()
+	sort.Strings(topics)
+	sort.Strings(exptopics)
+
+	if len(topics) != len(exptopics) {
+		t.Fatalf("expected to have %v, but got %v", exptopics, topics)
+	}
+
+	for i, v := range exptopics {
+		if topics[i] != v {
+			t.Fatalf("expected %s but have %s", v, topics[i])
+		}
+	}
+}
+
+func TestSubReporting(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	host := getNetHosts(t, ctx, 1)[0]
+	psub := NewFloodSub(ctx, host)
+
+	_, err := psub.Subscribe(ctx, "foo")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = psub.Subscribe(ctx, "bar")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	assertHasTopics(t, psub, "foo", "bar")
+
+	_, err = psub.Subscribe(ctx, "baz")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	assertHasTopics(t, psub, "foo", "bar", "baz")
+
+	psub.Unsub("bar")
+	assertHasTopics(t, psub, "foo", "baz")
+	psub.Unsub("foo")
+	assertHasTopics(t, psub, "baz")
+
+	_, err = psub.Subscribe(ctx, "fish")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	assertHasTopics(t, psub, "baz", "fish")
 }
