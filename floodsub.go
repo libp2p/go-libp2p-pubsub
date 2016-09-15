@@ -36,6 +36,9 @@ type PubSub struct {
 	//
 	getTopics chan *topicReq
 
+	//
+	getPeers chan chan []peer.ID
+
 	// a notification channel for incoming streams from other peers
 	newPeers chan inet.Stream
 
@@ -77,6 +80,7 @@ func NewFloodSub(ctx context.Context, h host.Host) *PubSub {
 		publish:      make(chan *Message),
 		newPeers:     make(chan inet.Stream),
 		peerDead:     make(chan peer.ID),
+		getPeers:     make(chan chan []peer.ID),
 		addSub:       make(chan *addSub),
 		getTopics:    make(chan *topicReq),
 		myTopics:     make(map[string]chan *Message),
@@ -124,6 +128,12 @@ func (p *PubSub) processLoop(ctx context.Context) {
 			treq.resp <- out
 		case sub := <-p.addSub:
 			p.handleSubscriptionChange(sub)
+		case pch := <-p.getPeers:
+			var peers []peer.ID
+			for p := range p.peers {
+				peers = append(peers, p)
+			}
+			pch <- peers
 		case rpc := <-p.incoming:
 			err := p.handleIncomingRPC(rpc)
 			if err != nil {
@@ -340,4 +350,10 @@ func (p *PubSub) Publish(topic string, data []byte) error {
 		},
 	}
 	return nil
+}
+
+func (p *PubSub) ListPeers() []peer.ID {
+	out := make(chan []peer.ID)
+	p.getPeers <- out
+	return <-out
 }

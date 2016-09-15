@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	peer "github.com/ipfs/go-libp2p-peer"
 	host "github.com/libp2p/go-libp2p/p2p/host"
 	netutil "github.com/libp2p/go-libp2p/p2p/test/util"
 )
@@ -320,6 +321,20 @@ func TestOneToOne(t *testing.T) {
 	checkMessageRouting(t, "foobar", psubs, []<-chan *Message{ch})
 }
 
+func assertPeerLists(t *testing.T, hosts []host.Host, ps *PubSub, has ...int) {
+	peers := ps.ListPeers()
+	set := make(map[peer.ID]struct{})
+	for _, p := range peers {
+		set[p] = struct{}{}
+	}
+
+	for _, h := range has {
+		if _, ok := set[hosts[h].ID()]; !ok {
+			t.Fatal("expected to have connection to peer: ", h)
+		}
+	}
+}
+
 func TestTreeTopology(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -358,6 +373,10 @@ func TestTreeTopology(t *testing.T) {
 	}
 
 	time.Sleep(time.Millisecond * 50)
+
+	assertPeerLists(t, hosts, psubs[0], 1, 5)
+	assertPeerLists(t, hosts, psubs[1], 0, 2, 4)
+	assertPeerLists(t, hosts, psubs[2], 1, 3)
 
 	checkMessageRouting(t, "fizzbuzz", []*PubSub{psubs[9], psubs[3]}, chs)
 }
