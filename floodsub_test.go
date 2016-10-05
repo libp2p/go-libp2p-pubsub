@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	peer "github.com/ipfs/go-libp2p-peer"
-	host "github.com/libp2p/go-libp2p/p2p/host"
+	host "github.com/libp2p/go-libp2p-host"
+	peer "github.com/libp2p/go-libp2p-peer"
 	netutil "github.com/libp2p/go-libp2p/p2p/test/util"
 )
 

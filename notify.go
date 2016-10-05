@@ -3,8 +3,8 @@ package floodsub
 import (
 	"context"
 
-	ma "github.com/jbenet/go-multiaddr"
-	inet "github.com/libp2p/go-libp2p/p2p/net"
+	inet "github.com/libp2p/go-libp2p-net"
+	ma "github.com/multiformats/go-multiaddr"
 )
 
 var _ inet.Notifiee = (*PubSubNotif)(nil)

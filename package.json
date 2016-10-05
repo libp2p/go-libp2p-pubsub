@@ -9,9 +9,9 @@
   "gxDependencies": [
     {
       "author": "whyrusleeping",
-      "hash": "QmbiRCGZqhfcSjnm9icGz3oNQQdPLAnLWnKHXixaEWXVCN",
+      "hash": "QmcRa2qn6iCmap9bjp8jAwkvYAq13AUfxdY3rrYiaJbLum",
       "name": "go-libp2p",
-      "version": "3.5.4"
+      "version": "4.0.1"
     },
     {
       "author": "whyrusleeping",
@@ -24,6 +24,12 @@
       "hash": "QmYftoT56eEfUBTD3erR6heXuPSUhGRezSmhSU8LeczP8b",
       "name": "timecache",
       "version": "1.0.0"
+    },
+    {
+      "author": "whyrusleeping",
+      "hash": "QmdML3R42PRSwnt46jSuEts9bHSqLctVYEjJqMR3UYV8ki",
+      "name": "go-libp2p-host",
+      "version": "1.1.0"
     }
   ],
   "gxVersion": "0.9.0",
@@ -31,6 +37,6 @@
   "license": "",
   "name": "floodsub",
   "releaseCmd": "git commit -a -m \"gx publish $VERSION\"",
-  "version": "0.6.2"
+  "version": "0.7.0"
 }
 
