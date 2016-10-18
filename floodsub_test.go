@@ -322,7 +322,7 @@ func TestOneToOne(t *testing.T) {
 }
 
 func assertPeerLists(t *testing.T, hosts []host.Host, ps *PubSub, has ...int) {
-	peers := ps.ListPeers()
+	peers := ps.ListPeers("")
 	set := make(map[peer.ID]struct{})
 	for _, p := range peers {
 		set[p] = struct{}{}
@@ -434,4 +434,54 @@ func TestSubReporting(t *testing.T) {
 	}
 
 	assertHasTopics(t, psub, "baz", "fish")
+}
+
+func TestPeerTopicReporting(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	hosts := getNetHosts(t, ctx, 4)
+	psubs := getPubsubs(ctx, hosts)
+
+	connect(t, hosts[0], hosts[1])
+	connect(t, hosts[0], hosts[2])
+	connect(t, hosts[0], hosts[3])
+
+	psubs[1].Subscribe(ctx, "foo")
+	psubs[1].Subscribe(ctx, "bar")
+	psubs[1].Subscribe(ctx, "baz")
+
+	psubs[2].Subscribe(ctx, "foo")
+	psubs[2].Subscribe(ctx, "ipfs")
+
+	psubs[3].Subscribe(ctx, "baz")
+	psubs[3].Subscribe(ctx, "ipfs")
+
+	time.Sleep(time.Millisecond * 10)
+	peers := psubs[0].ListPeers("ipfs")
+	assertPeerList(t, peers, hosts[2].ID(), hosts[3].ID())
+
+	peers = psubs[0].ListPeers("foo")
+	assertPeerList(t, peers, hosts[1].ID(), hosts[2].ID())
+
+	peers = psubs[0].ListPeers("baz")
+	assertPeerList(t, peers, hosts[1].ID(), hosts[3].ID())
+
+	peers = psubs[0].ListPeers("bar")
+	assertPeerList(t, peers, hosts[1].ID())
+}
+
+func assertPeerList(t *testing.T, peers []peer.ID, expected ...peer.ID) {
+	sort.Sort(peer.IDSlice(peers))
+	sort.Sort(peer.IDSlice(expected))
+
+	if len(peers) != len(expected) {
+		t.Fatal("mismatch: %s != %s", peers, expected)
+	}
+
+	for i, p := range peers {
+		if expected[i] != p {
+			t.Fatal("mismatch: %s != %s", peers, expected)
+		}
+	}
 }
