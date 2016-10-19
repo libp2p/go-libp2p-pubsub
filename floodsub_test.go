@@ -14,7 +14,7 @@ import (
 	netutil "github.com/libp2p/go-libp2p/p2p/test/util"
 )
 
-func checkMessageRouting(t *testing.T, topic string, pubs []*PubSub, subs []<-chan *Message) {
+func checkMessageRouting(t *testing.T, topic string, pubs []*PubSub, subs []*Subscription) {
 	data := make([]byte, 16)
 	rand.Read(data)
 
@@ -85,13 +85,14 @@ func getPubsubs(ctx context.Context, hs []host.Host) []*PubSub {
 	return psubs
 }
 
-func assertReceive(t *testing.T, ch <-chan *Message, exp []byte) {
+func assertReceive(t *testing.T, ch *Subscription, exp []byte) {
 	select {
-	case msg := <-ch:
+	case msg := <-ch.ch:
 		if !bytes.Equal(msg.GetData(), exp) {
 			t.Fatalf("got wrong message, expected %s but got %s", string(exp), string(msg.GetData()))
 		}
 	case <-time.After(time.Second * 5):
+		t.Logf("%#v\n", ch)
 		t.Fatal("timed out waiting for message of: ", string(exp))
 	}
 }
@@ -103,9 +104,9 @@ func TestBasicFloodsub(t *testing.T) {
 
 	psubs := getPubsubs(ctx, hosts)
 
-	var msgs []<-chan *Message
+	var msgs []*Subscription
 	for _, ps := range psubs {
-		subch, err := ps.Subscribe(ctx, "foobar")
+		subch, err := ps.Subscribe("foobar")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -125,8 +126,11 @@ func TestBasicFloodsub(t *testing.T) {
 
 		psubs[owner].Publish("foobar", msg)
 
-		for _, resp := range msgs {
-			got := <-resp
+		for _, sub := range msgs {
+			got, err := sub.Next()
+			if err != nil {
+				t.Fatal(sub.err)
+			}
 			if !bytes.Equal(msg, got.Data) {
 				t.Fatal("got wrong message!")
 			}
@@ -149,13 +153,13 @@ func TestMultihops(t *testing.T) {
 	connect(t, hosts[3], hosts[4])
 	connect(t, hosts[4], hosts[5])
 
-	var msgChs []<-chan *Message
+	var subs []*Subscription
 	for i := 1; i < 6; i++ {
-		ch, err := psubs[i].Subscribe(ctx, "foobar")
+		ch, err := psubs[i].Subscribe("foobar")
 		if err != nil {
 			t.Fatal(err)
 		}
-		msgChs = append(msgChs, ch)
+		subs = append(subs, ch)
 	}
 
 	time.Sleep(time.Millisecond * 100)
@@ -168,7 +172,7 @@ func TestMultihops(t *testing.T) {
 
 	// last node in the chain should get the message
 	select {
-	case out := <-msgChs[4]:
+	case out := <-subs[4].ch:
 		if !bytes.Equal(out.GetData(), msg) {
 			t.Fatal("got wrong data")
 		}
@@ -188,12 +192,12 @@ func TestReconnects(t *testing.T) {
 	connect(t, hosts[0], hosts[1])
 	connect(t, hosts[0], hosts[2])
 
-	A, err := psubs[1].Subscribe(ctx, "cats")
+	A, err := psubs[1].Subscribe("cats")
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	B, err := psubs[2].Subscribe(ctx, "cats")
+	B, err := psubs[2].Subscribe("cats")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -209,7 +213,7 @@ func TestReconnects(t *testing.T) {
 	assertReceive(t, A, msg)
 	assertReceive(t, B, msg)
 
-	psubs[2].Unsub("cats")
+	B.Cancel()
 
 	time.Sleep(time.Millisecond * 50)
 
@@ -221,7 +225,7 @@ func TestReconnects(t *testing.T) {
 
 	assertReceive(t, A, msg2)
 	select {
-	case _, ok := <-B:
+	case _, ok := <-B.ch:
 		if ok {
 			t.Fatal("shouldnt have gotten data on this channel")
 		}
@@ -229,12 +233,17 @@ func TestReconnects(t *testing.T) {
 		t.Fatal("timed out waiting for B chan to be closed")
 	}
 
-	ch2, err := psubs[2].Subscribe(ctx, "cats")
+	nSubs := len(psubs[2].myTopics["cats"])
+	if nSubs > 0 {
+		t.Fatal(`B should have 0 subscribers for channel "cats", has`, nSubs)
+	}
+
+	ch2, err := psubs[2].Subscribe("cats")
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	time.Sleep(time.Millisecond * 50)
+	time.Sleep(time.Millisecond * 100)
 
 	nextmsg := []byte("ifps is kul")
 	err = psubs[0].Publish("cats", nextmsg)
@@ -254,7 +263,7 @@ func TestNoConnection(t *testing.T) {
 
 	psubs := getPubsubs(ctx, hosts)
 
-	ch, err := psubs[5].Subscribe(ctx, "foobar")
+	ch, err := psubs[5].Subscribe("foobar")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -265,7 +274,7 @@ func TestNoConnection(t *testing.T) {
 	}
 
 	select {
-	case <-ch:
+	case <-ch.ch:
 		t.Fatal("shouldnt have gotten a message")
 	case <-time.After(time.Millisecond * 200):
 	}
@@ -288,7 +297,7 @@ func TestSelfReceive(t *testing.T) {
 
 	time.Sleep(time.Millisecond * 10)
 
-	ch, err := psub.Subscribe(ctx, "foobar")
+	ch, err := psub.Subscribe("foobar")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -311,14 +320,14 @@ func TestOneToOne(t *testing.T) {
 
 	connect(t, hosts[0], hosts[1])
 
-	ch, err := psubs[1].Subscribe(ctx, "foobar")
+	ch, err := psubs[1].Subscribe("foobar")
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	time.Sleep(time.Millisecond * 50)
 
-	checkMessageRouting(t, "foobar", psubs, []<-chan *Message{ch})
+	checkMessageRouting(t, "foobar", psubs, []*Subscription{ch})
 }
 
 func assertPeerLists(t *testing.T, hosts []host.Host, ps *PubSub, has ...int) {
@@ -362,9 +371,9 @@ func TestTreeTopology(t *testing.T) {
 		[8] -> [9]
 	*/
 
-	var chs []<-chan *Message
+	var chs []*Subscription
 	for _, ps := range psubs {
-		ch, err := ps.Subscribe(ctx, "fizzbuzz")
+		ch, err := ps.Subscribe("fizzbuzz")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -404,31 +413,31 @@ func TestSubReporting(t *testing.T) {
 	host := getNetHosts(t, ctx, 1)[0]
 	psub := NewFloodSub(ctx, host)
 
-	_, err := psub.Subscribe(ctx, "foo")
+	fooSub, err := psub.Subscribe("foo")
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	_, err = psub.Subscribe(ctx, "bar")
+	barSub, err := psub.Subscribe("bar")
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	assertHasTopics(t, psub, "foo", "bar")
 
-	_, err = psub.Subscribe(ctx, "baz")
+	_, err = psub.Subscribe("baz")
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	assertHasTopics(t, psub, "foo", "bar", "baz")
 
-	psub.Unsub("bar")
+	barSub.Cancel()
 	assertHasTopics(t, psub, "foo", "baz")
-	psub.Unsub("foo")
+	fooSub.Cancel()
 	assertHasTopics(t, psub, "baz")
 
-	_, err = psub.Subscribe(ctx, "fish")
+	_, err = psub.Subscribe("fish")
 	if err != nil {
 		t.Fatal(err)
 	}

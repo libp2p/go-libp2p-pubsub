@@ -31,16 +31,16 @@ type PubSub struct {
 	publish chan *Message
 
 	// addSub is a control channel for us to add and remove subscriptions
-	addSub chan *addSub
+	addSub chan *addSubReq
 
-	//
+	// get list of topics we are subscribed to
 	getTopics chan *topicReq
 
-	//
+	// get chan of peers we are connected to
 	getPeers chan *listPeerReq
 
-	//
-	addFeedHook chan *addFeedReq
+	// send subscription here to cancel it
+	cancelCh chan *Subscription
 
 	// a notification channel for incoming streams from other peers
 	newPeers chan inet.Stream
@@ -49,7 +49,7 @@ type PubSub struct {
 	peerDead chan peer.ID
 
 	// The set of topics we are subscribed to
-	myTopics map[string][]*clientFeed
+	myTopics map[string]map[*Subscription]struct{}
 
 	// topics tracks which topics each of our peers are subscribed to
 	topics map[string]map[peer.ID]struct{}
@@ -83,11 +83,11 @@ func NewFloodSub(ctx context.Context, h host.Host) *PubSub {
 		publish:      make(chan *Message),
 		newPeers:     make(chan inet.Stream),
 		peerDead:     make(chan peer.ID),
+		cancelCh:     make(chan *Subscription),
 		getPeers:     make(chan *listPeerReq),
-		addSub:       make(chan *addSub),
+		addSub:       make(chan *addSubReq),
 		getTopics:    make(chan *topicReq),
-		addFeedHook:  make(chan *addFeedReq, 32),
-		myTopics:     make(map[string][]*clientFeed),
+		myTopics:     make(map[string]map[*Subscription]struct{}),
 		topics:       make(map[string]map[peer.ID]struct{}),
 		peers:        make(map[peer.ID]chan *RPC),
 		seenMessages: timecache.NewTimeCache(time.Second * 30),
@@ -118,21 +118,6 @@ func (p *PubSub) processLoop(ctx context.Context) {
 
 			p.peers[pid] = messages
 
-		case req := <-p.addFeedHook:
-			feeds, ok := p.myTopics[req.topic]
-
-			var out chan *Message
-			if ok {
-				out = make(chan *Message, 32)
-				nfeed := &clientFeed{
-					out: out,
-					ctx: req.ctx,
-				}
-
-				p.myTopics[req.topic] = append(feeds, nfeed)
-			}
-
-			req.resp <- out
 		case pid := <-p.peerDead:
 			ch, ok := p.peers[pid]
 			if ok {
@@ -145,12 +130,16 @@ func (p *PubSub) processLoop(ctx context.Context) {
 			}
 		case treq := <-p.getTopics:
 			var out []string
-			for t := range p.myTopics {
-				out = append(out, t)
+			for t, subs := range p.myTopics {
+				if len(subs) > 0 {
+					out = append(out, t)
+				}
 			}
 			treq.resp <- out
+		case sub := <-p.cancelCh:
+			p.handleRemoveSubscription(sub)
 		case sub := <-p.addSub:
-			p.handleSubscriptionChange(sub)
+			p.handleAddSubscription(sub)
 		case preq := <-p.getPeers:
 			tmap, ok := p.topics[preq.topic]
 			if preq.topic != "" && !ok {
@@ -183,28 +172,51 @@ func (p *PubSub) processLoop(ctx context.Context) {
 	}
 }
 
-func (p *PubSub) handleSubscriptionChange(sub *addSub) {
-	subopt := &pb.RPC_SubOpts{
-		Topicid:   &sub.topic,
-		Subscribe: &sub.sub,
+func (p *PubSub) handleRemoveSubscription(sub *Subscription) {
+	subs := p.myTopics[sub.topic]
+
+	if subs == nil {
+		return
 	}
 
-	feeds, ok := p.myTopics[sub.topic]
-	if sub.sub {
-		if ok {
-			return
-		}
+	sub.err = fmt.Errorf("subscription cancelled by calling sub.Cancel()")
+	close(sub.ch)
+	delete(subs, sub)
 
-		p.myTopics[sub.topic] = nil
-	} else {
-		if !ok {
-			return
-		}
+	if len(subs) == 0 {
+		p.announce(sub.topic, false)
+	}
+}
 
-		for _, f := range feeds {
-			close(f.out)
-		}
-		delete(p.myTopics, sub.topic)
+func (p *PubSub) handleAddSubscription(req *addSubReq) {
+	subs := p.myTopics[req.topic]
+
+	// announce we want this topic
+	if len(subs) == 0 {
+		p.announce(req.topic, true)
+	}
+
+	// make new if not there
+	if subs == nil {
+		p.myTopics[req.topic] = make(map[*Subscription]struct{})
+		subs = p.myTopics[req.topic]
+	}
+
+	sub := &Subscription{
+		ch:       make(chan *Message, 32),
+		topic:    req.topic,
+		cancelCh: p.cancelCh,
+	}
+
+	p.myTopics[sub.topic][sub] = struct{}{}
+
+	req.resp <- sub
+}
+
+func (p *PubSub) announce(topic string, sub bool) {
+	subopt := &pb.RPC_SubOpts{
+		Topicid:   &topic,
+		Subscribe: &sub,
 	}
 
 	out := rpcWithSubs(subopt)
@@ -215,26 +227,9 @@ func (p *PubSub) handleSubscriptionChange(sub *addSub) {
 
 func (p *PubSub) notifySubs(msg *pb.Message) {
 	for _, topic := range msg.GetTopicIDs() {
-		var cleanup bool
-		feeds := p.myTopics[topic]
-		for _, f := range feeds {
-			select {
-			case f.out <- &Message{msg}:
-			case <-f.ctx.Done():
-				close(f.out)
-				f.out = nil
-				cleanup = true
-			}
-		}
-
-		if cleanup {
-			out := make([]*clientFeed, 0, len(feeds))
-			for _, f := range feeds {
-				if f.out != nil {
-					out = append(out, f)
-				}
-			}
-			p.myTopics[topic] = out
+		subs := p.myTopics[topic]
+		for f := range subs {
+			f.ch <- &Message{msg}
 		}
 	}
 }
@@ -337,22 +332,36 @@ func (p *PubSub) publishMessage(from peer.ID, msg *pb.Message) error {
 	return nil
 }
 
-type addSub struct {
+type addSubReq struct {
 	topic string
-	sub   bool
-	resp  chan chan *Message
+	resp  chan *Subscription
 }
 
-func (p *PubSub) Subscribe(ctx context.Context, topic string) (<-chan *Message, error) {
-	err := p.AddTopicSubscription(&pb.TopicDescriptor{
+func (p *PubSub) Subscribe(topic string) (*Subscription, error) {
+	td := &pb.TopicDescriptor{
 		Name: proto.String(topic),
-	})
-
-	if err != nil {
-		return nil, err
 	}
 
-	return p.GetFeed(ctx, topic)
+	if td.GetAuth().GetMode() != pb.TopicDescriptor_AuthOpts_NONE {
+		return nil, fmt.Errorf("Auth method not yet supported")
+	}
+
+	if td.GetEnc().GetMode() != pb.TopicDescriptor_EncOpts_NONE {
+		return nil, fmt.Errorf("Encryption method not yet supported")
+	}
+
+	out := make(chan *Subscription, 1)
+	p.addSub <- &addSubReq{
+		topic: topic,
+		resp:  out,
+	}
+
+	resp := <-out
+	if resp == nil {
+		return nil, fmt.Errorf("not subscribed to topic %s", topic)
+	}
+
+	return resp, nil
 }
 
 type topicReq struct {
@@ -363,56 +372,6 @@ func (p *PubSub) GetTopics() []string {
 	out := make(chan []string, 1)
 	p.getTopics <- &topicReq{resp: out}
 	return <-out
-}
-
-func (p *PubSub) AddTopicSubscription(td *pb.TopicDescriptor) error {
-	if td.GetAuth().GetMode() != pb.TopicDescriptor_AuthOpts_NONE {
-		return fmt.Errorf("Auth method not yet supported")
-	}
-
-	if td.GetEnc().GetMode() != pb.TopicDescriptor_EncOpts_NONE {
-		return fmt.Errorf("Encryption method not yet supported")
-	}
-
-	p.addSub <- &addSub{
-		topic: td.GetName(),
-		sub:   true,
-	}
-
-	return nil
-}
-
-type addFeedReq struct {
-	ctx   context.Context
-	topic string
-	resp  chan chan *Message
-}
-
-type clientFeed struct {
-	out chan *Message
-	ctx context.Context
-}
-
-func (p *PubSub) GetFeed(ctx context.Context, topic string) (<-chan *Message, error) {
-	out := make(chan chan *Message, 1)
-	p.addFeedHook <- &addFeedReq{
-		ctx:   ctx,
-		topic: topic,
-		resp:  out,
-	}
-
-	resp := <-out
-	if resp == nil {
-		return nil, fmt.Errorf("not subscribed to topic %s", topic)
-	}
-	return resp, nil
-}
-
-func (p *PubSub) Unsub(topic string) {
-	p.addSub <- &addSub{
-		topic: topic,
-		sub:   false,
-	}
 }
 
 func (p *PubSub) Publish(topic string, data []byte) error {
