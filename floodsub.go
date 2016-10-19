@@ -337,31 +337,14 @@ type addSubReq struct {
 	resp  chan *Subscription
 }
 
-func (p *PubSub) Subscribe(topic string) (*Subscription, error) {
-	td := &pb.TopicDescriptor{
-		Name: proto.String(topic),
-	}
-
-	if td.GetAuth().GetMode() != pb.TopicDescriptor_AuthOpts_NONE {
-		return nil, fmt.Errorf("Auth method not yet supported")
-	}
-
-	if td.GetEnc().GetMode() != pb.TopicDescriptor_EncOpts_NONE {
-		return nil, fmt.Errorf("Encryption method not yet supported")
-	}
-
+func (p *PubSub) Subscribe(topic string) *Subscription {
 	out := make(chan *Subscription, 1)
 	p.addSub <- &addSubReq{
 		topic: topic,
 		resp:  out,
 	}
 
-	resp := <-out
-	if resp == nil {
-		return nil, fmt.Errorf("not subscribed to topic %s", topic)
-	}
-
-	return resp, nil
+	return <-out
 }
 
 type topicReq struct {
