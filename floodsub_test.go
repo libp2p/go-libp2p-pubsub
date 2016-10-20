@@ -446,12 +446,12 @@ func assertPeerList(t *testing.T, peers []peer.ID, expected ...peer.ID) {
 	sort.Sort(peer.IDSlice(expected))
 
 	if len(peers) != len(expected) {
-		t.Fatal("mismatch: %s != %s", peers, expected)
+		t.Fatalf("mismatch: %s != %s", peers, expected)
 	}
 
 	for i, p := range peers {
 		if expected[i] != p {
-			t.Fatal("mismatch: %s != %s", peers, expected)
+			t.Fatalf("mismatch: %s != %s", peers, expected)
 		}
 	}
 }
