@@ -236,7 +236,7 @@ func TestReconnects(t *testing.T) {
 
 	time.Sleep(time.Millisecond * 50)
 
-	nextmsg := []byte("ifps is kul")
+	nextmsg := []byte("ipfs is kul")
 	err = psubs[0].Publish("cats", nextmsg)
 	if err != nil {
 		t.Fatal(err)
