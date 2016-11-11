@@ -441,6 +441,45 @@ func TestPeerTopicReporting(t *testing.T) {
 	assertPeerList(t, peers, hosts[1].ID())
 }
 
+func TestSubscribeMultipleTimes(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	hosts := getNetHosts(t, ctx, 2)
+	psubs := getPubsubs(ctx, hosts)
+
+	connect(t, hosts[0], hosts[1])
+
+	sub1 := psubs[0].Subscribe("foo")
+	sub2 := psubs[0].Subscribe("foo")
+
+	// make sure subscribing is finished by the time we publish
+	time.Sleep(1 * time.Millisecond)
+
+	psubs[1].Publish("foo", []byte("bar"))
+
+	msg, err := sub1.Next()
+	if err != nil {
+		t.Fatalf("unexpected error: %v.", err)
+	}
+
+	data := string(msg.GetData())
+
+	if data != "bar" {
+		t.Fatalf("data is %s, expected %s.", data, "bar")
+	}
+
+	msg, err = sub2.Next()
+	if err != nil {
+		t.Fatalf("unexpected error: %v.", err)
+	}
+	data = string(msg.GetData())
+
+	if data != "bar" {
+		t.Fatalf("data is %s, expected %s.", data, "bar")
+	}
+}
+
 func assertPeerList(t *testing.T, peers []peer.ID, expected ...peer.ID) {
 	sort.Sort(peer.IDSlice(peers))
 	sort.Sort(peer.IDSlice(expected))

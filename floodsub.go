@@ -132,10 +132,8 @@ func (p *PubSub) processLoop(ctx context.Context) {
 			}
 		case treq := <-p.getTopics:
 			var out []string
-			for t, subs := range p.myTopics {
-				if len(subs) > 0 {
-					out = append(out, t)
-				}
+			for t := range p.myTopics {
+				out = append(out, t)
 			}
 			treq.resp <- out
 		case sub := <-p.cancelCh:
@@ -190,6 +188,7 @@ func (p *PubSub) handleRemoveSubscription(sub *Subscription) {
 	delete(subs, sub)
 
 	if len(subs) == 0 {
+		delete(p.myTopics, sub.topic)
 		p.announce(sub.topic, false)
 	}
 }
@@ -365,6 +364,19 @@ func (p *PubSub) Subscribe(topic string) *Subscription {
 	}
 
 	return <-out
+}
+
+// SubscribeByTopicDescriptor lets you subscribe a topic using a pb.TopicDescriptor
+func (p *PubSub) SubscribeByTopicDescriptor(td *pb.TopicDescriptor) (*Subscription, error) {
+	if td.GetAuth().GetMode() != pb.TopicDescriptor_AuthOpts_NONE {
+		return nil, fmt.Errorf("auth mode not yet supported")
+	}
+
+	if td.GetEnc().GetMode() != pb.TopicDescriptor_EncOpts_NONE {
+		return nil, fmt.Errorf("encryption mode not yet supported")
+	}
+
+	return p.Subscribe(td.GetName()), nil
 }
 
 type topicReq struct {
