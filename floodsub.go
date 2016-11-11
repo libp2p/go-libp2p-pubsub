@@ -356,14 +356,10 @@ type addSubReq struct {
 }
 
 // Subscribe returns a new Subscription for the given topic
-func (p *PubSub) Subscribe(topic string) *Subscription {
-	out := make(chan *Subscription, 1)
-	p.addSub <- &addSubReq{
-		topic: topic,
-		resp:  out,
-	}
+func (p *PubSub) Subscribe(topic string) (*Subscription, error) {
+	td := pb.TopicDescriptor{Name: &topic}
 
-	return <-out
+	return p.SubscribeByTopicDescriptor(&td)
 }
 
 // SubscribeByTopicDescriptor lets you subscribe a topic using a pb.TopicDescriptor
@@ -376,7 +372,13 @@ func (p *PubSub) SubscribeByTopicDescriptor(td *pb.TopicDescriptor) (*Subscripti
 		return nil, fmt.Errorf("encryption mode not yet supported")
 	}
 
-	return p.Subscribe(td.GetName()), nil
+	out := make(chan *Subscription, 1)
+	p.addSub <- &addSubReq{
+		topic: td.GetName(),
+		resp:  out,
+	}
+
+	return <-out, nil
 }
 
 type topicReq struct {
