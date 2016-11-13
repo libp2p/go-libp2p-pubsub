@@ -487,7 +487,8 @@ func TestPeerTopicReporting(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	time.Sleep(time.Millisecond * 1)
+	time.Sleep(time.Millisecond * 10)
+
 	peers := psubs[0].ListPeers("ipfs")
 	assertPeerList(t, peers, hosts[2].ID(), hosts[3].ID())
 
