@@ -9,9 +9,9 @@
   "gxDependencies": [
     {
       "author": "whyrusleeping",
-      "hash": "QmUYzZRJcuUxLSnSzF1bSyw1jYbNAULkBrbS6rnr7F72uK",
+      "hash": "QmZyBJGpRnbQ7oUstoGNZbhXC4HJuFUCgpp8pmsVTUwdS3",
       "name": "go-libp2p",
-      "version": "4.1.0"
+      "version": "4.2.0"
     },
     {
       "author": "whyrusleeping",
@@ -37,6 +37,6 @@
   "license": "",
   "name": "floodsub",
   "releaseCmd": "git commit -a -m \"gx publish $VERSION\"",
-  "version": "0.7.4"
+  "version": "0.8.0"
 }
 
