@@ -127,7 +127,7 @@ func TestBasicFloodsub(t *testing.T) {
 		psubs[owner].Publish("foobar", msg)
 
 		for _, sub := range msgs {
-			got, err := sub.Next()
+			got, err := sub.Next(ctx)
 			if err != nil {
 				t.Fatal(sub.err)
 			}
@@ -525,7 +525,7 @@ func TestSubscribeMultipleTimes(t *testing.T) {
 
 	psubs[1].Publish("foo", []byte("bar"))
 
-	msg, err := sub1.Next()
+	msg, err := sub1.Next(ctx)
 	if err != nil {
 		t.Fatalf("unexpected error: %v.", err)
 	}
@@ -536,7 +536,7 @@ func TestSubscribeMultipleTimes(t *testing.T) {
 		t.Fatalf("data is %s, expected %s.", data, "bar")
 	}
 
-	msg, err = sub2.Next()
+	msg, err = sub2.Next(ctx)
 	if err != nil {
 		t.Fatalf("unexpected error: %v.", err)
 	}

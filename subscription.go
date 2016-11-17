@@ -1,5 +1,9 @@
 package floodsub
 
+import (
+	"context"
+)
+
 type Subscription struct {
 	topic    string
 	ch       chan *Message
@@ -11,14 +15,17 @@ func (sub *Subscription) Topic() string {
 	return sub.topic
 }
 
-func (sub *Subscription) Next() (*Message, error) {
-	msg, ok := <-sub.ch
+func (sub *Subscription) Next(ctx context.Context) (*Message, error) {
+	select {
+	case msg, ok := <-sub.ch:
+		if !ok {
+			return msg, sub.err
+		}
 
-	if !ok {
-		return msg, sub.err
+		return msg, nil
+	case <-ctx.Done():
+		return nil, ctx.Err()
 	}
-
-	return msg, nil
 }
 
 func (sub *Subscription) Cancel() {
