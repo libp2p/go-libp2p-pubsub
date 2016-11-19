@@ -10,8 +10,9 @@ import (
 	"time"
 
 	host "github.com/libp2p/go-libp2p-host"
+	netutil "github.com/libp2p/go-libp2p-netutil"
 	peer "github.com/libp2p/go-libp2p-peer"
-	netutil "github.com/libp2p/go-libp2p/p2p/test/util"
+	bhost "github.com/libp2p/go-libp2p/p2p/host/basic"
 )
 
 func checkMessageRouting(t *testing.T, topic string, pubs []*PubSub, subs []*Subscription) {
@@ -34,7 +35,8 @@ func getNetHosts(t *testing.T, ctx context.Context, n int) []host.Host {
 	var out []host.Host
 
 	for i := 0; i < n; i++ {
-		h := netutil.GenHostSwarm(t, ctx)
+		netw := netutil.GenSwarmNetwork(t, ctx)
+		h := bhost.New(netw)
 		out = append(out, h)
 	}
 
