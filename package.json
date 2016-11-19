@@ -33,9 +33,9 @@
     },
     {
       "author": "whyrusleeping",
-      "hash": "QmbUDXBMqSe4VCRgTMeAfyBh1T3GBnELEBXobZDL7cjVgs",
+      "hash": "QmcDTquYLTYirqj71RRWKUWEEw3nJt11Awzun5ep8kfY7W",
       "name": "go-libp2p-netutil",
-      "version": "0.1.1"
+      "version": "0.1.0"
     }
   ],
   "gxVersion": "0.9.0",
