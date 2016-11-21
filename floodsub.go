@@ -31,13 +31,16 @@ type PubSub struct {
 	publish chan *Message
 
 	// addSub is a control channel for us to add and remove subscriptions
-	addSub chan *addSub
+	addSub chan *addSubReq
 
-	//
+	// get list of topics we are subscribed to
 	getTopics chan *topicReq
 
-	//
+	// get chan of peers we are connected to
 	getPeers chan *listPeerReq
+
+	// send subscription here to cancel it
+	cancelCh chan *Subscription
 
 	// a notification channel for incoming streams from other peers
 	newPeers chan inet.Stream
@@ -46,7 +49,7 @@ type PubSub struct {
 	peerDead chan peer.ID
 
 	// The set of topics we are subscribed to
-	myTopics map[string]chan *Message
+	myTopics map[string]map[*Subscription]struct{}
 
 	// topics tracks which topics each of our peers are subscribed to
 	topics map[string]map[peer.ID]struct{}
@@ -72,6 +75,7 @@ type RPC struct {
 	from peer.ID
 }
 
+// NewFloodSub returns a new FloodSub management object
 func NewFloodSub(ctx context.Context, h host.Host) *PubSub {
 	ps := &PubSub{
 		host:         h,
@@ -80,10 +84,11 @@ func NewFloodSub(ctx context.Context, h host.Host) *PubSub {
 		publish:      make(chan *Message),
 		newPeers:     make(chan inet.Stream),
 		peerDead:     make(chan peer.ID),
+		cancelCh:     make(chan *Subscription),
 		getPeers:     make(chan *listPeerReq),
-		addSub:       make(chan *addSub),
+		addSub:       make(chan *addSubReq),
 		getTopics:    make(chan *topicReq),
-		myTopics:     make(map[string]chan *Message),
+		myTopics:     make(map[string]map[*Subscription]struct{}),
 		topics:       make(map[string]map[peer.ID]struct{}),
 		peers:        make(map[peer.ID]chan *RPC),
 		seenMessages: timecache.NewTimeCache(time.Second * 30),
@@ -97,6 +102,7 @@ func NewFloodSub(ctx context.Context, h host.Host) *PubSub {
 	return ps
 }
 
+// processLoop handles all inputs arriving on the channels
 func (p *PubSub) processLoop(ctx context.Context) {
 	for {
 		select {
@@ -130,8 +136,10 @@ func (p *PubSub) processLoop(ctx context.Context) {
 				out = append(out, t)
 			}
 			treq.resp <- out
+		case sub := <-p.cancelCh:
+			p.handleRemoveSubscription(sub)
 		case sub := <-p.addSub:
-			p.handleSubscriptionChange(sub)
+			p.handleAddSubscription(sub)
 		case preq := <-p.getPeers:
 			tmap, ok := p.topics[preq.topic]
 			if preq.topic != "" && !ok {
@@ -164,30 +172,62 @@ func (p *PubSub) processLoop(ctx context.Context) {
 	}
 }
 
-func (p *PubSub) handleSubscriptionChange(sub *addSub) {
-	subopt := &pb.RPC_SubOpts{
-		Topicid:   &sub.topic,
-		Subscribe: &sub.sub,
+// handleRemoveSubscription removes Subscription sub from bookeeping.
+// If this was the last Subscription for a given topic, it will also announce
+// that this node is not subscribing to this topic anymore.
+// Only called from processLoop.
+func (p *PubSub) handleRemoveSubscription(sub *Subscription) {
+	subs := p.myTopics[sub.topic]
+
+	if subs == nil {
+		return
 	}
 
-	ch, ok := p.myTopics[sub.topic]
-	if sub.sub {
-		if ok {
-			// we don't allow multiple subs per topic at this point
-			sub.resp <- nil
-			return
-		}
+	sub.err = fmt.Errorf("subscription cancelled by calling sub.Cancel()")
+	close(sub.ch)
+	delete(subs, sub)
 
-		resp := make(chan *Message, 16)
-		p.myTopics[sub.topic] = resp
-		sub.resp <- resp
-	} else {
-		if !ok {
-			return
-		}
-
-		close(ch)
+	if len(subs) == 0 {
 		delete(p.myTopics, sub.topic)
+		p.announce(sub.topic, false)
+	}
+}
+
+// handleAddSubscription adds a Subscription for a particular topic. If it is
+// the first Subscription for the topic, it will announce that this node
+// subscribes to the topic.
+// Only called from processLoop.
+func (p *PubSub) handleAddSubscription(req *addSubReq) {
+	subs := p.myTopics[req.topic]
+
+	// announce we want this topic
+	if len(subs) == 0 {
+		p.announce(req.topic, true)
+	}
+
+	// make new if not there
+	if subs == nil {
+		p.myTopics[req.topic] = make(map[*Subscription]struct{})
+		subs = p.myTopics[req.topic]
+	}
+
+	sub := &Subscription{
+		ch:       make(chan *Message, 32),
+		topic:    req.topic,
+		cancelCh: p.cancelCh,
+	}
+
+	p.myTopics[sub.topic][sub] = struct{}{}
+
+	req.resp <- sub
+}
+
+// announce announces whether or not this node is interested in a given topic
+// Only called from processLoop.
+func (p *PubSub) announce(topic string, sub bool) {
+	subopt := &pb.RPC_SubOpts{
+		Topicid:   &topic,
+		Subscribe: &sub,
 	}
 
 	out := rpcWithSubs(subopt)
@@ -196,23 +236,29 @@ func (p *PubSub) handleSubscriptionChange(sub *addSub) {
 	}
 }
 
+// notifySubs sends a given message to all corresponding subscribbers.
+// Only called from processLoop.
 func (p *PubSub) notifySubs(msg *pb.Message) {
 	for _, topic := range msg.GetTopicIDs() {
-		subch, ok := p.myTopics[topic]
-		if ok {
-			subch <- &Message{msg}
+		subs := p.myTopics[topic]
+		for f := range subs {
+			f.ch <- &Message{msg}
 		}
 	}
 }
 
+// seenMessage returns whether we already saw this message before
 func (p *PubSub) seenMessage(id string) bool {
 	return p.seenMessages.Has(id)
 }
 
+// markSeen marks a message as seen such that seenMessage returns `true' for the given id
 func (p *PubSub) markSeen(id string) {
 	p.seenMessages.Add(id)
 }
 
+// subscribedToMessage returns whether we are subscribed to one of the topics
+// of a given message
 func (p *PubSub) subscribedToMsg(msg *pb.Message) bool {
 	for _, t := range msg.GetTopicIDs() {
 		if _, ok := p.myTopics[t]; ok {
@@ -253,6 +299,7 @@ func (p *PubSub) handleIncomingRPC(rpc *RPC) error {
 	return nil
 }
 
+// msgID returns a unique ID of the passed Message
 func msgID(pmsg *pb.Message) string {
 	return string(pmsg.GetFrom()) + string(pmsg.GetSeqno())
 }
@@ -303,59 +350,49 @@ func (p *PubSub) publishMessage(from peer.ID, msg *pb.Message) error {
 	return nil
 }
 
-type addSub struct {
+type addSubReq struct {
 	topic string
-	sub   bool
-	resp  chan chan *Message
+	resp  chan *Subscription
 }
 
-func (p *PubSub) Subscribe(ctx context.Context, topic string) (<-chan *Message, error) {
-	return p.SubscribeComplicated(&pb.TopicDescriptor{
-		Name: proto.String(topic),
-	})
+// Subscribe returns a new Subscription for the given topic
+func (p *PubSub) Subscribe(topic string) (*Subscription, error) {
+	td := pb.TopicDescriptor{Name: &topic}
+
+	return p.SubscribeByTopicDescriptor(&td)
+}
+
+// SubscribeByTopicDescriptor lets you subscribe a topic using a pb.TopicDescriptor
+func (p *PubSub) SubscribeByTopicDescriptor(td *pb.TopicDescriptor) (*Subscription, error) {
+	if td.GetAuth().GetMode() != pb.TopicDescriptor_AuthOpts_NONE {
+		return nil, fmt.Errorf("auth mode not yet supported")
+	}
+
+	if td.GetEnc().GetMode() != pb.TopicDescriptor_EncOpts_NONE {
+		return nil, fmt.Errorf("encryption mode not yet supported")
+	}
+
+	out := make(chan *Subscription, 1)
+	p.addSub <- &addSubReq{
+		topic: td.GetName(),
+		resp:  out,
+	}
+
+	return <-out, nil
 }
 
 type topicReq struct {
 	resp chan []string
 }
 
+// GetTopics returns the topics this node is subscribed to
 func (p *PubSub) GetTopics() []string {
 	out := make(chan []string, 1)
 	p.getTopics <- &topicReq{resp: out}
 	return <-out
 }
 
-func (p *PubSub) SubscribeComplicated(td *pb.TopicDescriptor) (<-chan *Message, error) {
-	if td.GetAuth().GetMode() != pb.TopicDescriptor_AuthOpts_NONE {
-		return nil, fmt.Errorf("Auth method not yet supported")
-	}
-
-	if td.GetEnc().GetMode() != pb.TopicDescriptor_EncOpts_NONE {
-		return nil, fmt.Errorf("Encryption method not yet supported")
-	}
-
-	resp := make(chan chan *Message)
-	p.addSub <- &addSub{
-		topic: td.GetName(),
-		resp:  resp,
-		sub:   true,
-	}
-
-	outch := <-resp
-	if outch == nil {
-		return nil, fmt.Errorf("error, duplicate subscription")
-	}
-
-	return outch, nil
-}
-
-func (p *PubSub) Unsub(topic string) {
-	p.addSub <- &addSub{
-		topic: topic,
-		sub:   false,
-	}
-}
-
+// Publish publishes data under the given topic
 func (p *PubSub) Publish(topic string, data []byte) error {
 	seqno := make([]byte, 8)
 	binary.BigEndian.PutUint64(seqno, uint64(time.Now().UnixNano()))
@@ -376,6 +413,7 @@ type listPeerReq struct {
 	topic string
 }
 
+// ListPeers returns a list of peers we are connected to.
 func (p *PubSub) ListPeers(topic string) []peer.ID {
 	out := make(chan []peer.ID)
 	p.getPeers <- &listPeerReq{
