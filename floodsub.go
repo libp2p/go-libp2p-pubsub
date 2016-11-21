@@ -33,6 +33,8 @@ type PubSub struct {
 	// addSub is a control channel for us to add and remove subscriptions
 	addSub chan *addSub
 
+	removeSub chan *removeSub
+
 	//
 	getTopics chan *topicReq
 
@@ -82,6 +84,7 @@ func NewFloodSub(ctx context.Context, h host.Host) *PubSub {
 		peerDead:     make(chan peer.ID),
 		getPeers:     make(chan *listPeerReq),
 		addSub:       make(chan *addSub),
+		removeSub:    make(chan *removeSub),
 		getTopics:    make(chan *topicReq),
 		myTopics:     make(map[string]chan *Message),
 		topics:       make(map[string]map[peer.ID]struct{}),
@@ -117,6 +120,7 @@ func (p *PubSub) processLoop(ctx context.Context) {
 		case pid := <-p.peerDead:
 			ch, ok := p.peers[pid]
 			if ok {
+				log.Debug("Peer %s disconnected")
 				close(ch)
 			}
 
@@ -132,6 +136,8 @@ func (p *PubSub) processLoop(ctx context.Context) {
 			treq.resp <- out
 		case sub := <-p.addSub:
 			p.handleSubscriptionChange(sub)
+		case unsub := <-p.removeSub:
+			p.handleUnsubscribed(unsub)
 		case preq := <-p.getPeers:
 			tmap, ok := p.topics[preq.topic]
 			if preq.topic != "" && !ok {
@@ -162,6 +168,33 @@ func (p *PubSub) processLoop(ctx context.Context) {
 			return
 		}
 	}
+}
+
+
+func (p *PubSub) handleUnsubscribed(unsub *removeSub) {
+	if !unsub.sub {
+		ch, ok := p.myTopics[unsub.topic]
+		if ok {
+			close(ch)
+			delete(p.myTopics, unsub.topic)
+
+			subopt := &pb.RPC_SubOpts{
+				Topicid:   &unsub.topic,
+				Subscribe: &unsub.sub,
+			}
+
+			out := rpcWithSubs(subopt)
+			for _, peer := range p.peers {
+				peer <- out
+			}
+
+			unsub.resp <- true
+			return
+		}
+	}
+
+	unsub.resp <- false
+	return
 }
 
 func (p *PubSub) handleSubscriptionChange(sub *addSub) {
@@ -223,6 +256,8 @@ func (p *PubSub) subscribedToMsg(msg *pb.Message) bool {
 }
 
 func (p *PubSub) handleIncomingRPC(rpc *RPC) error {
+	log.Debug("incoming floodsub RPC: %s", rpc.String())
+
 	for _, subopt := range rpc.GetSubscriptions() {
 		t := subopt.GetTopicid()
 		if subopt.GetSubscribe() {
@@ -309,6 +344,12 @@ type addSub struct {
 	resp  chan chan *Message
 }
 
+type removeSub struct {
+	topic string
+	sub   bool
+	resp  chan bool
+}
+
 func (p *PubSub) Subscribe(ctx context.Context, topic string) (<-chan *Message, error) {
 	return p.SubscribeComplicated(&pb.TopicDescriptor{
 		Name: proto.String(topic),
@@ -346,14 +387,25 @@ func (p *PubSub) SubscribeComplicated(td *pb.TopicDescriptor) (<-chan *Message, 
 		return nil, fmt.Errorf("error, duplicate subscription")
 	}
 
+	log.Debug("Subscribed to %s", td.GetName())
+
 	return outch, nil
 }
 
-func (p *PubSub) Unsub(topic string) {
-	p.addSub <- &addSub{
+func (p *PubSub) Unsub(topic string) (bool, error) {
+	resp := make(chan bool, 1)
+	p.removeSub <- &removeSub{
 		topic: topic,
 		sub:   false,
+		resp:  resp,
 	}
+
+	out := <-resp
+	if !out {
+		return false, fmt.Errorf("error, not subscribed")
+	}
+
+	return out, nil
 }
 
 func (p *PubSub) Publish(topic string, data []byte) error {
