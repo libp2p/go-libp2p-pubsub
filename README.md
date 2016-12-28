@@ -16,7 +16,7 @@
 ## Install
 
 ```
-go get libp2p/go-floodsub
+go get github.com/libp2p/go-floodsub
 ```
 
 ## Usage
