@@ -145,7 +145,7 @@ func (m *RPC_SubOpts) GetTopicid() string {
 }
 
 type Message struct {
-	From             *string  `protobuf:"bytes,1,opt,name=from" json:"from,omitempty"`
+	From             []byte   `protobuf:"bytes,1,opt,name=from" json:"from,omitempty"`
 	Data             []byte   `protobuf:"bytes,2,opt,name=data" json:"data,omitempty"`
 	Seqno            []byte   `protobuf:"bytes,3,opt,name=seqno" json:"seqno,omitempty"`
 	TopicIDs         []string `protobuf:"bytes,4,rep,name=topicIDs" json:"topicIDs,omitempty"`
@@ -156,11 +156,11 @@ func (m *Message) Reset()         { *m = Message{} }
 func (m *Message) String() string { return proto.CompactTextString(m) }
 func (*Message) ProtoMessage()    {}
 
-func (m *Message) GetFrom() string {
-	if m != nil && m.From != nil {
-		return *m.From
+func (m *Message) GetFrom() []byte {
+	if m != nil {
+		return m.From
 	}
-	return ""
+	return nil
 }
 
 func (m *Message) GetData() []byte {

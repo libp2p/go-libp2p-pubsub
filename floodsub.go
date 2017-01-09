@@ -8,7 +8,6 @@ import (
 
 	pb "github.com/libp2p/go-floodsub/pb"
 
-	proto "github.com/gogo/protobuf/proto"
 	logging "github.com/ipfs/go-log"
 	host "github.com/libp2p/go-libp2p-host"
 	inet "github.com/libp2p/go-libp2p-net"
@@ -401,7 +400,7 @@ func (p *PubSub) Publish(topic string, data []byte) error {
 		&pb.Message{
 			Data:     data,
 			TopicIDs: []string{topic},
-			From:     proto.String(string(p.host.ID())),
+			From:     []byte(p.host.ID()),
 			Seqno:    seqno,
 		},
 	}
