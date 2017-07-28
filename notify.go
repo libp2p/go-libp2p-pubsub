@@ -1,8 +1,6 @@
 package floodsub
 
 import (
-	"context"
-
 	inet "github.com/libp2p/go-libp2p-net"
 	ma "github.com/multiformats/go-multiaddr"
 )
@@ -18,17 +16,19 @@ func (p *PubSubNotif) ClosedStream(n inet.Network, s inet.Stream) {
 }
 
 func (p *PubSubNotif) Connected(n inet.Network, c inet.Conn) {
-	s, err := p.host.NewStream(context.Background(), c.RemotePeer(), ID)
-	if err != nil {
-		log.Warning("opening new stream to peer: ", err, c.LocalPeer(), c.RemotePeer())
-		return
-	}
+	go func() {
+		s, err := p.host.NewStream(p.ctx, c.RemotePeer(), ID)
+		if err != nil {
+			log.Warning("opening new stream to peer: ", err, c.LocalPeer(), c.RemotePeer())
+			return
+		}
 
-	select {
-	case p.newPeers <- s:
-	case <-p.ctx.Done():
-		s.Close()
-	}
+		select {
+		case p.newPeers <- s:
+		case <-p.ctx.Done():
+			s.Close()
+		}
+	}()
 }
 
 func (p *PubSubNotif) Disconnected(n inet.Network, c inet.Conn) {
