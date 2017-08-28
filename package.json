@@ -21,21 +21,21 @@
     },
     {
       "author": "whyrusleeping",
-      "hash": "QmW8Rgju5JrSMHP7RDNdiwwXyenRqAbtSaPfdQKQC7ZdH6",
+      "hash": "QmcQJspoQP914EDCTemcXz8yQkL4xvc49pTWFhzmifvUZY",
       "name": "go-libp2p-host",
-      "version": "1.3.18"
+      "version": "1.3.19"
     },
     {
       "author": "whyrusleeping",
-      "hash": "QmYdcTdkuCvFXLj2uejJF5aY3HWhtd8JLT4BjPxF9BNPYf",
+      "hash": "QmQWNh36tpEaJgcoetFFWRpL9tV3Y1tUHx6tVTqbjKd6jP",
       "name": "go-libp2p-netutil",
-      "version": "0.2.22"
+      "version": "0.2.23"
     },
     {
       "author": "whyrusleeping",
-      "hash": "QmYCDYphqhKPAfyyLQykUMYikhV9a4NhxgQarwNsbQyctu",
+      "hash": "QmSj7CHTCbz8H8aK1EpiuYZtQZT26PK7n9MHJTZsfp6skt",
       "name": "go-libp2p-blankhost",
-      "version": "0.1.17"
+      "version": "0.1.18"
     },
     {
       "author": "whyrusleeping",
@@ -72,6 +72,6 @@
   "license": "",
   "name": "floodsub",
   "releaseCmd": "git commit -a -m \"gx publish $VERSION\"",
-  "version": "0.8.21"
+  "version": "0.8.22"
 }
 
