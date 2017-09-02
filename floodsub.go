@@ -259,6 +259,10 @@ func (p *PubSub) markSeen(id string) {
 // subscribedToMessage returns whether we are subscribed to one of the topics
 // of a given message
 func (p *PubSub) subscribedToMsg(msg *pb.Message) bool {
+	if len(p.myTopics) == 0 {
+		return false
+	}
+
 	for _, t := range msg.GetTopicIDs() {
 		if _, ok := p.myTopics[t]; ok {
 			return true
