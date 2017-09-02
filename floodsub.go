@@ -230,8 +230,12 @@ func (p *PubSub) announce(topic string, sub bool) {
 	}
 
 	out := rpcWithSubs(subopt)
-	for _, peer := range p.peers {
-		peer <- out
+	for pid, peer := range p.peers {
+		select {
+		case peer <- out:
+		default:
+			log.Infof("dropping announce message to peer %s: queue full", pid)
+		}
 	}
 }
 
