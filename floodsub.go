@@ -351,7 +351,12 @@ func (p *PubSub) publishMessage(from peer.ID, msg *pb.Message) error {
 			continue
 		}
 
-		go func() { mch <- out }()
+		select {
+		case mch <- out:
+		default:
+			log.Infof("dropping message to peer %s: queue full", pid)
+			// Drop it. The peer is too slow.
+		}
 	}
 
 	return nil
