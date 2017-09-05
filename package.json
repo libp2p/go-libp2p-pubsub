@@ -72,6 +72,6 @@
   "license": "",
   "name": "floodsub",
   "releaseCmd": "git commit -a -m \"gx publish $VERSION\"",
-  "version": "0.8.24"
+  "version": "0.8.25"
 }
 
