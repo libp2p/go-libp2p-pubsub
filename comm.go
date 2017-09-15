@@ -26,15 +26,18 @@ func (p *PubSub) getHelloPacket() *RPC {
 }
 
 func (p *PubSub) handleNewStream(s inet.Stream) {
-	defer s.Close()
-
 	r := ggio.NewDelimitedReader(s, 1<<20)
 	for {
 		rpc := new(RPC)
 		err := r.ReadMsg(&rpc.RPC)
 		if err != nil {
 			if err != io.EOF {
+				s.Reset()
 				log.Errorf("error reading rpc from %s: %s", s.Conn().RemotePeer(), err)
+			} else {
+				// Just be nice. They probably won't read this
+				// but it doesn't hurt to send it.
+				s.Close()
 			}
 			return
 		}
@@ -43,6 +46,8 @@ func (p *PubSub) handleNewStream(s inet.Stream) {
 		select {
 		case p.incoming <- rpc:
 		case <-p.ctx.Done():
+			// Close is useless because the other side isn't reading.
+			s.Reset()
 			return
 		}
 	}
@@ -62,7 +67,7 @@ func (p *PubSub) handleSendingMessages(ctx context.Context, s inet.Stream, outgo
 		return bufw.Flush()
 	}
 
-	defer wc.Close()
+	defer s.Close()
 	for {
 		select {
 		case rpc, ok := <-outgoing:
@@ -76,6 +81,7 @@ func (p *PubSub) handleSendingMessages(ctx context.Context, s inet.Stream, outgo
 
 			err := writeMsg(&rpc.RPC)
 			if err != nil {
+				s.Reset()
 				log.Warningf("writing message to %s: %s", s.Conn().RemotePeer(), err)
 				dead = true
 				go func() {
