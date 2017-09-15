@@ -26,7 +26,7 @@ func (p *PubSubNotif) Connected(n inet.Network, c inet.Conn) {
 		select {
 		case p.newPeers <- s:
 		case <-p.ctx.Done():
-			s.Close()
+			s.Reset()
 		}
 	}()
 }
