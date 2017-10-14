@@ -26,6 +26,10 @@ func (p *PubSub) getHelloPacket() *RPC {
 }
 
 func (p *PubSub) handleNewStream(s inet.Stream) {
+	defer func() {
+		p.peerDead <- s.Conn().RemotePeer()
+	}()
+
 	r := ggio.NewDelimitedReader(s, 1<<20)
 	for {
 		rpc := new(RPC)
