@@ -26,10 +26,6 @@ func (p *PubSub) getHelloPacket() *RPC {
 }
 
 func (p *PubSub) handleNewStream(s inet.Stream) {
-	defer func() {
-		p.peerDead <- s.Conn().RemotePeer()
-	}()
-
 	r := ggio.NewDelimitedReader(s, 1<<20)
 	for {
 		rpc := new(RPC)
@@ -42,6 +38,10 @@ func (p *PubSub) handleNewStream(s inet.Stream) {
 				// Just be nice. They probably won't read this
 				// but it doesn't hurt to send it.
 				s.Close()
+			}
+			select {
+			case p.peerDead <- s.Conn().RemotePeer():
+			case <-p.ctx.Done():
 			}
 			return
 		}
@@ -58,7 +58,6 @@ func (p *PubSub) handleNewStream(s inet.Stream) {
 }
 
 func (p *PubSub) handleSendingMessages(ctx context.Context, s inet.Stream, outgoing <-chan *RPC) {
-	var dead bool
 	bufw := bufio.NewWriter(s)
 	wc := ggio.NewDelimitedWriter(bufw)
 
@@ -78,21 +77,16 @@ func (p *PubSub) handleSendingMessages(ctx context.Context, s inet.Stream, outgo
 			if !ok {
 				return
 			}
-			if dead {
-				// continue in order to drain messages
-				continue
-			}
 
 			err := writeMsg(&rpc.RPC)
 			if err != nil {
 				s.Reset()
 				log.Warningf("writing message to %s: %s", s.Conn().RemotePeer(), err)
-				dead = true
-				go func() {
-					p.peerDead <- s.Conn().RemotePeer()
-				}()
+				select {
+				case p.peerDead <- s.Conn().RemotePeer():
+				case <-ctx.Done():
+				}
 			}
-
 		case <-ctx.Done():
 			return
 		}

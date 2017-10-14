@@ -103,6 +103,14 @@ func NewFloodSub(ctx context.Context, h host.Host) *PubSub {
 
 // processLoop handles all inputs arriving on the channels
 func (p *PubSub) processLoop(ctx context.Context) {
+	defer func() {
+		// Clean up go routines.
+		for _, ch := range p.peers {
+			close(ch)
+		}
+		p.peers = nil
+		p.topics = nil
+	}()
 	for {
 		select {
 		case s := <-p.newPeers:
