@@ -70,8 +70,7 @@
   "gxVersion": "0.9.0",
   "language": "go",
   "license": "",
-  "name": "floodsub",
+  "name": "go-libp2p-floodsub",
   "releaseCmd": "git commit -a -m \"gx publish $VERSION\"",
   "version": "0.9.3"
 }
-
