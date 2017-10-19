@@ -27,9 +27,9 @@
     },
     {
       "author": "whyrusleeping",
-      "hash": "QmdzuGp4a9pahgXuBeReHdYGUzdVX3FUCwfmWVo5mQfkTi",
+      "hash": "QmQGX417WoxKxDJeHqouMEmmH4G1RCENNSzkZYHrXy3Xb3",
       "name": "go-libp2p-netutil",
-      "version": "0.3.2"
+      "version": "0.3.3"
     },
     {
       "author": "whyrusleeping",
@@ -72,5 +72,6 @@
   "license": "",
   "name": "go-libp2p-floodsub",
   "releaseCmd": "git commit -a -m \"gx publish $VERSION\"",
-  "version": "0.9.3"
+  "version": "0.9.4"
 }
+
