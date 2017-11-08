@@ -53,6 +53,9 @@ type PubSub struct {
 	// topics tracks which topics each of our peers are subscribed to
 	topics map[string]map[peer.ID]struct{}
 
+	// sendMsg handles messages that have been validated
+	sendMsg chan sendReq
+
 	peers        map[peer.ID]chan *RPC
 	seenMessages *timecache.TimeCache
 
@@ -87,6 +90,7 @@ func NewFloodSub(ctx context.Context, h host.Host) *PubSub {
 		getPeers:     make(chan *listPeerReq),
 		addSub:       make(chan *addSubReq),
 		getTopics:    make(chan *topicReq),
+		sendMsg:      make(chan sendReq),
 		myTopics:     make(map[string]map[*Subscription]struct{}),
 		topics:       make(map[string]map[peer.ID]struct{}),
 		peers:        make(map[peer.ID]chan *RPC),
@@ -171,7 +175,19 @@ func (p *PubSub) processLoop(ctx context.Context) {
 				continue
 			}
 		case msg := <-p.publish:
-			p.maybePublishMessage(p.host.ID(), msg.Message)
+			subs := p.getSubscriptions(msg) // call before goroutine!
+			go func() {
+				if p.validate(subs, msg) {
+					p.sendMsg <- sendReq{
+						from: p.host.ID(),
+						msg:  msg,
+					}
+
+				}
+			}()
+		case req := <-p.sendMsg:
+			p.maybePublishMessage(req.from, req.msg.Message)
+
 		case <-ctx.Done():
 			log.Info("pubsub processloop shutting down")
 			return
@@ -205,24 +221,22 @@ func (p *PubSub) handleRemoveSubscription(sub *Subscription) {
 // subscribes to the topic.
 // Only called from processLoop.
 func (p *PubSub) handleAddSubscription(req *addSubReq) {
-	subs := p.myTopics[req.topic]
+	sub := req.sub
+	subs := p.myTopics[sub.topic]
 
 	// announce we want this topic
 	if len(subs) == 0 {
-		p.announce(req.topic, true)
+		p.announce(sub.topic, true)
 	}
 
 	// make new if not there
 	if subs == nil {
-		p.myTopics[req.topic] = make(map[*Subscription]struct{})
-		subs = p.myTopics[req.topic]
+		p.myTopics[sub.topic] = make(map[*Subscription]struct{})
+		subs = p.myTopics[sub.topic]
 	}
 
-	sub := &Subscription{
-		ch:       make(chan *Message, 32),
-		topic:    req.topic,
-		cancelCh: p.cancelCh,
-	}
+	sub.ch = make(chan *Message, 32)
+	sub.cancelCh = p.cancelCh
 
 	p.myTopics[sub.topic][sub] = struct{}{}
 
@@ -309,7 +323,15 @@ func (p *PubSub) handleIncomingRPC(rpc *RPC) error {
 			continue
 		}
 
-		p.maybePublishMessage(rpc.from, pmsg)
+		subs := p.getSubscriptions(&Message{pmsg}) // call before goroutine!
+		go func() {
+			if p.validate(subs, &Message{pmsg}) {
+				p.sendMsg <- sendReq{
+					from: rpc.from,
+					msg:  &*Message{pmsg},
+				}
+			}
+		}()
 	}
 	return nil
 }
@@ -317,6 +339,17 @@ func (p *PubSub) handleIncomingRPC(rpc *RPC) error {
 // msgID returns a unique ID of the passed Message
 func msgID(pmsg *pb.Message) string {
 	return string(pmsg.GetFrom()) + string(pmsg.GetSeqno())
+}
+
+// validate is called in a goroutine and calls the validate functions of all subs with msg as parameter.
+func (p *PubSub) validate(subs []*Subscription, msg *Message) bool {
+	for _, sub := range subs {
+		if sub.validate != nil && !sub.validate(msg) {
+			return false
+		}
+	}
+
+	return true
 }
 
 func (p *PubSub) maybePublishMessage(from peer.ID, pmsg *pb.Message) {
@@ -370,20 +403,47 @@ func (p *PubSub) publishMessage(from peer.ID, msg *pb.Message) error {
 	return nil
 }
 
+// getSubscriptions returns all subscriptions the would receive the given message.
+func (p *PubSub) getSubscriptions(msg *Message) []*Subscription {
+	var subs []*Subscription
+
+	for _, topic := range msg.GetTopicIDs() {
+		tSubs, ok := p.myTopics[topic]
+		if !ok {
+			continue
+		}
+
+		for sub := range tSubs {
+			subs = append(subs, sub)
+		}
+	}
+
+	return subs
+}
+
 type addSubReq struct {
-	topic string
-	resp  chan *Subscription
+	sub  *Subscription
+	resp chan *Subscription
+}
+
+// WithValidator is an option that can be supplied to Subscribe. The argument is a function that returns whether or not a given message should be propagated further.
+func WithValidator(validate func(*Message) bool) func(*Subscription) error {
+	return func(sub *Subscription) error {
+		sub.validate = validate
+		return nil
+	}
+
 }
 
 // Subscribe returns a new Subscription for the given topic
-func (p *PubSub) Subscribe(topic string) (*Subscription, error) {
+func (p *PubSub) Subscribe(topic string, opts ...func(*Subscription) error) (*Subscription, error) {
 	td := pb.TopicDescriptor{Name: &topic}
 
-	return p.SubscribeByTopicDescriptor(&td)
+	return p.SubscribeByTopicDescriptor(&td, opts...)
 }
 
 // SubscribeByTopicDescriptor lets you subscribe a topic using a pb.TopicDescriptor
-func (p *PubSub) SubscribeByTopicDescriptor(td *pb.TopicDescriptor) (*Subscription, error) {
+func (p *PubSub) SubscribeByTopicDescriptor(td *pb.TopicDescriptor, opts ...func(*Subscription) error) (*Subscription, error) {
 	if td.GetAuth().GetMode() != pb.TopicDescriptor_AuthOpts_NONE {
 		return nil, fmt.Errorf("auth mode not yet supported")
 	}
@@ -392,10 +452,21 @@ func (p *PubSub) SubscribeByTopicDescriptor(td *pb.TopicDescriptor) (*Subscripti
 		return nil, fmt.Errorf("encryption mode not yet supported")
 	}
 
+	sub := &Subscription{
+		topic: td.GetName(),
+	}
+
+	for _, opt := range opts {
+		err := opt(sub)
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	out := make(chan *Subscription, 1)
 	p.addSub <- &addSubReq{
-		topic: td.GetName(),
-		resp:  out,
+		sub:  sub,
+		resp: out,
 	}
 
 	return <-out, nil
@@ -431,6 +502,12 @@ func (p *PubSub) Publish(topic string, data []byte) error {
 type listPeerReq struct {
 	resp  chan []peer.ID
 	topic string
+}
+
+// sendReq is a request to call maybePublishMessage. It is issued after the subscription verification is done.
+type sendReq struct {
+	from peer.ID
+	msg  *Message
 }
 
 // ListPeers returns a list of peers we are connected to.

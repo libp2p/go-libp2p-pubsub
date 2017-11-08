@@ -323,14 +323,53 @@ func TestOneToOne(t *testing.T) {
 
 	connect(t, hosts[0], hosts[1])
 
-	ch, err := psubs[1].Subscribe("foobar")
+	sub, err := psubs[1].Subscribe("foobar")
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	time.Sleep(time.Millisecond * 50)
 
-	checkMessageRouting(t, "foobar", psubs, []*Subscription{ch})
+	checkMessageRouting(t, "foobar", psubs, []*Subscription{sub})
+}
+
+func TestValidate(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	hosts := getNetHosts(t, ctx, 2)
+	psubs := getPubsubs(ctx, hosts)
+
+	connect(t, hosts[0], hosts[1])
+	topic := "foobar"
+
+	sub, err := psubs[1].Subscribe(topic, WithValidator(func(msg *Message) bool {
+		return !bytes.Contains(msg.Data, []byte("illegal"))
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	time.Sleep(time.Millisecond * 50)
+
+	data := make([]byte, 16)
+	rand.Read(data)
+
+	data = append(data, []byte("illegal")...)
+
+	for _, p := range psubs {
+		err := p.Publish(topic, data)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		select {
+		case msg := <-sub.ch:
+			t.Log(msg)
+			t.Fatal("expected message validation to filter out the message")
+		case <-time.After(333 * time.Millisecond):
+		}
+	}
 }
 
 func assertPeerLists(t *testing.T, hosts []host.Host, ps *PubSub, has ...int) {
