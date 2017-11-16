@@ -187,7 +187,6 @@ func (p *PubSub) processLoop(ctx context.Context) {
 						from: p.host.ID(),
 						msg:  msg,
 					}
-
 				}
 			}()
 		case req := <-p.sendMsg:
@@ -350,6 +349,7 @@ func msgID(pmsg *pb.Message) string {
 func (p *PubSub) validate(subs []*Subscription, msg *Message) bool {
 	for _, sub := range subs {
 		if sub.validate != nil && !sub.validate(msg) {
+			log.Debugf("validator for topic %s returned false", sub.topic)
 			return false
 		}
 	}
