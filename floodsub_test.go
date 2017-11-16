@@ -9,11 +9,11 @@ import (
 	"testing"
 	"time"
 
-	netutil "gx/ipfs/QmQGX417WoxKxDJeHqouMEmmH4G1RCENNSzkZYHrXy3Xb3/go-libp2p-netutil"
-	peer "gx/ipfs/QmXYjuNuxVzXKJCfWasQk1RqkhVLDM9jtUKhqc2WPQmFSB/go-libp2p-peer"
-	host "gx/ipfs/Qmc1XhrFEiSeBNn3mpfg6gEuYCt5im2gYmNVmncsvmpeAk/go-libp2p-host"
+	host "github.com/libp2p/go-libp2p-host"
+	netutil "github.com/libp2p/go-libp2p-netutil"
+	peer "github.com/libp2p/go-libp2p-peer"
 	//bhost "github.com/libp2p/go-libp2p/p2p/host/basic"
-	bhost "gx/ipfs/QmQkeGXc9ZuQ5upVFpd2EjKvgw9aVh1BbtAgvNGVcebmmX/go-libp2p-blankhost"
+	bhost "github.com/libp2p/go-libp2p-blankhost"
 )
 
 func checkMessageRouting(t *testing.T, topic string, pubs []*PubSub, subs []*Subscription) {

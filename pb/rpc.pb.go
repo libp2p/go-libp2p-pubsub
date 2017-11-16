@@ -15,7 +15,7 @@ It has these top-level messages:
 */
 package floodsub_pb
 
-import proto "gx/ipfs/QmZ4Qi3GaRbjcx28Sme5eMH7RQjGkt8wHxt2a65oLaeFEV/gogo-protobuf/proto"
+import proto "github.com/gogo/protobuf/proto"
 import fmt "fmt"
 import math "math"
 
