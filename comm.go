@@ -7,9 +7,9 @@ import (
 
 	pb "github.com/libp2p/go-floodsub/pb"
 
-	ggio "github.com/gogo/protobuf/io"
-	proto "github.com/gogo/protobuf/proto"
-	inet "github.com/libp2p/go-libp2p-net"
+	inet "gx/ipfs/QmNa31VPzC561NWwRsJLE7nGYZYuuD2QfpK2b1q9BK54J1/go-libp2p-net"
+	ggio "gx/ipfs/QmZ4Qi3GaRbjcx28Sme5eMH7RQjGkt8wHxt2a65oLaeFEV/gogo-protobuf/io"
+	proto "gx/ipfs/QmZ4Qi3GaRbjcx28Sme5eMH7RQjGkt8wHxt2a65oLaeFEV/gogo-protobuf/proto"
 )
 
 // get the initial RPC containing all of our subscriptions to send to new peers
