@@ -352,22 +352,34 @@ func TestValidate(t *testing.T) {
 
 	time.Sleep(time.Millisecond * 50)
 
-	data := make([]byte, 16)
-	rand.Read(data)
+	msgs := []struct {
+		msg       []byte
+		validates bool
+	}{
+		{msg: []byte("this is a legal message"), validates: true},
+		{msg: []byte("there also is nothing controversial about this message"), validates: true},
+		{msg: []byte("openly illegal content will be censored"), validates: false},
+		{msg: []byte("but subversive actors will use leetspeek to spread 1ll3g4l content"), validates: true},
+	}
 
-	data = append(data, []byte("illegal")...)
+	for _, tc := range msgs {
+		for _, p := range psubs {
+			err := p.Publish(topic, tc.msg)
+			if err != nil {
+				t.Fatal(err)
+			}
 
-	for _, p := range psubs {
-		err := p.Publish(topic, data)
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		select {
-		case msg := <-sub.ch:
-			t.Log(msg)
-			t.Fatal("expected message validation to filter out the message")
-		case <-time.After(333 * time.Millisecond):
+			select {
+			case msg := <-sub.ch:
+				if !tc.validates {
+					t.Log(msg)
+					t.Error("expected message validation to filter out the message")
+				}
+			case <-time.After(333 * time.Millisecond):
+				if tc.validates {
+					t.Error("expected message validation to accept the message")
+				}
+			}
 		}
 	}
 }
