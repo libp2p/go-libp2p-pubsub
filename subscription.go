@@ -9,7 +9,7 @@ type Subscription struct {
 	ch       chan *Message
 	cancelCh chan<- *Subscription
 	err      error
-	validate func(*Message) bool
+	validate Validator
 }
 
 func (sub *Subscription) Topic() string {
