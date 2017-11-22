@@ -16,7 +16,11 @@ import (
 	timecache "github.com/whyrusleeping/timecache"
 )
 
-const ID = protocol.ID("/floodsub/1.0.0")
+const (
+	ID                    = protocol.ID("/floodsub/1.0.0")
+	maxConcurrency        = 10
+	validateTimeoutMillis = 100
+)
 
 var log = logging.Logger("floodsub")
 
@@ -56,6 +60,9 @@ type PubSub struct {
 	// sendMsg handles messages that have been validated
 	sendMsg chan sendReq
 
+	// throttleValidate bounds the number of goroutines concurrently validating messages
+	throttleValidate chan struct{}
+
 	peers        map[peer.ID]chan *RPC
 	seenMessages *timecache.TimeCache
 
@@ -80,21 +87,22 @@ type RPC struct {
 // NewFloodSub returns a new FloodSub management object
 func NewFloodSub(ctx context.Context, h host.Host) *PubSub {
 	ps := &PubSub{
-		host:         h,
-		ctx:          ctx,
-		incoming:     make(chan *RPC, 32),
-		publish:      make(chan *Message),
-		newPeers:     make(chan inet.Stream),
-		peerDead:     make(chan peer.ID),
-		cancelCh:     make(chan *Subscription),
-		getPeers:     make(chan *listPeerReq),
-		addSub:       make(chan *addSubReq),
-		getTopics:    make(chan *topicReq),
-		sendMsg:      make(chan sendReq),
-		myTopics:     make(map[string]map[*Subscription]struct{}),
-		topics:       make(map[string]map[peer.ID]struct{}),
-		peers:        make(map[peer.ID]chan *RPC),
-		seenMessages: timecache.NewTimeCache(time.Second * 30),
+		host:             h,
+		ctx:              ctx,
+		incoming:         make(chan *RPC, 32),
+		publish:          make(chan *Message),
+		newPeers:         make(chan inet.Stream),
+		peerDead:         make(chan peer.ID),
+		cancelCh:         make(chan *Subscription),
+		getPeers:         make(chan *listPeerReq),
+		addSub:           make(chan *addSubReq),
+		getTopics:        make(chan *topicReq),
+		sendMsg:          make(chan sendReq),
+		myTopics:         make(map[string]map[*Subscription]struct{}),
+		topics:           make(map[string]map[peer.ID]struct{}),
+		peers:            make(map[peer.ID]chan *RPC),
+		seenMessages:     timecache.NewTimeCache(time.Second * 30),
+		throttleValidate: make(chan struct{}, maxConcurrency),
 	}
 
 	h.SetStreamHandler(ID, ps.handleNewStream)
@@ -176,14 +184,23 @@ func (p *PubSub) processLoop(ctx context.Context) {
 			}
 		case msg := <-p.publish:
 			subs := p.getSubscriptions(msg) // call before goroutine!
-			go func() {
-				if p.validate(subs, msg) {
-					p.sendMsg <- sendReq{
-						from: p.host.ID(),
-						msg:  msg,
+
+			select {
+			case p.throttleValidate <- struct{}{}:
+				go func() {
+					defer func() { <-p.throttleValidate }()
+
+					if p.validate(subs, msg) {
+						p.sendMsg <- sendReq{
+							from: p.host.ID(),
+							msg:  msg,
+						}
+
 					}
-				}
-			}()
+				}()
+			default:
+				log.Warning("could not acquire validator; dropping message")
+			}
 		case req := <-p.sendMsg:
 			p.maybePublishMessage(req.from, req.msg.Message)
 
@@ -323,14 +340,22 @@ func (p *PubSub) handleIncomingRPC(rpc *RPC) error {
 		}
 
 		subs := p.getSubscriptions(&Message{pmsg}) // call before goroutine!
-		go func(pmsg *pb.Message) {
-			if p.validate(subs, &Message{pmsg}) {
-				p.sendMsg <- sendReq{
-					from: rpc.from,
-					msg:  &Message{pmsg},
+
+		select {
+		case p.throttleValidate <- struct{}{}:
+			go func(pmsg *pb.Message) {
+				defer func() { <-p.throttleValidate }()
+
+				if p.validate(subs, &Message{pmsg}) {
+					p.sendMsg <- sendReq{
+						from: rpc.from,
+						msg:  &Message{pmsg},
+					}
 				}
-			}
-		}(pmsg)
+			}(pmsg)
+		default:
+			log.Warning("could not acquire validator; dropping message")
+		}
 	}
 	return nil
 }
@@ -343,7 +368,10 @@ func msgID(pmsg *pb.Message) string {
 // validate is called in a goroutine and calls the validate functions of all subs with msg as parameter.
 func (p *PubSub) validate(subs []*Subscription, msg *Message) bool {
 	for _, sub := range subs {
-		if sub.validate != nil && !sub.validate(msg) {
+		ctx, cancel := context.WithTimeout(p.ctx, validateTimeoutMillis*time.Millisecond)
+		defer cancel()
+
+		if sub.validate != nil && !sub.validate(ctx, msg) {
 			log.Debugf("validator for topic %s returned false", sub.topic)
 			return false
 		}
@@ -427,9 +455,10 @@ type addSubReq struct {
 }
 
 type SubOpt func(*Subscription) error
+type Validator func(context.Context, *Message) bool
 
 // WithValidator is an option that can be supplied to Subscribe. The argument is a function that returns whether or not a given message should be propagated further.
-func WithValidator(validate func(*Message) bool) func(*Subscription) error {
+func WithValidator(validate Validator) func(*Subscription) error {
 	return func(sub *Subscription) error {
 		sub.validate = validate
 		return nil
