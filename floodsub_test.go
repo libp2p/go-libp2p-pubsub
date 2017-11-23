@@ -406,7 +406,7 @@ func TestValidateCancel(t *testing.T) {
 	time.Sleep(time.Millisecond * 50)
 
 	testmsg := []byte("this is a legal message")
-	validates := true
+	validates := false // message for which the validator times our are discarded
 
 	p := psubs[0]
 
@@ -441,7 +441,7 @@ func TestValidateOverload(t *testing.T) {
 	block := make(chan struct{})
 
 	sub, err := psubs[1].Subscribe(topic, WithValidator(func(ctx context.Context, msg *Message) bool {
-		_, _ = <-block
+		<-block
 		return true
 	}))
 	if err != nil {
