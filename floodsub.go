@@ -18,9 +18,9 @@ import (
 )
 
 const (
-	ID              = protocol.ID("/floodsub/1.0.0")
-	maxConcurrency  = 10
-	validateTimeout = 150 * time.Millisecond
+	ID                     = protocol.ID("/floodsub/1.0.0")
+	maxConcurrency         = 10
+	defaultValidateTimeout = 150 * time.Millisecond
 )
 
 var log = logging.Logger("floodsub")
@@ -373,7 +373,7 @@ func msgID(pmsg *pb.Message) string {
 // validate is called in a goroutine and calls the validate functions of all subs with msg as parameter.
 func (p *PubSub) validate(subs []*Subscription, msg *Message) bool {
 	for _, sub := range subs {
-		ctx, cancel := context.WithTimeout(p.ctx, validateTimeout)
+		ctx, cancel := context.WithTimeout(p.ctx, sub.validateTimeout)
 		defer cancel()
 
 		result := make(chan bool)
@@ -479,7 +479,14 @@ func WithValidator(validate Validator) func(*Subscription) error {
 		sub.validate = validate
 		return nil
 	}
+}
 
+// WithValidatorTimeout is an option that can be supplied to Subscribe. The argument is a duration after which long-running validators are canceled.
+func WithValidatorTimeout(timeout time.Duration) func(*Subscription) error {
+	return func(sub *Subscription) error {
+		sub.validateTimeout = timeout
+		return nil
+	}
 }
 
 // Subscribe returns a new Subscription for the given topic
@@ -500,7 +507,8 @@ func (p *PubSub) SubscribeByTopicDescriptor(td *pb.TopicDescriptor, opts ...SubO
 	}
 
 	sub := &Subscription{
-		topic: td.GetName(),
+		topic:           td.GetName(),
+		validateTimeout: defaultValidateTimeout,
 	}
 
 	for _, opt := range opts {
