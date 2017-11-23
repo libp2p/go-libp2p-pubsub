@@ -385,6 +385,61 @@ func TestValidate(t *testing.T) {
 	}
 }
 
+func TestValidateTimeout(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	hosts := getNetHosts(t, ctx, 2)
+	psubs := getPubsubs(ctx, hosts)
+
+	connect(t, hosts[0], hosts[1])
+	topic := "foobar"
+
+	cases := []struct {
+		timeout   time.Duration
+		msg       []byte
+		validates bool
+	}{
+		{75 * time.Millisecond, []byte("this better time out"), false},
+		{150 * time.Millisecond, []byte("this should work"), true},
+	}
+
+	for _, tc := range cases {
+		sub, err := psubs[1].Subscribe(topic, WithValidator(func(ctx context.Context, msg *Message) bool {
+			time.Sleep(100 * time.Millisecond)
+			return true
+		}), WithValidatorTimeout(tc.timeout))
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		time.Sleep(time.Millisecond * 50)
+
+		p := psubs[0]
+		err = p.Publish(topic, tc.msg)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		select {
+		case msg := <-sub.ch:
+			if !tc.validates {
+				t.Log(msg)
+				t.Error("expected message validation to filter out the message")
+			}
+		case <-time.After(333 * time.Millisecond):
+			if tc.validates {
+				t.Error("expected message validation to accept the message")
+			}
+		}
+
+		// important: cancel!
+		// otherwise the message will still be filtered by the other subscription
+		sub.Cancel()
+	}
+
+}
+
 func TestValidateCancel(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
