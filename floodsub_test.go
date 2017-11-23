@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"math/rand"
 	"sort"
+	"sync"
 	"testing"
 	"time"
 
@@ -323,14 +324,245 @@ func TestOneToOne(t *testing.T) {
 
 	connect(t, hosts[0], hosts[1])
 
-	ch, err := psubs[1].Subscribe("foobar")
+	sub, err := psubs[1].Subscribe("foobar")
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	time.Sleep(time.Millisecond * 50)
 
-	checkMessageRouting(t, "foobar", psubs, []*Subscription{ch})
+	checkMessageRouting(t, "foobar", psubs, []*Subscription{sub})
+}
+
+func TestValidate(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	hosts := getNetHosts(t, ctx, 2)
+	psubs := getPubsubs(ctx, hosts)
+
+	connect(t, hosts[0], hosts[1])
+	topic := "foobar"
+
+	sub, err := psubs[1].Subscribe(topic, WithValidator(func(ctx context.Context, msg *Message) bool {
+		return !bytes.Contains(msg.Data, []byte("illegal"))
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	time.Sleep(time.Millisecond * 50)
+
+	msgs := []struct {
+		msg       []byte
+		validates bool
+	}{
+		{msg: []byte("this is a legal message"), validates: true},
+		{msg: []byte("there also is nothing controversial about this message"), validates: true},
+		{msg: []byte("openly illegal content will be censored"), validates: false},
+		{msg: []byte("but subversive actors will use leetspeek to spread 1ll3g4l content"), validates: true},
+	}
+
+	for _, tc := range msgs {
+		for _, p := range psubs {
+			err := p.Publish(topic, tc.msg)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			select {
+			case msg := <-sub.ch:
+				if !tc.validates {
+					t.Log(msg)
+					t.Error("expected message validation to filter out the message")
+				}
+			case <-time.After(333 * time.Millisecond):
+				if tc.validates {
+					t.Error("expected message validation to accept the message")
+				}
+			}
+		}
+	}
+}
+
+func TestValidateTimeout(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	hosts := getNetHosts(t, ctx, 2)
+	psubs := getPubsubs(ctx, hosts)
+
+	connect(t, hosts[0], hosts[1])
+	topic := "foobar"
+
+	cases := []struct {
+		timeout   time.Duration
+		msg       []byte
+		validates bool
+	}{
+		{75 * time.Millisecond, []byte("this better time out"), false},
+		{150 * time.Millisecond, []byte("this should work"), true},
+	}
+
+	for _, tc := range cases {
+		sub, err := psubs[1].Subscribe(topic, WithValidator(func(ctx context.Context, msg *Message) bool {
+			time.Sleep(100 * time.Millisecond)
+			return true
+		}), WithValidatorTimeout(tc.timeout))
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		time.Sleep(time.Millisecond * 50)
+
+		p := psubs[0]
+		err = p.Publish(topic, tc.msg)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		select {
+		case msg := <-sub.ch:
+			if !tc.validates {
+				t.Log(msg)
+				t.Error("expected message validation to filter out the message")
+			}
+		case <-time.After(333 * time.Millisecond):
+			if tc.validates {
+				t.Error("expected message validation to accept the message")
+			}
+		}
+
+		// important: cancel!
+		// otherwise the message will still be filtered by the other subscription
+		sub.Cancel()
+	}
+
+}
+
+func TestValidateCancel(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	hosts := getNetHosts(t, ctx, 2)
+	psubs := getPubsubs(ctx, hosts)
+
+	connect(t, hosts[0], hosts[1])
+	topic := "foobar"
+
+	sub, err := psubs[1].Subscribe(topic, WithValidator(func(ctx context.Context, msg *Message) bool {
+		<-ctx.Done()
+		return true
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	time.Sleep(time.Millisecond * 50)
+
+	testmsg := []byte("this is a legal message")
+	validates := false // message for which the validator times our are discarded
+
+	p := psubs[0]
+
+	err = p.Publish(topic, testmsg)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	select {
+	case msg := <-sub.ch:
+		if !validates {
+			t.Log(msg)
+			t.Error("expected message validation to filter out the message")
+		}
+	case <-time.After(333 * time.Millisecond):
+		if validates {
+			t.Error("expected message validation to accept the message")
+		}
+	}
+}
+
+func TestValidateOverload(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	hosts := getNetHosts(t, ctx, 2)
+	psubs := getPubsubs(ctx, hosts)
+
+	connect(t, hosts[0], hosts[1])
+	topic := "foobar"
+
+	block := make(chan struct{})
+
+	sub, err := psubs[1].Subscribe(topic, WithValidator(func(ctx context.Context, msg *Message) bool {
+		<-block
+		return true
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	time.Sleep(time.Millisecond * 50)
+
+	msgs := []struct {
+		msg       []byte
+		validates bool
+	}{
+		{msg: []byte("this is a legal message"), validates: true},
+		{msg: []byte("but subversive actors will use leetspeek to spread 1ll3g4l content"), validates: true},
+		{msg: []byte("there also is nothing controversial about this message"), validates: true},
+		{msg: []byte("also fine"), validates: true},
+		{msg: []byte("still, all good"), validates: true},
+		{msg: []byte("this is getting boring"), validates: true},
+		{msg: []byte("foo"), validates: true},
+		{msg: []byte("foobar"), validates: true},
+		{msg: []byte("foofoo"), validates: true},
+		{msg: []byte("barfoo"), validates: true},
+		{msg: []byte("barbar"), validates: false},
+	}
+
+	if len(msgs) != maxConcurrency+1 {
+		t.Fatalf("expected number of messages sent to be maxConcurrency+1. Got %d, expected %d", len(msgs), maxConcurrency+1)
+	}
+
+	p := psubs[0]
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		for _, tc := range msgs {
+			select {
+			case msg := <-sub.ch:
+				if !tc.validates {
+					t.Log(msg)
+					t.Error("expected message validation to drop the message because all validator goroutines are taken")
+				}
+			case <-time.After(333 * time.Millisecond):
+				if tc.validates {
+					t.Error("expected message validation to accept the message")
+				}
+			}
+		}
+		wg.Done()
+	}()
+
+	for i, tc := range msgs {
+		err := p.Publish(topic, tc.msg)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		// wait a bit to let pubsub's internal state machine start validating the message
+		time.Sleep(10 * time.Millisecond)
+
+		// unblock validator goroutines after we sent one too many
+		if i == len(msgs)-1 {
+			close(block)
+		}
+	}
+
+	wg.Wait()
 }
 
 func assertPeerLists(t *testing.T, hosts []host.Host, ps *PubSub, has ...int) {

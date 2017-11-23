@@ -2,6 +2,7 @@ package floodsub
 
 import (
 	"context"
+	"time"
 )
 
 type Subscription struct {
@@ -9,6 +10,9 @@ type Subscription struct {
 	ch       chan *Message
 	cancelCh chan<- *Subscription
 	err      error
+
+	validate        Validator
+	validateTimeout time.Duration
 }
 
 func (sub *Subscription) Topic() string {
