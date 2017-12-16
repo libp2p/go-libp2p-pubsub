@@ -18,7 +18,7 @@ import (
 
 const (
 	ID                     = protocol.ID("/floodsub/1.0.0")
-	maxConcurrency         = 10
+	defaultMaxConcurrency  = 10
 	defaultValidateTimeout = 150 * time.Millisecond
 )
 
@@ -84,8 +84,17 @@ type RPC struct {
 	from peer.ID
 }
 
+type Option func(*PubSub) error
+
+func WithMaxConcurrency(n int) Option {
+	return func(ps *PubSub) error {
+		ps.throttleValidate = make(chan struct{}, n)
+		return nil
+	}
+}
+
 // NewFloodSub returns a new FloodSub management object
-func NewFloodSub(ctx context.Context, h host.Host) *PubSub {
+func NewFloodSub(ctx context.Context, h host.Host, opts ...Option) (*PubSub, error) {
 	ps := &PubSub{
 		host:             h,
 		ctx:              ctx,
@@ -102,7 +111,14 @@ func NewFloodSub(ctx context.Context, h host.Host) *PubSub {
 		topics:           make(map[string]map[peer.ID]struct{}),
 		peers:            make(map[peer.ID]chan *RPC),
 		seenMessages:     timecache.NewTimeCache(time.Second * 30),
-		throttleValidate: make(chan struct{}, maxConcurrency),
+		throttleValidate: make(chan struct{}, defaultMaxConcurrency),
+	}
+
+	for _, opt := range opts {
+		err := opt(ps)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	h.SetStreamHandler(ID, ps.handleNewStream)
@@ -110,7 +126,7 @@ func NewFloodSub(ctx context.Context, h host.Host) *PubSub {
 
 	go ps.processLoop(ctx)
 
-	return ps
+	return ps, nil
 }
 
 // processLoop handles all inputs arriving on the channels
@@ -367,14 +383,25 @@ func msgID(pmsg *pb.Message) string {
 
 // validate is called in a goroutine and calls the validate functions of all subs with msg as parameter.
 func (p *PubSub) validate(subs []*Subscription, msg *Message) bool {
-	for _, sub := range subs {
+	results := make([]chan bool, len(subs))
+	ctxs := make([]context.Context, len(subs))
+
+	for i, sub := range subs {
+		result := make(chan bool)
 		ctx, cancel := context.WithTimeout(p.ctx, sub.validateTimeout)
 		defer cancel()
 
-		result := make(chan bool)
+		ctxs[i] = ctx
+		results[i] = result
+
 		go func(sub *Subscription) {
 			result <- sub.validate == nil || sub.validate(ctx, msg)
 		}(sub)
+	}
+
+	for i, sub := range subs {
+		ctx := ctxs[i]
+		result := results[i]
 
 		select {
 		case valid := <-result:
