@@ -95,6 +95,7 @@ func NewFloodSub(ctx context.Context, h host.Host) *PubSub {
 		topics:       make(map[string]map[peer.ID]struct{}),
 		peers:        make(map[peer.ID]chan *RPC),
 		seenMessages: timecache.NewTimeCache(time.Second * 30),
+		counter:      uint64(time.Now().UnixNano()),
 	}
 
 	h.SetStreamHandler(ID, ps.handleNewStream)
@@ -418,10 +419,9 @@ func (p *PubSub) GetTopics() []string {
 
 // Publish publishes data under the given topic
 func (p *PubSub) Publish(topic string, data []byte) error {
-	seqno := make([]byte, 16)
+	seqno := make([]byte, 8)
 	counter := atomic.AddUint64(&p.counter, 1)
-	binary.BigEndian.PutUint64(seqno[:8], uint64(time.Now().UnixNano()))
-	binary.BigEndian.PutUint64(seqno[8:], counter)
+	binary.BigEndian.PutUint64(seqno, counter)
 
 	p.publish <- &Message{
 		&pb.Message{
