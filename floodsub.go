@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/binary"
 	"fmt"
+	"sync/atomic"
 	"time"
 
 	pb "github.com/libp2p/go-floodsub/pb"
@@ -57,6 +58,9 @@ type PubSub struct {
 	seenMessages *timecache.TimeCache
 
 	ctx context.Context
+
+	// atomic counter for seqnos
+	counter uint64
 }
 
 type Message struct {
@@ -414,8 +418,10 @@ func (p *PubSub) GetTopics() []string {
 
 // Publish publishes data under the given topic
 func (p *PubSub) Publish(topic string, data []byte) error {
-	seqno := make([]byte, 8)
-	binary.BigEndian.PutUint64(seqno, uint64(time.Now().UnixNano()))
+	seqno := make([]byte, 16)
+	counter := atomic.AddUint64(&p.counter, 1)
+	binary.BigEndian.PutUint64(seqno[:8], uint64(time.Now().UnixNano()))
+	binary.BigEndian.PutUint64(seqno[8:], counter)
 
 	p.publish <- &Message{
 		&pb.Message{
