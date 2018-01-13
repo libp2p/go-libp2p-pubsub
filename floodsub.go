@@ -116,7 +116,7 @@ func NewFloodSub(ctx context.Context, h host.Host, opts ...Option) (*PubSub, err
 		peers:            make(map[peer.ID]chan *RPC),
 		seenMessages:     timecache.NewTimeCache(time.Second * 30),
 		counter:          uint64(time.Now().UnixNano()),
-		throttleValidate: make(chan struct{}, maxConcurrency),
+		throttleValidate: make(chan struct{}, defaultMaxConcurrency),
 	}
 
 	for _, opt := range opts {
