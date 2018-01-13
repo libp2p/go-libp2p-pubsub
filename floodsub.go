@@ -360,19 +360,19 @@ func (p *PubSub) pushMsg(subs []*Subscription, src peer.ID, msg *Message) {
 		}
 	}
 
-	if !needval {
-		go func() {
-			p.sendMsg <- sendReq{
-				from: src,
-				msg:  msg,
-			}
-		}()
+	if needval {
+		// validation is asynchronous
+		// XXX vyzo: do we want a global validation throttle here?
+		go p.validate(subs, src, msg)
 		return
 	}
 
-	// validation is asynchronous
-	// XXX vyzo: do we want a global validation throttle here?
-	go p.validate(subs, src, msg)
+	go func() {
+		p.sendMsg <- sendReq{
+			from: src,
+			msg:  msg,
+		}
+	}()
 }
 
 // validate performs validation and only sends the message if all validators succeed
