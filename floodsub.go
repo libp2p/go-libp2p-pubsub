@@ -377,6 +377,9 @@ func (p *PubSub) pushMsg(subs []*Subscription, src peer.ID, msg *Message) {
 
 // validate performs validation and only sends the message if all validators succeed
 func (p *PubSub) validate(subs []*Subscription, src peer.ID, msg *Message) {
+	ctx, cancel := context.WithCancel(p.ctx)
+	defer cancel()
+
 	results := make([]chan bool, 0, len(subs))
 	throttle := false
 
@@ -391,10 +394,10 @@ loop:
 
 		select {
 		case sub.validateThrottle <- struct{}{}:
-			go func(sub *Subscription, msg *Message, rch chan bool) {
-				rch <- sub.validateMsg(p.ctx, msg)
+			go func(sub *Subscription, rch chan bool) {
+				rch <- sub.validateMsg(ctx, msg)
 				<-sub.validateThrottle
-			}(sub, msg, rch)
+			}(sub, rch)
 
 		default:
 			log.Debugf("validation throttled for topic %s", sub.topic)
