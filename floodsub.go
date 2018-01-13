@@ -386,14 +386,7 @@ func (p *PubSub) pushMsg(subs []*Subscription, src peer.ID, msg *Message) {
 		return
 	}
 
-	sreq := &sendReq{from: src, msg: msg}
-	select {
-	case p.sendMsg <- sreq:
-	default:
-		go func() {
-			p.sendMsg <- sreq
-		}()
-	}
+	p.maybePublishMessage(src, msg.Message)
 }
 
 // validate performs validation and only sends the message if all validators succeed
