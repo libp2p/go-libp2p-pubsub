@@ -38,22 +38,13 @@ func (sub *Subscription) Cancel() {
 }
 
 func (sub *Subscription) validateMsg(ctx context.Context, msg *Message) bool {
-	result := make(chan bool, 1)
 	vctx, cancel := context.WithTimeout(ctx, sub.validateTimeout)
 	defer cancel()
 
-	go func() {
-		result <- sub.validate(vctx, msg)
-	}()
-
-	select {
-	case valid := <-result:
-		if !valid {
-			log.Debugf("validation failed for topic %s", sub.topic)
-		}
-		return valid
-	case <-vctx.Done():
-		log.Debugf("validation timeout for topic %s", sub.topic)
-		return false
+	valid := sub.validate(vctx, msg)
+	if !valid {
+		log.Debugf("validation failed for topic %s", sub.topic)
 	}
+
+	return valid
 }
