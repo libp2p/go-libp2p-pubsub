@@ -501,7 +501,7 @@ type SubOpt func(*Subscription) error
 type Validator func(context.Context, *Message) bool
 
 // WithValidator is an option that can be supplied to Subscribe. The argument is a function that returns whether or not a given message should be propagated further.
-func WithValidator(validate Validator) func(*Subscription) error {
+func WithValidator(validate Validator) SubOpt {
 	return func(sub *Subscription) error {
 		sub.validate = validate
 		return nil
@@ -509,7 +509,7 @@ func WithValidator(validate Validator) func(*Subscription) error {
 }
 
 // WithValidatorTimeout is an option that can be supplied to Subscribe. The argument is a duration after which long-running validators are canceled.
-func WithValidatorTimeout(timeout time.Duration) func(*Subscription) error {
+func WithValidatorTimeout(timeout time.Duration) SubOpt {
 	return func(sub *Subscription) error {
 		sub.validateTimeout = timeout
 		return nil
