@@ -104,7 +104,7 @@ func NewFloodSub(ctx context.Context, h host.Host, opts ...Option) (*PubSub, err
 		getPeers:         make(chan *listPeerReq),
 		addSub:           make(chan *addSubReq),
 		getTopics:        make(chan *topicReq),
-		sendMsg:          make(chan *sendReq),
+		sendMsg:          make(chan *sendReq, 32),
 		validateThrottle: make(chan struct{}, defaultValidateThrottle),
 		myTopics:         make(map[string]map[*Subscription]struct{}),
 		topics:           make(map[string]map[peer.ID]struct{}),
