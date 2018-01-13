@@ -533,17 +533,20 @@ func TestValidateOverload(t *testing.T) {
 	for _, tc := range tcs {
 
 		hosts := getNetHosts(t, ctx, 2)
-		psubs := getPubsubs(ctx, hosts, WithMaxConcurrency(tc.maxConcurrency))
+		psubs := getPubsubs(ctx, hosts)
 
 		connect(t, hosts[0], hosts[1])
 		topic := "foobar"
 
 		block := make(chan struct{})
 
-		sub, err := psubs[1].Subscribe(topic, WithValidator(func(ctx context.Context, msg *Message) bool {
-			<-block
-			return true
-		}))
+		sub, err := psubs[1].Subscribe(topic,
+			WithMaxConcurrency(tc.maxConcurrency),
+			WithValidator(func(ctx context.Context, msg *Message) bool {
+				<-block
+				return true
+			}))
+
 		if err != nil {
 			t.Fatal(err)
 		}

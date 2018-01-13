@@ -11,8 +11,9 @@ type Subscription struct {
 	cancelCh chan<- *Subscription
 	err      error
 
-	validate        Validator
-	validateTimeout time.Duration
+	validate         Validator
+	validateTimeout  time.Duration
+	validateThrottle chan struct{}
 }
 
 func (sub *Subscription) Topic() string {
@@ -34,4 +35,25 @@ func (sub *Subscription) Next(ctx context.Context) (*Message, error) {
 
 func (sub *Subscription) Cancel() {
 	sub.cancelCh <- sub
+}
+
+func (sub *Subscription) validateMsg(ctx context.Context, msg *Message) bool {
+	result := make(chan bool, 1)
+	vctx, cancel := context.WithTimeout(ctx, sub.validateTimeout)
+	defer cancel()
+
+	go func() {
+		result <- sub.validate(vctx, msg)
+	}()
+
+	select {
+	case valid := <-result:
+		if !valid {
+			log.Debugf("validation failed for topic %s", sub.topic)
+		}
+		return valid
+	case <-vctx.Done():
+		log.Debugf("validation timeout for topic %s", sub.topic)
+		return false
+	}
 }
