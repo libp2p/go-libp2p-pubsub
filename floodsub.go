@@ -59,7 +59,7 @@ type PubSub struct {
 	topics map[string]map[peer.ID]struct{}
 
 	// sendMsg handles messages that have been validated
-	sendMsg chan sendReq
+	sendMsg chan *sendReq
 
 	peers        map[peer.ID]chan *RPC
 	seenMessages *timecache.TimeCache
@@ -100,7 +100,7 @@ func NewFloodSub(ctx context.Context, h host.Host, opts ...Option) (*PubSub, err
 		getPeers:     make(chan *listPeerReq),
 		addSub:       make(chan *addSubReq),
 		getTopics:    make(chan *topicReq),
-		sendMsg:      make(chan sendReq),
+		sendMsg:      make(chan *sendReq),
 		myTopics:     make(map[string]map[*Subscription]struct{}),
 		topics:       make(map[string]map[peer.ID]struct{}),
 		peers:        make(map[peer.ID]chan *RPC),
@@ -367,7 +367,7 @@ func (p *PubSub) pushMsg(subs []*Subscription, src peer.ID, msg *Message) {
 		return
 	}
 
-	sreq := sendReq{from: src, msg: msg}
+	sreq := &sendReq{from: src, msg: msg}
 	select {
 	case p.sendMsg <- sreq:
 	default:
@@ -422,7 +422,7 @@ loop:
 	}
 
 	// all validators were successful, send the message
-	p.sendMsg <- sendReq{
+	p.sendMsg <- &sendReq{
 		from: src,
 		msg:  msg,
 	}
