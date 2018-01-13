@@ -18,9 +18,9 @@ import (
 )
 
 const (
-	ID                     = protocol.ID("/floodsub/1.0.0")
-	defaultMaxConcurrency  = 10
-	defaultValidateTimeout = 150 * time.Millisecond
+	ID                         = protocol.ID("/floodsub/1.0.0")
+	defaultValidateConcurrency = 10
+	defaultValidateTimeout     = 150 * time.Millisecond
 )
 
 var log = logging.Logger("floodsub")
@@ -521,7 +521,7 @@ func WithValidatorTimeout(timeout time.Duration) SubOpt {
 	}
 }
 
-func WithMaxConcurrency(n int) SubOpt {
+func WithValidatorConcurrency(n int) SubOpt {
 	return func(sub *Subscription) error {
 		sub.validateThrottle = make(chan struct{}, n)
 		return nil
@@ -558,7 +558,7 @@ func (p *PubSub) SubscribeByTopicDescriptor(td *pb.TopicDescriptor, opts ...SubO
 	}
 
 	if sub.validate != nil && sub.validateThrottle == nil {
-		sub.validateThrottle = make(chan struct{}, defaultMaxConcurrency)
+		sub.validateThrottle = make(chan struct{}, defaultValidateConcurrency)
 	}
 
 	out := make(chan *Subscription, 1)

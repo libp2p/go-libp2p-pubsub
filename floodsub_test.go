@@ -541,7 +541,7 @@ func TestValidateOverload(t *testing.T) {
 		block := make(chan struct{})
 
 		sub, err := psubs[1].Subscribe(topic,
-			WithMaxConcurrency(tc.maxConcurrency),
+			WithValidatorConcurrency(tc.maxConcurrency),
 			WithValidator(func(ctx context.Context, msg *Message) bool {
 				<-block
 				return true
@@ -554,7 +554,7 @@ func TestValidateOverload(t *testing.T) {
 		time.Sleep(time.Millisecond * 50)
 
 		if len(tc.msgs) != tc.maxConcurrency+1 {
-			t.Fatalf("expected number of messages sent to be defaultMaxConcurrency+1. Got %d, expected %d", len(tc.msgs), tc.maxConcurrency+1)
+			t.Fatalf("expected number of messages sent to be maxConcurrency+1. Got %d, expected %d", len(tc.msgs), tc.maxConcurrency+1)
 		}
 
 		p := psubs[0]
