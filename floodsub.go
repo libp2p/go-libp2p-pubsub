@@ -373,7 +373,10 @@ func (p *PubSub) pushMsg(subs []*Subscription, src peer.ID, msg *Message) {
 	}
 
 	if needval {
-		// validation is asynchronous and globally throttled with the throttleValidate semaphore
+		// validation is asynchronous and globally throttled with the throttleValidate semaphore.
+		// the purpose of the global throttle is to bound the goncurrency possible from incoming
+		// network traffic; each subscription also has an individual throttle to preclude
+		// slow (or faulty) validators from starving other topics; see validate below.
 		select {
 		case p.validateThrottle <- struct{}{}:
 			go func() {
