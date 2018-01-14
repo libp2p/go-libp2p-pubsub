@@ -252,8 +252,9 @@ func (p *PubSub) announce(topic string, sub bool) {
 	}
 }
 
-// notifySubs sends a given message to all corresponding subscribbers.
-// Only called from processLoop.
+// notifySubs sends a given message to all corresponding subscribers.
+// A topic must have a subscription(s), otherwise notifySubs fails.
+// Only called from maybePublishMessage.
 func (p *PubSub) notifySubs(msg *pb.Message) {
 	for _, topic := range msg.GetTopicIDs() {
 		subs := p.myTopics[topic]

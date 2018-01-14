@@ -524,7 +524,7 @@ func TestSubscribeMultipleTimes(t *testing.T) {
 	}
 
 	// make sure subscribing is finished by the time we publish
-	time.Sleep(1 * time.Millisecond)
+	time.Sleep(10 * time.Millisecond)
 
 	psubs[1].Publish("foo", []byte("bar"))
 
