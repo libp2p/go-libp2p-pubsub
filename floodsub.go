@@ -252,7 +252,7 @@ func (p *PubSub) announce(topic string, sub bool) {
 	}
 }
 
-// notifySubs sends a given message to all corresponding subscribbers.
+// notifySubs sends a given message to all corresponding subscribers.
 // Only called from processLoop.
 func (p *PubSub) notifySubs(msg *pb.Message) {
 	for _, topic := range msg.GetTopicIDs() {
