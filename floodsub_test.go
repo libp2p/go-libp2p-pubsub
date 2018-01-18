@@ -351,9 +351,14 @@ func TestValidate(t *testing.T) {
 	connect(t, hosts[0], hosts[1])
 	topic := "foobar"
 
-	sub, err := psubs[1].Subscribe(topic, WithValidator(func(ctx context.Context, msg *Message) bool {
+	err := psubs[1].RegisterTopicValidator(topic, func(ctx context.Context, msg *Message) bool {
 		return !bytes.Contains(msg.Data, []byte("illegal"))
-	}))
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	sub, err := psubs[1].Subscribe(topic)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -442,13 +447,18 @@ func TestValidateOverload(t *testing.T) {
 
 		block := make(chan struct{})
 
-		sub, err := psubs[1].Subscribe(topic,
-			WithValidatorConcurrency(tc.maxConcurrency),
-			WithValidator(func(ctx context.Context, msg *Message) bool {
+		err := psubs[1].RegisterTopicValidator(topic,
+			func(ctx context.Context, msg *Message) bool {
 				<-block
 				return true
-			}))
+			},
+			WithValidatorConcurrency(tc.maxConcurrency))
 
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		sub, err := psubs[1].Subscribe(topic)
 		if err != nil {
 			t.Fatal(err)
 		}
