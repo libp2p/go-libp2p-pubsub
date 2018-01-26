@@ -33,7 +33,7 @@ func (p *PubSub) handleNewStream(s inet.Stream) {
 		if err != nil {
 			if err != io.EOF {
 				s.Reset()
-				log.Errorf("error reading rpc from %s: %s", s.Conn().RemotePeer(), err)
+				log.Infof("error reading rpc from %s: %s", s.Conn().RemotePeer(), err)
 			} else {
 				// Just be nice. They probably won't read this
 				// but it doesn't hurt to send it.
@@ -81,7 +81,7 @@ func (p *PubSub) handleSendingMessages(ctx context.Context, s inet.Stream, outgo
 			err := writeMsg(&rpc.RPC)
 			if err != nil {
 				s.Reset()
-				log.Warningf("writing message to %s: %s", s.Conn().RemotePeer(), err)
+				log.Infof("writing message to %s: %s", s.Conn().RemotePeer(), err)
 				select {
 				case p.peerDead <- s.Conn().RemotePeer():
 				case <-ctx.Done():

@@ -207,11 +207,7 @@ func (p *PubSub) processLoop(ctx context.Context) {
 			}
 			preq.resp <- peers
 		case rpc := <-p.incoming:
-			err := p.handleIncomingRPC(rpc)
-			if err != nil {
-				log.Error("handling RPC: ", err)
-				continue
-			}
+			p.handleIncomingRPC(rpc)
 		case msg := <-p.publish:
 			vals := p.getValidators(msg)
 			p.pushMsg(vals, p.host.ID(), msg)
@@ -331,7 +327,7 @@ func (p *PubSub) subscribedToMsg(msg *pb.Message) bool {
 	return false
 }
 
-func (p *PubSub) handleIncomingRPC(rpc *RPC) error {
+func (p *PubSub) handleIncomingRPC(rpc *RPC) {
 	for _, subopt := range rpc.GetSubscriptions() {
 		t := subopt.GetTopicid()
 		if subopt.GetSubscribe() {
@@ -361,8 +357,6 @@ func (p *PubSub) handleIncomingRPC(rpc *RPC) error {
 		vals := p.getValidators(msg)
 		p.pushMsg(vals, rpc.from, msg)
 	}
-
-	return nil
 }
 
 // msgID returns a unique ID of the passed Message
@@ -449,13 +443,10 @@ func (p *PubSub) maybePublishMessage(from peer.ID, pmsg *pb.Message) {
 
 	p.notifySubs(pmsg)
 
-	err := p.publishMessage(from, pmsg)
-	if err != nil {
-		log.Error("publish message: ", err)
-	}
+	p.publishMessage(from, pmsg)
 }
 
-func (p *PubSub) publishMessage(from peer.ID, msg *pb.Message) error {
+func (p *PubSub) publishMessage(from peer.ID, msg *pb.Message) {
 	tosend := make(map[peer.ID]struct{})
 	for _, topic := range msg.GetTopicIDs() {
 		tmap, ok := p.topics[topic]
@@ -486,8 +477,6 @@ func (p *PubSub) publishMessage(from peer.ID, msg *pb.Message) error {
 			// Drop it. The peer is too slow.
 		}
 	}
-
-	return nil
 }
 
 // getValidators returns all validators that apply to a given message
