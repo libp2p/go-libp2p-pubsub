@@ -36,11 +36,9 @@ func (fs *FloodSubRouter) AddPeer(peer.ID, protocol.ID) {}
 
 func (fs *FloodSubRouter) RemovePeer(peer.ID) {}
 
-func (fs *FloodSubRouter) HandleRPC(rpc *RPC) error {
-	return nil
-}
+func (fs *FloodSubRouter) HandleRPC(rpc *RPC) {}
 
-func (fs *FloodSubRouter) Publish(from peer.ID, msg *pb.Message) error {
+func (fs *FloodSubRouter) Publish(from peer.ID, msg *pb.Message) {
 	tosend := make(map[peer.ID]struct{})
 	for _, topic := range msg.GetTopicIDs() {
 		tmap, ok := fs.p.topics[topic]
