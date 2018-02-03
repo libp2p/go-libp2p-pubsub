@@ -78,3 +78,7 @@ func (fs *FloodSubRouter) Publish(from peer.ID, msg *pb.Message) {
 		}
 	}
 }
+
+func (fs *FloodSubRouter) Join(topic string) {}
+
+func (fs *FloodSubRouter) Leave(topic string) {}
