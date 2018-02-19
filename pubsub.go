@@ -139,7 +139,7 @@ func NewPubSub(ctx context.Context, h host.Host, rt PubSubRouter, opts ...Option
 		topics:           make(map[string]map[peer.ID]struct{}),
 		peers:            make(map[peer.ID]chan *RPC),
 		topicVals:        make(map[string]*topicVal),
-		seenMessages:     timecache.NewTimeCache(time.Second * 30),
+		seenMessages:     timecache.NewTimeCache(time.Second * 120),
 		counter:          uint64(time.Now().UnixNano()),
 	}
 
