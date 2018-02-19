@@ -199,27 +199,16 @@ func (gs *GossipSubRouter) Publish(from peer.ID, msg *pb.Message) {
 
 		// gossipsub peers
 		gmap, ok := gs.mesh[topic]
-		if ok {
-			// direct peers in the mesh for topic
-			for p := range gmap {
-				tosend[p] = struct{}{}
-			}
-		} else {
-			// fanout peers, we are not in the mesh for topic
+		if !ok {
+			// we are not in the mesh for topic, use fanout peers
 			gmap, ok = gs.fanout[topic]
 			if !ok {
-				// we don't have any yet, pick some
-				var peers []peer.ID
-				for p := range tmap {
-					if gs.peers[p] == GossipSubID {
-						peers = append(peers, p)
-					}
-				}
+				// we don't have any, pick some
+				peers := gs.getPeers(topic, func(peer.ID) bool { return true })
 
 				if len(peers) > 0 {
 					gmap = make(map[peer.ID]struct{})
 
-					shufflePeers(peers)
 					for _, p := range peers[:GossipSubD] {
 						gmap[p] = struct{}{}
 					}
@@ -252,6 +241,24 @@ func (gs *GossipSubRouter) Publish(from peer.ID, msg *pb.Message) {
 			// Drop it. The peer is too slow.
 		}
 	}
+}
+
+func (gs *GossipSubRouter) getPeers(topic string, filter func(peer.ID) bool) []peer.ID {
+	tmap, ok := gs.p.topics[topic]
+	if !ok {
+		return nil
+	}
+
+	peers := make([]peer.ID, 0, len(tmap))
+	for p := range tmap {
+		if gs.peers[p] == GossipSubID && filter(p) {
+			peers = append(peers, p)
+		}
+	}
+
+	shufflePeers(peers)
+
+	return peers
 }
 
 func (gs *GossipSubRouter) Join(topic string) {
