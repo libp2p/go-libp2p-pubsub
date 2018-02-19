@@ -2,6 +2,7 @@ package floodsub
 
 import (
 	"context"
+	"time"
 
 	pb "github.com/libp2p/go-floodsub/pb"
 
@@ -29,6 +30,7 @@ func (fs *GossipSubRouter) Protocols() []protocol.ID {
 
 func (fs *GossipSubRouter) Attach(p *PubSub) {
 	fs.p = p
+	go fs.heartbeatTimer()
 }
 
 func (fs *GossipSubRouter) AddPeer(peer.ID, protocol.ID) {
@@ -52,5 +54,27 @@ func (fs *GossipSubRouter) Join(topic string) {
 }
 
 func (fs *GossipSubRouter) Leave(topic string) {
+
+}
+
+func (fs *GossipSubRouter) heartbeatTimer() {
+	ticker := time.NewTicker(1 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ticker.C:
+			select {
+			case fs.p.eval <- fs.heartbeat:
+			case <-fs.p.ctx.Done():
+				return
+			}
+		case <-fs.p.ctx.Done():
+			return
+		}
+	}
+}
+
+func (fs *GossipSubRouter) heartbeat() {
 
 }
