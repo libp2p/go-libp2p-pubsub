@@ -323,6 +323,8 @@ func (p *PubSub) announce(topic string, sub bool) {
 		select {
 		case peer <- out:
 		default:
+			// TODO this needs to be reliable, schedule it for piggybacking
+			//      in a subsequent message or retry later
 			log.Infof("dropping announce message to peer %s: queue full", pid)
 		}
 	}
