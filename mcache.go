@@ -14,3 +14,8 @@ type MessageCache struct {
 func (mc *MessageCache) Add(msg *pb.Message) {
 	// TODO
 }
+
+func (mc *MessageCache) Get(mid string) (*pb.Message, bool) {
+	// TODO
+	return nil, false
+}
