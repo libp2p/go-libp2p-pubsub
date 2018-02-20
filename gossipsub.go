@@ -373,7 +373,11 @@ func (gs *GossipSubRouter) heartbeat() {
 
 		gpeers := gs.getPeers(topic, func(peer.ID) bool { return true })
 		for _, p := range gpeers[:GossipSubD] {
-			gs.pushGossip(p, &pb.ControlIHave{TopicID: &topic, MessageIDs: mids})
+			// skip mesh peers
+			_, ok := peers[p]
+			if !ok {
+				gs.pushGossip(p, &pb.ControlIHave{TopicID: &topic, MessageIDs: mids})
+			}
 		}
 	}
 
