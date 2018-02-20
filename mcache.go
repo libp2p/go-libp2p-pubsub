@@ -20,6 +20,10 @@ func (mc *MessageCache) Get(mid string) (*pb.Message, bool) {
 	return nil, false
 }
 
+func (mc *MessageCache) GetGossipIDs(topic string) []string {
+	return nil
+}
+
 func (mc *MessageCache) Shift() {
 	// TODO
 }
