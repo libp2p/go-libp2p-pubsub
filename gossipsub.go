@@ -335,6 +335,15 @@ func (gs *GossipSubRouter) heartbeat() {
 
 	for topic, peers := range gs.mesh {
 
+		// check whether our peers are still in the topic
+		for p := range peers {
+			_, ok := gs.p.topics[topic][p]
+			if !ok {
+				delete(peers, p)
+			}
+		}
+
+		// do we have enough peers?
 		if len(peers) < GossipSubDlo {
 			ineed := GossipSubD - len(peers)
 			plst := gs.getPeers(topic, func(p peer.ID) bool {
@@ -349,10 +358,12 @@ func (gs *GossipSubRouter) heartbeat() {
 			}
 		}
 
+		// do we have too many peers
 		if len(peers) > GossipSubDhi {
 			idontneed := len(peers) - GossipSubD
 			plst := peerMapToList(peers)
 			shufflePeers(plst)
+
 			for _, p := range plst[:idontneed] {
 				delete(peers, p)
 				topics := toprune[p]
@@ -363,6 +374,7 @@ func (gs *GossipSubRouter) heartbeat() {
 		// TODO gossip
 	}
 
+	// send coalesced GRAFT/PRUNE messages
 	for p, topics := range tograft {
 		graft := make([]*pb.ControlGraft, 0, len(topics))
 		for _, topic := range topics {
