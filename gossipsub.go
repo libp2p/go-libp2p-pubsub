@@ -432,7 +432,19 @@ func (gs *GossipSubRouter) heartbeat() {
 }
 
 func (gs *GossipSubRouter) flush() {
-	// TODO
+	// send gossip first, which will also piggyback control
+	for p, ihave := range gs.gossip {
+		delete(gs.gossip, p)
+		out := rpcWithControl(nil, ihave, nil, nil, nil)
+		gs.sendRPC(p, out)
+	}
+
+	// send the remaining control messages
+	for p, ctl := range gs.control {
+		delete(gs.control, p)
+		out := rpcWithControl(nil, nil, nil, ctl.Graft, ctl.Prune)
+		gs.sendRPC(p, out)
+	}
 }
 
 func (gs *GossipSubRouter) pushGossip(p peer.ID, ihave *pb.ControlIHave) {
@@ -455,7 +467,9 @@ func (gs *GossipSubRouter) pushControl(p peer.ID, ctl *pb.ControlMessage) {
 	// remove IHAVE/IWANT from control message, gossip is not retried
 	ctl.Ihave = nil
 	ctl.Iwant = nil
-	gs.control[p] = ctl
+	if ctl.Graft != nil || ctl.Prune != nil {
+		gs.control[p] = ctl
+	}
 }
 
 func (gs *GossipSubRouter) piggybackControl(p peer.ID, out *RPC, ctl *pb.ControlMessage) {
