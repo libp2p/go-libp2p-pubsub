@@ -404,6 +404,30 @@ func (gs *GossipSubRouter) heartbeat() {
 		out := rpcWithControl(nil, nil, nil, nil, prune)
 		gs.sendControl(p, out)
 	}
+
+	// maintain our fanout for topics we are publishing but we have not joined
+	for topic, peers := range gs.fanout {
+		// check whether our peers are still in the topic
+		for p := range peers {
+			_, ok := gs.p.topics[topic][p]
+			if !ok {
+				delete(peers, p)
+			}
+		}
+
+		// do we need more peers
+		if len(peers) < GossipSubD {
+			ineed := GossipSubD - len(peers)
+			plst := gs.getPeers(topic, func(p peer.ID) bool {
+				_, ok := peers[p]
+				return !ok
+			})
+
+			for _, p := range plst[:ineed] {
+				peers[p] = struct{}{}
+			}
+		}
+	}
 }
 
 func peerListToMap(peers []peer.ID) map[peer.ID]struct{} {
