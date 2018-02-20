@@ -2,6 +2,7 @@ package floodsub
 
 import (
 	"context"
+	"math/rand"
 	"time"
 
 	pb "github.com/libp2p/go-floodsub/pb"
@@ -350,7 +351,7 @@ func (gs *GossipSubRouter) heartbeat() {
 			}
 		}
 
-		// do we have too many peers
+		// do we have too many peers?
 		if len(peers) > GossipSubDhi {
 			idontneed := len(peers) - GossipSubD
 			plst := peerMapToList(peers)
@@ -526,7 +527,6 @@ func (gs *GossipSubRouter) getPeers(topic string, filter func(peer.ID) bool) []p
 	}
 
 	shufflePeers(peers)
-
 	return peers
 }
 
@@ -547,5 +547,8 @@ func peerMapToList(peers map[peer.ID]struct{}) []peer.ID {
 }
 
 func shufflePeers(peers []peer.ID) {
-	// TODO
+	for i := range peers {
+		j := rand.Intn(i + 1)
+		peers[i], peers[j] = peers[j], peers[i]
+	}
 }
