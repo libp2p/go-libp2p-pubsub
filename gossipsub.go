@@ -441,16 +441,61 @@ func (gs *GossipSubRouter) pushGossip(p peer.ID, ihave *pb.ControlIHave) {
 	gs.gossip[p] = gossip
 }
 
-func (gs *GossipSubRouter) pushControl(p peer.ID, ctl *pb.ControlMessage) {
-	// TODO
+func (gs *GossipSubRouter) piggybackGossip(p peer.ID, out *RPC, ihave []*pb.ControlIHave) {
+	ctl := out.GetControl()
+	if ctl == nil {
+		ctl = &pb.ControlMessage{}
+		out.Control = ctl
+	}
+
+	ctl.Ihave = ihave
 }
 
-func (gs *GossipSubRouter) piggybackGossip(p peer.ID, out *RPC, ihave []*pb.ControlIHave) {
-	// TODO
+func (gs *GossipSubRouter) pushControl(p peer.ID, ctl *pb.ControlMessage) {
+	// remove IHAVE/IWANT from control message, gossip is not retried
+	ctl.Ihave = nil
+	ctl.Iwant = nil
+	gs.control[p] = ctl
 }
 
 func (gs *GossipSubRouter) piggybackControl(p peer.ID, out *RPC, ctl *pb.ControlMessage) {
-	// TODO
+	// check control message for staleness first
+	var tograft []*pb.ControlGraft
+	var toprune []*pb.ControlPrune
+
+	for _, graft := range ctl.GetGraft() {
+		topic := graft.GetTopicID()
+		peers, ok := gs.mesh[topic]
+		if !ok {
+			continue
+		}
+		_, ok = peers[p]
+		if ok {
+			tograft = append(tograft, graft)
+		}
+	}
+
+	for _, prune := range ctl.GetPrune() {
+		topic := prune.GetTopicID()
+		peers, ok := gs.mesh[topic]
+		if !ok {
+			toprune = append(toprune, prune)
+			continue
+		}
+		_, ok = peers[p]
+		if !ok {
+			toprune = append(toprune, prune)
+		}
+	}
+
+	xctl := out.Control
+	if xctl == nil {
+		xctl = &pb.ControlMessage{}
+		out.Control = xctl
+	}
+
+	xctl.Graft = append(xctl.Graft, tograft...)
+	xctl.Prune = append(xctl.Prune, toprune...)
 }
 
 func (gs *GossipSubRouter) getPeers(topic string, filter func(peer.ID) bool) []peer.ID {
