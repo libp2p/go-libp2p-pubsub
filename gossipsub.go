@@ -248,10 +248,11 @@ func (gs *GossipSubRouter) Leave(topic string) {
 		return
 	}
 
+	delete(gs.mesh, topic)
+
 	for p := range gmap {
 		gs.sendPrune(p, topic)
 	}
-	delete(gs.mesh, topic)
 }
 
 func (gs *GossipSubRouter) sendGraft(p peer.ID, topic string) {
@@ -417,7 +418,7 @@ func (gs *GossipSubRouter) heartbeat() {
 			}
 		}
 
-		// do we need more peers
+		// do we need more peers?
 		if len(peers) < GossipSubD {
 			ineed := GossipSubD - len(peers)
 			plst := gs.getPeers(topic, func(p peer.ID) bool {
