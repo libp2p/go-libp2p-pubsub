@@ -68,6 +68,8 @@ func (gs *GossipSubRouter) RemovePeer(p peer.ID) {
 	for _, peers := range gs.fanout {
 		delete(peers, p)
 	}
+	delete(gs.gossip, p)
+	delete(gs.control, p)
 }
 
 func (gs *GossipSubRouter) HandleRPC(rpc *RPC) {
