@@ -19,6 +19,10 @@ const (
 	GossipSubD   = 6
 	GossipSubDlo = 4
 	GossipSubDhi = 12
+
+	// gossip parameters
+	GossipSubHistoryLength = 5
+	GossipSubHistoryGossip = 3
 )
 
 func NewGossipSub(ctx context.Context, h host.Host, opts ...Option) (*PubSub, error) {
@@ -28,7 +32,7 @@ func NewGossipSub(ctx context.Context, h host.Host, opts ...Option) (*PubSub, er
 		fanout:  make(map[string]map[peer.ID]struct{}),
 		gossip:  make(map[peer.ID][]*pb.ControlIHave),
 		control: make(map[peer.ID]*pb.ControlMessage),
-		mcache:  NewMessageCache(3, 5),
+		mcache:  NewMessageCache(GossipSubHistoryGossip, GossipSubHistoryLength),
 	}
 	return NewPubSub(ctx, h, rt, opts...)
 }
