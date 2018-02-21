@@ -324,8 +324,6 @@ func (gs *GossipSubRouter) heartbeatTimer() {
 }
 
 func (gs *GossipSubRouter) heartbeat() {
-	gs.mcache.Shift()
-
 	// flush pending control message from retries and gossip
 	// that hasn't been piggybacked since the last heartbeat
 	gs.flush()
@@ -441,6 +439,9 @@ func (gs *GossipSubRouter) heartbeat() {
 			}
 		}
 	}
+
+	// advance the message history window
+	gs.mcache.Shift()
 }
 
 func (gs *GossipSubRouter) flush() {
