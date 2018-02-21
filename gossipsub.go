@@ -203,10 +203,10 @@ func (gs *GossipSubRouter) Publish(from peer.ID, msg *pb.Message) {
 			gmap, ok = gs.fanout[topic]
 			if !ok {
 				// we don't have any, pick some
-				peers := gs.getPeers(topic, func(peer.ID) bool { return true })
+				peers := gs.getPeers(topic, GossipSubD, func(peer.ID) bool { return true })
 
 				if len(peers) > 0 {
-					gmap = peerListToMap(peers[:GossipSubD])
+					gmap = peerListToMap(peers)
 					gs.fanout[topic] = gmap
 				}
 			}
@@ -238,8 +238,8 @@ func (gs *GossipSubRouter) Join(topic string) {
 		gs.mesh[topic] = gmap
 		delete(gs.fanout, topic)
 	} else {
-		peers := gs.getPeers(topic, func(peer.ID) bool { return true })
-		gmap = peerListToMap(peers[:GossipSubD])
+		peers := gs.getPeers(topic, GossipSubD, func(peer.ID) bool { return true })
+		gmap = peerListToMap(peers)
 		gs.mesh[topic] = gmap
 	}
 
@@ -344,12 +344,12 @@ func (gs *GossipSubRouter) heartbeat() {
 		// do we have enough peers?
 		if len(peers) < GossipSubDlo {
 			ineed := GossipSubD - len(peers)
-			plst := gs.getPeers(topic, func(p peer.ID) bool {
+			plst := gs.getPeers(topic, ineed, func(p peer.ID) bool {
 				_, ok := peers[p]
 				return !ok
 			})
 
-			for _, p := range plst[:ineed] {
+			for _, p := range plst {
 				peers[p] = struct{}{}
 				topics := tograft[p]
 				tograft[p] = append(topics, topic)
@@ -375,8 +375,8 @@ func (gs *GossipSubRouter) heartbeat() {
 			continue
 		}
 
-		gpeers := gs.getPeers(topic, func(peer.ID) bool { return true })
-		for _, p := range gpeers[:GossipSubD] {
+		gpeers := gs.getPeers(topic, GossipSubD, func(peer.ID) bool { return true })
+		for _, p := range gpeers {
 			// skip mesh peers
 			_, ok := peers[p]
 			if !ok {
@@ -429,12 +429,12 @@ func (gs *GossipSubRouter) heartbeat() {
 		// do we need more peers?
 		if len(peers) < GossipSubD {
 			ineed := GossipSubD - len(peers)
-			plst := gs.getPeers(topic, func(p peer.ID) bool {
+			plst := gs.getPeers(topic, ineed, func(p peer.ID) bool {
 				_, ok := peers[p]
 				return !ok
 			})
 
-			for _, p := range plst[:ineed] {
+			for _, p := range plst {
 				peers[p] = struct{}{}
 			}
 		}
@@ -525,7 +525,7 @@ func (gs *GossipSubRouter) piggybackControl(p peer.ID, out *RPC, ctl *pb.Control
 	xctl.Prune = append(xctl.Prune, toprune...)
 }
 
-func (gs *GossipSubRouter) getPeers(topic string, filter func(peer.ID) bool) []peer.ID {
+func (gs *GossipSubRouter) getPeers(topic string, count int, filter func(peer.ID) bool) []peer.ID {
 	tmap, ok := gs.p.topics[topic]
 	if !ok {
 		return nil
@@ -539,6 +539,11 @@ func (gs *GossipSubRouter) getPeers(topic string, filter func(peer.ID) bool) []p
 	}
 
 	shufflePeers(peers)
+
+	if count > 0 && len(peers) > count {
+		peers = peers[:count]
+	}
+
 	return peers
 }
 
