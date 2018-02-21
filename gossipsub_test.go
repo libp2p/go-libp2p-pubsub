@@ -593,6 +593,54 @@ func TestGossipsubRemovePeer(t *testing.T) {
 	}
 }
 
+func TestGossipsubGraftPruneCoalesce(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	hosts := getNetHosts(t, ctx, 20)
+	psubs := getGossipsubs(ctx, hosts)
+	denseConnect(t, hosts)
+
+	var topics []string
+	var msgs [][]*Subscription
+	for i := 0; i < 100; i++ {
+		topic := fmt.Sprintf("topic%d", i)
+
+		var subs []*Subscription
+		for _, ps := range psubs {
+			subch, err := ps.Subscribe(topic)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			subs = append(subs, subch)
+		}
+
+		msgs = append(msgs, subs)
+	}
+
+	// wait for heartbeats to build meshes
+	time.Sleep(time.Second * 2)
+
+	for i, topic := range topics {
+		msg := []byte(fmt.Sprintf("%d it's not a floooooood %d", i, i))
+
+		owner := rand.Intn(len(psubs))
+
+		psubs[owner].Publish(topic, msg)
+
+		for _, sub := range msgs[i] {
+			got, err := sub.Next(ctx)
+			if err != nil {
+				t.Fatal(sub.err)
+			}
+			if !bytes.Equal(msg, got.Data) {
+				t.Fatal("got wrong message!")
+			}
+		}
+	}
+}
+
 func TestMixedGossipsub(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
