@@ -334,14 +334,6 @@ func (gs *GossipSubRouter) heartbeat() {
 	// maintain the mesh for topics we have joined
 	for topic, peers := range gs.mesh {
 
-		// check whether our peers are still in the topic
-		for p := range peers {
-			_, ok := gs.p.topics[topic][p]
-			if !ok {
-				delete(peers, p)
-			}
-		}
-
 		// do we have enough peers?
 		if len(peers) < GossipSubDlo {
 			ineed := GossipSubD - len(peers)
