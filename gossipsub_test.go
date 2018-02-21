@@ -105,6 +105,78 @@ func TestDenseGossipsub(t *testing.T) {
 	}
 }
 
+func TestGossipsubFanout(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	hosts := getNetHosts(t, ctx, 20)
+
+	psubs := getGossipsubs(ctx, hosts)
+
+	var msgs []*Subscription
+	for _, ps := range psubs[1:] {
+		subch, err := ps.Subscribe("foobar")
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		msgs = append(msgs, subch)
+	}
+
+	denseConnect(t, hosts)
+
+	// wait for heartbeats to build mesh
+	time.Sleep(time.Second * 2)
+
+	for i := 0; i < 100; i++ {
+		msg := []byte(fmt.Sprintf("%d it's not a floooooood %d", i, i))
+
+		owner := 0
+
+		psubs[owner].Publish("foobar", msg)
+
+		for _, sub := range msgs {
+			got, err := sub.Next(ctx)
+			if err != nil {
+				t.Fatal(sub.err)
+			}
+			if !bytes.Equal(msg, got.Data) {
+				t.Fatal("got wrong message!")
+			}
+		}
+	}
+
+	// wait for heartbeat to exercise fanout maintainance
+	time.Sleep(time.Second * 2)
+
+	// subscribe the owner
+	subch, err := psubs[0].Subscribe("foobar")
+	if err != nil {
+		t.Fatal(err)
+	}
+	msgs = append(msgs, subch)
+
+	// wait for a heartbeat
+	time.Sleep(time.Second * 1)
+
+	for i := 0; i < 100; i++ {
+		msg := []byte(fmt.Sprintf("%d it's not a floooooood %d", i, i))
+
+		owner := 0
+
+		psubs[owner].Publish("foobar", msg)
+
+		for _, sub := range msgs {
+			got, err := sub.Next(ctx)
+			if err != nil {
+				t.Fatal(sub.err)
+			}
+			if !bytes.Equal(msg, got.Data) {
+				t.Fatal("got wrong message!")
+			}
+		}
+	}
+}
+
 func TestGossipsubGossip(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -135,6 +207,74 @@ func TestGossipsubGossip(t *testing.T) {
 		psubs[owner].Publish("foobar", msg)
 
 		for _, sub := range msgs {
+			got, err := sub.Next(ctx)
+			if err != nil {
+				t.Fatal(sub.err)
+			}
+			if !bytes.Equal(msg, got.Data) {
+				t.Fatal("got wrong message!")
+			}
+		}
+
+		// wait a bit to have some gossip interleaved
+		time.Sleep(time.Millisecond * 100)
+	}
+
+	// and wait for some gossip flushing
+	time.Sleep(time.Second * 2)
+}
+
+func TestGossipsubGossipPiggyback(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	hosts := getNetHosts(t, ctx, 20)
+
+	psubs := getGossipsubs(ctx, hosts)
+
+	var msgs []*Subscription
+	for _, ps := range psubs {
+		subch, err := ps.Subscribe("foobar")
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		msgs = append(msgs, subch)
+	}
+
+	var xmsgs []*Subscription
+	for _, ps := range psubs {
+		subch, err := ps.Subscribe("bazcrux")
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		xmsgs = append(xmsgs, subch)
+	}
+
+	denseConnect(t, hosts)
+
+	// wait for heartbeats to build mesh
+	time.Sleep(time.Second * 2)
+
+	for i := 0; i < 100; i++ {
+		msg := []byte(fmt.Sprintf("%d it's not a floooooood %d", i, i))
+
+		owner := rand.Intn(len(psubs))
+
+		psubs[owner].Publish("foobar", msg)
+		psubs[owner].Publish("bazcrux", msg)
+
+		for _, sub := range msgs {
+			got, err := sub.Next(ctx)
+			if err != nil {
+				t.Fatal(sub.err)
+			}
+			if !bytes.Equal(msg, got.Data) {
+				t.Fatal("got wrong message!")
+			}
+		}
+
+		for _, sub := range xmsgs {
 			got, err := sub.Next(ctx)
 			if err != nil {
 				t.Fatal(sub.err)
@@ -235,6 +375,55 @@ func TestGossipsubGraft(t *testing.T) {
 		psubs[owner].Publish("foobar", msg)
 
 		for _, sub := range msgs {
+			got, err := sub.Next(ctx)
+			if err != nil {
+				t.Fatal(sub.err)
+			}
+			if !bytes.Equal(msg, got.Data) {
+				t.Fatal("got wrong message!")
+			}
+		}
+	}
+}
+
+func TestGossipsubRemovePeer(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	hosts := getNetHosts(t, ctx, 20)
+
+	psubs := getGossipsubs(ctx, hosts)
+
+	var msgs []*Subscription
+	for _, ps := range psubs {
+		subch, err := ps.Subscribe("foobar")
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		msgs = append(msgs, subch)
+	}
+
+	denseConnect(t, hosts)
+
+	// wait for heartbeats to build mesh
+	time.Sleep(time.Second * 2)
+
+	// disconnect some peers to exercise RemovePeer paths
+	for _, host := range hosts[:5] {
+		host.Close()
+	}
+
+	// wait a heartbeat
+	time.Sleep(time.Second * 1)
+
+	for i := 0; i < 10; i++ {
+		msg := []byte(fmt.Sprintf("%d it's not a floooooood %d", i, i))
+
+		owner := 5 + rand.Intn(len(psubs)-5)
+
+		psubs[owner].Publish("foobar", msg)
+
+		for _, sub := range msgs[5:] {
 			got, err := sub.Next(ctx)
 			if err != nil {
 				t.Fatal(sub.err)
