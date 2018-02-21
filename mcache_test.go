@@ -24,23 +24,23 @@ func TestMessageCache(t *testing.T) {
 		mid := msgID(msgs[i])
 		m, ok := mcache.Get(mid)
 		if !ok {
-			t.Fatal("Message %d not in cache", i)
+			t.Fatalf("Message %d not in cache", i)
 		}
 
 		if m != msgs[i] {
-			t.Fatal("Message %d does not match cache", i)
+			t.Fatalf("Message %d does not match cache", i)
 		}
 	}
 
 	gids := mcache.GetGossipIDs("test")
 	if len(gids) != 10 {
-		t.Fatal("Expected 10 gossip IDs; got %d", len(gids))
+		t.Fatalf("Expected 10 gossip IDs; got %d", len(gids))
 	}
 
 	for i := 0; i < 10; i++ {
 		mid := msgID(msgs[i])
 		if mid != gids[i] {
-			t.Fatal("GossipID mismatch for message %d", i)
+			t.Fatalf("GossipID mismatch for message %d", i)
 		}
 	}
 
@@ -53,30 +53,30 @@ func TestMessageCache(t *testing.T) {
 		mid := msgID(msgs[i])
 		m, ok := mcache.Get(mid)
 		if !ok {
-			t.Fatal("Message %d not in cache", i)
+			t.Fatalf("Message %d not in cache", i)
 		}
 
 		if m != msgs[i] {
-			t.Fatal("Message %d does not match cache", i)
+			t.Fatalf("Message %d does not match cache", i)
 		}
 	}
 
 	gids = mcache.GetGossipIDs("test")
 	if len(gids) != 20 {
-		t.Fatal("Expected 20 gossip IDs; got %d", len(gids))
+		t.Fatalf("Expected 20 gossip IDs; got %d", len(gids))
 	}
 
 	for i := 0; i < 10; i++ {
 		mid := msgID(msgs[i])
 		if mid != gids[10+i] {
-			t.Fatal("GossipID mismatch for message %d", i)
+			t.Fatalf("GossipID mismatch for message %d", i)
 		}
 	}
 
 	for i := 10; i < 20; i++ {
 		mid := msgID(msgs[i])
 		if mid != gids[i-10] {
-			t.Fatal("GossipID mismatch for message %d", i)
+			t.Fatalf("GossipID mismatch for message %d", i)
 		}
 	}
 
@@ -101,14 +101,14 @@ func TestMessageCache(t *testing.T) {
 	}
 
 	if len(mcache.msgs) != 50 {
-		t.Fatal("Expected 50 messages in the cache; got %d", len(mcache.msgs))
+		t.Fatalf("Expected 50 messages in the cache; got %d", len(mcache.msgs))
 	}
 
 	for i := 0; i < 10; i++ {
 		mid := msgID(msgs[i])
 		_, ok := mcache.Get(mid)
 		if ok {
-			t.Fatal("Message %d still in cache", i)
+			t.Fatalf("Message %d still in cache", i)
 		}
 	}
 
@@ -116,37 +116,37 @@ func TestMessageCache(t *testing.T) {
 		mid := msgID(msgs[i])
 		m, ok := mcache.Get(mid)
 		if !ok {
-			t.Fatal("Message %d not in cache", i)
+			t.Fatalf("Message %d not in cache", i)
 		}
 
 		if m != msgs[i] {
-			t.Fatal("Message %d does not match cache", i)
+			t.Fatalf("Message %d does not match cache", i)
 		}
 	}
 
 	gids = mcache.GetGossipIDs("test")
 	if len(gids) != 30 {
-		t.Fatal("Expected 30 gossip IDs; got %d", len(gids))
+		t.Fatalf("Expected 30 gossip IDs; got %d", len(gids))
 	}
 
 	for i := 0; i < 10; i++ {
 		mid := msgID(msgs[50+i])
 		if mid != gids[i] {
-			t.Fatal("GossipID mismatch for message %d", i)
+			t.Fatalf("GossipID mismatch for message %d", i)
 		}
 	}
 
 	for i := 10; i < 20; i++ {
 		mid := msgID(msgs[30+i])
 		if mid != gids[i] {
-			t.Fatal("GossipID mismatch for message %d", i)
+			t.Fatalf("GossipID mismatch for message %d", i)
 		}
 	}
 
 	for i := 20; i < 30; i++ {
 		mid := msgID(msgs[10+i])
 		if mid != gids[i] {
-			t.Fatal("GossipID mismatch for message %d", i)
+			t.Fatalf("GossipID mismatch for message %d", i)
 		}
 	}
 
