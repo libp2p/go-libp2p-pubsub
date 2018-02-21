@@ -127,7 +127,7 @@ func TestGossipsubGossip(t *testing.T) {
 	// wait for heartbeats to build mesh
 	time.Sleep(time.Second * 2)
 
-	for i := 0; i < 10; i++ {
+	for i := 0; i < 100; i++ {
 		msg := []byte(fmt.Sprintf("%d it's not a floooooood %d", i, i))
 
 		owner := rand.Intn(len(psubs))
@@ -144,8 +144,8 @@ func TestGossipsubGossip(t *testing.T) {
 			}
 		}
 
-		// wait for hearbeat to have some gossip
-		time.Sleep(time.Second * 1)
+		// wait a bit to have some gossip interleaved
+		time.Sleep(time.Millisecond * 100)
 	}
 
 	// and wait for some gossip flushing
@@ -190,6 +190,51 @@ func TestGossipsubPrune(t *testing.T) {
 		psubs[owner].Publish("foobar", msg)
 
 		for _, sub := range msgs[5:] {
+			got, err := sub.Next(ctx)
+			if err != nil {
+				t.Fatal(sub.err)
+			}
+			if !bytes.Equal(msg, got.Data) {
+				t.Fatal("got wrong message!")
+			}
+		}
+	}
+}
+
+func TestGossipsubGraft(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	hosts := getNetHosts(t, ctx, 20)
+
+	psubs := getGossipsubs(ctx, hosts)
+
+	sparseConnect(t, hosts)
+
+	time.Sleep(time.Second * 1)
+
+	var msgs []*Subscription
+	for _, ps := range psubs {
+		subch, err := ps.Subscribe("foobar")
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		msgs = append(msgs, subch)
+
+		// wait for announce to propagate
+		time.Sleep(time.Millisecond * 100)
+	}
+
+	time.Sleep(time.Second * 1)
+
+	for i := 0; i < 100; i++ {
+		msg := []byte(fmt.Sprintf("%d it's not a floooooood %d", i, i))
+
+		owner := rand.Intn(len(psubs))
+
+		psubs[owner].Publish("foobar", msg)
+
+		for _, sub := range msgs {
 			got, err := sub.Next(ctx)
 			if err != nil {
 				t.Fatal(sub.err)
