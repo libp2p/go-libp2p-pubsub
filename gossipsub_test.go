@@ -105,6 +105,102 @@ func TestDenseGossipsub(t *testing.T) {
 	}
 }
 
+func TestGossipsubGossip(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	hosts := getNetHosts(t, ctx, 20)
+
+	psubs := getGossipsubs(ctx, hosts)
+
+	var msgs []*Subscription
+	for _, ps := range psubs {
+		subch, err := ps.Subscribe("foobar")
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		msgs = append(msgs, subch)
+	}
+
+	denseConnect(t, hosts)
+
+	// wait for heartbeats to build mesh
+	time.Sleep(time.Second * 2)
+
+	for i := 0; i < 10; i++ {
+		msg := []byte(fmt.Sprintf("%d it's not a floooooood %d", i, i))
+
+		owner := rand.Intn(len(psubs))
+
+		psubs[owner].Publish("foobar", msg)
+
+		for _, sub := range msgs {
+			got, err := sub.Next(ctx)
+			if err != nil {
+				t.Fatal(sub.err)
+			}
+			if !bytes.Equal(msg, got.Data) {
+				t.Fatal("got wrong message!")
+			}
+		}
+
+		// wait for hearbeat to have some gossip
+		time.Sleep(time.Second * 1)
+	}
+
+	// and wait for some gossip flushing
+	time.Sleep(time.Second * 2)
+}
+
+func TestGossipsubPrune(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	hosts := getNetHosts(t, ctx, 20)
+
+	psubs := getGossipsubs(ctx, hosts)
+
+	var msgs []*Subscription
+	for _, ps := range psubs {
+		subch, err := ps.Subscribe("foobar")
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		msgs = append(msgs, subch)
+	}
+
+	denseConnect(t, hosts)
+
+	// wait for heartbeats to build mesh
+	time.Sleep(time.Second * 2)
+
+	// disconnect some peers from the mesh to get some PRUNEs
+	for _, sub := range msgs[:5] {
+		sub.Cancel()
+	}
+
+	// wait a bit to take effect
+	time.Sleep(time.Millisecond * 100)
+
+	for i := 0; i < 10; i++ {
+		msg := []byte(fmt.Sprintf("%d it's not a floooooood %d", i, i))
+
+		owner := rand.Intn(len(psubs))
+
+		psubs[owner].Publish("foobar", msg)
+
+		for _, sub := range msgs[5:] {
+			got, err := sub.Next(ctx)
+			if err != nil {
+				t.Fatal(sub.err)
+			}
+			if !bytes.Equal(msg, got.Data) {
+				t.Fatal("got wrong message!")
+			}
+		}
+	}
+}
+
 func TestMixedGossipsub(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
