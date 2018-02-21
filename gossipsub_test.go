@@ -369,6 +369,87 @@ func TestGossipsubGossipPiggyback(t *testing.T) {
 	time.Sleep(time.Second * 2)
 }
 
+func TestGossipsubGossipPropagation(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	hosts := getNetHosts(t, ctx, 20)
+	psubs := getGossipsubs(ctx, hosts)
+
+	hosts1 := hosts[:GossipSubD+1]
+	hosts2 := append(hosts[GossipSubD+1:], hosts[0])
+
+	denseConnect(t, hosts1)
+	denseConnect(t, hosts2)
+
+	var msgs1 []*Subscription
+	for _, ps := range psubs[1 : GossipSubD+1] {
+		subch, err := ps.Subscribe("foobar")
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		msgs1 = append(msgs1, subch)
+	}
+
+	time.Sleep(time.Second * 1)
+
+	for i := 0; i < 10; i++ {
+		msg := []byte(fmt.Sprintf("%d it's not a floooooood %d", i, i))
+
+		owner := 0
+
+		psubs[owner].Publish("foobar", msg)
+
+		for _, sub := range msgs1 {
+			got, err := sub.Next(ctx)
+			if err != nil {
+				t.Fatal(sub.err)
+			}
+			if !bytes.Equal(msg, got.Data) {
+				t.Fatal("got wrong message!")
+			}
+		}
+	}
+
+	time.Sleep(time.Millisecond * 100)
+
+	var msgs2 []*Subscription
+	for _, ps := range psubs[GossipSubD+1:] {
+		subch, err := ps.Subscribe("foobar")
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		msgs2 = append(msgs2, subch)
+	}
+
+	var collect [][]byte
+	for i := 0; i < 10; i++ {
+		for _, sub := range msgs2 {
+			got, err := sub.Next(ctx)
+			if err != nil {
+				t.Fatal(sub.err)
+			}
+			collect = append(collect, got.Data)
+		}
+	}
+
+	for i := 0; i < 10; i++ {
+		msg := []byte(fmt.Sprintf("%d it's not a floooooood %d", i, i))
+		gotit := false
+		for j := 0; j < len(collect); j++ {
+			if bytes.Equal(msg, collect[j]) {
+				gotit = true
+				break
+			}
+		}
+		if !gotit {
+			t.Fatalf("Didn't get message %s", string(msg))
+		}
+	}
+}
+
 func TestGossipsubPrune(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
