@@ -145,9 +145,6 @@ func TestGossipsubFanout(t *testing.T) {
 		}
 	}
 
-	// wait for heartbeat to exercise fanout maintainance
-	time.Sleep(time.Second * 2)
-
 	// subscribe the owner
 	subch, err := psubs[0].Subscribe("foobar")
 	if err != nil {
@@ -157,6 +154,86 @@ func TestGossipsubFanout(t *testing.T) {
 
 	// wait for a heartbeat
 	time.Sleep(time.Second * 1)
+
+	for i := 0; i < 100; i++ {
+		msg := []byte(fmt.Sprintf("%d it's not a floooooood %d", i, i))
+
+		owner := 0
+
+		psubs[owner].Publish("foobar", msg)
+
+		for _, sub := range msgs {
+			got, err := sub.Next(ctx)
+			if err != nil {
+				t.Fatal(sub.err)
+			}
+			if !bytes.Equal(msg, got.Data) {
+				t.Fatal("got wrong message!")
+			}
+		}
+	}
+}
+
+func TestGossipsubFanoutMaintenance(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	hosts := getNetHosts(t, ctx, 20)
+
+	psubs := getGossipsubs(ctx, hosts)
+
+	var msgs []*Subscription
+	for _, ps := range psubs[1:] {
+		subch, err := ps.Subscribe("foobar")
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		msgs = append(msgs, subch)
+	}
+
+	denseConnect(t, hosts)
+
+	// wait for heartbeats to build mesh
+	time.Sleep(time.Second * 2)
+
+	for i := 0; i < 100; i++ {
+		msg := []byte(fmt.Sprintf("%d it's not a floooooood %d", i, i))
+
+		owner := 0
+
+		psubs[owner].Publish("foobar", msg)
+
+		for _, sub := range msgs {
+			got, err := sub.Next(ctx)
+			if err != nil {
+				t.Fatal(sub.err)
+			}
+			if !bytes.Equal(msg, got.Data) {
+				t.Fatal("got wrong message!")
+			}
+		}
+	}
+
+	// unsubscribe all peers to exercise fanout maintenance
+	for _, sub := range msgs {
+		sub.Cancel()
+	}
+	msgs = nil
+
+	// wait for heartbeats
+	time.Sleep(time.Second * 2)
+
+	// resubscribe and repeat
+	for _, ps := range psubs[1:] {
+		subch, err := ps.Subscribe("foobar")
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		msgs = append(msgs, subch)
+	}
+
+	time.Sleep(time.Second * 2)
 
 	for i := 0; i < 100; i++ {
 		msg := []byte(fmt.Sprintf("%d it's not a floooooood %d", i, i))
