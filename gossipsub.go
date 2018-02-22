@@ -520,14 +520,22 @@ func (gs *GossipSubRouter) piggybackControl(p peer.ID, out *RPC, ctl *pb.Control
 		}
 	}
 
+	if len(tograft) == 0 && len(toprune) == 0 {
+		return
+	}
+
 	xctl := out.Control
 	if xctl == nil {
 		xctl = &pb.ControlMessage{}
 		out.Control = xctl
 	}
 
-	xctl.Graft = append(xctl.Graft, tograft...)
-	xctl.Prune = append(xctl.Prune, toprune...)
+	if len(tograft) > 0 {
+		xctl.Graft = append(xctl.Graft, tograft...)
+	}
+	if len(toprune) > 0 {
+		xctl.Prune = append(xctl.Prune, toprune...)
+	}
 }
 
 func (gs *GossipSubRouter) getPeers(topic string, count int, filter func(peer.ID) bool) []peer.ID {
