@@ -593,7 +593,7 @@ func TestGossipsubRemovePeer(t *testing.T) {
 	}
 }
 
-func TestGossipsubGraftPruneCoalesce(t *testing.T) {
+func TestGossipsubGraftPruneRetry(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -603,8 +603,9 @@ func TestGossipsubGraftPruneCoalesce(t *testing.T) {
 
 	var topics []string
 	var msgs [][]*Subscription
-	for i := 0; i < 100; i++ {
+	for i := 0; i < 50; i++ {
 		topic := fmt.Sprintf("topic%d", i)
+		topics = append(topics, topic)
 
 		var subs []*Subscription
 		for _, ps := range psubs {
@@ -615,12 +616,11 @@ func TestGossipsubGraftPruneCoalesce(t *testing.T) {
 
 			subs = append(subs, subch)
 		}
-
 		msgs = append(msgs, subs)
 	}
 
 	// wait for heartbeats to build meshes
-	time.Sleep(time.Second * 2)
+	time.Sleep(time.Second * 5)
 
 	for i, topic := range topics {
 		msg := []byte(fmt.Sprintf("%d it's not a floooooood %d", i, i))
