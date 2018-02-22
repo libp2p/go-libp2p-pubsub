@@ -338,6 +338,7 @@ func (gs *GossipSubRouter) heartbeat() {
 		if len(peers) < GossipSubDlo {
 			ineed := GossipSubD - len(peers)
 			plst := gs.getPeers(topic, ineed, func(p peer.ID) bool {
+				// filter our current peers
 				_, ok := peers[p]
 				return !ok
 			})
@@ -379,6 +380,7 @@ func (gs *GossipSubRouter) heartbeat() {
 		if len(peers) < GossipSubD {
 			ineed := GossipSubD - len(peers)
 			plst := gs.getPeers(topic, ineed, func(p peer.ID) bool {
+				// filter our current peers
 				_, ok := peers[p]
 				return !ok
 			})
@@ -392,6 +394,13 @@ func (gs *GossipSubRouter) heartbeat() {
 	}
 
 	// send coalesced GRAFT/PRUNE messages (will piggyback gossip)
+	gs.sendGraftPrune(tograft, toprune)
+
+	// advance the message history window
+	gs.mcache.Shift()
+}
+
+func (gs *GossipSubRouter) sendGraftPrune(tograft, toprune map[peer.ID][]string) {
 	for p, topics := range tograft {
 		graft := make([]*pb.ControlGraft, 0, len(topics))
 		for _, topic := range topics {
@@ -422,8 +431,6 @@ func (gs *GossipSubRouter) heartbeat() {
 		gs.sendRPC(p, out)
 	}
 
-	// advance the message history window
-	gs.mcache.Shift()
 }
 
 func (gs *GossipSubRouter) emitGossip(topic string, peers map[peer.ID]struct{}) {
