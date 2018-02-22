@@ -603,7 +603,7 @@ func TestGossipsubGraftPruneRetry(t *testing.T) {
 
 	var topics []string
 	var msgs [][]*Subscription
-	for i := 0; i < 50; i++ {
+	for i := 0; i < 35; i++ {
 		topic := fmt.Sprintf("topic%d", i)
 		topics = append(topics, topic)
 
