@@ -341,6 +341,31 @@ func TestOneToOne(t *testing.T) {
 	checkMessageRouting(t, "foobar", psubs, []*Subscription{sub})
 }
 
+func TestRegisterUnregisterValidator(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	hosts := getNetHosts(t, ctx, 1)
+	psubs := getPubsubs(ctx, hosts)
+
+	err := psubs[0].RegisterTopicValidator("foo", func(context.Context, *Message) bool {
+		return true
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = psubs[0].UnregisterTopicValidator("foo")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = psubs[0].UnregisterTopicValidator("foo")
+	if err == nil {
+		t.Fatal("Unregistered bogus topic validator")
+	}
+}
+
 func TestValidate(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
