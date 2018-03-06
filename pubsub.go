@@ -326,7 +326,11 @@ func (p *PubSub) notifySubs(msg *pb.Message) {
 	for _, topic := range msg.GetTopicIDs() {
 		subs := p.myTopics[topic]
 		for f := range subs {
-			f.ch <- &Message{msg}
+			select {
+			case f.ch <- &Message{msg}:
+			default:
+				log.Errorf("Can't deliver message to subscription for topic %s; subscriber too slow", topic)
+			}
 		}
 	}
 }
