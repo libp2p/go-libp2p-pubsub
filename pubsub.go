@@ -329,7 +329,7 @@ func (p *PubSub) notifySubs(msg *pb.Message) {
 			select {
 			case f.ch <- &Message{msg}:
 			default:
-				log.Errorf("Can't deliver message to subscription for topic %s; subscriber too slow", topic)
+				log.Infof("Can't deliver message to subscription for topic %s; subscriber too slow", topic)
 			}
 		}
 	}
