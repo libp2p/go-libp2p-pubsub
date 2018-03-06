@@ -670,7 +670,7 @@ func TestGossipsubControlPiggyback(t *testing.T) {
 	done := make(chan struct{})
 	go func() {
 		owner := rand.Intn(len(psubs))
-		for i := 0; i < 1000; i++ {
+		for i := 0; i < 10000; i++ {
 			msg := []byte("background flooooood")
 			psubs[owner].Publish("flood", msg)
 		}
