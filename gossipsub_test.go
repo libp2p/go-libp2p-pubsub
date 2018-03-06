@@ -597,7 +597,7 @@ func TestGossipsubGraftPruneRetry(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	hosts := getNetHosts(t, ctx, 20)
+	hosts := getNetHosts(t, ctx, 10)
 	psubs := getGossipsubs(ctx, hosts)
 	denseConnect(t, hosts)
 
@@ -645,7 +645,7 @@ func TestGossipsubControlPiggyback(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	hosts := getNetHosts(t, ctx, 20)
+	hosts := getNetHosts(t, ctx, 10)
 	psubs := getGossipsubs(ctx, hosts)
 	denseConnect(t, hosts)
 
