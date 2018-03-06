@@ -339,11 +339,17 @@ func (p *PubSub) announce(topic string, sub bool) {
 
 func (p *PubSub) announceRetry(topic string, sub bool) {
 	time.Sleep(time.Duration(1+rand.Intn(1000)) * time.Millisecond)
-	p.eval <- func() {
+
+	retry := func() {
 		_, ok := p.myTopics[topic]
 		if (ok && sub) || (!ok && !sub) {
 			p.announce(topic, sub)
 		}
+	}
+
+	select {
+	case p.eval <- retry:
+	case <-p.ctx.Done():
 	}
 }
 
