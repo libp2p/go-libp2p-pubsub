@@ -70,7 +70,7 @@ func (p *PubSub) handleSendingMessages(ctx context.Context, s inet.Stream, outgo
 		return bufw.Flush()
 	}
 
-	defer s.Close()
+	defer inet.FullClose(s)
 	for {
 		select {
 		case rpc, ok := <-outgoing:
