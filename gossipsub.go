@@ -28,13 +28,18 @@ var (
 
 	// heartbeat interval
 	GossipSubHeartbeatInterval = 1 * time.Second
+
+	// fanout ttl
+	GossipSubFanoutTTL = 60 * time.Second
 )
 
+// NewGossipSub returns a new PubSub object using GossipSubRouter as the router
 func NewGossipSub(ctx context.Context, h host.Host, opts ...Option) (*PubSub, error) {
 	rt := &GossipSubRouter{
 		peers:   make(map[peer.ID]protocol.ID),
 		mesh:    make(map[string]map[peer.ID]struct{}),
 		fanout:  make(map[string]map[peer.ID]struct{}),
+		lastpub: make(map[string]int64),
 		gossip:  make(map[peer.ID][]*pb.ControlIHave),
 		control: make(map[peer.ID]*pb.ControlMessage),
 		mcache:  NewMessageCache(GossipSubHistoryGossip, GossipSubHistoryLength),
@@ -42,11 +47,19 @@ func NewGossipSub(ctx context.Context, h host.Host, opts ...Option) (*PubSub, er
 	return NewPubSub(ctx, h, rt, opts...)
 }
 
+// GossipSubRouter is a router that implements the gossipsub protocol.
+// For each topic we have joined, we maintain an overlay through which
+// messages flow; this is the mesh map.
+// For each topic we publish to without joining, we maintain a list of peers
+// to use for injecting our messages in the overlay with stable routes; this
+// is the fanout map. Fanout peer lists are expired if we don't publish any
+// messages to their topic for GossipSubFanoutTTL.
 type GossipSubRouter struct {
 	p       *PubSub
 	peers   map[peer.ID]protocol.ID         // peer protocols
 	mesh    map[string]map[peer.ID]struct{} // topic meshes
 	fanout  map[string]map[peer.ID]struct{} // topic fanout
+	lastpub map[string]int64                // last pubish time for fanout topics
 	gossip  map[peer.ID][]*pb.ControlIHave  // pending gossip
 	control map[peer.ID]*pb.ControlMessage  // pending control messages
 	mcache  *MessageCache
@@ -215,6 +228,7 @@ func (gs *GossipSubRouter) Publish(from peer.ID, msg *pb.Message) {
 					gs.fanout[topic] = gmap
 				}
 			}
+			gs.lastpub[topic] = time.Now().UnixNano()
 		}
 
 		for p := range gmap {
@@ -242,6 +256,7 @@ func (gs *GossipSubRouter) Join(topic string) {
 	if ok {
 		gs.mesh[topic] = gmap
 		delete(gs.fanout, topic)
+		delete(gs.lastpub, topic)
 	} else {
 		peers := gs.getPeers(topic, GossipSubD, func(peer.ID) bool { return true })
 		gmap = peerListToMap(peers)
@@ -369,6 +384,15 @@ func (gs *GossipSubRouter) heartbeat() {
 		}
 
 		gs.emitGossip(topic, peers)
+	}
+
+	// expire fanout for topics we haven't published to in a while
+	now := time.Now().UnixNano()
+	for topic, lastpub := range gs.lastpub {
+		if lastpub+int64(GossipSubFanoutTTL) < now {
+			delete(gs.fanout, topic)
+			delete(gs.lastpub, topic)
+		}
 	}
 
 	// maintain our fanout for topics we are publishing but we have not joined

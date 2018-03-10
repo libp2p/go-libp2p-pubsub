@@ -254,6 +254,61 @@ func TestGossipsubFanoutMaintenance(t *testing.T) {
 	}
 }
 
+func TestGossipsubFanoutExpiry(t *testing.T) {
+	GossipSubFanoutTTL = 1 * time.Second
+	defer func() { GossipSubFanoutTTL = 60 * time.Second }()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	hosts := getNetHosts(t, ctx, 10)
+
+	psubs := getGossipsubs(ctx, hosts)
+
+	var msgs []*Subscription
+	for _, ps := range psubs[1:] {
+		subch, err := ps.Subscribe("foobar")
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		msgs = append(msgs, subch)
+	}
+
+	denseConnect(t, hosts)
+
+	// wait for heartbeats to build mesh
+	time.Sleep(time.Second * 2)
+
+	for i := 0; i < 5; i++ {
+		msg := []byte(fmt.Sprintf("%d it's not a floooooood %d", i, i))
+
+		owner := 0
+
+		psubs[owner].Publish("foobar", msg)
+
+		for _, sub := range msgs {
+			got, err := sub.Next(ctx)
+			if err != nil {
+				t.Fatal(sub.err)
+			}
+			if !bytes.Equal(msg, got.Data) {
+				t.Fatal("got wrong message!")
+			}
+		}
+	}
+
+	if len(psubs[0].rt.(*GossipSubRouter).fanout) == 0 {
+		t.Fatal("owner has no fanout")
+	}
+
+	// wait for TTL to expire fanout peers in owner
+	time.Sleep(time.Second * 2)
+
+	if len(psubs[0].rt.(*GossipSubRouter).fanout) > 0 {
+		t.Fatal("fanout hasn't expired")
+	}
+}
+
 func TestGossipsubGossip(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
