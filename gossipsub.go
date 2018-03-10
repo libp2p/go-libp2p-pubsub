@@ -14,7 +14,9 @@ import (
 
 const (
 	GossipSubID = protocol.ID("/meshsub/1.0.0")
+)
 
+var (
 	// overlay parameters
 	GossipSubD   = 6
 	GossipSubDlo = 4
@@ -23,6 +25,9 @@ const (
 	// gossip parameters
 	GossipSubHistoryLength = 5
 	GossipSubHistoryGossip = 3
+
+	// heartbeat interval
+	GossipSubHeartbeatInterval = 1 * time.Second
 )
 
 func NewGossipSub(ctx context.Context, h host.Host, opts ...Option) (*PubSub, error) {
@@ -306,7 +311,7 @@ func (gs *GossipSubRouter) sendRPC(p peer.ID, out *RPC) {
 }
 
 func (gs *GossipSubRouter) heartbeatTimer() {
-	ticker := time.NewTicker(1 * time.Second)
+	ticker := time.NewTicker(GossipSubHeartbeatInterval)
 	defer ticker.Stop()
 
 	for {
