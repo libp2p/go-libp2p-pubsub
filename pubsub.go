@@ -94,13 +94,25 @@ type PubSub struct {
 
 // PubSubRouter is the message router component of PubSub
 type PubSubRouter interface {
+	// Protocols returns the list of protocols supported by the router.
 	Protocols() []protocol.ID
+	// Attach is invoked by the PubSub constructor to attach the router to a
+	// freshly initialized PubSub instance.
 	Attach(*PubSub)
+	// AddPeer notifies the router that a new peer has been connected.
 	AddPeer(peer.ID, protocol.ID)
+	// RemovePeer notifies the router that a peer has been disconnected.
 	RemovePeer(peer.ID)
+	// HandleRPC is invoked to process control messages in the RPC envelope.
+	// It is invoked after subscriptions and payload messages have been processed.
 	HandleRPC(*RPC)
+	// Publish is invoked to forward a new message that has been validated.
 	Publish(peer.ID, *pb.Message)
+	// Join notifies the router that we want to receive and forward messages in a topic.
+	// It is invoked after the subscription announcement.
 	Join(topic string)
+	// Leave notifies the router that we are no longer interested in a topic.
+	// It is invoked after the unsubscription announcement.
 	Leave(topic string)
 }
 
