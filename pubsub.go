@@ -133,7 +133,7 @@ type RPC struct {
 
 type Option func(*PubSub) error
 
-// NewFloodSub returns a new PubSub management object
+// NewPubSub returns a new PubSub management object
 func NewPubSub(ctx context.Context, h host.Host, rt PubSubRouter, opts ...Option) (*PubSub, error) {
 	ps := &PubSub{
 		host:             h,
