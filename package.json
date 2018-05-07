@@ -31,5 +31,6 @@
   "license": "",
   "name": "go-libp2p-floodsub",
   "releaseCmd": "git commit -a -m \"gx publish $VERSION\"",
-  "version": "0.9.12"
+  "version": "0.9.13"
 }
+
