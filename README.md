@@ -6,6 +6,8 @@
 
 > A flooding pubsub system.
 
+PubSub is a work in progress, with [floodsub](https://github.com/libp2p/go-floodsub/) as an initial protocol, followed by gossipsub, which is an alpha release as of May 2018.
+
 ## Table of Contents
 
 - [Install](#install)
@@ -24,6 +26,14 @@ go get github.com/libp2p/go-floodsub
 ```
 TODO
 ```
+
+## Implementations
+
+See [this issue](https://github.com/libp2p/go-floodsub/issues/77) for an introduction to pubsub, gossipsub and floodsub, which is in the repo for go-floodsub. A PR for gossipsub with Go is [here](https://github.com/libp2p/go-floodsub/pull/67)
+
+The rust-libp2p implementation of floodsub is [here](https://github.com/libp2p/rust-libp2p/search?utf8=%E2%9C%93&q=floodsub&type=). Work is in progress on a gossipsub implementation for Rust with @jamesray1 from Drops of Diamond (which is developing sharding for Ethereum).
+
+gossipsub is also being worked on by @mhcia, another Ethereum sharding developer with Python and Trinity/Py-EVM, e.g. see [here](https://github.com/libp2p/libp2p/issues/33#issuecomment-392140536).
 
 ## Contribute
 
