@@ -29,7 +29,7 @@ TODO
 
 ## Implementations
 
-See [this issue](https://github.com/libp2p/go-floodsub/issues/77) for an introduction to pubsub, gossipsub and floodsub, which is in the repo for go-floodsub. A PR for gossipsub with Go is [here](https://github.com/libp2p/go-floodsub/pull/67)
+See [this issue](https://github.com/libp2p/go-floodsub/issues/77) for an introduction to pubsub, gossipsub and floodsub, which is in the repo for go-floodsub. A PR for gossipsub with Go is [here](https://github.com/libp2p/go-floodsub/pull/67); see [gerbil-simsub](https://github.com/vyzo/gerbil-simsub) for a high-level literate specification.
 
 The rust-libp2p implementation of floodsub is [here](https://github.com/libp2p/rust-libp2p/search?utf8=%E2%9C%93&q=floodsub&type=). Work is in progress on a gossipsub implementation for Rust with @jamesray1 from Drops of Diamond (which is developing sharding for Ethereum).
 
