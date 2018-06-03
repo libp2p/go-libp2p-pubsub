@@ -26,6 +26,13 @@ const (
 var log = logging.Logger("pubsub")
 
 type PubSub struct {
+	// atomic counter for seqnos
+	// NOTE: Must be declared at the top of the struct as we perform atomic
+	// operations on this field.
+	//
+	// See: https://golang.org/pkg/sync/atomic/#pkg-note-BUG
+	counter uint64
+
 	host host.Host
 
 	rt PubSubRouter
@@ -79,9 +86,6 @@ type PubSub struct {
 	seenMessages *timecache.TimeCache
 
 	ctx context.Context
-
-	// atomic counter for seqnos
-	counter uint64
 }
 
 // PubSubRouter is the message router component of PubSub
