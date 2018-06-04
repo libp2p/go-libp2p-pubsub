@@ -681,7 +681,7 @@ func TestFloodSubPluggableProtocol(t *testing.T) {
 }
 
 func mustCreatePubSub(ctx context.Context, t *testing.T, h host.Host, ps ...protocol.ID) *PubSub {
-	psub, err := New(ctx, h, ps)
+	psub, err := NewFloodsubWithProtocols(ctx, h, ps)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -14,8 +14,8 @@ const (
 	FloodSubID = protocol.ID("/floodsub/1.0.0")
 )
 
-// New returns a new floodsub-enabled PubSub objecting using the protocols specified in ps
-func New(ctx context.Context, h host.Host, ps []protocol.ID, opts ...Option) (*PubSub, error) {
+// NewFloodsubWithProtocols returns a new floodsub-enabled PubSub objecting using the protocols specified in ps
+func NewFloodsubWithProtocols(ctx context.Context, h host.Host, ps []protocol.ID, opts ...Option) (*PubSub, error) {
 	rt := &FloodSubRouter{
 		protocols: ps,
 	}
@@ -24,7 +24,7 @@ func New(ctx context.Context, h host.Host, ps []protocol.ID, opts ...Option) (*P
 
 // NewFloodSub returns a new PubSub object using the FloodSubRouter
 func NewFloodSub(ctx context.Context, h host.Host, opts ...Option) (*PubSub, error) {
-	return New(ctx, h, []protocol.ID{FloodSubID}, opts...)
+	return NewFloodsubWithProtocols(ctx, h, []protocol.ID{FloodSubID}, opts...)
 }
 
 type FloodSubRouter struct {
