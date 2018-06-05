@@ -3,7 +3,7 @@ package floodsub
 import (
 	"context"
 
-	pb "github.com/libp2p/go-floodsub/pb"
+	pb "github.com/libp2p/go-libp2p-pubsub/pb"
 
 	host "github.com/libp2p/go-libp2p-host"
 	peer "github.com/libp2p/go-libp2p-peer"

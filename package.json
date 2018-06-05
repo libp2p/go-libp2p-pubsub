@@ -65,6 +65,12 @@
       "hash": "QmZNkThpqfVXs9GNbexPrfBbXSLNYeKrE7jwFM2oqHbyqN",
       "name": "go-libp2p-protocol",
       "version": "1.0.0"
+    },
+    {
+      "author": "whyrusleeping",
+      "hash": "Qmd1HfU1m9mR839VhGp5JrcvteF7b5LoTtPMqcxLuriCTY",
+      "name": "go-libp2p-pubsub",
+      "version": "0.1.0"
     }
   ],
   "gxVersion": "0.9.0",
