@@ -33,7 +33,7 @@ See [this issue](https://github.com/libp2p/go-floodsub/issues/77) for an introdu
 
 The rust-libp2p implementation of floodsub is [here](https://github.com/libp2p/rust-libp2p/search?utf8=%E2%9C%93&q=floodsub&type=). Work is in progress on a gossipsub implementation for Rust with @jamesray1 from Drops of Diamond (which is developing sharding for Ethereum).
 
-gossipsub is also being worked on by @mhcia, another Ethereum sharding developer with Python and Trinity/Py-EVM, e.g. see [here](https://github.com/libp2p/libp2p/issues/33#issuecomment-392140536).
+Here is a [Javascript](http://github.com/libp2p/js-libp2p-floodsub) implementation of floodsub.
 
 ## Contribute
 
