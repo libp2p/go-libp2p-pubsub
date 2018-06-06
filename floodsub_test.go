@@ -11,8 +11,8 @@ import (
 	"time"
 
 	host "github.com/libp2p/go-libp2p-host"
-	netutil "github.com/libp2p/go-libp2p-netutil"
 	peer "github.com/libp2p/go-libp2p-peer"
+	swarmt "github.com/libp2p/go-libp2p-swarm/testing"
 	//bhost "github.com/libp2p/go-libp2p/p2p/host/basic"
 	bhost "github.com/libp2p/go-libp2p-blankhost"
 )
@@ -37,7 +37,7 @@ func getNetHosts(t *testing.T, ctx context.Context, n int) []host.Host {
 	var out []host.Host
 
 	for i := 0; i < n; i++ {
-		netw := netutil.GenSwarmNetwork(t, ctx)
+		netw := swarmt.GenSwarm(t, ctx)
 		h := bhost.NewBlankHost(netw)
 		out = append(out, h)
 	}
@@ -777,11 +777,7 @@ func TestPeerDisconnect(t *testing.T) {
 	peers := psubs[0].ListPeers("foo")
 	assertPeerList(t, peers, hosts[1].ID())
 	for _, c := range hosts[1].Network().ConnsToPeer(hosts[0].ID()) {
-		streams, err := c.GetStreams()
-		if err != nil {
-			t.Fatal(err)
-		}
-		for _, s := range streams {
+		for _, s := range c.GetStreams() {
 			s.Close()
 		}
 	}
