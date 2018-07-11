@@ -55,8 +55,16 @@ func connect(t *testing.T, a, b host.Host) {
 }
 
 func sparseConnect(t *testing.T, hosts []host.Host) {
+	connectSome(t, hosts, 3)
+}
+
+func denseConnect(t *testing.T, hosts []host.Host) {
+	connectSome(t, hosts, 10)
+}
+
+func connectSome(t *testing.T, hosts []host.Host, d int) {
 	for i, a := range hosts {
-		for j := 0; j < 3; j++ {
+		for j := 0; j < d; j++ {
 			n := rand.Intn(len(hosts))
 			if n == i {
 				j--

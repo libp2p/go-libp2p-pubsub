@@ -11,6 +11,11 @@ It is generated from these files:
 It has these top-level messages:
 	RPC
 	Message
+	ControlMessage
+	ControlIHave
+	ControlIWant
+	ControlGraft
+	ControlPrune
 	TopicDescriptor
 */
 package floodsub_pb
@@ -97,9 +102,10 @@ func (x *TopicDescriptor_EncOpts_EncMode) UnmarshalJSON(data []byte) error {
 }
 
 type RPC struct {
-	Subscriptions    []*RPC_SubOpts `protobuf:"bytes,1,rep,name=subscriptions" json:"subscriptions,omitempty"`
-	Publish          []*Message     `protobuf:"bytes,2,rep,name=publish" json:"publish,omitempty"`
-	XXX_unrecognized []byte         `json:"-"`
+	Subscriptions    []*RPC_SubOpts  `protobuf:"bytes,1,rep,name=subscriptions" json:"subscriptions,omitempty"`
+	Publish          []*Message      `protobuf:"bytes,2,rep,name=publish" json:"publish,omitempty"`
+	Control          *ControlMessage `protobuf:"bytes,3,opt,name=control" json:"control,omitempty"`
+	XXX_unrecognized []byte          `json:"-"`
 }
 
 func (m *RPC) Reset()         { *m = RPC{} }
@@ -116,6 +122,13 @@ func (m *RPC) GetSubscriptions() []*RPC_SubOpts {
 func (m *RPC) GetPublish() []*Message {
 	if m != nil {
 		return m.Publish
+	}
+	return nil
+}
+
+func (m *RPC) GetControl() *ControlMessage {
+	if m != nil {
+		return m.Control
 	}
 	return nil
 }
@@ -182,6 +195,118 @@ func (m *Message) GetTopicIDs() []string {
 		return m.TopicIDs
 	}
 	return nil
+}
+
+type ControlMessage struct {
+	Ihave            []*ControlIHave `protobuf:"bytes,1,rep,name=ihave" json:"ihave,omitempty"`
+	Iwant            []*ControlIWant `protobuf:"bytes,2,rep,name=iwant" json:"iwant,omitempty"`
+	Graft            []*ControlGraft `protobuf:"bytes,3,rep,name=graft" json:"graft,omitempty"`
+	Prune            []*ControlPrune `protobuf:"bytes,4,rep,name=prune" json:"prune,omitempty"`
+	XXX_unrecognized []byte          `json:"-"`
+}
+
+func (m *ControlMessage) Reset()         { *m = ControlMessage{} }
+func (m *ControlMessage) String() string { return proto.CompactTextString(m) }
+func (*ControlMessage) ProtoMessage()    {}
+
+func (m *ControlMessage) GetIhave() []*ControlIHave {
+	if m != nil {
+		return m.Ihave
+	}
+	return nil
+}
+
+func (m *ControlMessage) GetIwant() []*ControlIWant {
+	if m != nil {
+		return m.Iwant
+	}
+	return nil
+}
+
+func (m *ControlMessage) GetGraft() []*ControlGraft {
+	if m != nil {
+		return m.Graft
+	}
+	return nil
+}
+
+func (m *ControlMessage) GetPrune() []*ControlPrune {
+	if m != nil {
+		return m.Prune
+	}
+	return nil
+}
+
+type ControlIHave struct {
+	TopicID          *string  `protobuf:"bytes,1,opt,name=topicID" json:"topicID,omitempty"`
+	MessageIDs       []string `protobuf:"bytes,2,rep,name=messageIDs" json:"messageIDs,omitempty"`
+	XXX_unrecognized []byte   `json:"-"`
+}
+
+func (m *ControlIHave) Reset()         { *m = ControlIHave{} }
+func (m *ControlIHave) String() string { return proto.CompactTextString(m) }
+func (*ControlIHave) ProtoMessage()    {}
+
+func (m *ControlIHave) GetTopicID() string {
+	if m != nil && m.TopicID != nil {
+		return *m.TopicID
+	}
+	return ""
+}
+
+func (m *ControlIHave) GetMessageIDs() []string {
+	if m != nil {
+		return m.MessageIDs
+	}
+	return nil
+}
+
+type ControlIWant struct {
+	MessageIDs       []string `protobuf:"bytes,1,rep,name=messageIDs" json:"messageIDs,omitempty"`
+	XXX_unrecognized []byte   `json:"-"`
+}
+
+func (m *ControlIWant) Reset()         { *m = ControlIWant{} }
+func (m *ControlIWant) String() string { return proto.CompactTextString(m) }
+func (*ControlIWant) ProtoMessage()    {}
+
+func (m *ControlIWant) GetMessageIDs() []string {
+	if m != nil {
+		return m.MessageIDs
+	}
+	return nil
+}
+
+type ControlGraft struct {
+	TopicID          *string `protobuf:"bytes,1,opt,name=topicID" json:"topicID,omitempty"`
+	XXX_unrecognized []byte  `json:"-"`
+}
+
+func (m *ControlGraft) Reset()         { *m = ControlGraft{} }
+func (m *ControlGraft) String() string { return proto.CompactTextString(m) }
+func (*ControlGraft) ProtoMessage()    {}
+
+func (m *ControlGraft) GetTopicID() string {
+	if m != nil && m.TopicID != nil {
+		return *m.TopicID
+	}
+	return ""
+}
+
+type ControlPrune struct {
+	TopicID          *string `protobuf:"bytes,1,opt,name=topicID" json:"topicID,omitempty"`
+	XXX_unrecognized []byte  `json:"-"`
+}
+
+func (m *ControlPrune) Reset()         { *m = ControlPrune{} }
+func (m *ControlPrune) String() string { return proto.CompactTextString(m) }
+func (*ControlPrune) ProtoMessage()    {}
+
+func (m *ControlPrune) GetTopicID() string {
+	if m != nil && m.TopicID != nil {
+		return *m.TopicID
+	}
+	return ""
 }
 
 // topicID = hash(topicDescriptor); (not the topic.name)
@@ -269,6 +394,11 @@ func init() {
 	proto.RegisterType((*RPC)(nil), "floodsub.pb.RPC")
 	proto.RegisterType((*RPC_SubOpts)(nil), "floodsub.pb.RPC.SubOpts")
 	proto.RegisterType((*Message)(nil), "floodsub.pb.Message")
+	proto.RegisterType((*ControlMessage)(nil), "floodsub.pb.ControlMessage")
+	proto.RegisterType((*ControlIHave)(nil), "floodsub.pb.ControlIHave")
+	proto.RegisterType((*ControlIWant)(nil), "floodsub.pb.ControlIWant")
+	proto.RegisterType((*ControlGraft)(nil), "floodsub.pb.ControlGraft")
+	proto.RegisterType((*ControlPrune)(nil), "floodsub.pb.ControlPrune")
 	proto.RegisterType((*TopicDescriptor)(nil), "floodsub.pb.TopicDescriptor")
 	proto.RegisterType((*TopicDescriptor_AuthOpts)(nil), "floodsub.pb.TopicDescriptor.AuthOpts")
 	proto.RegisterType((*TopicDescriptor_EncOpts)(nil), "floodsub.pb.TopicDescriptor.EncOpts")
