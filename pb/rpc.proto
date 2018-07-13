@@ -1,3 +1,5 @@
+syntax = "proto3";
+
 package floodsub.pb;
 
 message RPC {
@@ -5,17 +7,17 @@ message RPC {
 	repeated Message publish = 2;
 
 	message SubOpts {
-		optional bool subscribe = 1; // subscribe or unsubcribe
-		optional string topicid = 2;
+		bool subscribe = 1; // subscribe or unsubcribe
+		string topicid = 2;
 	}
 
-    optional ControlMessage control = 3;
+    ControlMessage control = 3;
 }
 
 message Message {
-	optional bytes from = 1;
-	optional bytes data = 2;
-	optional bytes seqno = 3;
+	bytes from = 1;
+	bytes data = 2;
+	bytes seqno = 3;
 	repeated string topicIDs = 4;
 }
 
@@ -27,7 +29,7 @@ message ControlMessage {
 }
 
 message ControlIHave {
-    optional string topicID = 1;
+    string topicID = 1;
     repeated string messageIDs = 2;
 }
 
@@ -36,21 +38,21 @@ message ControlIWant {
 }
 
 message ControlGraft {
-    optional string topicID = 1;
+    string topicID = 1;
 }
 
 message ControlPrune {
-    optional string topicID = 1;
+    string topicID = 1;
 }
 
 // topicID = hash(topicDescriptor); (not the topic.name)
 message TopicDescriptor {
-	optional string name = 1;
-	optional AuthOpts auth = 2;
-	optional EncOpts enc = 3;
+	string name = 1;
+	AuthOpts auth = 2;
+	EncOpts enc = 3;
 
 	message AuthOpts {
-		optional AuthMode mode = 1;
+		AuthMode mode = 1;
 		repeated bytes keys = 2; // root keys to trust
 
 		enum AuthMode {
@@ -61,7 +63,7 @@ message TopicDescriptor {
 	}
 
 	message EncOpts {
-		optional EncMode mode = 1;
+		EncMode mode = 1;
 		repeated bytes keyHashes = 2; // the hashes of the shared keys used (salted)
 
 		enum EncMode {
