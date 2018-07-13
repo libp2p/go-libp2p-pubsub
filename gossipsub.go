@@ -180,7 +180,7 @@ func (gs *GossipSubRouter) handleGraft(p peer.ID, ctl *pb.ControlMessage) []*pb.
 
 	cprune := make([]*pb.ControlPrune, 0, len(prune))
 	for _, topic := range prune {
-		cprune = append(cprune, &pb.ControlPrune{TopicID: &topic})
+		cprune = append(cprune, &pb.ControlPrune{TopicID: topic})
 	}
 
 	return cprune
@@ -282,13 +282,13 @@ func (gs *GossipSubRouter) Leave(topic string) {
 }
 
 func (gs *GossipSubRouter) sendGraft(p peer.ID, topic string) {
-	graft := []*pb.ControlGraft{&pb.ControlGraft{TopicID: &topic}}
+	graft := []*pb.ControlGraft{&pb.ControlGraft{TopicID: topic}}
 	out := rpcWithControl(nil, nil, nil, graft, nil)
 	gs.sendRPC(p, out)
 }
 
 func (gs *GossipSubRouter) sendPrune(p peer.ID, topic string) {
-	prune := []*pb.ControlPrune{&pb.ControlPrune{TopicID: &topic}}
+	prune := []*pb.ControlPrune{&pb.ControlPrune{TopicID: topic}}
 	out := rpcWithControl(nil, nil, nil, nil, prune)
 	gs.sendRPC(p, out)
 }
@@ -433,7 +433,7 @@ func (gs *GossipSubRouter) sendGraftPrune(tograft, toprune map[peer.ID][]string)
 	for p, topics := range tograft {
 		graft := make([]*pb.ControlGraft, 0, len(topics))
 		for _, topic := range topics {
-			graft = append(graft, &pb.ControlGraft{TopicID: &topic})
+			graft = append(graft, &pb.ControlGraft{TopicID: topic})
 		}
 
 		var prune []*pb.ControlPrune
@@ -442,7 +442,7 @@ func (gs *GossipSubRouter) sendGraftPrune(tograft, toprune map[peer.ID][]string)
 			delete(toprune, p)
 			prune = make([]*pb.ControlPrune, 0, len(pruning))
 			for _, topic := range pruning {
-				prune = append(prune, &pb.ControlPrune{TopicID: &topic})
+				prune = append(prune, &pb.ControlPrune{TopicID: topic})
 			}
 		}
 
@@ -453,7 +453,7 @@ func (gs *GossipSubRouter) sendGraftPrune(tograft, toprune map[peer.ID][]string)
 	for p, topics := range toprune {
 		prune := make([]*pb.ControlPrune, 0, len(topics))
 		for _, topic := range topics {
-			prune = append(prune, &pb.ControlPrune{TopicID: &topic})
+			prune = append(prune, &pb.ControlPrune{TopicID: topic})
 		}
 
 		out := rpcWithControl(nil, nil, nil, nil, prune)
@@ -473,7 +473,7 @@ func (gs *GossipSubRouter) emitGossip(topic string, peers map[peer.ID]struct{}) 
 		// skip mesh peers
 		_, ok := peers[p]
 		if !ok {
-			gs.pushGossip(p, &pb.ControlIHave{TopicID: &topic, MessageIDs: mids})
+			gs.pushGossip(p, &pb.ControlIHave{TopicID: topic, MessageIDs: mids})
 		}
 	}
 }

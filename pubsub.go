@@ -334,8 +334,8 @@ func (p *PubSub) handleAddSubscription(req *addSubReq) {
 // Only called from processLoop.
 func (p *PubSub) announce(topic string, sub bool) {
 	subopt := &pb.RPC_SubOpts{
-		Topicid:   &topic,
-		Subscribe: &sub,
+		Topicid:   topic,
+		Subscribe: sub,
 	}
 
 	out := rpcWithSubs(subopt)
@@ -549,7 +549,7 @@ type SubOpt func(sub *Subscription) error
 
 // Subscribe returns a new Subscription for the given topic
 func (p *PubSub) Subscribe(topic string, opts ...SubOpt) (*Subscription, error) {
-	td := pb.TopicDescriptor{Name: &topic}
+	td := pb.TopicDescriptor{Name: topic}
 
 	return p.SubscribeByTopicDescriptor(&td, opts...)
 }
