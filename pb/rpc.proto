@@ -11,7 +11,7 @@ message RPC {
 		optional string topicid = 2;
 	}
 
-    optional ControlMessage control = 3;
+	optional ControlMessage control = 3;
 }
 
 message Message {
@@ -22,27 +22,27 @@ message Message {
 }
 
 message ControlMessage {
-    repeated ControlIHave ihave = 1;
-    repeated ControlIWant iwant = 2;
-    repeated ControlGraft graft = 3;
-    repeated ControlPrune prune = 4;
+	repeated ControlIHave ihave = 1;
+	repeated ControlIWant iwant = 2;
+	repeated ControlGraft graft = 3;
+	repeated ControlPrune prune = 4;
 }
 
 message ControlIHave {
-    optional string topicID = 1;
-    repeated string messageIDs = 2;
+	optional string topicID = 1;
+	repeated string messageIDs = 2;
 }
 
 message ControlIWant {
-    repeated string messageIDs = 1;
+	repeated string messageIDs = 1;
 }
 
 message ControlGraft {
-    optional string topicID = 1;
+	optional string topicID = 1;
 }
 
 message ControlPrune {
-    optional string topicID = 1;
+	optional string topicID = 1;
 }
 
 // topicID = hash(topicDescriptor); (not the topic.name)
