@@ -15,26 +15,26 @@
     },
     {
       "author": "whyrusleeping",
-      "hash": "Qmb8T6YBBsjYsVGfrihQLfCJveczZnneSBqBKkYEBWDjge",
+      "hash": "QmQ1hwb95uSSZR8jSPJysnfHxBDQAykSXsmz5TwTzxjq2Z",
       "name": "go-libp2p-host",
-      "version": "3.0.4"
-    },
-    {
-      "author": "whyrusleeping",
-      "hash": "QmT1Q44YeQXSiK3LBXbXBRdxJAFZZSTarseqt7DVe9ASNA",
-      "name": "go-libp2p-blankhost",
-      "version": "0.3.4"
-    },
-    {
-      "author": "whyrusleeping",
-      "hash": "QmPjvxTpVH8qJyQDnxnsxF9kv9jezKD1kozz1hs3fCGsNh",
-      "name": "go-libp2p-net",
       "version": "3.0.5"
     },
     {
-      "hash": "QmcVVHfdyv15GVPk7NrxdWjh2hLVccXnoD8j2tyQShiXJb",
+      "author": "whyrusleeping",
+      "hash": "QmVdU678uqPAfGgrrrn7zPz2yttmZTYbowF56TeNFecWzW",
+      "name": "go-libp2p-blankhost",
+      "version": "0.3.5"
+    },
+    {
+      "author": "whyrusleeping",
+      "hash": "QmVwU7Mgwg6qaPn9XXz93ANfq1PTxcduGRzfe41Sygg4mR",
+      "name": "go-libp2p-net",
+      "version": "3.0.6"
+    },
+    {
+      "hash": "QmRREK2CAZ5Re2Bd9zZFG6FeYDppUWt5cMgsoUEp3ktgSr",
       "name": "go-log",
-      "version": "1.5.3"
+      "version": "1.5.5"
     },
     {
       "author": "multiformats",
@@ -44,9 +44,9 @@
     },
     {
       "author": "whyrusleeping",
-      "hash": "QmdVrMn1LhB4ybb8hMVaMLXnA8XRSewMnK6YqXKXoTcRvN",
+      "hash": "QmcZSzKEM5yDfpZbeEEZaVmaZ1zXm6JWTbrQZSB8hCVPzk",
       "name": "go-libp2p-peer",
-      "version": "2.3.5"
+      "version": "2.3.6"
     },
     {
       "author": "whyrusleeping",
@@ -56,9 +56,9 @@
     },
     {
       "author": "whyrusleeping",
-      "hash": "QmemVjhp1UuWPQqrWSvPcaqH3QJRMjMqNm4T2RULMkDDQe",
+      "hash": "QmdjC8HtKZpEufBL1u7WxvQn78Lqq2Wk31NJS8WvFX3crB",
       "name": "go-libp2p-swarm",
-      "version": "3.0.6"
+      "version": "3.0.7"
     },
     {
       "author": "whyrusleeping",
@@ -72,6 +72,6 @@
   "license": "",
   "name": "go-libp2p-floodsub",
   "releaseCmd": "git commit -a -m \"gx publish $VERSION\"",
-  "version": "0.9.22"
+  "version": "0.9.23"
 }
 
