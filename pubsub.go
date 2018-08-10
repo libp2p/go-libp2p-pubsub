@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/binary"
 	"fmt"
+	"math/rand"
 	"sync/atomic"
 	"time"
 
@@ -82,6 +83,9 @@ type PubSub struct {
 	// validateThrottle limits the number of active validation goroutines
 	validateThrottle chan struct{}
 
+	// eval thunk in event loop
+	eval chan func()
+
 	peers        map[peer.ID]chan *RPC
 	seenMessages *timecache.TimeCache
 
@@ -90,12 +94,26 @@ type PubSub struct {
 
 // PubSubRouter is the message router component of PubSub
 type PubSubRouter interface {
+	// Protocols returns the list of protocols supported by the router.
 	Protocols() []protocol.ID
+	// Attach is invoked by the PubSub constructor to attach the router to a
+	// freshly initialized PubSub instance.
 	Attach(*PubSub)
+	// AddPeer notifies the router that a new peer has been connected.
 	AddPeer(peer.ID, protocol.ID)
+	// RemovePeer notifies the router that a peer has been disconnected.
 	RemovePeer(peer.ID)
+	// HandleRPC is invoked to process control messages in the RPC envelope.
+	// It is invoked after subscriptions and payload messages have been processed.
 	HandleRPC(*RPC)
+	// Publish is invoked to forward a new message that has been validated.
 	Publish(peer.ID, *pb.Message)
+	// Join notifies the router that we want to receive and forward messages in a topic.
+	// It is invoked after the subscription announcement.
+	Join(topic string)
+	// Leave notifies the router that we are no longer interested in a topic.
+	// It is invoked after the unsubscription announcement.
+	Leave(topic string)
 }
 
 type Message struct {
@@ -115,7 +133,7 @@ type RPC struct {
 
 type Option func(*PubSub) error
 
-// NewFloodSub returns a new PubSub management object
+// NewPubSub returns a new PubSub management object
 func NewPubSub(ctx context.Context, h host.Host, rt PubSubRouter, opts ...Option) (*PubSub, error) {
 	ps := &PubSub{
 		host:             h,
@@ -133,11 +151,12 @@ func NewPubSub(ctx context.Context, h host.Host, rt PubSubRouter, opts ...Option
 		addVal:           make(chan *addValReq),
 		rmVal:            make(chan *rmValReq),
 		validateThrottle: make(chan struct{}, defaultValidateThrottle),
+		eval:             make(chan func()),
 		myTopics:         make(map[string]map[*Subscription]struct{}),
 		topics:           make(map[string]map[peer.ID]struct{}),
 		peers:            make(map[peer.ID]chan *RPC),
 		topicVals:        make(map[string]*topicVal),
-		seenMessages:     timecache.NewTimeCache(time.Second * 30),
+		seenMessages:     timecache.NewTimeCache(time.Second * 120),
 		counter:          uint64(time.Now().UnixNano()),
 	}
 
@@ -243,13 +262,16 @@ func (p *PubSub) processLoop(ctx context.Context) {
 			p.pushMsg(vals, p.host.ID(), msg)
 
 		case req := <-p.sendMsg:
-			p.maybePublishMessage(req.from, req.msg.Message)
+			p.publishMessage(req.from, req.msg.Message)
 
 		case req := <-p.addVal:
 			p.addValidator(req)
 
 		case req := <-p.rmVal:
 			p.rmValidator(req)
+
+		case thunk := <-p.eval:
+			thunk()
 
 		case <-ctx.Done():
 			log.Info("pubsub processloop shutting down")
@@ -276,6 +298,7 @@ func (p *PubSub) handleRemoveSubscription(sub *Subscription) {
 	if len(subs) == 0 {
 		delete(p.myTopics, sub.topic)
 		p.announce(sub.topic, false)
+		p.rt.Leave(sub.topic)
 	}
 }
 
@@ -290,6 +313,7 @@ func (p *PubSub) handleAddSubscription(req *addSubReq) {
 	// announce we want this topic
 	if len(subs) == 0 {
 		p.announce(sub.topic, true)
+		p.rt.Join(sub.topic)
 	}
 
 	// make new if not there
@@ -319,8 +343,25 @@ func (p *PubSub) announce(topic string, sub bool) {
 		select {
 		case peer <- out:
 		default:
-			log.Infof("dropping announce message to peer %s: queue full", pid)
+			log.Infof("Can't send announce message to peer %s: queue full; scheduling retry", pid)
+			go p.announceRetry(topic, sub)
 		}
+	}
+}
+
+func (p *PubSub) announceRetry(topic string, sub bool) {
+	time.Sleep(time.Duration(1+rand.Intn(1000)) * time.Millisecond)
+
+	retry := func() {
+		_, ok := p.myTopics[topic]
+		if (ok && sub) || (!ok && !sub) {
+			p.announce(topic, sub)
+		}
+	}
+
+	select {
+	case p.eval <- retry:
+	case <-p.ctx.Done():
 	}
 }
 
@@ -405,6 +446,12 @@ func msgID(pmsg *pb.Message) string {
 
 // pushMsg pushes a message performing validation as necessary
 func (p *PubSub) pushMsg(vals []*topicVal, src peer.ID, msg *Message) {
+	id := msgID(msg.Message)
+	if p.seenMessage(id) {
+		return
+	}
+	p.markSeen(id)
+
 	if len(vals) > 0 {
 		// validation is asynchronous and globally throttled with the throttleValidate semaphore.
 		// the purpose of the global throttle is to bound the goncurrency possible from incoming
@@ -422,7 +469,7 @@ func (p *PubSub) pushMsg(vals []*topicVal, src peer.ID, msg *Message) {
 		return
 	}
 
-	p.maybePublishMessage(src, msg.Message)
+	p.publishMessage(src, msg.Message)
 }
 
 // validate performs validation and only sends the message if all validators succeed
@@ -472,13 +519,7 @@ loop:
 	}
 }
 
-func (p *PubSub) maybePublishMessage(from peer.ID, pmsg *pb.Message) {
-	id := msgID(pmsg)
-	if p.seenMessage(id) {
-		return
-	}
-
-	p.markSeen(id)
+func (p *PubSub) publishMessage(from peer.ID, pmsg *pb.Message) {
 	p.notifySubs(pmsg)
 	p.rt.Publish(from, pmsg)
 }
@@ -556,10 +597,7 @@ func (p *PubSub) GetTopics() []string {
 
 // Publish publishes data under the given topic
 func (p *PubSub) Publish(topic string, data []byte) error {
-	seqno := make([]byte, 8)
-	counter := atomic.AddUint64(&p.counter, 1)
-	binary.BigEndian.PutUint64(seqno, counter)
-
+	seqno := p.nextSeqno()
 	p.publish <- &Message{
 		&pb.Message{
 			Data:     data,
@@ -571,12 +609,20 @@ func (p *PubSub) Publish(topic string, data []byte) error {
 	return nil
 }
 
+func (p *PubSub) nextSeqno() []byte {
+	seqno := make([]byte, 8)
+	counter := atomic.AddUint64(&p.counter, 1)
+	binary.BigEndian.PutUint64(seqno, counter)
+	return seqno
+}
+
 type listPeerReq struct {
 	resp  chan []peer.ID
 	topic string
 }
 
-// sendReq is a request to call maybePublishMessage. It is issued after the subscription verification is done.
+// sendReq is a request to call publishMessage.
+// It is issued after message validation is done.
 type sendReq struct {
 	from peer.ID
 	msg  *Message
