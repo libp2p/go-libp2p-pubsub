@@ -452,7 +452,7 @@ func (p *PubSub) pushMsg(vals []*topicVal, src peer.ID, msg *Message) {
 	}
 	p.markSeen(id)
 
-	if len(vals) > 0 {
+	if len(vals) > 0 || msg.Signature != nil {
 		// validation is asynchronous and globally throttled with the throttleValidate semaphore.
 		// the purpose of the global throttle is to bound the goncurrency possible from incoming
 		// network traffic; each validator also has an individual throttle to preclude
@@ -474,6 +474,32 @@ func (p *PubSub) pushMsg(vals []*topicVal, src peer.ID, msg *Message) {
 
 // validate performs validation and only sends the message if all validators succeed
 func (p *PubSub) validate(vals []*topicVal, src peer.ID, msg *Message) {
+	if msg.Signature != nil {
+		if !p.validateSignature(msg) {
+			log.Warningf("message signature validation failed; dropping message from %s", src)
+			return
+		}
+	}
+
+	if len(vals) > 0 {
+		if !p.validateTopic(vals, msg) {
+			log.Warningf("message validation failed; dropping message from %s", src)
+			return
+		}
+	}
+
+	// all validators were successful, send the message
+	p.sendMsg <- &sendReq{
+		from: src,
+		msg:  msg,
+	}
+}
+
+func (p *PubSub) validateSignature(msg *Message) bool {
+	return true
+}
+
+func (p *PubSub) validateTopic(vals []*topicVal, msg *Message) bool {
 	ctx, cancel := context.WithCancel(p.ctx)
 	defer cancel()
 
@@ -500,23 +526,17 @@ loop:
 	}
 
 	if throttle {
-		log.Warningf("message validation throttled; dropping message from %s", src)
-		return
+		return false
 	}
 
 	for i := 0; i < rcount; i++ {
 		valid := <-rch
 		if !valid {
-			log.Warningf("message validation failed; dropping message from %s", src)
-			return
+			return false
 		}
 	}
 
-	// all validators were successful, send the message
-	p.sendMsg <- &sendReq{
-		from: src,
-		msg:  msg,
-	}
+	return true
 }
 
 func (p *PubSub) publishMessage(from peer.ID, pmsg *pb.Message) {
