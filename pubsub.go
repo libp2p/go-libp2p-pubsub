@@ -664,7 +664,10 @@ func (p *PubSub) Publish(topic string, data []byte) error {
 		Seqno:    seqno,
 	}
 	if p.signKey != nil {
-		signMessage(p.signKey, m)
+		err := signMessage(p.signKey, m)
+		if err != nil {
+			return err
+		}
 	}
 	p.publish <- &Message{m}
 	return nil
