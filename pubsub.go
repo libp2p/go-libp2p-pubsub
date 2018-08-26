@@ -11,6 +11,7 @@ import (
 	pb "github.com/libp2p/go-floodsub/pb"
 
 	logging "github.com/ipfs/go-log"
+	crypto "github.com/libp2p/go-libp2p-crypto"
 	host "github.com/libp2p/go-libp2p-host"
 	inet "github.com/libp2p/go-libp2p-net"
 	peer "github.com/libp2p/go-libp2p-peer"
@@ -88,6 +89,9 @@ type PubSub struct {
 
 	peers        map[peer.ID]chan *RPC
 	seenMessages *timecache.TimeCache
+
+	// key for signing messages; nil when signing is disabled (default for now)
+	signKey crypto.PrivKey
 
 	ctx context.Context
 }
@@ -646,14 +650,16 @@ func (p *PubSub) GetTopics() []string {
 // Publish publishes data under the given topic
 func (p *PubSub) Publish(topic string, data []byte) error {
 	seqno := p.nextSeqno()
-	p.publish <- &Message{
-		&pb.Message{
-			Data:     data,
-			TopicIDs: []string{topic},
-			From:     []byte(p.host.ID()),
-			Seqno:    seqno,
-		},
+	m := &pb.Message{
+		Data:     data,
+		TopicIDs: []string{topic},
+		From:     []byte(p.host.ID()),
+		Seqno:    seqno,
 	}
+	if p.signKey != nil {
+		signMessage(p.signKey, m)
+	}
+	p.publish <- &Message{m}
 	return nil
 }
 
