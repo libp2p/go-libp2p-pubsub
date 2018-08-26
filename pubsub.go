@@ -506,6 +506,10 @@ func (p *PubSub) validateSignature(msg *Message) bool {
 }
 
 func (p *PubSub) validateTopic(vals []*topicVal, msg *Message) bool {
+	if len(vals) == 1 {
+		return p.validateSingleTopic(vals[0], msg)
+	}
+
 	ctx, cancel := context.WithCancel(p.ctx)
 	defer cancel()
 
@@ -543,6 +547,24 @@ loop:
 	}
 
 	return true
+}
+
+// fast path for single topic validation that avoids the extra goroutine
+func (p *PubSub) validateSingleTopic(val *topicVal, msg *Message) bool {
+	select {
+	case val.validateThrottle <- struct{}{}:
+		ctx, cancel := context.WithCancel(p.ctx)
+		defer cancel()
+
+		res := val.validateMsg(ctx, msg)
+		<-val.validateThrottle
+
+		return res
+
+	default:
+		log.Debugf("validation throttled for topic %s", val.topic)
+		return false
+	}
 }
 
 func (p *PubSub) publishMessage(from peer.ID, pmsg *pb.Message) {
