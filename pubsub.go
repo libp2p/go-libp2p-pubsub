@@ -496,6 +496,12 @@ func (p *PubSub) validate(vals []*topicVal, src peer.ID, msg *Message) {
 }
 
 func (p *PubSub) validateSignature(msg *Message) bool {
+	err := verifyMessageSignature(msg.Message)
+	if err != nil {
+		log.Debugf("signature verification error: %s", err.Error())
+		return false
+	}
+
 	return true
 }
 
