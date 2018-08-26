@@ -190,6 +190,13 @@ func WithValidateThrottle(n int) Option {
 	}
 }
 
+func WithMessageSigning() Option {
+	return func(p *PubSub) error {
+		p.signKey = p.host.Peerstore().PrivKey(p.host.ID())
+		return nil
+	}
+}
+
 // processLoop handles all inputs arriving on the channels
 func (p *PubSub) processLoop(ctx context.Context) {
 	defer func() {
