@@ -30,13 +30,8 @@ func verifyMessageSignature(m *pb.Message) error {
 		}
 
 		// verify that the source ID matches the attached key
-		xpid, err := peer.IDFromPublicKey(pubk)
-		if err != nil {
-			return err
-		}
-
-		if pid != xpid {
-			return fmt.Errorf("bad signing key; source ID/key mismatch: %s %s", pid, xpid)
+		if !pid.MatchesPublicKey(pubk) {
+			return fmt.Errorf("bad signing key; source ID %s doesn't match key", pid)
 		}
 	}
 
