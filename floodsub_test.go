@@ -899,3 +899,39 @@ func assertPeerList(t *testing.T, peers []peer.ID, expected ...peer.ID) {
 		}
 	}
 }
+
+func TestWithSigning(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	hosts := getNetHosts(t, ctx, 2)
+	psubs := getPubsubs(ctx, hosts, WithMessageSigning())
+
+	connect(t, hosts[0], hosts[1])
+
+	topic := "foobar"
+	data := []byte("this is a message")
+
+	sub, err := psubs[1].Subscribe(topic)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	time.Sleep(time.Millisecond * 10)
+
+	err = psubs[0].Publish(topic, data)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	msg, err := sub.Next(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if msg.Signature == nil {
+		t.Fatal("no signature in message")
+	}
+	if string(msg.Data) != string(data) {
+		t.Fatalf("unexpected data: %s", string(msg.Data))
+	}
+}
