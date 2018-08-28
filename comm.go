@@ -122,3 +122,13 @@ func rpcWithControl(msgs []*pb.Message,
 		},
 	}
 }
+
+func copyRPC(rpc *RPC) *RPC {
+	res := new(RPC)
+	*res = *rpc
+	if rpc.Control != nil {
+		res.Control = new(pb.ControlMessage)
+		*res.Control = *rpc.Control
+	}
+	return res
+}
