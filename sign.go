@@ -1,9 +1,9 @@
-package floodsub
+package pubsub
 
 import (
 	"fmt"
 
-	pb "github.com/libp2p/go-floodsub/pb"
+	pb "github.com/libp2p/go-libp2p-pubsub/pb"
 
 	crypto "github.com/libp2p/go-libp2p-crypto"
 	peer "github.com/libp2p/go-libp2p-peer"

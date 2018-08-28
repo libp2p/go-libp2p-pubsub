@@ -1,4 +1,4 @@
-# go-floodsub
+# go-libp2p-pubsub
 
 [![](https://img.shields.io/badge/made%20by-Protocol%20Labs-blue.svg?style=flat-square)](http://ipn.io)
 [![](https://img.shields.io/badge/project-libp2p-blue.svg?style=flat-square)](http://github.com/libp2p/libp2p)
@@ -6,9 +6,7 @@
 
 > A pubsub system with flooding and gossiping variants.
 
-<!--TODO: change this repo/package name to pubsub-->
-
-PubSub is a work in progress, with floodsub as an initial protocol, followed by gossipsub ([spec](https://github.com/libp2p/specs/tree/master/pubsub/gossipsub), [gossipsub.go](https://github.com/libp2p/go-floodsub/blob/master/gossipsub.go)).
+PubSub is a work in progress, with floodsub as an initial protocol, followed by gossipsub ([spec](https://github.com/libp2p/specs/tree/master/pubsub/gossipsub), [gossipsub.go](https://github.com/libp2p/go-libp2p-pubsub/blob/master/gossipsub.go)).
 
 ## Table of Contents
 
@@ -20,7 +18,7 @@ PubSub is a work in progress, with floodsub as an initial protocol, followed by 
 ## Install
 
 ```
-go get github.com/libp2p/go-floodsub
+go get github.com/libp2p/go-libp2p-pubsub
 ```
 
 ## Usage
@@ -33,7 +31,7 @@ See [libp2p/specs/pubsub#Implementations](https://github.com/libp2p/specs/tree/m
 
 ## Contribute
 
-Contributions welcome. Please check out [the issues](https://github.com/libp2p/go-floodsub/issues).
+Contributions welcome. Please check out [the issues](https://github.com/libp2p/go-libp2p-pubsub/issues).
 
 Check out our [contributing document](https://github.com/libp2p/community/blob/master/contributing.md) for more information on how we work, and about contributing in general. Please be aware that all interactions related to multiformats are subject to the IPFS [Code of Conduct](https://github.com/ipfs/community/blob/master/code-of-conduct.md).
 

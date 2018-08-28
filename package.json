@@ -1,10 +1,10 @@
 {
   "author": "whyrusleeping",
   "bugs": {
-    "url": "https://github.com/libp2p/go-floodsub"
+    "url": "https://github.com/libp2p/go-libp2p-pubsub"
   },
   "gx": {
-    "dvcsimport": "github.com/libp2p/go-floodsub"
+    "dvcsimport": "github.com/libp2p/go-libp2p-pubsub"
   },
   "gxDependencies": [
     {
@@ -75,8 +75,8 @@
   ],
   "gxVersion": "0.9.0",
   "language": "go",
-  "license": "",
-  "name": "go-libp2p-floodsub",
+  "license": "MIT",
+  "name": "go-libp2p-pubsub",
   "releaseCmd": "git commit -a -m \"gx publish $VERSION\"",
   "version": "0.9.36"
 }

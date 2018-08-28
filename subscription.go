@@ -1,4 +1,4 @@
-package floodsub
+package pubsub
 
 import (
 	"context"

@@ -1,11 +1,11 @@
-package floodsub
+package pubsub
 
 import (
 	"encoding/binary"
 	"fmt"
 	"testing"
 
-	pb "github.com/libp2p/go-floodsub/pb"
+	pb "github.com/libp2p/go-libp2p-pubsub/pb"
 )
 
 func TestMessageCache(t *testing.T) {
