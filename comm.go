@@ -124,20 +124,11 @@ func rpcWithControl(msgs []*pb.Message,
 }
 
 func copyRPC(rpc *RPC) *RPC {
-	res := &RPC{
-		RPC: pb.RPC{
-			Subscriptions: rpc.Subscriptions,
-			Publish:       rpc.Publish,
-		},
-		from: rpc.from,
-	}
+	res := new(RPC)
+	*res = *rpc
 	if rpc.Control != nil {
-		res.Control = &pb.ControlMessage{
-			Ihave: rpc.Control.Ihave,
-			Iwant: rpc.Control.Iwant,
-			Graft: rpc.Control.Graft,
-			Prune: rpc.Control.Prune,
-		}
+		res.Control = new(pb.ControlMessage)
+		*res.Control = *rpc.Control
 	}
 	return res
 }
