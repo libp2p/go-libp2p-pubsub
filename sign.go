@@ -9,6 +9,8 @@ import (
 	peer "github.com/libp2p/go-libp2p-peer"
 )
 
+const SignPrefix = "libp2p-pubsub:"
+
 func verifyMessageSignature(m *pb.Message) error {
 	pubk, err := messagePubKey(m)
 	if err != nil {
@@ -25,6 +27,8 @@ func verifyMessageSignature(m *pb.Message) error {
 	if err != nil {
 		return err
 	}
+
+	bytes = withSignPrefix(bytes)
 
 	valid, err := pubk.Verify(bytes, m.Signature)
 	if err != nil {
@@ -73,6 +77,8 @@ func signMessage(key crypto.PrivKey, m *pb.Message) error {
 		return err
 	}
 
+	bytes = withSignPrefix(bytes)
+
 	sig, err := key.Sign(bytes)
 	if err != nil {
 		return err
@@ -88,4 +94,8 @@ func signMessage(key crypto.PrivKey, m *pb.Message) error {
 		m.Key = pubk
 	}
 	return nil
+}
+
+func withSignPrefix(bytes []byte) []byte {
+	return append([]byte(SignPrefix), bytes...)
 }
