@@ -10,29 +10,9 @@ import (
 )
 
 func verifyMessageSignature(m *pb.Message) error {
-	var pubk crypto.PubKey
-
-	pid, err := peer.IDFromBytes(m.From)
+	pubk, err := messagePubKey(m)
 	if err != nil {
 		return err
-	}
-
-	if m.Key == nil {
-		// no attached key, it must be extractable from the source ID
-		pubk, err = pid.ExtractPublicKey()
-		if err != nil {
-			return err
-		}
-	} else {
-		pubk, err = crypto.UnmarshalPublicKey(m.Key)
-		if err != nil {
-			return err
-		}
-
-		// verify that the source ID matches the attached key
-		if !pid.MatchesPublicKey(pubk) {
-			return fmt.Errorf("bad signing key; source ID %s doesn't match key", pid)
-		}
 	}
 
 	xm := pb.Message{
@@ -56,6 +36,35 @@ func verifyMessageSignature(m *pb.Message) error {
 	}
 
 	return nil
+}
+
+func messagePubKey(m *pb.Message) (crypto.PubKey, error) {
+	var pubk crypto.PubKey
+
+	pid, err := peer.IDFromBytes(m.From)
+	if err != nil {
+		return nil, err
+	}
+
+	if m.Key == nil {
+		// no attached key, it must be extractable from the source ID
+		pubk, err = pid.ExtractPublicKey()
+		if err != nil {
+			return nil, fmt.Errorf("cannot extract signing key: %s", err.Error())
+		}
+	} else {
+		pubk, err = crypto.UnmarshalPublicKey(m.Key)
+		if err != nil {
+			return nil, fmt.Errorf("cannot unmarshal signing key: %s", err.Error())
+		}
+
+		// verify that the source ID matches the attached key
+		if !pid.MatchesPublicKey(pubk) {
+			return nil, fmt.Errorf("bad signing key; source ID %s doesn't match key", pid)
+		}
+	}
+
+	return pubk, nil
 }
 
 func signMessage(key crypto.PrivKey, m *pb.Message) error {
