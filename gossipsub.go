@@ -27,7 +27,8 @@ var (
 	GossipSubHistoryGossip = 3
 
 	// heartbeat interval
-	GossipSubHeartbeatInterval = 1 * time.Second
+	GossipSubHeartbeatInitialDelay = 100 * time.Millisecond
+	GossipSubHeartbeatInterval     = 1 * time.Second
 
 	// fanout ttl
 	GossipSubFanoutTTL = 60 * time.Second
@@ -349,6 +350,13 @@ func (gs *GossipSubRouter) sendRPC(p peer.ID, out *RPC) {
 }
 
 func (gs *GossipSubRouter) heartbeatTimer() {
+	time.Sleep(GossipSubHeartbeatInitialDelay)
+	select {
+	case gs.p.eval <- gs.heartbeat:
+	case <-gs.p.ctx.Done():
+		return
+	}
+
 	ticker := time.NewTicker(GossipSubHeartbeatInterval)
 	defer ticker.Stop()
 
