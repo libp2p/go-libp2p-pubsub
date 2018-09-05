@@ -17,12 +17,9 @@ func verifyMessageSignature(m *pb.Message) error {
 		return err
 	}
 
-	xm := pb.Message{
-		Data:     m.Data,
-		TopicIDs: m.TopicIDs,
-		From:     m.From,
-		Seqno:    m.Seqno,
-	}
+	xm := *m
+	xm.Signature = nil
+	xm.Key = nil
 	bytes, err := xm.Marshal()
 	if err != nil {
 		return err
