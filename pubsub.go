@@ -92,6 +92,8 @@ type PubSub struct {
 
 	// key for signing messages; nil when signing is disabled (default for now)
 	signKey crypto.PrivKey
+	// source ID for signed messages; corresponds to signKey
+	signID peer.ID
 	// strict mode rejects all unsigned messages prior to validation
 	signStrict bool
 
@@ -194,7 +196,8 @@ func WithValidateThrottle(n int) Option {
 
 func WithMessageSigning(strict bool) Option {
 	return func(p *PubSub) error {
-		p.signKey = p.host.Peerstore().PrivKey(p.host.ID())
+		p.signID = p.host.ID()
+		p.signKey = p.host.Peerstore().PrivKey(p.signID)
 		p.signStrict = strict
 		return nil
 	}
@@ -673,6 +676,7 @@ func (p *PubSub) Publish(topic string, data []byte) error {
 		Seqno:    seqno,
 	}
 	if p.signKey != nil {
+		m.From = []byte(p.signID)
 		err := signMessage(p.signKey, m)
 		if err != nil {
 			return err
