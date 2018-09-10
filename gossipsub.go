@@ -312,7 +312,7 @@ func (gs *GossipSubRouter) sendRPC(p peer.ID, out *RPC) {
 	// do we own the RPC?
 	own := false
 
-	// piggyback cotrol message retries
+	// piggyback control message retries
 	ctl, ok := gs.control[p]
 	if ok {
 		out = copyRPC(out)
