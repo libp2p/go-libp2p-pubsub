@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/binary"
 	"fmt"
+	"math/big"
 	"math/rand"
 	"sync/atomic"
 	"time"
@@ -86,7 +87,7 @@ type PubSub struct {
 	// eval thunk in event loop
 	eval chan func()
 
-	peers        map[peer.ID]chan *RPC
+	peers        map[peer.ID]*rpcpair
 	seenMessages *timecache.TimeCache
 
 	ctx context.Context
@@ -124,6 +125,42 @@ func (m *Message) GetFrom() peer.ID {
 	return peer.ID(m.Message.GetFrom())
 }
 
+type rpcpair struct {
+	rpc       chan *RPC
+	initiator peer.ID
+}
+
+func newrpcpair(s inet.Stream) *rpcpair {
+	return &rpcpair{
+		rpc:       make(chan *RPC, 32),
+		initiator: streamInitiator(s),
+	}
+}
+
+func (pair *rpcpair) init(ctx context.Context, p *PubSub, s inet.Stream) {
+	go p.handleSendingMessages(ctx, s, pair.rpc)
+	pair.rpc <- p.getHelloPacket()
+}
+
+func (pair *rpcpair) close() {
+	close(pair.rpc)
+}
+
+func (pair *rpcpair) updateIfNecessary(ctx context.Context, p *PubSub, s inet.Stream) {
+	initiator := streamInitiator(s)
+	theirs := big.NewInt(0)
+	theirs.SetBytes([]byte(initiator))
+	ours := big.NewInt(0)
+	ours.SetBytes([]byte(pair.initiator))
+	if theirs.Cmp(ours) <= 0 {
+		return
+	}
+
+	pair.close()
+	pair.initiator = initiator
+	pair.rpc = make(chan *RPC, 32)
+}
+
 type RPC struct {
 	pb.RPC
 
@@ -154,7 +191,7 @@ func NewPubSub(ctx context.Context, h host.Host, rt PubSubRouter, opts ...Option
 		eval:             make(chan func()),
 		myTopics:         make(map[string]map[*Subscription]struct{}),
 		topics:           make(map[string]map[peer.ID]struct{}),
-		peers:            make(map[peer.ID]chan *RPC),
+		peers:            make(map[peer.ID]*rpcpair),
 		topicVals:        make(map[string]*topicVal),
 		seenMessages:     timecache.NewTimeCache(time.Second * 120),
 		counter:          uint64(time.Now().UnixNano()),
@@ -186,12 +223,19 @@ func WithValidateThrottle(n int) Option {
 	}
 }
 
+func streamInitiator(s inet.Stream) peer.ID {
+	if s.Conn().Stat().Direction == inet.DirInbound {
+		return s.Conn().RemotePeer()
+	}
+	return s.Conn().LocalPeer()
+}
+
 // processLoop handles all inputs arriving on the channels
 func (p *PubSub) processLoop(ctx context.Context) {
 	defer func() {
 		// Clean up go routines.
-		for _, ch := range p.peers {
-			close(ch)
+		for _, pair := range p.peers {
+			pair.close()
 		}
 		p.peers = nil
 		p.topics = nil
@@ -200,24 +244,22 @@ func (p *PubSub) processLoop(ctx context.Context) {
 		select {
 		case s := <-p.newPeers:
 			pid := s.Conn().RemotePeer()
-			ch, ok := p.peers[pid]
+			pair, ok := p.peers[pid]
 			if ok {
-				log.Error("already have connection to peer: ", pid)
-				close(ch)
+				log.Info("already have connection to peer: ", pid)
+				pair.updateIfNecessary(ctx, p, s)
+			} else {
+				pair = newrpcpair(s)
+				pair.init(ctx, p, s)
 			}
 
-			messages := make(chan *RPC, 32)
-			go p.handleSendingMessages(ctx, s, messages)
-			messages <- p.getHelloPacket()
-
-			p.peers[pid] = messages
-
+			p.peers[pid] = pair
 			p.rt.AddPeer(pid, s.Protocol())
 
 		case pid := <-p.peerDead:
-			ch, ok := p.peers[pid]
+			pair, ok := p.peers[pid]
 			if ok {
-				close(ch)
+				pair.close()
 			}
 
 			delete(p.peers, pid)
@@ -339,9 +381,9 @@ func (p *PubSub) announce(topic string, sub bool) {
 	}
 
 	out := rpcWithSubs(subopt)
-	for pid, peer := range p.peers {
+	for pid, pair := range p.peers {
 		select {
-		case peer <- out:
+		case pair.rpc <- out:
 		default:
 			log.Infof("Can't send announce message to peer %s: queue full; scheduling retry", pid)
 			go p.announceRetry(topic, sub)

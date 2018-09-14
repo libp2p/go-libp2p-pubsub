@@ -65,13 +65,13 @@ func (fs *FloodSubRouter) Publish(from peer.ID, msg *pb.Message) {
 			continue
 		}
 
-		mch, ok := fs.p.peers[pid]
+		mpair, ok := fs.p.peers[pid]
 		if !ok {
 			continue
 		}
 
 		select {
-		case mch <- out:
+		case mpair.rpc <- out:
 		default:
 			log.Infof("dropping message to peer %s: queue full", pid)
 			// Drop it. The peer is too slow.
