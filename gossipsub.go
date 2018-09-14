@@ -332,13 +332,13 @@ func (gs *GossipSubRouter) sendRPC(p peer.ID, out *RPC) {
 		delete(gs.gossip, p)
 	}
 
-	mpair, ok := gs.p.peers[p]
+	mch, ok := gs.p.peers[p]
 	if !ok {
 		return
 	}
 
 	select {
-	case mpair.rpc <- out:
+	case mch <- out:
 	default:
 		log.Infof("dropping message to peer %s: queue full", p)
 		// push control messages that need to be retried

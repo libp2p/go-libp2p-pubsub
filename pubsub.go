@@ -87,7 +87,8 @@ type PubSub struct {
 	// eval thunk in event loop
 	eval chan func()
 
-	peers        map[peer.ID]*rpcpair
+	peers        map[peer.ID]chan *RPC
+	peerStreams  map[peer.ID]inet.Stream
 	seenMessages *timecache.TimeCache
 
 	ctx context.Context
@@ -125,42 +126,6 @@ func (m *Message) GetFrom() peer.ID {
 	return peer.ID(m.Message.GetFrom())
 }
 
-type rpcpair struct {
-	rpc       chan *RPC
-	initiator peer.ID
-}
-
-func newrpcpair(s inet.Stream) *rpcpair {
-	return &rpcpair{
-		rpc:       make(chan *RPC, 32),
-		initiator: streamInitiator(s),
-	}
-}
-
-func (pair *rpcpair) init(ctx context.Context, p *PubSub, s inet.Stream) {
-	go p.handleSendingMessages(ctx, s, pair.rpc)
-	pair.rpc <- p.getHelloPacket()
-}
-
-func (pair *rpcpair) close() {
-	close(pair.rpc)
-}
-
-func (pair *rpcpair) updateIfNecessary(ctx context.Context, p *PubSub, s inet.Stream) {
-	initiator := streamInitiator(s)
-	theirs := big.NewInt(0)
-	theirs.SetBytes([]byte(initiator))
-	ours := big.NewInt(0)
-	ours.SetBytes([]byte(pair.initiator))
-	if theirs.Cmp(ours) <= 0 {
-		return
-	}
-
-	pair.close()
-	pair.initiator = initiator
-	pair.rpc = make(chan *RPC, 32)
-}
-
 type RPC struct {
 	pb.RPC
 
@@ -191,7 +156,8 @@ func NewPubSub(ctx context.Context, h host.Host, rt PubSubRouter, opts ...Option
 		eval:             make(chan func()),
 		myTopics:         make(map[string]map[*Subscription]struct{}),
 		topics:           make(map[string]map[peer.ID]struct{}),
-		peers:            make(map[peer.ID]*rpcpair),
+		peers:            make(map[peer.ID]chan *RPC),
+		peerStreams:      make(map[peer.ID]inet.Stream),
 		topicVals:        make(map[string]*topicVal),
 		seenMessages:     timecache.NewTimeCache(time.Second * 120),
 		counter:          uint64(time.Now().UnixNano()),
@@ -223,46 +189,67 @@ func WithValidateThrottle(n int) Option {
 	}
 }
 
-func streamInitiator(s inet.Stream) peer.ID {
+func streamInitiator(s inet.Stream) *big.Int {
+	var id peer.ID
 	if s.Conn().Stat().Direction == inet.DirInbound {
-		return s.Conn().RemotePeer()
+		id = s.Conn().RemotePeer()
+	} else {
+		id = s.Conn().LocalPeer()
 	}
-	return s.Conn().LocalPeer()
+	res := big.NewInt(0)
+	return res.SetBytes([]byte(id))
+}
+
+func initiatorGreaterThan(a, b inet.Stream) bool {
+	aid := streamInitiator(a)
+	bid := streamInitiator(b)
+	return aid.Cmp(bid) > 0
 }
 
 // processLoop handles all inputs arriving on the channels
 func (p *PubSub) processLoop(ctx context.Context) {
 	defer func() {
 		// Clean up go routines.
-		for _, pair := range p.peers {
-			pair.close()
+		for _, ch := range p.peers {
+			close(ch)
 		}
 		p.peers = nil
+		p.peerStreams = nil
 		p.topics = nil
 	}()
 	for {
 		select {
 		case s := <-p.newPeers:
 			pid := s.Conn().RemotePeer()
-			pair, ok := p.peers[pid]
+			ch, ok := p.peers[pid]
 			if ok {
-				log.Info("already have connection to peer: ", pid)
-				pair.updateIfNecessary(ctx, p, s)
-			} else {
-				pair = newrpcpair(s)
-				pair.init(ctx, p, s)
+				oldstream := p.peerStreams[pid]
+				log.Error("already have connection to peer: ", pid)
+
+				if initiatorGreaterThan(s, oldstream) {
+					close(ch)
+				} else {
+					continue
+				}
 			}
 
-			p.peers[pid] = pair
+			ch = make(chan *RPC, 32)
+			p.peers[pid] = ch
+			p.peerStreams[pid] = s
+
+			go p.handleSendingMessages(ctx, s, ch)
+			ch <- p.getHelloPacket()
+
 			p.rt.AddPeer(pid, s.Protocol())
 
 		case pid := <-p.peerDead:
-			pair, ok := p.peers[pid]
+			ch, ok := p.peers[pid]
 			if ok {
-				pair.close()
+				close(ch)
 			}
 
 			delete(p.peers, pid)
+			delete(p.peerStreams, pid)
 			for _, t := range p.topics {
 				delete(t, pid)
 			}
@@ -381,9 +368,9 @@ func (p *PubSub) announce(topic string, sub bool) {
 	}
 
 	out := rpcWithSubs(subopt)
-	for pid, pair := range p.peers {
+	for pid, peer := range p.peers {
 		select {
-		case pair.rpc <- out:
+		case peer <- out:
 		default:
 			log.Infof("Can't send announce message to peer %s: queue full; scheduling retry", pid)
 			go p.announceRetry(topic, sub)
