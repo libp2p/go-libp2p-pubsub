@@ -60,7 +60,7 @@ type GossipSubRouter struct {
 	peers   map[peer.ID]protocol.ID         // peer protocols
 	mesh    map[string]map[peer.ID]struct{} // topic meshes
 	fanout  map[string]map[peer.ID]struct{} // topic fanout
-	lastpub map[string]int64                // last pubish time for fanout topics
+	lastpub map[string]int64                // last publish time for fanout topics
 	gossip  map[peer.ID][]*pb.ControlIHave  // pending gossip
 	control map[peer.ID]*pb.ControlMessage  // pending control messages
 	mcache  *MessageCache
