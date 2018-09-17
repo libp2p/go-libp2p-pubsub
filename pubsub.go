@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/binary"
 	"fmt"
+	"math/big"
 	"math/rand"
 	"sync/atomic"
 	"time"
@@ -87,6 +88,7 @@ type PubSub struct {
 	eval chan func()
 
 	peers        map[peer.ID]chan *RPC
+	peerStreams  map[peer.ID]inet.Stream
 	seenMessages *timecache.TimeCache
 
 	ctx context.Context
@@ -155,6 +157,7 @@ func NewPubSub(ctx context.Context, h host.Host, rt PubSubRouter, opts ...Option
 		myTopics:         make(map[string]map[*Subscription]struct{}),
 		topics:           make(map[string]map[peer.ID]struct{}),
 		peers:            make(map[peer.ID]chan *RPC),
+		peerStreams:      make(map[peer.ID]inet.Stream),
 		topicVals:        make(map[string]*topicVal),
 		seenMessages:     timecache.NewTimeCache(time.Second * 120),
 		counter:          uint64(time.Now().UnixNano()),
@@ -186,6 +189,23 @@ func WithValidateThrottle(n int) Option {
 	}
 }
 
+func streamInitiator(s inet.Stream) *big.Int {
+	var id peer.ID
+	if s.Conn().Stat().Direction == inet.DirInbound {
+		id = s.Conn().RemotePeer()
+	} else {
+		id = s.Conn().LocalPeer()
+	}
+	res := big.NewInt(0)
+	return res.SetBytes([]byte(id))
+}
+
+func initiatorGreaterThan(a, b inet.Stream) bool {
+	aid := streamInitiator(a)
+	bid := streamInitiator(b)
+	return aid.Cmp(bid) > 0
+}
+
 // processLoop handles all inputs arriving on the channels
 func (p *PubSub) processLoop(ctx context.Context) {
 	defer func() {
@@ -194,6 +214,7 @@ func (p *PubSub) processLoop(ctx context.Context) {
 			close(ch)
 		}
 		p.peers = nil
+		p.peerStreams = nil
 		p.topics = nil
 	}()
 	for {
@@ -202,15 +223,22 @@ func (p *PubSub) processLoop(ctx context.Context) {
 			pid := s.Conn().RemotePeer()
 			ch, ok := p.peers[pid]
 			if ok {
+				oldstream := p.peerStreams[pid]
 				log.Error("already have connection to peer: ", pid)
-				close(ch)
+
+				if initiatorGreaterThan(s, oldstream) {
+					close(ch)
+				} else {
+					continue
+				}
 			}
 
-			messages := make(chan *RPC, 32)
-			go p.handleSendingMessages(ctx, s, messages)
-			messages <- p.getHelloPacket()
+			ch = make(chan *RPC, 32)
+			p.peers[pid] = ch
+			p.peerStreams[pid] = s
 
-			p.peers[pid] = messages
+			go p.handleSendingMessages(ctx, s, ch)
+			ch <- p.getHelloPacket()
 
 			p.rt.AddPeer(pid, s.Protocol())
 
@@ -221,6 +249,7 @@ func (p *PubSub) processLoop(ctx context.Context) {
 			}
 
 			delete(p.peers, pid)
+			delete(p.peerStreams, pid)
 			for _, t := range p.topics {
 				delete(t, pid)
 			}

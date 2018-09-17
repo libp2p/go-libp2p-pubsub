@@ -13,6 +13,7 @@ import (
 	host "github.com/libp2p/go-libp2p-host"
 	peer "github.com/libp2p/go-libp2p-peer"
 	swarmt "github.com/libp2p/go-libp2p-swarm/testing"
+
 	//bhost "github.com/libp2p/go-libp2p/p2p/host/basic"
 	bhost "github.com/libp2p/go-libp2p-blankhost"
 	"github.com/libp2p/go-libp2p-protocol"
@@ -79,15 +80,21 @@ func connectSome(t *testing.T, hosts []host.Host, d int) {
 }
 
 func connectAll(t *testing.T, hosts []host.Host) {
+	wg := sync.WaitGroup{}
+	wg.Add(len(hosts)*len(hosts) - len(hosts))
 	for i, a := range hosts {
 		for j, b := range hosts {
 			if i == j {
 				continue
 			}
 
-			connect(t, a, b)
+			go func(a, b host.Host) {
+				connect(t, a, b)
+				wg.Done()
+			}(a, b)
 		}
 	}
+	wg.Wait()
 }
 
 func getPubsubs(ctx context.Context, hs []host.Host, opts ...Option) []*PubSub {
@@ -114,46 +121,51 @@ func assertReceive(t *testing.T, ch *Subscription, exp []byte) {
 	}
 }
 
-func TestBasicFloodsub(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	hosts := getNetHosts(t, ctx, 20)
+func testBasicFloodsubWithConnectivity(connect func(*testing.T, []host.Host)) func(*testing.T) {
+	return func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+		hosts := getNetHosts(t, ctx, 20)
 
-	psubs := getPubsubs(ctx, hosts)
+		psubs := getPubsubs(ctx, hosts)
 
-	var msgs []*Subscription
-	for _, ps := range psubs {
-		subch, err := ps.Subscribe("foobar")
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		msgs = append(msgs, subch)
-	}
-
-	//connectAll(t, hosts)
-	sparseConnect(t, hosts)
-
-	time.Sleep(time.Millisecond * 100)
-
-	for i := 0; i < 100; i++ {
-		msg := []byte(fmt.Sprintf("%d the flooooooood %d", i, i))
-
-		owner := rand.Intn(len(psubs))
-
-		psubs[owner].Publish("foobar", msg)
-
-		for _, sub := range msgs {
-			got, err := sub.Next(ctx)
+		var msgs []*Subscription
+		for _, ps := range psubs {
+			subch, err := ps.Subscribe("foobar")
 			if err != nil {
-				t.Fatal(sub.err)
+				t.Fatal(err)
 			}
-			if !bytes.Equal(msg, got.Data) {
-				t.Fatal("got wrong message!")
+
+			msgs = append(msgs, subch)
+		}
+
+		connect(t, hosts)
+
+		time.Sleep(time.Millisecond * 100)
+
+		for i := 0; i < 100; i++ {
+			msg := []byte(fmt.Sprintf("%d the flooooooood %d", i, i))
+
+			owner := rand.Intn(len(psubs))
+
+			psubs[owner].Publish("foobar", msg)
+
+			for _, sub := range msgs {
+				got, err := sub.Next(ctx)
+				if err != nil {
+					t.Fatal(sub.err)
+				}
+				if !bytes.Equal(msg, got.Data) {
+					t.Fatal("got wrong message!")
+				}
 			}
 		}
 	}
+}
 
+func TestBasicFloodsub(t *testing.T) {
+	t.Run("sparseConnect", testBasicFloodsubWithConnectivity(sparseConnect))
+	t.Run("connectAll", testBasicFloodsubWithConnectivity(connectAll))
 }
 
 func TestMultihops(t *testing.T) {
