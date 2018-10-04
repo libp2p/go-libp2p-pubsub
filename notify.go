@@ -1,8 +1,8 @@
 package floodsub
 
 import (
-	inet "github.com/libp2p/go-libp2p-net"
-	ma "github.com/multiformats/go-multiaddr"
+	inet "gx/ipfs/QmQdLcvoy3JuSqhV6iwQ9T6Cv7hWLAdzob4jUZRPqFL67Z/go-libp2p-net"
+	ma "gx/ipfs/QmYmsdtJ3HsodkePE3eU3TsCaP2YvPZJ4LoXnNkDE5Tpt7/go-multiaddr"
 )
 
 var _ inet.Notifiee = (*PubSubNotif)(nil)
