@@ -34,7 +34,7 @@ type RandomSubRouter struct {
 }
 
 func (rs *RandomSubRouter) Protocols() []protocol.ID {
-	return []protocol.ID{RandomSubID, RandomSubID}
+	return []protocol.ID{RandomSubID, FloodSubID}
 }
 
 func (rs *RandomSubRouter) Attach(p *PubSub) {
