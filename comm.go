@@ -86,6 +86,7 @@ func (p *PubSub) handleSendingMessages(ctx context.Context, s inet.Stream, outgo
 				case p.peerDead <- s.Conn().RemotePeer():
 				case <-ctx.Done():
 				}
+				return
 			}
 		case <-ctx.Done():
 			return
