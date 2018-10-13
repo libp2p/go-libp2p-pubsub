@@ -11,6 +11,7 @@ import (
 	pb "github.com/libp2p/go-floodsub/pb"
 
 	logging "github.com/ipfs/go-log"
+	crypto "github.com/libp2p/go-libp2p-crypto"
 	host "github.com/libp2p/go-libp2p-host"
 	inet "github.com/libp2p/go-libp2p-net"
 	peer "github.com/libp2p/go-libp2p-peer"
@@ -88,6 +89,13 @@ type PubSub struct {
 
 	peers        map[peer.ID]chan *RPC
 	seenMessages *timecache.TimeCache
+
+	// key for signing messages; nil when signing is disabled (default for now)
+	signKey crypto.PrivKey
+	// source ID for signed messages; corresponds to signKey
+	signID peer.ID
+	// strict mode rejects all unsigned messages prior to validation
+	signStrict bool
 
 	ctx context.Context
 }
@@ -182,6 +190,15 @@ func NewPubSub(ctx context.Context, h host.Host, rt PubSubRouter, opts ...Option
 func WithValidateThrottle(n int) Option {
 	return func(ps *PubSub) error {
 		ps.validateThrottle = make(chan struct{}, n)
+		return nil
+	}
+}
+
+func WithMessageSigning(strict bool) Option {
+	return func(p *PubSub) error {
+		p.signID = p.host.ID()
+		p.signKey = p.host.Peerstore().PrivKey(p.signID)
+		p.signStrict = strict
 		return nil
 	}
 }
@@ -446,13 +463,19 @@ func msgID(pmsg *pb.Message) string {
 
 // pushMsg pushes a message performing validation as necessary
 func (p *PubSub) pushMsg(vals []*topicVal, src peer.ID, msg *Message) {
+	// reject unsigned messages when strict before we even process the id
+	if p.signStrict && msg.Signature == nil {
+		log.Debugf("dropping unsigned message from %s", src)
+		return
+	}
+
 	id := msgID(msg.Message)
 	if p.seenMessage(id) {
 		return
 	}
 	p.markSeen(id)
 
-	if len(vals) > 0 {
+	if len(vals) > 0 || msg.Signature != nil {
 		// validation is asynchronous and globally throttled with the throttleValidate semaphore.
 		// the purpose of the global throttle is to bound the goncurrency possible from incoming
 		// network traffic; each validator also has an individual throttle to preclude
@@ -474,6 +497,42 @@ func (p *PubSub) pushMsg(vals []*topicVal, src peer.ID, msg *Message) {
 
 // validate performs validation and only sends the message if all validators succeed
 func (p *PubSub) validate(vals []*topicVal, src peer.ID, msg *Message) {
+	if msg.Signature != nil {
+		if !p.validateSignature(msg) {
+			log.Warningf("message signature validation failed; dropping message from %s", src)
+			return
+		}
+	}
+
+	if len(vals) > 0 {
+		if !p.validateTopic(vals, msg) {
+			log.Warningf("message validation failed; dropping message from %s", src)
+			return
+		}
+	}
+
+	// all validators were successful, send the message
+	p.sendMsg <- &sendReq{
+		from: src,
+		msg:  msg,
+	}
+}
+
+func (p *PubSub) validateSignature(msg *Message) bool {
+	err := verifyMessageSignature(msg.Message)
+	if err != nil {
+		log.Debugf("signature verification error: %s", err.Error())
+		return false
+	}
+
+	return true
+}
+
+func (p *PubSub) validateTopic(vals []*topicVal, msg *Message) bool {
+	if len(vals) == 1 {
+		return p.validateSingleTopic(vals[0], msg)
+	}
+
 	ctx, cancel := context.WithCancel(p.ctx)
 	defer cancel()
 
@@ -500,22 +559,34 @@ loop:
 	}
 
 	if throttle {
-		log.Warningf("message validation throttled; dropping message from %s", src)
-		return
+		return false
 	}
 
 	for i := 0; i < rcount; i++ {
 		valid := <-rch
 		if !valid {
-			log.Warningf("message validation failed; dropping message from %s", src)
-			return
+			return false
 		}
 	}
 
-	// all validators were successful, send the message
-	p.sendMsg <- &sendReq{
-		from: src,
-		msg:  msg,
+	return true
+}
+
+// fast path for single topic validation that avoids the extra goroutine
+func (p *PubSub) validateSingleTopic(val *topicVal, msg *Message) bool {
+	select {
+	case val.validateThrottle <- struct{}{}:
+		ctx, cancel := context.WithCancel(p.ctx)
+		defer cancel()
+
+		res := val.validateMsg(ctx, msg)
+		<-val.validateThrottle
+
+		return res
+
+	default:
+		log.Debugf("validation throttled for topic %s", val.topic)
+		return false
 	}
 }
 
@@ -598,14 +669,20 @@ func (p *PubSub) GetTopics() []string {
 // Publish publishes data under the given topic
 func (p *PubSub) Publish(topic string, data []byte) error {
 	seqno := p.nextSeqno()
-	p.publish <- &Message{
-		&pb.Message{
-			Data:     data,
-			TopicIDs: []string{topic},
-			From:     []byte(p.host.ID()),
-			Seqno:    seqno,
-		},
+	m := &pb.Message{
+		Data:     data,
+		TopicIDs: []string{topic},
+		From:     []byte(p.host.ID()),
+		Seqno:    seqno,
 	}
+	if p.signKey != nil {
+		m.From = []byte(p.signID)
+		err := signMessage(p.signID, p.signKey, m)
+		if err != nil {
+			return err
+		}
+	}
+	p.publish <- &Message{m}
 	return nil
 }
 
