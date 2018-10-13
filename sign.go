@@ -68,7 +68,7 @@ func messagePubKey(m *pb.Message) (crypto.PubKey, error) {
 	return pubk, nil
 }
 
-func signMessage(key crypto.PrivKey, m *pb.Message) error {
+func signMessage(pid peer.ID, key crypto.PrivKey, m *pb.Message) error {
 	bytes, err := m.Marshal()
 	if err != nil {
 		return err
@@ -82,14 +82,16 @@ func signMessage(key crypto.PrivKey, m *pb.Message) error {
 	}
 
 	m.Signature = sig
-	switch key.Type() {
-	case crypto.RSA:
+
+	pk, _ := pid.ExtractPublicKey()
+	if pk == nil {
 		pubk, err := key.GetPublic().Bytes()
 		if err != nil {
 			return err
 		}
 		m.Key = pubk
 	}
+
 	return nil
 }
 

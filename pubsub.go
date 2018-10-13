@@ -677,7 +677,7 @@ func (p *PubSub) Publish(topic string, data []byte) error {
 	}
 	if p.signKey != nil {
 		m.From = []byte(p.signID)
-		err := signMessage(p.signKey, m)
+		err := signMessage(p.signID, p.signKey, m)
 		if err != nil {
 			return err
 		}
