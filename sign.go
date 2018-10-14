@@ -53,6 +53,9 @@ func messagePubKey(m *pb.Message) (crypto.PubKey, error) {
 		if err != nil {
 			return nil, fmt.Errorf("cannot extract signing key: %s", err.Error())
 		}
+		if pubk == nil {
+			return nil, fmt.Errorf("cannot extract signing key")
+		}
 	} else {
 		pubk, err = crypto.UnmarshalPublicKey(m.Key)
 		if err != nil {
