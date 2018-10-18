@@ -29,7 +29,7 @@ To be used for messaging in p2p instrastructure (as part of libp2p) such as IPFS
 
 ## Implementations
 
-See [libp2p/specs/pubsub/gossipsub#implementation-status](https://github.com/libp2p/specs/tree/master/pubsub/gossipsub#implementation-status) and [libp2p/specs/pubsub#Implementations](https://github.com/libp2p/specs/tree/master/pubsub#Implementations).
+See [libp2p/specs/pubsub#Implementations](https://github.com/libp2p/specs/tree/master/pubsub#Implementations).
 
 ## Contribute
 
