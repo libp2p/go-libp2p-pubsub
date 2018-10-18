@@ -4,9 +4,11 @@
 [![](https://img.shields.io/badge/project-libp2p-blue.svg?style=flat-square)](http://github.com/libp2p/libp2p)
 [![](https://img.shields.io/badge/freenode-%23ipfs-blue.svg?style=flat-square)](http://webchat.freenode.net/?channels=%23ipfs)
 
-> A flooding pubsub system.
+> A pubsub system with flooding and gossiping variants.
 
-PubSub is a work in progress, with [floodsub](https://github.com/libp2p/go-floodsub/) as an initial protocol, followed by gossipsub, which is an alpha release as of May 2018.
+<!--TODO: change this repo/package name to pubsub-->
+
+PubSub is a work in progress, with floodsub as an initial protocol, followed by gossipsub ([spec](https://github.com/libp2p/specs/tree/master/pubsub/gossipsub), [gossipsub.go](https://github.com/libp2p/go-floodsub/blob/master/gossipsub.go)).
 
 ## Table of Contents
 
@@ -23,17 +25,11 @@ go get github.com/libp2p/go-floodsub
 
 ## Usage
 
-```
-TODO
-```
+To be used for messaging in p2p instrastructure (as part of libp2p) such as IPFS, Ethereum, other blockchains, etc.
 
 ## Implementations
 
-See [this issue](https://github.com/libp2p/go-floodsub/issues/77) for an introduction to pubsub, gossipsub and floodsub, which is in the repo for go-floodsub. A PR for gossipsub with Go is [here](https://github.com/libp2p/go-floodsub/pull/67); see [gerbil-simsub](https://github.com/vyzo/gerbil-simsub) for a high-level literate specification, as well as [the libp2p spec for gossipsub](https://github.com/libp2p/specs/blob/master/pubsub/gossipsub/README.md).
-
-The rust-libp2p implementation of floodsub is [here](https://github.com/libp2p/rust-libp2p/search?utf8=%E2%9C%93&q=floodsub&type=). Work is in progress on a gossipsub implementation for Rust with @jamesray1 from Drops of Diamond (which is developing sharding for Ethereum).
-
-Here is a [Javascript](http://github.com/libp2p/js-libp2p-floodsub) implementation of floodsub.
+See [libp2p/specs/pubsub#Implementations](https://github.com/libp2p/specs/tree/master/pubsub#Implementations).
 
 ## Contribute
 
