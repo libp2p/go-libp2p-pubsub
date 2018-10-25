@@ -236,8 +236,8 @@ func WithMessageAuthor(author peer.ID) Option {
 // WithStrictSignatureVerification enforces message signing. If set, unsigned
 // messages will be discarded.
 //
-// This currently defaults to false but as we transition to signing by default
-// but will eventually default to true.
+// This currently defaults to false but, as we transition to signing by default,
+// will eventually default to true.
 func WithStrictSignatureVerification(required bool) Option {
 	return func(p *PubSub) error {
 		p.signStrict = required
