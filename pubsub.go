@@ -147,6 +147,8 @@ func NewPubSub(ctx context.Context, h host.Host, rt PubSubRouter, opts ...Option
 		host:             h,
 		ctx:              ctx,
 		rt:               rt,
+		signID:           h.ID(),
+		signKey:          h.Peerstore().PrivKey(h.ID()),
 		incoming:         make(chan *RPC, 32),
 		publish:          make(chan *Message),
 		newPeers:         make(chan inet.Stream),
@@ -187,6 +189,8 @@ func NewPubSub(ctx context.Context, h host.Host, rt PubSubRouter, opts ...Option
 	return ps, nil
 }
 
+// WithValidateThrottle sets the upper bound on the number of active validation
+// goroutines.
 func WithValidateThrottle(n int) Option {
 	return func(ps *PubSub) error {
 		ps.validateThrottle = make(chan struct{}, n)
@@ -194,11 +198,49 @@ func WithValidateThrottle(n int) Option {
 	}
 }
 
-func WithMessageSigning(strict bool) Option {
+// WithMessageSigning enables or disables message signing (enabled by default).
+func WithMessageSigning(enabled bool) Option {
 	return func(p *PubSub) error {
-		p.signID = p.host.ID()
-		p.signKey = p.host.Peerstore().PrivKey(p.signID)
-		p.signStrict = strict
+		if enabled {
+			p.signKey = p.host.Peerstore().PrivKey(p.signID)
+			if p.signKey == nil {
+				return fmt.Errorf("can't sign for peer %s: no private key", p.signID)
+			}
+		} else {
+			p.signKey = nil
+		}
+		return nil
+	}
+}
+
+// WithMessageAuthor sets the author for outbound messages to the given peer ID
+// (defaults to the host's ID). If message signing is enabled, the private key
+// must be available in the host's peerstore.
+func WithMessageAuthor(author peer.ID) Option {
+	return func(p *PubSub) error {
+		if author == "" {
+			author = p.host.ID()
+		}
+		if p.signKey != nil {
+			newSignKey := p.host.Peerstore().PrivKey(author)
+			if newSignKey == nil {
+				return fmt.Errorf("can't sign for peer %s: no private key", p.signID)
+			}
+			p.signKey = newSignKey
+		}
+		p.signID = author
+		return nil
+	}
+}
+
+// WithStrictSignatureVerification enforces message signing. If set, unsigned
+// messages will be discarded.
+//
+// This currently defaults to false but, as we transition to signing by default,
+// will eventually default to true.
+func WithStrictSignatureVerification(required bool) Option {
+	return func(p *PubSub) error {
+		p.signStrict = required
 		return nil
 	}
 }
