@@ -905,7 +905,7 @@ func TestWithSigning(t *testing.T) {
 	defer cancel()
 
 	hosts := getNetHosts(t, ctx, 2)
-	psubs := getPubsubs(ctx, hosts, WithMessageSigning(true))
+	psubs := getPubsubs(ctx, hosts, WithStrictSignatureVerification(true))
 
 	connect(t, hosts[0], hosts[1])
 
