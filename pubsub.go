@@ -177,6 +177,10 @@ func NewPubSub(ctx context.Context, h host.Host, rt PubSubRouter, opts ...Option
 		}
 	}
 
+	if ps.signStrict && ps.signKey == nil {
+		return nil, fmt.Errorf("strict signature verification enabled but message signing is disabled")
+	}
+
 	rt.Attach(ps)
 
 	for _, id := range rt.Protocols() {
