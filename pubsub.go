@@ -407,24 +407,44 @@ func (p *PubSub) announce(topic string, sub bool) {
 		case peer <- out:
 		default:
 			log.Infof("Can't send announce message to peer %s: queue full; scheduling retry", pid)
-			go p.announceRetry(topic, sub)
+			go p.announceRetry(pid, topic, sub)
 		}
 	}
 }
 
-func (p *PubSub) announceRetry(topic string, sub bool) {
+func (p *PubSub) announceRetry(pid peer.ID, topic string, sub bool) {
 	time.Sleep(time.Duration(1+rand.Intn(1000)) * time.Millisecond)
 
 	retry := func() {
 		_, ok := p.myTopics[topic]
 		if (ok && sub) || (!ok && !sub) {
-			p.announce(topic, sub)
+			p.doAnnounceRetry(pid, topic, sub)
 		}
 	}
 
 	select {
 	case p.eval <- retry:
 	case <-p.ctx.Done():
+	}
+}
+
+func (p *PubSub) doAnnounceRetry(pid peer.ID, topic string, sub bool) {
+	peer, ok := p.peers[pid]
+	if !ok {
+		return
+	}
+
+	subopt := &pb.RPC_SubOpts{
+		Topicid:   &topic,
+		Subscribe: &sub,
+	}
+
+	out := rpcWithSubs(subopt)
+	select {
+	case peer <- out:
+	default:
+		log.Infof("Can't send announce message to peer %s: queue full; scheduling retry", pid)
+		go p.announceRetry(pid, topic, sub)
 	}
 }
 
