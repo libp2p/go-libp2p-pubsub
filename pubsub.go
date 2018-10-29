@@ -434,14 +434,9 @@ func (p *PubSub) doAnnounceRetry(pid peer.ID, topic string, sub bool) {
 		return
 	}
 
-	// don't take pointers to the goroutine stack
-	topicP := new(string)
-	subP := new(bool)
-	*topicP = topic
-	*subP = sub
 	subopt := &pb.RPC_SubOpts{
-		Topicid:   topicP,
-		Subscribe: subP,
+		Topicid:   &topic,
+		Subscribe: &sub,
 	}
 
 	out := rpcWithSubs(subopt)
