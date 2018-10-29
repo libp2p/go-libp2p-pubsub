@@ -78,6 +78,6 @@
   "license": "MIT",
   "name": "go-libp2p-pubsub",
   "releaseCmd": "git commit -a -m \"gx publish $VERSION\"",
-  "version": "0.11.2"
+  "version": "0.11.3"
 }
 
