@@ -15,21 +15,21 @@
     },
     {
       "author": "whyrusleeping",
-      "hash": "QmUR3nQ8nSP7vUnzTvz2kLxq4ncud6eC2s4BAEC8uiAsde",
+      "hash": "QmYWxr8cuXMeisJ69SK5HCg3S7FVuARCi8JZWxDyb9Aatw",
       "name": "go-libp2p-host",
-      "version": "3.0.16"
-    },
-    {
-      "author": "whyrusleeping",
-      "hash": "QmNipGra5iGyJYw85wYwLf2RpvsUu1q93XESxCPWYpMmrF",
-      "name": "go-libp2p-blankhost",
-      "version": "0.3.16"
-    },
-    {
-      "author": "whyrusleeping",
-      "hash": "QmX1VAqodkn8yFJe7gYFs8PvrSCVsCWcTUBgxswoeC3J4K",
-      "name": "go-libp2p-net",
       "version": "3.0.17"
+    },
+    {
+      "author": "whyrusleeping",
+      "hash": "QmVXYnW9fUXpJwpUyyN1uTSoAWUUHKreKmBaieqk6Q3Jjs",
+      "name": "go-libp2p-blankhost",
+      "version": "0.3.17"
+    },
+    {
+      "author": "whyrusleeping",
+      "hash": "QmXmkWCiVumBA1MMfPHHoUaCoVo7H5uceEXjzYCVkwVxN9",
+      "name": "go-libp2p-net",
+      "version": "3.0.18"
     },
     {
       "hash": "QmcuXC5cxs79ro2cUuHs4HQ2bkDLJUYokwL8aivcX6HW3C",
@@ -44,9 +44,9 @@
     },
     {
       "author": "whyrusleeping",
-      "hash": "QmUz7HmU4ws577TMEVNoTjNghVvq2jXnxnVhbkNXKPKpgK",
+      "hash": "Qme2jJHLnAfULnkrSxmqAn7pGTp3HWVmFYLnuLtxFvH9nA",
       "name": "go-libp2p-peer",
-      "version": "2.4.1"
+      "version": "2.4.2"
     },
     {
       "author": "whyrusleeping",
@@ -56,9 +56,9 @@
     },
     {
       "author": "whyrusleeping",
-      "hash": "QmdEdguaWGhjhQXUBvSLjSAT3idU1ECwASUo95ZW1obEEp",
+      "hash": "QmXncr9XPENrEdKSVtSht8RafevVfFwvPCPRVoYhrZmMi8",
       "name": "go-libp2p-swarm",
-      "version": "3.0.23"
+      "version": "3.0.24"
     },
     {
       "author": "whyrusleeping",
@@ -68,9 +68,9 @@
     },
     {
       "author": "whyrusleeping",
-      "hash": "QmaZ1F8vQdJaQqA8hjAzH8a7Qnqqb2n2ZYeUbKMjMcxAZe",
+      "hash": "QmcgyFuP2SVMhgkTjFaXwnyAi9Fheg6A7SWgpYJKuajPnK",
       "name": "go-libp2p-crypto",
-      "version": "2.0.2"
+      "version": "2.0.3"
     }
   ],
   "gxVersion": "0.9.0",
@@ -78,6 +78,6 @@
   "license": "MIT",
   "name": "go-libp2p-pubsub",
   "releaseCmd": "git commit -a -m \"gx publish $VERSION\"",
-  "version": "0.11.4"
+  "version": "0.11.5"
 }
 
