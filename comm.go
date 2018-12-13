@@ -11,6 +11,7 @@ import (
 	proto "github.com/gogo/protobuf/proto"
 	inet "github.com/libp2p/go-libp2p-net"
 	peer "github.com/libp2p/go-libp2p-peer"
+	ms "github.com/multiformats/go-multistream"
 )
 
 // get the initial RPC containing all of our subscriptions to send to new peers
@@ -58,8 +59,16 @@ func (p *PubSub) handleNewPeer(ctx context.Context, pid peer.ID, outgoing <-chan
 	s, err := p.host.NewStream(p.ctx, pid, p.rt.Protocols()...)
 	if err != nil {
 		log.Warning("opening new stream to peer: ", err, pid)
+
+		var ch chan peer.ID
+		if err == ms.ErrNotSupported {
+			ch = p.newPeerError
+		} else {
+			ch = p.peerDead
+		}
+
 		select {
-		case p.newPeerError <- pid:
+		case ch <- pid:
 		case <-ctx.Done():
 		}
 		return
