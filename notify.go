@@ -25,12 +25,6 @@ func (p *PubSubNotif) Connected(n inet.Network, c inet.Conn) {
 }
 
 func (p *PubSubNotif) Disconnected(n inet.Network, c inet.Conn) {
-	go func() {
-		select {
-		case p.peerDead <- c.RemotePeer():
-		case <-p.ctx.Done():
-		}
-	}()
 }
 
 func (p *PubSubNotif) Listen(n inet.Network, _ ma.Multiaddr) {

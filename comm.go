@@ -66,9 +66,26 @@ func (p *PubSub) handleNewPeer(ctx context.Context, pid peer.ID, outgoing <-chan
 	}
 
 	go p.handleSendingMessages(ctx, s, outgoing)
+	go p.handlePeerEOF(ctx, s)
 	select {
 	case p.newPeerStream <- s:
 	case <-ctx.Done():
+	}
+}
+
+func (p *PubSub) handlePeerEOF(ctx context.Context, s inet.Stream) {
+	r := ggio.NewDelimitedReader(s, 1<<20)
+	rpc := new(RPC)
+	for {
+		err := r.ReadMsg(&rpc.RPC)
+		if err != nil {
+			select {
+			case p.peerDead <- s.Conn().RemotePeer():
+			case <-ctx.Done():
+			}
+			return
+		}
+		log.Warning("unexpected message from ", s.Conn().RemotePeer())
 	}
 }
 

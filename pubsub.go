@@ -318,8 +318,7 @@ func (p *PubSub) processLoop(ctx context.Context) {
 
 			if p.host.Network().Connectedness(pid) == inet.Connected {
 				// still connected, must be a duplicate connection being closed.
-				// we respawn the writer as we need to ensure there is at leat one active
-				// at worst we can end with two writers pushing messages from the same channel.
+				// we respawn the writer as we need to ensure there is a stream active
 				log.Warning("peer declared dead but still connected; respawning writer: ", pid)
 				go p.handleNewPeer(ctx, pid, ch)
 				continue
