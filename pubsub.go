@@ -278,30 +278,17 @@ func (p *PubSub) processLoop(ctx context.Context) {
 			}
 
 			messages := make(chan *RPC, 32)
+			messages <- p.getHelloPacket()
 			go p.handleNewPeer(ctx, pid, messages)
 			p.peers[pid] = messages
 
 		case s := <-p.newPeerStream:
 			pid := s.Conn().RemotePeer()
 
-			ch, ok := p.peers[pid]
+			_, ok := p.peers[pid]
 			if !ok {
 				log.Warning("new stream for unknown peer: ", pid)
 				s.Reset()
-				continue
-			}
-
-			select {
-			case ch <- p.getHelloPacket():
-			default:
-				log.Warning("error sending hello packet; buffer full: ", pid)
-				go func() {
-					time.Sleep(time.Duration(1+rand.Intn(1000)) * time.Millisecond)
-					select {
-					case p.newPeerStream <- s:
-					case <-ctx.Done():
-					}
-				}()
 				continue
 			}
 
@@ -323,6 +310,7 @@ func (p *PubSub) processLoop(ctx context.Context) {
 				// we respawn the writer as we need to ensure there is a stream active
 				log.Warning("peer declared dead but still connected; respawning writer: ", pid)
 				messages := make(chan *RPC, 32)
+				messages <- p.getHelloPacket()
 				go p.handleNewPeer(ctx, pid, messages)
 				p.peers[pid] = messages
 				continue
