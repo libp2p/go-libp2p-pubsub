@@ -57,8 +57,14 @@ type PubSub struct {
 	// send subscription here to cancel it
 	cancelCh chan *Subscription
 
-	// a notification channel for incoming streams from other peers
-	newPeers chan inet.Stream
+	// a notification channel for new peer connections
+	newPeers chan peer.ID
+
+	// a notification channel for new outoging peer streams
+	newPeerStream chan inet.Stream
+
+	// a notification channel for errors opening new peer streams
+	newPeerError chan peer.ID
 
 	// a notification channel for when our peers die
 	peerDead chan peer.ID
@@ -151,7 +157,9 @@ func NewPubSub(ctx context.Context, h host.Host, rt PubSubRouter, opts ...Option
 		signKey:          h.Peerstore().PrivKey(h.ID()),
 		incoming:         make(chan *RPC, 32),
 		publish:          make(chan *Message),
-		newPeers:         make(chan inet.Stream),
+		newPeers:         make(chan peer.ID),
+		newPeerStream:    make(chan inet.Stream),
+		newPeerError:     make(chan peer.ID),
 		peerDead:         make(chan peer.ID),
 		cancelCh:         make(chan *Subscription),
 		getPeers:         make(chan *listPeerReq),
@@ -259,28 +267,53 @@ func (p *PubSub) processLoop(ctx context.Context) {
 		p.peers = nil
 		p.topics = nil
 	}()
+
 	for {
 		select {
-		case s := <-p.newPeers:
-			pid := s.Conn().RemotePeer()
-			ch, ok := p.peers[pid]
+		case pid := <-p.newPeers:
+			_, ok := p.peers[pid]
 			if ok {
-				log.Error("already have connection to peer: ", pid)
-				close(ch)
+				log.Warning("already have connection to peer: ", pid)
+				continue
 			}
 
 			messages := make(chan *RPC, 32)
-			go p.handleSendingMessages(ctx, s, messages)
 			messages <- p.getHelloPacket()
-
+			go p.handleNewPeer(ctx, pid, messages)
 			p.peers[pid] = messages
+
+		case s := <-p.newPeerStream:
+			pid := s.Conn().RemotePeer()
+
+			_, ok := p.peers[pid]
+			if !ok {
+				log.Warning("new stream for unknown peer: ", pid)
+				s.Reset()
+				continue
+			}
 
 			p.rt.AddPeer(pid, s.Protocol())
 
+		case pid := <-p.newPeerError:
+			delete(p.peers, pid)
+
 		case pid := <-p.peerDead:
 			ch, ok := p.peers[pid]
-			if ok {
-				close(ch)
+			if !ok {
+				continue
+			}
+
+			close(ch)
+
+			if p.host.Network().Connectedness(pid) == inet.Connected {
+				// still connected, must be a duplicate connection being closed.
+				// we respawn the writer as we need to ensure there is a stream active
+				log.Warning("peer declared dead but still connected; respawning writer: ", pid)
+				messages := make(chan *RPC, 32)
+				messages <- p.getHelloPacket()
+				go p.handleNewPeer(ctx, pid, messages)
+				p.peers[pid] = messages
+				continue
 			}
 
 			delete(p.peers, pid)
