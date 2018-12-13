@@ -10,6 +10,7 @@ import (
 	ggio "github.com/gogo/protobuf/io"
 	proto "github.com/gogo/protobuf/proto"
 	inet "github.com/libp2p/go-libp2p-net"
+	peer "github.com/libp2p/go-libp2p-peer"
 )
 
 // get the initial RPC containing all of our subscriptions to send to new peers
@@ -39,10 +40,6 @@ func (p *PubSub) handleNewStream(s inet.Stream) {
 				// but it doesn't hurt to send it.
 				s.Close()
 			}
-			select {
-			case p.peerDead <- s.Conn().RemotePeer():
-			case <-p.ctx.Done():
-			}
 			return
 		}
 
@@ -54,6 +51,24 @@ func (p *PubSub) handleNewStream(s inet.Stream) {
 			s.Reset()
 			return
 		}
+	}
+}
+
+func (p *PubSub) handleNewPeer(ctx context.Context, pid peer.ID, outgoing <-chan *RPC) {
+	s, err := p.host.NewStream(p.ctx, pid, p.rt.Protocols()...)
+	if err != nil {
+		log.Warning("opening new stream to peer: ", err, pid)
+		select {
+		case p.newPeerError <- pid:
+		case <-ctx.Done():
+		}
+		return
+	}
+
+	go p.handleSendingMessages(ctx, s, outgoing)
+	select {
+	case p.newPeerStream <- s:
+	case <-ctx.Done():
 	}
 }
 
@@ -82,10 +97,6 @@ func (p *PubSub) handleSendingMessages(ctx context.Context, s inet.Stream, outgo
 			if err != nil {
 				s.Reset()
 				log.Infof("writing message to %s: %s", s.Conn().RemotePeer(), err)
-				select {
-				case p.peerDead <- s.Conn().RemotePeer():
-				case <-ctx.Done():
-				}
 				return
 			}
 		case <-ctx.Done():
