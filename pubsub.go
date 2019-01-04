@@ -27,6 +27,7 @@ const (
 
 var log = logging.Logger("pubsub")
 
+// PubSub is the implementation of the pubsub system.
 type PubSub struct {
 	// atomic counter for seqnos
 	// NOTE: Must be declared at the top of the struct as we perform atomic
@@ -106,7 +107,7 @@ type PubSub struct {
 	ctx context.Context
 }
 
-// PubSubRouter is the message router component of PubSub
+// PubSubRouter is the message router component of PubSub.
 type PubSubRouter interface {
 	// Protocols returns the list of protocols supported by the router.
 	Protocols() []protocol.ID
@@ -147,7 +148,7 @@ type RPC struct {
 
 type Option func(*PubSub) error
 
-// NewPubSub returns a new PubSub management object
+// NewPubSub returns a new PubSub management object.
 func NewPubSub(ctx context.Context, h host.Host, rt PubSubRouter, opts ...Option) (*PubSub, error) {
 	ps := &PubSub{
 		host:             h,
@@ -758,14 +759,14 @@ type topicReq struct {
 	resp chan []string
 }
 
-// GetTopics returns the topics this node is subscribed to
+// GetTopics returns the topics this node is subscribed to.
 func (p *PubSub) GetTopics() []string {
 	out := make(chan []string, 1)
 	p.getTopics <- &topicReq{resp: out}
 	return <-out
 }
 
-// Publish publishes data under the given topic
+// Publish publishes data to the given topic.
 func (p *PubSub) Publish(topic string, data []byte) error {
 	seqno := p.nextSeqno()
 	m := &pb.Message{
@@ -804,7 +805,7 @@ type sendReq struct {
 	msg  *Message
 }
 
-// ListPeers returns a list of peers we are connected to.
+// ListPeers returns a list of peers we are connected to in the given topic.
 func (p *PubSub) ListPeers(topic string) []peer.ID {
 	out := make(chan []peer.ID)
 	p.getPeers <- &listPeerReq{
@@ -835,13 +836,13 @@ type topicVal struct {
 	validateThrottle chan struct{}
 }
 
-// Validator is a function that validates a message
+// Validator is a function that validates a message.
 type Validator func(context.Context, *Message) bool
 
-// ValidatorOpt is an option for RegisterTopicValidator
+// ValidatorOpt is an option for RegisterTopicValidator.
 type ValidatorOpt func(addVal *addValReq) error
 
-// WithValidatorTimeout is an option that sets the topic validator timeout
+// WithValidatorTimeout is an option that sets the topic validator timeout.
 func WithValidatorTimeout(timeout time.Duration) ValidatorOpt {
 	return func(addVal *addValReq) error {
 		addVal.timeout = timeout
@@ -849,7 +850,7 @@ func WithValidatorTimeout(timeout time.Duration) ValidatorOpt {
 	}
 }
 
-// WithValidatorConcurrency is an option that sets topic validator throttle
+// WithValidatorConcurrency is an option that sets topic validator throttle.
 func WithValidatorConcurrency(n int) ValidatorOpt {
 	return func(addVal *addValReq) error {
 		addVal.throttle = n
@@ -857,7 +858,7 @@ func WithValidatorConcurrency(n int) ValidatorOpt {
 	}
 }
 
-// RegisterTopicValidator registers a validator for topic
+// RegisterTopicValidator registers a validator for topic.
 func (p *PubSub) RegisterTopicValidator(topic string, val Validator, opts ...ValidatorOpt) error {
 	addVal := &addValReq{
 		topic:    topic,
@@ -904,8 +905,8 @@ func (ps *PubSub) addValidator(req *addValReq) {
 	req.resp <- nil
 }
 
-// UnregisterTopicValidator removes a validator from a topic
-// returns an error if there was no validator registered with the topic
+// UnregisterTopicValidator removes a validator from a topic.
+// Returns an error if there was no validator registered with the topic.
 func (p *PubSub) UnregisterTopicValidator(topic string) error {
 	rmVal := &rmValReq{
 		topic: topic,
