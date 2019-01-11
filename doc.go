@@ -4,11 +4,12 @@
 //
 // The main interface to the library is the PubSub object.
 // You can construct this object with the following constructors:
-// <ul>
-// <li> NewFloodSub creates an instance that uses the floodsub routing algorithm.   </li>
-// <li> NewGossipSub creates an instance that uses the gossipsub routing algorithm. </li>
-// <li> NewRandomSub creates an instance that uses the randomsub routing algorithm. </li>
-// </ul>
+//
+// - NewFloodSub creates an instance that uses the floodsub routing algorithm.
+//
+// - NewGossipSub creates an instance that uses the gossipsub routing algorithm.
+//
+// - NewRandomSub creates an instance that uses the randomsub routing algorithm.
 //
 // In addition, there is a generic constructor that creates a pubsub instance with
 // a custom PubSubRouter interface. This procedure is currently reserved for internal
