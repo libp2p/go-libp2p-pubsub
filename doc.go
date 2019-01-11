@@ -1,5 +1,3 @@
-package pubsub
-
 // The pubsub package provides facilities for the Publish/Subscribe pattern of message
 // propagation, also known as overlay multicast.
 // The implementation provides topic-based pubsub, with pluggable routing algorithms.
@@ -23,3 +21,4 @@ package pubsub
 //
 // To subscribe to a topic, use `Subscribe`; this will give you a subscription interface
 // from which new messages can be pumped.
+package pubsub

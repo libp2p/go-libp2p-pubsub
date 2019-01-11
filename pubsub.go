@@ -718,14 +718,16 @@ type addSubReq struct {
 
 type SubOpt func(sub *Subscription) error
 
-// Subscribe returns a new Subscription for the given topic
+// Subscribe returns a new Subscription for the given topic.
+// Note that subscription is not an instanteneous operation. It may take some time
+// before the subscription is processed by the pubsub main loop and propagated to our peers.
 func (p *PubSub) Subscribe(topic string, opts ...SubOpt) (*Subscription, error) {
 	td := pb.TopicDescriptor{Name: &topic}
 
 	return p.SubscribeByTopicDescriptor(&td, opts...)
 }
 
-// SubscribeByTopicDescriptor lets you subscribe a topic using a pb.TopicDescriptor
+// SubscribeByTopicDescriptor lets you subscribe a topic using a pb.TopicDescriptor.
 func (p *PubSub) SubscribeByTopicDescriptor(td *pb.TopicDescriptor, opts ...SubOpt) (*Subscription, error) {
 	if td.GetAuth().GetMode() != pb.TopicDescriptor_AuthOpts_NONE {
 		return nil, fmt.Errorf("auth mode not yet supported")
