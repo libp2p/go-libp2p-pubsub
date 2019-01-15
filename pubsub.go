@@ -25,6 +25,10 @@ const (
 	defaultValidateThrottle    = 8192
 )
 
+var (
+	TimeCacheDuration = 120 * time.Second
+)
+
 var log = logging.Logger("pubsub")
 
 // PubSub is the implementation of the pubsub system.
@@ -175,7 +179,7 @@ func NewPubSub(ctx context.Context, h host.Host, rt PubSubRouter, opts ...Option
 		topics:           make(map[string]map[peer.ID]struct{}),
 		peers:            make(map[peer.ID]chan *RPC),
 		topicVals:        make(map[string]*topicVal),
-		seenMessages:     timecache.NewTimeCache(time.Second * 120),
+		seenMessages:     timecache.NewTimeCache(TimeCacheDuration),
 		counter:          uint64(time.Now().UnixNano()),
 	}
 
