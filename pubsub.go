@@ -607,6 +607,12 @@ func (p *PubSub) pushMsg(vals []*topicVal, src peer.ID, msg *Message) {
 		return
 	}
 
+	// even if they are forwarded by good peers
+	if _, ok := p.blacklist[msg.GetFrom()]; ok {
+		log.Warningf("dropping message from blacklisted source %s", src)
+		return
+	}
+
 	// reject unsigned messages when strict before we even process the id
 	if p.signStrict && msg.Signature == nil {
 		log.Debugf("dropping unsigned message from %s", src)
