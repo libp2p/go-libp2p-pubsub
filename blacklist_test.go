@@ -4,7 +4,36 @@ import (
 	"context"
 	"testing"
 	"time"
+
+	peer "github.com/libp2p/go-libp2p-peer"
 )
+
+func TestMapBlacklist(t *testing.T) {
+	b := NewMapBlacklist()
+
+	p := peer.ID("test")
+
+	b.Add(p)
+	if !b.Contains(p) {
+		t.Fatal("peer not in the blacklist")
+	}
+
+}
+
+func TestLRUBlacklist(t *testing.T) {
+	b, err := NewLRUBlacklist(10)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	p := peer.ID("test")
+
+	b.Add(p)
+	if !b.Contains(p) {
+		t.Fatal("peer not in the blacklist")
+	}
+
+}
 
 func TestBlacklist(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
