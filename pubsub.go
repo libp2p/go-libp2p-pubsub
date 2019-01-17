@@ -661,7 +661,7 @@ func (p *PubSub) validate(vals []*topicVal, src peer.ID, msg *Message) {
 	}
 
 	if len(vals) > 0 {
-		if !p.validateTopic(vals, msg) {
+		if !p.validateTopic(vals, src, msg) {
 			log.Warningf("message validation failed; dropping message from %s", src)
 			return
 		}
@@ -684,9 +684,9 @@ func (p *PubSub) validateSignature(msg *Message) bool {
 	return true
 }
 
-func (p *PubSub) validateTopic(vals []*topicVal, msg *Message) bool {
+func (p *PubSub) validateTopic(vals []*topicVal, src peer.ID, msg *Message) bool {
 	if len(vals) == 1 {
-		return p.validateSingleTopic(vals[0], msg)
+		return p.validateSingleTopic(vals[0], src, msg)
 	}
 
 	ctx, cancel := context.WithCancel(p.ctx)
@@ -703,7 +703,7 @@ loop:
 		select {
 		case val.validateThrottle <- struct{}{}:
 			go func(val *topicVal) {
-				rch <- val.validateMsg(ctx, msg)
+				rch <- val.validateMsg(ctx, src, msg)
 				<-val.validateThrottle
 			}(val)
 
@@ -729,13 +729,13 @@ loop:
 }
 
 // fast path for single topic validation that avoids the extra goroutine
-func (p *PubSub) validateSingleTopic(val *topicVal, msg *Message) bool {
+func (p *PubSub) validateSingleTopic(val *topicVal, src peer.ID, msg *Message) bool {
 	select {
 	case val.validateThrottle <- struct{}{}:
 		ctx, cancel := context.WithCancel(p.ctx)
 		defer cancel()
 
-		res := val.validateMsg(ctx, msg)
+		res := val.validateMsg(ctx, src, msg)
 		<-val.validateThrottle
 
 		return res
@@ -900,7 +900,7 @@ type topicVal struct {
 }
 
 // Validator is a function that validates a message.
-type Validator func(context.Context, *Message) bool
+type Validator func(context.Context, peer.ID, *Message) bool
 
 // ValidatorOpt is an option for RegisterTopicValidator.
 type ValidatorOpt func(addVal *addValReq) error
@@ -992,11 +992,11 @@ func (ps *PubSub) rmValidator(req *rmValReq) {
 	}
 }
 
-func (val *topicVal) validateMsg(ctx context.Context, msg *Message) bool {
+func (val *topicVal) validateMsg(ctx context.Context, src peer.ID, msg *Message) bool {
 	vctx, cancel := context.WithTimeout(ctx, val.validateTimeout)
 	defer cancel()
 
-	valid := val.validate(vctx, msg)
+	valid := val.validate(vctx, src, msg)
 	if !valid {
 		log.Debugf("validation failed for topic %s", val.topic)
 	}
