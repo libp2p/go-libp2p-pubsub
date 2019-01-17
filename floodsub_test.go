@@ -357,7 +357,7 @@ func TestRegisterUnregisterValidator(t *testing.T) {
 	hosts := getNetHosts(t, ctx, 1)
 	psubs := getPubsubs(ctx, hosts)
 
-	err := psubs[0].RegisterTopicValidator("foo", func(context.Context, *Message) bool {
+	err := psubs[0].RegisterTopicValidator("foo", func(context.Context, peer.ID, *Message) bool {
 		return true
 	})
 	if err != nil {
@@ -385,7 +385,7 @@ func TestValidate(t *testing.T) {
 	connect(t, hosts[0], hosts[1])
 	topic := "foobar"
 
-	err := psubs[1].RegisterTopicValidator(topic, func(ctx context.Context, msg *Message) bool {
+	err := psubs[1].RegisterTopicValidator(topic, func(ctx context.Context, from peer.ID, msg *Message) bool {
 		return !bytes.Contains(msg.Data, []byte("illegal"))
 	})
 	if err != nil {
@@ -482,7 +482,7 @@ func TestValidateOverload(t *testing.T) {
 		block := make(chan struct{})
 
 		err := psubs[1].RegisterTopicValidator(topic,
-			func(ctx context.Context, msg *Message) bool {
+			func(ctx context.Context, from peer.ID, msg *Message) bool {
 				<-block
 				return true
 			},
