@@ -98,6 +98,10 @@ type PubSub struct {
 	// eval thunk in event loop
 	eval chan func()
 
+	// peer blacklist
+	blacklist     Blacklist
+	blacklistPeer chan peer.ID
+
 	peers        map[peer.ID]chan *RPC
 	seenMessages *timecache.TimeCache
 
@@ -179,6 +183,8 @@ func NewPubSub(ctx context.Context, h host.Host, rt PubSubRouter, opts ...Option
 		topics:           make(map[string]map[peer.ID]struct{}),
 		peers:            make(map[peer.ID]chan *RPC),
 		topicVals:        make(map[string]*topicVal),
+		blacklist:        NewMapBlacklist(),
+		blacklistPeer:    make(chan peer.ID),
 		seenMessages:     timecache.NewTimeCache(TimeCacheDuration),
 		counter:          uint64(time.Now().UnixNano()),
 	}
@@ -262,6 +268,15 @@ func WithStrictSignatureVerification(required bool) Option {
 	}
 }
 
+// WithBlacklist provides an implementation of the blacklist; the default is a
+// MapBlacklist
+func WithBlacklist(b Blacklist) Option {
+	return func(p *PubSub) error {
+		p.blacklist = b
+		return nil
+	}
+}
+
 // processLoop handles all inputs arriving on the channels
 func (p *PubSub) processLoop(ctx context.Context) {
 	defer func() {
@@ -276,9 +291,13 @@ func (p *PubSub) processLoop(ctx context.Context) {
 	for {
 		select {
 		case pid := <-p.newPeers:
-			_, ok := p.peers[pid]
-			if ok {
+			if p.blacklist.Contains(pid) {
 				log.Warning("already have connection to peer: ", pid)
+				continue
+			}
+
+			if p.blacklist.Contains(pid) {
+				log.Warning("ignoring connection from blacklisted peer: ", pid)
 				continue
 			}
 
@@ -290,9 +309,16 @@ func (p *PubSub) processLoop(ctx context.Context) {
 		case s := <-p.newPeerStream:
 			pid := s.Conn().RemotePeer()
 
-			_, ok := p.peers[pid]
+			ch, ok := p.peers[pid]
 			if !ok {
 				log.Warning("new stream for unknown peer: ", pid)
+				s.Reset()
+				continue
+			}
+
+			if p.blacklist.Contains(pid) {
+				log.Warning("closing stream for blacklisted peer: ", pid)
+				close(ch)
 				s.Reset()
 				continue
 			}
@@ -373,6 +399,20 @@ func (p *PubSub) processLoop(ctx context.Context) {
 
 		case thunk := <-p.eval:
 			thunk()
+
+		case pid := <-p.blacklistPeer:
+			log.Infof("Blacklisting peer %s", pid)
+			p.blacklist.Add(pid)
+
+			ch, ok := p.peers[pid]
+			if ok {
+				close(ch)
+				delete(p.peers, pid)
+				for _, t := range p.topics {
+					delete(t, pid)
+				}
+				p.rt.RemovePeer(pid)
+			}
 
 		case <-ctx.Done():
 			log.Info("pubsub processloop shutting down")
@@ -567,6 +607,18 @@ func msgID(pmsg *pb.Message) string {
 
 // pushMsg pushes a message performing validation as necessary
 func (p *PubSub) pushMsg(vals []*topicVal, src peer.ID, msg *Message) {
+	// reject messages from blacklisted peers
+	if p.blacklist.Contains(src) {
+		log.Warningf("dropping message from blacklisted peer %s", src)
+		return
+	}
+
+	// even if they are forwarded by good peers
+	if p.blacklist.Contains(msg.GetFrom()) {
+		log.Warningf("dropping message from blacklisted source %s", src)
+		return
+	}
+
 	// reject unsigned messages when strict before we even process the id
 	if p.signStrict && msg.Signature == nil {
 		log.Debugf("dropping unsigned message from %s", src)
@@ -819,6 +871,11 @@ func (p *PubSub) ListPeers(topic string) []peer.ID {
 		topic: topic,
 	}
 	return <-out
+}
+
+// BlacklistPeer blacklists a peer; all messages from this peer will be unconditionally dropped.
+func (p *PubSub) BlacklistPeer(pid peer.ID) {
+	p.blacklistPeer <- pid
 }
 
 // per topic validators
