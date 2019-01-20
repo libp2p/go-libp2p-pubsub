@@ -291,7 +291,7 @@ func (p *PubSub) processLoop(ctx context.Context) {
 	for {
 		select {
 		case pid := <-p.newPeers:
-			if p.blacklist.Contains(pid) {
+			if _, ok := p.peers[pid]; ok {
 				log.Warning("already have connection to peer: ", pid)
 				continue
 			}
