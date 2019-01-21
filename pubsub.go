@@ -625,11 +625,11 @@ func (p *PubSub) pushMsg(vals []*topicVal, src peer.ID, msg *Message) {
 		return
 	}
 
+	// have we already seen and validated this message?
 	id := msgID(msg.Message)
 	if p.seenMessage(id) {
 		return
 	}
-	p.markSeen(id)
 
 	if len(vals) > 0 || msg.Signature != nil {
 		// validation is asynchronous and globally throttled with the throttleValidate semaphore.
@@ -747,6 +747,12 @@ func (p *PubSub) validateSingleTopic(val *topicVal, src peer.ID, msg *Message) b
 }
 
 func (p *PubSub) publishMessage(from peer.ID, pmsg *pb.Message) {
+	id := msgID(pmsg)
+	if p.seenMessage(id) {
+		return
+	}
+	p.markSeen(id)
+
 	p.notifySubs(pmsg)
 	p.rt.Publish(from, pmsg)
 }
