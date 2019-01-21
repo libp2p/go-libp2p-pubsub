@@ -625,6 +625,12 @@ func (p *PubSub) pushMsg(vals []*topicVal, src peer.ID, msg *Message) {
 		return
 	}
 
+	// have we already seen and validated this message?
+	id := msgID(msg.Message)
+	if p.seenMessage(id) {
+		return
+	}
+
 	if len(vals) > 0 || msg.Signature != nil {
 		// validation is asynchronous and globally throttled with the throttleValidate semaphore.
 		// the purpose of the global throttle is to bound the goncurrency possible from incoming
