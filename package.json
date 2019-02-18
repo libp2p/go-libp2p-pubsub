@@ -15,26 +15,26 @@
     },
     {
       "author": "whyrusleeping",
-      "hash": "QmfRHxh8bt4jWLKRhNvR5fn7mFACrQBFLqV4wyoymEExKV",
+      "hash": "QmfLNahGe1CVYdxdcoKYXaSkScoDdvF68UPy8zmUB78cEG",
       "name": "go-libp2p-host",
-      "version": "3.0.22"
-    },
-    {
-      "author": "whyrusleeping",
-      "hash": "QmYZJzRGPeRpEufmdqXPAcKrpg9gxCnRVRadTn99PH2P77",
-      "name": "go-libp2p-blankhost",
-      "version": "0.3.22"
-    },
-    {
-      "author": "whyrusleeping",
-      "hash": "QmZ7cBWUXkyWTMN4qH6NGoyMVs7JugyFChBNP4ZUp5rJHH",
-      "name": "go-libp2p-net",
       "version": "3.0.23"
     },
     {
-      "hash": "QmcuXC5cxs79ro2cUuHs4HQ2bkDLJUYokwL8aivcX6HW3C",
+      "author": "whyrusleeping",
+      "hash": "QmWRQyCNQTsuAqt4AHnjFpiLwnYoCxRQQub1AjNwcgXX4C",
+      "name": "go-libp2p-blankhost",
+      "version": "0.3.23"
+    },
+    {
+      "author": "whyrusleeping",
+      "hash": "Qmf1MBFKph9DWDMsdksXUFWSpUW1cGvCsmYiN9Wsdr2Dn5",
+      "name": "go-libp2p-net",
+      "version": "3.0.26"
+    },
+    {
+      "hash": "QmbkT7eMTyXfpeyB3ZMxxcxg7XH8t6uXp49jqzz4HB7BGF",
       "name": "go-log",
-      "version": "1.5.8"
+      "version": "1.5.9"
     },
     {
       "author": "multiformats",
@@ -44,9 +44,9 @@
     },
     {
       "author": "whyrusleeping",
-      "hash": "QmPJxxDsX2UbchSHobbYuvz7qnyJTFKvaKMzE2rZWJ4x5B",
+      "hash": "QmTu65MVbemtUxJEWgsTtzv9Zv9P8rvmqNA4eG9TrTRGYc",
       "name": "go-libp2p-peer",
-      "version": "3.1.0"
+      "version": "3.1.1"
     },
     {
       "author": "whyrusleeping",
@@ -56,21 +56,21 @@
     },
     {
       "author": "whyrusleeping",
-      "hash": "QmTJCJaS8Cpjc2MkoS32iwr4zMZtbLkaF9GJsUgH1uwtN9",
+      "hash": "QmaWkV7WgViKgYNtnm2LfPCTuwKp1CMrfAvwfLwtajB9MA",
       "name": "go-libp2p-swarm",
-      "version": "3.0.29"
+      "version": "3.0.30"
     },
     {
       "author": "whyrusleeping",
-      "hash": "QmdxUuburamoF6zF9qjeQC4WYcWGbWuRmdLacMEsW8ioD8",
+      "hash": "QmddjPSGZb3ieihSseFeCfVRpZzcqczPNsD2DvarSwnjJB",
       "name": "gogo-protobuf",
-      "version": "0.0.0"
+      "version": "1.2.1"
     },
     {
       "author": "whyrusleeping",
-      "hash": "QmNiJiXwWE3kRhZrC5ej3kSjWHm337pYfhjLGSCDNKJP2s",
+      "hash": "QmTW4SdgBWq9GjsBsHeUx8WuGxzhgzAf88UMH2w62PC8yK",
       "name": "go-libp2p-crypto",
-      "version": "2.0.4"
+      "version": "2.0.7"
     },
     {
       "author": "whyrusleeping",
@@ -90,6 +90,6 @@
   "license": "MIT",
   "name": "go-libp2p-pubsub",
   "releaseCmd": "git commit -a -m \"gx publish $VERSION\"",
-  "version": "0.11.11"
+  "version": "0.11.12"
 }
 
