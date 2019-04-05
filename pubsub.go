@@ -43,6 +43,7 @@ type PubSub struct {
 	host host.Host
 
 	rt PubSubRouter
+	rtConfig PubSubRouterConfig
 
 	// incoming messages from other peers
 	incoming chan *RPC
@@ -137,6 +138,10 @@ type PubSubRouter interface {
 	// Leave notifies the router that we are no longer interested in a topic.
 	// It is invoked after the unsubscription announcement.
 	Leave(topic string)
+}
+
+type PubSubRouterConfig interface {
+	JoinWithProtocol(topic string, proto protocol.ID) error
 }
 
 type Message struct {
@@ -273,6 +278,22 @@ func WithStrictSignatureVerification(required bool) Option {
 func WithBlacklist(b Blacklist) Option {
 	return func(p *PubSub) error {
 		p.blacklist = b
+		return nil
+	}
+}
+
+// WithRouterConfiguration provides an implementation of a router configuration
+func WithRouterConfiguration(config PubSubRouterConfig) Option {
+	return func(p *PubSub) error {
+		p.rtConfig = config
+		return nil
+	}
+}
+
+// WithProtocol provides a protocol name that the channel should be operating under
+func WithProtocol(p protocol.ID) SubOpt {
+	return func(sub *Subscription) error {
+		sub.topicProtocol = p
 		return nil
 	}
 }
@@ -454,6 +475,12 @@ func (p *PubSub) handleAddSubscription(req *addSubReq) {
 	// announce we want this topic
 	if len(subs) == 0 {
 		p.announce(sub.topic, true)
+		if p.rtConfig != nil && sub.topicProtocol != "" {
+			if err := p.rtConfig.JoinWithProtocol(sub.topic, sub.topicProtocol); err != nil {
+				// TODO: What if there's an error here?
+				return
+			}
+		}
 		p.rt.Join(sub.topic)
 	}
 
@@ -807,6 +834,19 @@ func (p *PubSub) SubscribeByTopicDescriptor(td *pb.TopicDescriptor, opts ...SubO
 		err := opt(sub)
 		if err != nil {
 			return nil, err
+		}
+	}
+
+	if sub.topicProtocol != "" {
+		foundProto := false
+		for _, proto := range p.rt.Protocols() {
+			if sub.topicProtocol == proto {
+				foundProto = true
+				break
+			}
+		}
+		if !foundProto {
+			return nil, fmt.Errorf("could not subscribe with protocol %s", sub.topicProtocol)
 		}
 	}
 

@@ -1,20 +1,14 @@
 package pubsub
 
 import (
-	"context"
 	"fmt"
 	"math/rand"
 	"time"
 
 	pb "github.com/libp2p/go-libp2p-pubsub/pb"
 
-	host "github.com/libp2p/go-libp2p-host"
 	peer "github.com/libp2p/go-libp2p-peer"
 	protocol "github.com/libp2p/go-libp2p-protocol"
-)
-
-const (
-	GossipSubID = protocol.ID("/meshsub/1.0.0")
 )
 
 var (
@@ -35,18 +29,31 @@ var (
 	GossipSubFanoutTTL = 60 * time.Second
 )
 
-// NewGossipSub returns a new PubSub object using GossipSubRouter as the router.
-func NewGossipSub(ctx context.Context, h host.Host, opts ...Option) (*PubSub, error) {
-	rt := &GossipSubRouter{
-		peers:   make(map[peer.ID]protocol.ID),
-		mesh:    make(map[string]map[peer.ID]struct{}),
-		fanout:  make(map[string]map[peer.ID]struct{}),
-		lastpub: make(map[string]int64),
-		gossip:  make(map[peer.ID][]*pb.ControlIHave),
-		control: make(map[peer.ID]*pb.ControlMessage),
-		mcache:  NewMessageCache(GossipSubHistoryGossip, GossipSubHistoryLength),
+func NewGossipConfigurableRouter(configs ...GossipConfiguration) *GossipConfigurableRouter {
+	protocolSet := make(map[protocol.ID]struct{})
+	for _, c := range configs {
+		for _, p := range c.SupportedProtocols() {
+			protocolSet[p] = struct{}{}
+		}
 	}
-	return NewPubSub(ctx, h, rt, opts...)
+
+	protocolArr := make([]protocol.ID, 0, len(protocolSet))
+	for p := range protocolSet {
+		protocolArr = append(protocolArr, p)
+	}
+
+	rt := &GossipConfigurableRouter{
+		peers:        make(map[peer.ID]protocol.ID),
+		mesh:         make(map[string]map[peer.ID]struct{}),
+		fanout:       make(map[string]map[peer.ID]struct{}),
+		lastpub:      make(map[string]int64),
+		gossip:       make(map[peer.ID][]*pb.ControlIHave),
+		control:      make(map[peer.ID]*pb.ControlMessage),
+		configs:      configs,
+		topicConfigs: make(map[string]GossipConfiguration),
+		protocols:    protocolArr,
+	}
+	return rt
 }
 
 // GossipSubRouter is a router that implements the gossipsub protocol.
@@ -56,7 +63,7 @@ func NewGossipSub(ctx context.Context, h host.Host, opts ...Option) (*PubSub, er
 // to use for injecting our messages in the overlay with stable routes; this
 // is the fanout map. Fanout peer lists are expired if we don't publish any
 // messages to their topic for GossipSubFanoutTTL.
-type GossipSubRouter struct {
+type GossipConfigurableRouter struct {
 	p       *PubSub
 	peers   map[peer.ID]protocol.ID         // peer protocols
 	mesh    map[string]map[peer.ID]struct{} // topic meshes
@@ -64,24 +71,36 @@ type GossipSubRouter struct {
 	lastpub map[string]int64                // last publish time for fanout topics
 	gossip  map[peer.ID][]*pb.ControlIHave  // pending gossip
 	control map[peer.ID]*pb.ControlMessage  // pending control messages
-	mcache  *MessageCache
+
+	configs []GossipConfiguration
+	topicConfigs map[string]GossipConfiguration
+	protocols []protocol.ID
 }
 
-func (gs *GossipSubRouter) Protocols() []protocol.ID {
-	return []protocol.ID{GossipSubID, FloodSubID}
+type MessageCacheReader interface {
+	Get(mid string) (*pb.Message, bool)
+	GetGossipIDs(topic string) []string
+	Shift()
 }
 
-func (gs *GossipSubRouter) Attach(p *PubSub) {
+type GossipConfiguration interface {
+	GetCacher() MessageCacheReader
+	SupportedProtocols() []protocol.ID
+	Protocol() protocol.ID
+	Publish(rt *GossipConfigurableRouter, from peer.ID, msg *pb.Message)
+}
+
+func (gs *GossipConfigurableRouter) Attach(p *PubSub) {
 	gs.p = p
 	go gs.heartbeatTimer()
 }
 
-func (gs *GossipSubRouter) AddPeer(p peer.ID, proto protocol.ID) {
+func (gs *GossipConfigurableRouter) AddPeer(p peer.ID, proto protocol.ID) {
 	log.Debugf("PEERUP: Add new peer %s using %s", p, proto)
 	gs.peers[p] = proto
 }
 
-func (gs *GossipSubRouter) RemovePeer(p peer.ID) {
+func (gs *GossipConfigurableRouter) RemovePeer(p peer.ID) {
 	log.Debugf("PEERDOWN: Remove disconnected peer %s", p)
 	delete(gs.peers, p)
 	for _, peers := range gs.mesh {
@@ -94,7 +113,7 @@ func (gs *GossipSubRouter) RemovePeer(p peer.ID) {
 	delete(gs.control, p)
 }
 
-func (gs *GossipSubRouter) HandleRPC(rpc *RPC) {
+func (gs *GossipConfigurableRouter) HandleRPC(rpc *RPC) {
 	ctl := rpc.GetControl()
 	if ctl == nil {
 		return
@@ -113,7 +132,7 @@ func (gs *GossipSubRouter) HandleRPC(rpc *RPC) {
 	gs.sendRPC(rpc.from, out)
 }
 
-func (gs *GossipSubRouter) handleIHave(p peer.ID, ctl *pb.ControlMessage) []*pb.ControlIWant {
+func (gs *GossipConfigurableRouter) handleIHave(p peer.ID, ctl *pb.ControlMessage) []*pb.ControlIWant {
 	iwant := make(map[string]struct{})
 
 	for _, ihave := range ctl.GetIhave() {
@@ -145,13 +164,16 @@ func (gs *GossipSubRouter) handleIHave(p peer.ID, ctl *pb.ControlMessage) []*pb.
 	return []*pb.ControlIWant{&pb.ControlIWant{MessageIDs: iwantlst}}
 }
 
-func (gs *GossipSubRouter) handleIWant(p peer.ID, ctl *pb.ControlMessage) []*pb.Message {
+func (gs *GossipConfigurableRouter) handleIWant(p peer.ID, ctl *pb.ControlMessage) []*pb.Message {
 	ihave := make(map[string]*pb.Message)
 	for _, iwant := range ctl.GetIwant() {
 		for _, mid := range iwant.GetMessageIDs() {
-			msg, ok := gs.mcache.Get(mid)
-			if ok {
-				ihave[mid] = msg
+			for _, config := range gs.configs {
+				msg, ok := config.GetCacher().Get(mid)
+				if ok {
+					ihave[mid] = msg
+					break
+				}
 			}
 		}
 	}
@@ -170,7 +192,7 @@ func (gs *GossipSubRouter) handleIWant(p peer.ID, ctl *pb.ControlMessage) []*pb.
 	return msgs
 }
 
-func (gs *GossipSubRouter) handleGraft(p peer.ID, ctl *pb.ControlMessage) []*pb.ControlPrune {
+func (gs *GossipConfigurableRouter) handleGraft(p peer.ID, ctl *pb.ControlMessage) []*pb.ControlPrune {
 	var prune []string
 	for _, graft := range ctl.GetGraft() {
 		topic := graft.GetTopicID()
@@ -196,7 +218,7 @@ func (gs *GossipSubRouter) handleGraft(p peer.ID, ctl *pb.ControlMessage) []*pb.
 	return cprune
 }
 
-func (gs *GossipSubRouter) handlePrune(p peer.ID, ctl *pb.ControlMessage) {
+func (gs *GossipConfigurableRouter) handlePrune(p peer.ID, ctl *pb.ControlMessage) {
 	for _, prune := range ctl.GetPrune() {
 		topic := prune.GetTopicID()
 		peers, ok := gs.mesh[topic]
@@ -208,21 +230,29 @@ func (gs *GossipSubRouter) handlePrune(p peer.ID, ctl *pb.ControlMessage) {
 	}
 }
 
-func (gs *GossipSubRouter) Publish(from peer.ID, msg *pb.Message) {
-	gs.mcache.Put(msg)
-
-	tosend := make(map[peer.ID]struct{})
+func (gs *GossipConfigurableRouter) Publish(from peer.ID, msg *pb.Message) {
 	for _, topic := range msg.GetTopicIDs() {
+		config, ok := gs.topicConfigs[topic]
+		if ok {
+			config.Publish(gs, from, msg)
+		}
+	}
+}
+
+func (gs *GossipConfigurableRouter) AddGossipPeers(tosend map[peer.ID]struct{}, topics []string, withFloodSubPeers bool){
+	for _, topic := range topics {
 		// any peers in the topic?
 		tmap, ok := gs.p.topics[topic]
 		if !ok {
 			continue
 		}
 
-		// floodsub peers
-		for p := range tmap {
-			if gs.peers[p] == FloodSubID {
-				tosend[p] = struct{}{}
+		if withFloodSubPeers{
+			// floodsub peers
+			for p := range tmap {
+				if gs.peers[p] == FloodSubID {
+					tosend[p] = struct{}{}
+				}
 			}
 		}
 
@@ -247,21 +277,31 @@ func (gs *GossipSubRouter) Publish(from peer.ID, msg *pb.Message) {
 			tosend[p] = struct{}{}
 		}
 	}
-
-	out := rpcWithMessages(msg)
-	for pid := range tosend {
-		if pid == from || pid == peer.ID(msg.GetFrom()) {
-			continue
-		}
-
-		gs.sendRPC(pid, out)
-	}
 }
 
-func (gs *GossipSubRouter) Join(topic string) {
+func (gs *GossipConfigurableRouter) Protocols() []protocol.ID {
+	return gs.protocols
+}
+
+func (gs *GossipConfigurableRouter) JoinWithProtocol(topic string, proto protocol.ID) error{
+	for _, config := range gs.configs {
+		if config.Protocol() == proto{
+			gs.topicConfigs[topic] = config
+			gs.Join(topic)
+			return nil
+		}
+	}
+	return fmt.Errorf("could not join topic %s with protocol %s", topic, proto)
+}
+
+func (gs *GossipConfigurableRouter) Join(topic string) {
 	gmap, ok := gs.mesh[topic]
 	if ok {
 		return
+	}
+
+	if _, ok := gs.topicConfigs[topic]; (!ok && len(gs.configs)>0){
+		gs.topicConfigs[topic] = gs.configs[0]
 	}
 
 	log.Debugf("JOIN %s", topic)
@@ -284,7 +324,7 @@ func (gs *GossipSubRouter) Join(topic string) {
 	}
 }
 
-func (gs *GossipSubRouter) Leave(topic string) {
+func (gs *GossipConfigurableRouter) Leave(topic string) {
 	gmap, ok := gs.mesh[topic]
 	if !ok {
 		return
@@ -301,19 +341,26 @@ func (gs *GossipSubRouter) Leave(topic string) {
 	}
 }
 
-func (gs *GossipSubRouter) sendGraft(p peer.ID, topic string) {
+func (gs *GossipConfigurableRouter) sendGraft(p peer.ID, topic string) {
 	graft := []*pb.ControlGraft{&pb.ControlGraft{TopicID: &topic}}
 	out := rpcWithControl(nil, nil, nil, graft, nil)
 	gs.sendRPC(p, out)
 }
 
-func (gs *GossipSubRouter) sendPrune(p peer.ID, topic string) {
+func (gs *GossipConfigurableRouter) sendPrune(p peer.ID, topic string) {
 	prune := []*pb.ControlPrune{&pb.ControlPrune{TopicID: &topic}}
 	out := rpcWithControl(nil, nil, nil, nil, prune)
 	gs.sendRPC(p, out)
 }
 
-func (gs *GossipSubRouter) sendRPC(p peer.ID, out *RPC) {
+func (gs *GossipConfigurableRouter) PropagateMSG(peers map[peer.ID]struct{}, msg *pb.Message) {
+	out := rpcWithMessages(msg)
+	for p := range peers {
+		gs.sendRPC(p, out)
+	}
+}
+
+func (gs *GossipConfigurableRouter) sendRPC(p peer.ID, out *RPC) {
 	// do we own the RPC?
 	own := false
 
@@ -354,7 +401,7 @@ func (gs *GossipSubRouter) sendRPC(p peer.ID, out *RPC) {
 	}
 }
 
-func (gs *GossipSubRouter) heartbeatTimer() {
+func (gs *GossipConfigurableRouter) heartbeatTimer() {
 	time.Sleep(GossipSubHeartbeatInitialDelay)
 	select {
 	case gs.p.eval <- gs.heartbeat:
@@ -379,7 +426,7 @@ func (gs *GossipSubRouter) heartbeatTimer() {
 	}
 }
 
-func (gs *GossipSubRouter) heartbeat() {
+func (gs *GossipConfigurableRouter) heartbeat() {
 	defer log.EventBegin(gs.p.ctx, "heartbeat").Done()
 
 	// flush pending control message from retries and gossip
@@ -468,10 +515,12 @@ func (gs *GossipSubRouter) heartbeat() {
 	gs.sendGraftPrune(tograft, toprune)
 
 	// advance the message history window
-	gs.mcache.Shift()
+	for _, c := range gs.configs {
+		c.GetCacher().Shift()
+	}
 }
 
-func (gs *GossipSubRouter) sendGraftPrune(tograft, toprune map[peer.ID][]string) {
+func (gs *GossipConfigurableRouter) sendGraftPrune(tograft, toprune map[peer.ID][]string) {
 	for p, topics := range tograft {
 		graft := make([]*pb.ControlGraft, 0, len(topics))
 		for _, topic := range topics {
@@ -504,8 +553,13 @@ func (gs *GossipSubRouter) sendGraftPrune(tograft, toprune map[peer.ID][]string)
 
 }
 
-func (gs *GossipSubRouter) emitGossip(topic string, peers map[peer.ID]struct{}) {
-	mids := gs.mcache.GetGossipIDs(topic)
+func (gs *GossipConfigurableRouter) emitGossip(topic string, peers map[peer.ID]struct{}) {
+	config, ok := gs.topicConfigs[topic]
+	if !ok {
+		return
+	}
+
+	mids := config.GetCacher().GetGossipIDs(topic)
 	if len(mids) == 0 {
 		return
 	}
@@ -514,13 +568,13 @@ func (gs *GossipSubRouter) emitGossip(topic string, peers map[peer.ID]struct{}) 
 	for _, p := range gpeers {
 		// skip mesh peers
 		_, ok := peers[p]
-		if !ok {
+		if !ok || ok {
 			gs.pushGossip(p, &pb.ControlIHave{TopicID: &topic, MessageIDs: mids})
 		}
 	}
 }
 
-func (gs *GossipSubRouter) flush() {
+func (gs *GossipConfigurableRouter) flush() {
 	// send gossip first, which will also piggyback control
 	for p, ihave := range gs.gossip {
 		delete(gs.gossip, p)
@@ -536,13 +590,13 @@ func (gs *GossipSubRouter) flush() {
 	}
 }
 
-func (gs *GossipSubRouter) pushGossip(p peer.ID, ihave *pb.ControlIHave) {
+func (gs *GossipConfigurableRouter) pushGossip(p peer.ID, ihave *pb.ControlIHave) {
 	gossip := gs.gossip[p]
 	gossip = append(gossip, ihave)
 	gs.gossip[p] = gossip
 }
 
-func (gs *GossipSubRouter) piggybackGossip(p peer.ID, out *RPC, ihave []*pb.ControlIHave) {
+func (gs *GossipConfigurableRouter) piggybackGossip(p peer.ID, out *RPC, ihave []*pb.ControlIHave) {
 	ctl := out.GetControl()
 	if ctl == nil {
 		ctl = &pb.ControlMessage{}
@@ -552,7 +606,7 @@ func (gs *GossipSubRouter) piggybackGossip(p peer.ID, out *RPC, ihave []*pb.Cont
 	ctl.Ihave = ihave
 }
 
-func (gs *GossipSubRouter) pushControl(p peer.ID, ctl *pb.ControlMessage) {
+func (gs *GossipConfigurableRouter) pushControl(p peer.ID, ctl *pb.ControlMessage) {
 	// remove IHAVE/IWANT from control message, gossip is not retried
 	ctl.Ihave = nil
 	ctl.Iwant = nil
@@ -561,7 +615,7 @@ func (gs *GossipSubRouter) pushControl(p peer.ID, ctl *pb.ControlMessage) {
 	}
 }
 
-func (gs *GossipSubRouter) piggybackControl(p peer.ID, out *RPC, ctl *pb.ControlMessage) {
+func (gs *GossipConfigurableRouter) piggybackControl(p peer.ID, out *RPC, ctl *pb.ControlMessage) {
 	// check control message for staleness first
 	var tograft []*pb.ControlGraft
 	var toprune []*pb.ControlPrune
@@ -609,15 +663,17 @@ func (gs *GossipSubRouter) piggybackControl(p peer.ID, out *RPC, ctl *pb.Control
 	}
 }
 
-func (gs *GossipSubRouter) getPeers(topic string, count int, filter func(peer.ID) bool) []peer.ID {
+func (gs *GossipConfigurableRouter) getPeers(topic string, count int, filter func(peer.ID) bool) []peer.ID {
 	tmap, ok := gs.p.topics[topic]
 	if !ok {
 		return nil
 	}
 
+	gossipProtocol := gs.topicConfigs[topic].Protocol()
+
 	peers := make([]peer.ID, 0, len(tmap))
 	for p := range tmap {
-		if gs.peers[p] == GossipSubID && filter(p) {
+		if gs.peers[p] == gossipProtocol && filter(p) {
 			peers = append(peers, p)
 		}
 	}
@@ -631,12 +687,12 @@ func (gs *GossipSubRouter) getPeers(topic string, count int, filter func(peer.ID
 	return peers
 }
 
-func (gs *GossipSubRouter) tagPeer(p peer.ID, topic string) {
+func (gs *GossipConfigurableRouter) tagPeer(p peer.ID, topic string) {
 	tag := topicTag(topic)
 	gs.p.host.ConnManager().TagPeer(p, tag, 2)
 }
 
-func (gs *GossipSubRouter) untagPeer(p peer.ID, topic string) {
+func (gs *GossipConfigurableRouter) untagPeer(p peer.ID, topic string) {
 	tag := topicTag(topic)
 	gs.p.host.ConnManager().UntagPeer(p, tag)
 }

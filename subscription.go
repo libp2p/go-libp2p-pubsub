@@ -2,13 +2,15 @@ package pubsub
 
 import (
 	"context"
+	protocol "github.com/libp2p/go-libp2p-protocol"
 )
 
 type Subscription struct {
-	topic    string
-	ch       chan *Message
-	cancelCh chan<- *Subscription
-	err      error
+	topic         string
+	topicProtocol protocol.ID
+	ch            chan *Message
+	cancelCh      chan<- *Subscription
+	err           error
 }
 
 func (sub *Subscription) Topic() string {
