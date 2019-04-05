@@ -14,4 +14,6 @@ require (
 	github.com/multiformats/go-multiaddr v0.0.1
 	github.com/multiformats/go-multistream v0.0.1
 	github.com/whyrusleeping/timecache v0.0.0-20160911033111-cfcb2f1abfee
+	go.opencensus.io v0.20.0
+	gopkg.in/yaml.v2 v2.2.2 // indirect
 )

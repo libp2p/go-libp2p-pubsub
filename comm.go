@@ -5,6 +5,7 @@ import (
 	"context"
 	"io"
 
+	metrics "github.com/libp2p/go-libp2p-pubsub/metrics"
 	pb "github.com/libp2p/go-libp2p-pubsub/pb"
 
 	ggio "github.com/gogo/protobuf/io"
@@ -43,6 +44,7 @@ func (p *PubSub) handleNewStream(s inet.Stream) {
 			}
 			return
 		}
+		metrics.MIncomingMsgs.M((int64)(rpc.Size()))
 
 		rpc.from = s.Conn().RemotePeer()
 		select {

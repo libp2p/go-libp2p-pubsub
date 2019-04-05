@@ -16,6 +16,7 @@ import (
 	inet "github.com/libp2p/go-libp2p-net"
 	peer "github.com/libp2p/go-libp2p-peer"
 	protocol "github.com/libp2p/go-libp2p-protocol"
+	"github.com/libp2p/go-libp2p-pubsub/metrics"
 	timecache "github.com/whyrusleeping/timecache"
 )
 
@@ -300,6 +301,8 @@ func (p *PubSub) processLoop(ctx context.Context) {
 				log.Warning("ignoring connection from blacklisted peer: ", pid)
 				continue
 			}
+
+			metrics.MPeers.M((int64)(len(p.peers)))
 
 			messages := make(chan *RPC, 32)
 			messages <- p.getHelloPacket()
