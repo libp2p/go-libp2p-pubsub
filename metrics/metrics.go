@@ -26,14 +26,14 @@ var (
 	}
 
 	IncomingMsgCountView = &view.View{
-		Name:        "pubsub/outgoing_msg_count",
+		Name:        "pubsub/incoming_msg_count",
 		Description: "Number of outgoing messages sent",
 		Measure:     MIncomingMsgs,
 		Aggregation: view.Count(),
 	}
 
 	IncomingMsgSizeView = &view.View{
-		Name:        "pubsub/outgoing_msg_size",
+		Name:        "pubsub/incoming_msg_size",
 		Description: "Sizes of outgoing messages sent",
 		Measure:     MIncomingMsgs,
 		Aggregation: view.Distribution(0, 128, 512, 1024, 1024*1024),

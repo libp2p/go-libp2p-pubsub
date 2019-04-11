@@ -7,6 +7,7 @@ import (
 
 	metrics "github.com/libp2p/go-libp2p-pubsub/metrics"
 	pb "github.com/libp2p/go-libp2p-pubsub/pb"
+	stats "go.opencensus.io/stats"
 
 	ggio "github.com/gogo/protobuf/io"
 	proto "github.com/gogo/protobuf/proto"
@@ -44,7 +45,9 @@ func (p *PubSub) handleNewStream(s inet.Stream) {
 			}
 			return
 		}
-		metrics.MIncomingMsgs.M((int64)(rpc.Size()))
+
+		measure := metrics.MIncomingMsgs.M((int64)(rpc.Size()))
+		go stats.Record(context.Background(), measure)
 
 		rpc.from = s.Conn().RemotePeer()
 		select {

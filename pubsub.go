@@ -8,8 +8,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	pb "github.com/libp2p/go-libp2p-pubsub/pb"
-
 	logging "github.com/ipfs/go-log"
 	crypto "github.com/libp2p/go-libp2p-crypto"
 	host "github.com/libp2p/go-libp2p-host"
@@ -17,7 +15,9 @@ import (
 	peer "github.com/libp2p/go-libp2p-peer"
 	protocol "github.com/libp2p/go-libp2p-protocol"
 	"github.com/libp2p/go-libp2p-pubsub/metrics"
+	pb "github.com/libp2p/go-libp2p-pubsub/pb"
 	timecache "github.com/whyrusleeping/timecache"
+	stats "go.opencensus.io/stats"
 )
 
 const (
@@ -302,7 +302,8 @@ func (p *PubSub) processLoop(ctx context.Context) {
 				continue
 			}
 
-			metrics.MPeers.M((int64)(len(p.peers)))
+			measure := metrics.MPeers.M((int64)(len(p.peers)))
+			go stats.Record(ctx, measure)
 
 			messages := make(chan *RPC, 32)
 			messages <- p.getHelloPacket()
