@@ -6,11 +6,13 @@ import (
 	"math/rand"
 	"time"
 
+	metrics "github.com/libp2p/go-libp2p-pubsub/metrics"
 	pb "github.com/libp2p/go-libp2p-pubsub/pb"
 
 	host "github.com/libp2p/go-libp2p-host"
 	peer "github.com/libp2p/go-libp2p-peer"
 	protocol "github.com/libp2p/go-libp2p-protocol"
+	stats "go.opencensus.io/stats"
 )
 
 const (
@@ -249,6 +251,10 @@ func (gs *GossipSubRouter) Publish(from peer.ID, msg *pb.Message) {
 	}
 
 	out := rpcWithMessages(msg)
+
+	measure := metrics.MOutgoingMsgs.M((int64)(msg.Size()))
+	stats.Record(context.Background(), measure)
+
 	for pid := range tosend {
 		if pid == from || pid == peer.ID(msg.GetFrom()) {
 			continue
