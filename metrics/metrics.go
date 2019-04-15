@@ -6,10 +6,10 @@ import (
 )
 
 var (
-	MOutgoingMsgs = stats.Int64("pubsub/outgoing_msg_size", "Outgoing message size", "By")
-	MIncomingMsgs = stats.Int64("pubsub/incoming_msg_size", "Incoming message size", "By")
-	MTopics       = stats.Int64("pubsub/topics", "Number of topics currently subscribed", "1")
-	MPeers        = stats.Int64("pubsub/peers", "Number of pubsub peers", "1")
+	MOutgoingMsgs = stats.Int64("pubsub/outgoing_msg_size", "Outgoing message size", stats.UnitBytes)
+	MIncomingMsgs = stats.Int64("pubsub/incoming_msg_size", "Incoming message size", stats.UnitBytes)
+	MTopics       = stats.Int64("pubsub/topics", "Number of topics currently subscribed", stats.UnitDimensionless)
+	MPeers        = stats.Int64("pubsub/peers", "Number of pubsub peers", stats.UnitDimensionless)
 
 	OutgoingMsgCountView = &view.View{
 		Name:        "pubsub/outgoing_msg_count",

@@ -4,11 +4,12 @@ import (
 	"context"
 
 	pb "github.com/libp2p/go-libp2p-pubsub/pb"
+	stats "go.opencensus.io/stats"
 
 	host "github.com/libp2p/go-libp2p-host"
 	peer "github.com/libp2p/go-libp2p-peer"
 	protocol "github.com/libp2p/go-libp2p-protocol"
-	"github.com/libp2p/go-libp2p-pubsub/metrics"
+	metrics "github.com/libp2p/go-libp2p-pubsub/metrics"
 )
 
 const (
@@ -62,7 +63,8 @@ func (fs *FloodSubRouter) Publish(from peer.ID, msg *pb.Message) {
 
 	out := rpcWithMessages(msg)
 
-	metrics.MOutgoingMsgs.M((int64)(msg.Size()))
+	measure := metrics.MOutgoingMsgs.M((int64)(msg.Size()))
+	stats.Record(context.Background(), measure)
 
 	for pid := range tosend {
 		if pid == from || pid == peer.ID(msg.GetFrom()) {

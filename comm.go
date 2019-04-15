@@ -47,7 +47,7 @@ func (p *PubSub) handleNewStream(s inet.Stream) {
 		}
 
 		measure := metrics.MIncomingMsgs.M((int64)(rpc.Size()))
-		go stats.Record(context.Background(), measure)
+		stats.Record(context.Background(), measure)
 
 		rpc.from = s.Conn().RemotePeer()
 		select {

@@ -14,7 +14,7 @@ import (
 	inet "github.com/libp2p/go-libp2p-net"
 	peer "github.com/libp2p/go-libp2p-peer"
 	protocol "github.com/libp2p/go-libp2p-protocol"
-	"github.com/libp2p/go-libp2p-pubsub/metrics"
+	metrics "github.com/libp2p/go-libp2p-pubsub/metrics"
 	pb "github.com/libp2p/go-libp2p-pubsub/pb"
 	timecache "github.com/whyrusleeping/timecache"
 	stats "go.opencensus.io/stats"
@@ -303,7 +303,7 @@ func (p *PubSub) processLoop(ctx context.Context) {
 			}
 
 			measure := metrics.MPeers.M((int64)(len(p.peers)))
-			go stats.Record(ctx, measure)
+			stats.Record(ctx, measure)
 
 			messages := make(chan *RPC, 32)
 			messages <- p.getHelloPacket()
