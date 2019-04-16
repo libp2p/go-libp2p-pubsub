@@ -52,15 +52,13 @@ var (
 		Measure:     MPeers,
 		Aggregation: view.LastValue(),
 	}
-)
 
-func Register() error {
-	return view.Register(
+	Views = []*view.View{
 		OutgoingMsgCountView,
 		OutgoingMsgSizeView,
 		IncomingMsgCountView,
 		IncomingMsgSizeView,
 		TopicsGaugeView,
 		PeersGaugeView,
-	)
-}
+	}
+)
