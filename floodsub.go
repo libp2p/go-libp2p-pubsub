@@ -79,6 +79,6 @@ func (fs *FloodSubRouter) Publish(from peer.ID, msg *pb.Message) {
 	}
 }
 
-func (fs *FloodSubRouter) Join(topic string) {}
+func (fs *FloodSubRouter) Join(topic string, proto protocol.ID) {}
 
 func (fs *FloodSubRouter) Leave(topic string) {}

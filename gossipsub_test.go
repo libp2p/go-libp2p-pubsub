@@ -297,14 +297,14 @@ func TestGossipsubFanoutExpiry(t *testing.T) {
 		}
 	}
 
-	if len(psubs[0].rt.(*GossipConfigurableRouter).fanout) == 0 {
+	if len(psubs[0].rt.(*GossipSubRouter).fanout) == 0 {
 		t.Fatal("owner has no fanout")
 	}
 
 	// wait for TTL to expire fanout peers in owner
 	time.Sleep(time.Second * 2)
 
-	if len(psubs[0].rt.(*GossipConfigurableRouter).fanout) > 0 {
+	if len(psubs[0].rt.(*GossipSubRouter).fanout) > 0 {
 		t.Fatal("fanout hasn't expired")
 	}
 }

@@ -7,15 +7,34 @@ import (
 	pb "github.com/libp2p/go-libp2p-pubsub/pb"
 )
 
-//HandleRPC, handleIHave, handleIWant, Publish, pushGossip
-
 type MessageCacher interface {
 	MessageCacheReader
 	Put(msg *pb.Message)
 }
 
+type GetFilteredPeers func(count int, filter func(peer.ID) bool) []peer.ID
+type EmittingStrategy interface {
+	GetEmitPeers(topicPeers GetFilteredPeers, meshPeers map[peer.ID]struct{}) map[peer.ID]struct{}
+}
+
+type NoMeshPeersStrategy struct{}
+
+func (s *NoMeshPeersStrategy) GetEmitPeers(topicPeers GetFilteredPeers, meshPeers map[peer.ID]struct{}) map[peer.ID]struct{} {
+	gpeers := topicPeers(GossipSubD, func(peer.ID) bool { return true })
+	emitPeers := make(map[peer.ID]struct{})
+	for _, p := range gpeers {
+		// skip mesh peers
+		_, ok := meshPeers[p]
+		if !ok {
+			emitPeers[p] = struct{}{}
+		}
+	}
+	return emitPeers
+}
+
 type ClassicGossipSubConfiguration struct {
 	mcache             MessageCacher
+	emitter            EmittingStrategy
 	supportedProtocols []protocol.ID
 	protocol           protocol.ID
 }
@@ -31,7 +50,7 @@ func (gs *ClassicGossipSubConfiguration) Protocol() protocol.ID {
 	return gs.protocol
 }
 
-func (gs *ClassicGossipSubConfiguration) Publish(rt *GossipConfigurableRouter, from peer.ID, msg *pb.Message) {
+func (gs *ClassicGossipSubConfiguration) Publish(rt *GossipSubRouter, from peer.ID, msg *pb.Message) {
 	gs.mcache.Put(msg)
 
 	tosend := make(map[peer.ID]struct{})
@@ -49,5 +68,8 @@ func (gs *ClassicGossipSubConfiguration) Publish(rt *GossipConfigurableRouter, f
 	}
 
 	rt.PropagateMSG(tosend, msg)
+}
 
+func (gs *ClassicGossipSubConfiguration) GetEmitPeers(topicPeers GetFilteredPeers, meshPeers map[peer.ID]struct{}) map[peer.ID]struct{} {
+	return gs.emitter.GetEmitPeers(topicPeers, meshPeers)
 }

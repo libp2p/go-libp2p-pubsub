@@ -4,6 +4,7 @@ import (
 	"context"
 
 	host "github.com/libp2p/go-libp2p-host"
+	peer "github.com/libp2p/go-libp2p-peer"
 	protocol "github.com/libp2p/go-libp2p-protocol"
 
 	pb "github.com/libp2p/go-libp2p-pubsub/pb"
@@ -65,12 +66,26 @@ func (mc *LWWMessageCache) Shift() {}
 
 var _ MessageCacheReader = (*LWWMessageCache)(nil)
 
+type randomPeersStrategy struct {
+	numPeers int
+}
+
+func NewRandomPeersStrategy(numPeers int) EmittingStrategy {
+	return &randomPeersStrategy{numPeers: numPeers}
+}
+
+func (s *randomPeersStrategy) GetEmitPeers(topicPeers GetFilteredPeers, _ map[peer.ID]struct{}) map[peer.ID]struct{} {
+	gpeers := topicPeers(s.numPeers, func(peer.ID) bool { return true })
+	return peerListToMap(gpeers)
+}
+
 // NewGossipBaseSub returns a new PubSub object using GossipSubRouter as the router.
 func NewGossipSyncLWW(ctx context.Context, h host.Host, mcache *LWWMessageCache, protocolID protocol.ID, opts ...Option) (*PubSub, error) {
-	rt := NewGossipConfigurableRouter(&ClassicGossipSubConfiguration{
+	rt := NewGossipSubRouterWithConfig(&ClassicGossipSubConfiguration{
 		mcache:             mcache,
+		emitter:            NewRandomPeersStrategy(GossipSubD),
 		supportedProtocols: []protocol.ID{protocolID},
 		protocol:           protocolID,
 	})
-	return NewPubSub(ctx, h, rt, append([]Option{WithRouterConfiguration(rt)}, opts...)...)
+	return NewPubSub(ctx, h, rt, opts...)
 }

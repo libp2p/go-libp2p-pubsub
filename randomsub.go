@@ -103,6 +103,6 @@ func (rs *RandomSubRouter) Publish(from peer.ID, msg *pb.Message) {
 	}
 }
 
-func (rs *RandomSubRouter) Join(topic string) {}
+func (rs *RandomSubRouter) Join(topic string, proto protocol.ID) {}
 
 func (rs *RandomSubRouter) Leave(topic string) {}
