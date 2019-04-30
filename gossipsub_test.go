@@ -297,16 +297,23 @@ func TestGossipsubFanoutExpiry(t *testing.T) {
 		}
 	}
 
-	if len(psubs[0].rt.(*GossipSubRouter).fanout) == 0 {
-		t.Fatal("owner has no fanout")
+	psubs[0].eval <- func() {
+		if len(psubs[0].rt.(*GossipSubRouter).fanout) == 0 {
+			t.Fatal("owner has no fanout")
+		}
 	}
 
 	// wait for TTL to expire fanout peers in owner
 	time.Sleep(time.Second * 2)
 
-	if len(psubs[0].rt.(*GossipSubRouter).fanout) > 0 {
-		t.Fatal("fanout hasn't expired")
+	psubs[0].eval <- func() {
+		if len(psubs[0].rt.(*GossipSubRouter).fanout) > 0 {
+			t.Fatal("fanout hasn't expired")
+		}
 	}
+
+	// wait for it to run in the event loop
+	time.Sleep(10 * time.Millisecond)
 }
 
 func TestGossipsubGossip(t *testing.T) {
