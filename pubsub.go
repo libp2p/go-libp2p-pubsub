@@ -164,6 +164,7 @@ func NewPubSub(ctx context.Context, h host.Host, rt PubSubRouter, opts ...Option
 		rt:               rt,
 		signID:           h.ID(),
 		signKey:          h.Peerstore().PrivKey(h.ID()),
+		signStrict:       true,
 		incoming:         make(chan *RPC, 32),
 		publish:          make(chan *Message),
 		newPeers:         make(chan peer.ID),
@@ -231,6 +232,7 @@ func WithMessageSigning(enabled bool) Option {
 			}
 		} else {
 			p.signKey = nil
+			p.signStrict = false
 		}
 		return nil
 	}
@@ -256,11 +258,8 @@ func WithMessageAuthor(author peer.ID) Option {
 	}
 }
 
-// WithStrictSignatureVerification enforces message signing. If set, unsigned
-// messages will be discarded.
-//
-// This currently defaults to false but, as we transition to signing by default,
-// will eventually default to true.
+// WithStrictSignatureVerification is an option to enable or disable strict message signing.
+// When enabled (which is the default), unsigned messages will be discarded.
 func WithStrictSignatureVerification(required bool) Option {
 	return func(p *PubSub) error {
 		p.signStrict = required
