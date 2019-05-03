@@ -10,6 +10,7 @@ require (
 	github.com/libp2p/go-libp2p-net v0.0.1
 	github.com/libp2p/go-libp2p-peer v0.0.1
 	github.com/libp2p/go-libp2p-protocol v0.0.1
+	github.com/libp2p/go-libp2p-record v0.0.1
 	github.com/libp2p/go-libp2p-swarm v0.0.1
 	github.com/multiformats/go-multiaddr v0.0.1
 	github.com/multiformats/go-multistream v0.0.1

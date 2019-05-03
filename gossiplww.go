@@ -2,6 +2,7 @@ package pubsub
 
 import (
 	"context"
+	record "github.com/libp2p/go-libp2p-record"
 
 	host "github.com/libp2p/go-libp2p-host"
 	peer "github.com/libp2p/go-libp2p-peer"
@@ -11,40 +12,33 @@ import (
 )
 
 type LWWMessageCache struct {
-	IsNewerThan   func(currentMsg, incomingMsg *pb.Message) bool
-	ComputeID     func(msg *pb.Message) string
-	topicMsgIDMap map[string]string
-	IDMsgMap      map[string]*pb.Message
+	validator record.Validator
+	IDMsgMap  map[string]*pb.Message
 }
 
-func NewLWWMessageCache(IsNewerThan func(currentMsg, incomingMsg *pb.Message) bool, ComputeID func(msg *pb.Message) string) *LWWMessageCache {
+func NewLWWMessageCache(validator record.Validator) *LWWMessageCache {
 	return &LWWMessageCache{
-		topicMsgIDMap: make(map[string]string),
-		IDMsgMap:      make(map[string]*pb.Message),
-		IsNewerThan:   IsNewerThan,
-		ComputeID:     ComputeID,
+		validator: validator,
+		IDMsgMap:  make(map[string]*pb.Message),
 	}
 }
 
 func (mc *LWWMessageCache) Put(msg *pb.Message) {
-	mid := mc.ComputeID(msg)
-	_, ok := mc.IDMsgMap[mid]
-	if !ok {
-		mc.IDMsgMap[mid] = msg
-	}
-
 	for _, topic := range msg.TopicIDs {
-		lastMsgID, ok := mc.topicMsgIDMap[topic]
+		lastMsg, ok := mc.IDMsgMap[topic]
 		if !ok {
-			mc.topicMsgIDMap[topic] = mid
+			mc.IDMsgMap[topic] = msg
 			continue
 		}
-		lastMsg, ok := mc.IDMsgMap[lastMsgID]
-		if !ok {
-			continue
+
+		msgBytes := [][]byte{msg.Data, lastMsg.Data}
+		winningIndex, err := mc.validator.Select("", msgBytes)
+		if err != nil {
+			panic(err)
 		}
-		if mc.IsNewerThan(msg, lastMsg) {
-			mc.topicMsgIDMap[topic] = mid
+
+		if winningIndex == 0 {
+			mc.IDMsgMap[topic] = msg
 		}
 	}
 }
@@ -55,9 +49,9 @@ func (mc *LWWMessageCache) Get(mid string) (*pb.Message, bool) {
 }
 
 func (mc *LWWMessageCache) GetGossipIDs(topic string) []string {
-	mid, ok := mc.topicMsgIDMap[topic]
+	_, ok := mc.IDMsgMap[topic]
 	if ok {
-		return []string{mid}
+		return []string{topic}
 	}
 	return []string{}
 }
@@ -79,13 +73,21 @@ func (s *randomPeersStrategy) GetEmitPeers(topicPeers GetFilteredPeers, _ map[pe
 	return peerListToMap(gpeers)
 }
 
+type LWWGossipSubConfig struct {
+	ClassicGossipSubStrategy
+}
+
+func (cfg *LWWGossipSubConfig) OnGraft(rt *GossipSubRouter, topic string, peer peer.ID) {
+	rt.RequestMessage(topic, peer)
+}
+
 // NewGossipBaseSub returns a new PubSub object using GossipSubRouter as the router.
 func NewGossipSyncLWW(ctx context.Context, h host.Host, mcache *LWWMessageCache, protocolID protocol.ID, opts ...Option) (*PubSub, error) {
-	rt := NewGossipSubRouterWithConfig(&ClassicGossipSubConfiguration{
+	rt := NewGossipSubRouterWithStrategies(&LWWGossipSubConfig{ClassicGossipSubStrategy{
 		mcache:             mcache,
 		emitter:            NewRandomPeersStrategy(GossipSubD),
 		supportedProtocols: []protocol.ID{protocolID},
 		protocol:           protocolID,
-	})
+	}})
 	return NewPubSub(ctx, h, rt, opts...)
 }

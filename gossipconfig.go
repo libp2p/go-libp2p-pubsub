@@ -17,10 +17,16 @@ type EmittingStrategy interface {
 	GetEmitPeers(topicPeers GetFilteredPeers, meshPeers map[peer.ID]struct{}) map[peer.ID]struct{}
 }
 
-type NoMeshPeersStrategy struct{}
+type noMeshPeersStrategy struct {
+	numPeers int
+}
 
-func (s *NoMeshPeersStrategy) GetEmitPeers(topicPeers GetFilteredPeers, meshPeers map[peer.ID]struct{}) map[peer.ID]struct{} {
-	gpeers := topicPeers(GossipSubD, func(peer.ID) bool { return true })
+func NewNoMeshPeersStrategy(numPeers int) EmittingStrategy {
+	return &noMeshPeersStrategy{numPeers: numPeers}
+}
+
+func (s *noMeshPeersStrategy) GetEmitPeers(topicPeers GetFilteredPeers, meshPeers map[peer.ID]struct{}) map[peer.ID]struct{} {
+	gpeers := topicPeers(s.numPeers, func(peer.ID) bool { return true })
 	emitPeers := make(map[peer.ID]struct{})
 	for _, p := range gpeers {
 		// skip mesh peers
@@ -32,25 +38,25 @@ func (s *NoMeshPeersStrategy) GetEmitPeers(topicPeers GetFilteredPeers, meshPeer
 	return emitPeers
 }
 
-type ClassicGossipSubConfiguration struct {
+type ClassicGossipSubStrategy struct {
 	mcache             MessageCacher
 	emitter            EmittingStrategy
 	supportedProtocols []protocol.ID
 	protocol           protocol.ID
 }
 
-func (gs *ClassicGossipSubConfiguration) GetCacher() MessageCacheReader {
+func (gs *ClassicGossipSubStrategy) GetCacher() MessageCacheReader {
 	return gs.mcache
 }
 
-func (gs *ClassicGossipSubConfiguration) SupportedProtocols() []protocol.ID {
+func (gs *ClassicGossipSubStrategy) SupportedProtocols() []protocol.ID {
 	return gs.supportedProtocols
 }
-func (gs *ClassicGossipSubConfiguration) Protocol() protocol.ID {
+func (gs *ClassicGossipSubStrategy) Protocol() protocol.ID {
 	return gs.protocol
 }
 
-func (gs *ClassicGossipSubConfiguration) Publish(rt *GossipSubRouter, from peer.ID, msg *pb.Message) {
+func (gs *ClassicGossipSubStrategy) Publish(rt *GossipSubRouter, from peer.ID, msg *pb.Message) {
 	gs.mcache.Put(msg)
 
 	tosend := make(map[peer.ID]struct{})
@@ -70,6 +76,8 @@ func (gs *ClassicGossipSubConfiguration) Publish(rt *GossipSubRouter, from peer.
 	rt.PropagateMSG(tosend, msg)
 }
 
-func (gs *ClassicGossipSubConfiguration) GetEmitPeers(topicPeers GetFilteredPeers, meshPeers map[peer.ID]struct{}) map[peer.ID]struct{} {
+func (gs *ClassicGossipSubStrategy) GetEmitPeers(topicPeers GetFilteredPeers, meshPeers map[peer.ID]struct{}) map[peer.ID]struct{} {
 	return gs.emitter.GetEmitPeers(topicPeers, meshPeers)
 }
+
+func (gs *ClassicGossipSubStrategy) OnGraft(rt *GossipSubRouter, topic string, peer peer.ID) {}

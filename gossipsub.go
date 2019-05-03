@@ -35,11 +35,11 @@ var (
 	GossipSubFanoutTTL = 60 * time.Second
 )
 
-// NewGossipSub returns a new PubSub object using a GossipConfigurableRouter as the router and configured with classic GossipSub parameters.
+// NewGossipSub returns a new PubSub object using a ClassicGossipSubStrategy as the router and configured with classic GossipSub parameters.
 func NewGossipSub(ctx context.Context, h host.Host, opts ...Option) (*PubSub, error) {
-	rt := NewGossipSubRouterWithConfig(&ClassicGossipSubConfiguration{
+	rt := NewGossipSubRouterWithStrategies(&ClassicGossipSubStrategy{
 		mcache:             NewMessageCache(GossipSubHistoryGossip, GossipSubHistoryLength),
-		emitter:            &NoMeshPeersStrategy{},
+		emitter:            NewNoMeshPeersStrategy(GossipSubD),
 		supportedProtocols: []protocol.ID{GossipSubID, FloodSubID},
 		protocol:           GossipSubID,
 	})
@@ -47,10 +47,10 @@ func NewGossipSub(ctx context.Context, h host.Host, opts ...Option) (*PubSub, er
 	return NewPubSub(ctx, h, rt, opts...)
 }
 
-func NewGossipSubRouterWithConfig(configs ...GossipConfiguration) *GossipSubRouter {
+func NewGossipSubRouterWithStrategies(strategies ...GossipStrategy) *GossipSubRouter {
 	protocolSet := make(map[protocol.ID]struct{})
-	for _, c := range configs {
-		for _, p := range c.SupportedProtocols() {
+	for _, s := range strategies {
+		for _, p := range s.SupportedProtocols() {
 			protocolSet[p] = struct{}{}
 		}
 	}
@@ -61,15 +61,16 @@ func NewGossipSubRouterWithConfig(configs ...GossipConfiguration) *GossipSubRout
 	}
 
 	rt := &GossipSubRouter{
-		peers:        make(map[peer.ID]protocol.ID),
-		mesh:         make(map[string]map[peer.ID]struct{}),
-		fanout:       make(map[string]map[peer.ID]struct{}),
-		lastpub:      make(map[string]int64),
-		gossip:       make(map[peer.ID][]*pb.ControlIHave),
-		control:      make(map[peer.ID]*pb.ControlMessage),
-		configs:      configs,
-		topicConfigs: make(map[string]GossipConfiguration),
-		protocols:    protocolArr,
+		peers:           make(map[peer.ID]protocol.ID),
+		mesh:            make(map[string]map[peer.ID]struct{}),
+		fanout:          make(map[string]map[peer.ID]struct{}),
+		lastpub:         make(map[string]int64),
+		gossip:          make(map[peer.ID][]*pb.ControlIHave),
+		requests:        make(map[peer.ID]map[string]struct{}),
+		control:         make(map[peer.ID]*pb.ControlMessage),
+		strategies:      strategies,
+		topicStrategies: make(map[string]GossipStrategy),
+		protocols:       protocolArr,
 	}
 	return rt
 }
@@ -82,17 +83,17 @@ func NewGossipSubRouterWithConfig(configs ...GossipConfiguration) *GossipSubRout
 // is the fanout map. Fanout peer lists are expired if we don't publish any
 // messages to their topic for GossipSubFanoutTTL.
 type GossipSubRouter struct {
-	p       *PubSub
-	peers   map[peer.ID]protocol.ID         // peer protocols
-	mesh    map[string]map[peer.ID]struct{} // topic meshes
-	fanout  map[string]map[peer.ID]struct{} // topic fanout
-	lastpub map[string]int64                // last publish time for fanout topics
-	gossip  map[peer.ID][]*pb.ControlIHave  // pending gossip
-	control map[peer.ID]*pb.ControlMessage  // pending control messages
-
-	configs      []GossipConfiguration
-	topicConfigs map[string]GossipConfiguration
-	protocols    []protocol.ID
+	p               *PubSub
+	peers           map[peer.ID]protocol.ID         // peer protocols
+	mesh            map[string]map[peer.ID]struct{} // topic meshes
+	fanout          map[string]map[peer.ID]struct{} // topic fanout
+	lastpub         map[string]int64                // last publish time for fanout topics
+	gossip          map[peer.ID][]*pb.ControlIHave  // pending gossip
+	requests        map[peer.ID]map[string]struct{} // pending gossip requests
+	control         map[peer.ID]*pb.ControlMessage  // pending control messages
+	strategies      []GossipStrategy                // various gossip strategies used by the router
+	topicStrategies map[string]GossipStrategy       // topic specific gossip strategies
+	protocols       []protocol.ID                   // protocols handled by the router
 }
 
 type MessageCacheReader interface {
@@ -101,12 +102,13 @@ type MessageCacheReader interface {
 	Shift()
 }
 
-type GossipConfiguration interface {
+type GossipStrategy interface {
 	GetCacher() MessageCacheReader
 	SupportedProtocols() []protocol.ID
 	Protocol() protocol.ID
 	Publish(rt *GossipSubRouter, from peer.ID, msg *pb.Message)
 	GetEmitPeers(topicPeers GetFilteredPeers, meshPeers map[peer.ID]struct{}) map[peer.ID]struct{}
+	OnGraft(rt *GossipSubRouter, topic string, peer peer.ID)
 }
 
 func (gs *GossipSubRouter) Attach(p *PubSub) {
@@ -187,8 +189,8 @@ func (gs *GossipSubRouter) handleIWant(p peer.ID, ctl *pb.ControlMessage) []*pb.
 	ihave := make(map[string]*pb.Message)
 	for _, iwant := range ctl.GetIwant() {
 		for _, mid := range iwant.GetMessageIDs() {
-			for _, config := range gs.configs {
-				msg, ok := config.GetCacher().Get(mid)
+			for _, strategy := range gs.strategies {
+				msg, ok := strategy.GetCacher().Get(mid)
 				if ok {
 					ihave[mid] = msg
 					break
@@ -251,11 +253,22 @@ func (gs *GossipSubRouter) handlePrune(p peer.ID, ctl *pb.ControlMessage) {
 
 func (gs *GossipSubRouter) Publish(from peer.ID, msg *pb.Message) {
 	for _, topic := range msg.GetTopicIDs() {
-		config, ok := gs.topicConfigs[topic]
-		if ok {
-			config.Publish(gs, from, msg)
+		strategy, ok := gs.topicStrategies[topic]
+		if !ok {
+			gs.topicStrategies[topic] = gs.strategies[0]
+			strategy = gs.strategies[0]
 		}
+		strategy.Publish(gs, from, msg)
 	}
+}
+
+func (gs *GossipSubRouter) RequestMessage(messageID string, from peer.ID) {
+	requests, ok := gs.requests[from]
+	if !ok {
+		requests = make(map[string]struct{})
+		gs.requests[from] = requests
+	}
+	requests[messageID] = struct{}{}
 }
 
 func (gs *GossipSubRouter) AddGossipPeers(tosend map[peer.ID]struct{}, topics []string, withFloodSubPeers bool) {
@@ -308,16 +321,18 @@ func (gs *GossipSubRouter) Join(topic string, proto protocol.ID) {
 		return
 	}
 
+	var strategy GossipStrategy
 	if proto == "" {
-		gs.topicConfigs[topic] = gs.configs[0]
+		strategy = gs.strategies[0]
 	} else {
-		for _, config := range gs.configs {
-			if config.Protocol() == proto {
-				gs.topicConfigs[topic] = config
+		for _, strat := range gs.strategies {
+			if strat.Protocol() == proto {
+				strategy = strat
 				break
 			}
 		}
 	}
+	gs.topicStrategies[topic] = strategy
 
 	log.Debugf("JOIN %s", topic)
 
@@ -334,6 +349,7 @@ func (gs *GossipSubRouter) Join(topic string, proto protocol.ID) {
 
 	for p := range gmap {
 		log.Debugf("JOIN: Add mesh link to %s in %s", p, topic)
+		strategy.OnGraft(gs, topic, p)
 		gs.sendGraft(p, topic)
 		gs.tagPeer(p, topic)
 	}
@@ -397,6 +413,21 @@ func (gs *GossipSubRouter) sendRPC(p peer.ID, out *RPC) {
 		}
 		gs.piggybackGossip(p, out, ihave)
 		delete(gs.gossip, p)
+	}
+
+	// piggyback gossip requests
+	iwantSet, ok := gs.requests[p]
+	if ok {
+		if !own {
+			out = copyRPC(out)
+			own = true
+		}
+		iwant := make([]string, 0, len(iwantSet))
+		for s := range iwantSet {
+			iwant = append(iwant, s)
+		}
+		gs.piggybackGossipRequests(out, iwant)
+		delete(gs.requests, p)
 	}
 
 	mch, ok := gs.p.peers[p]
@@ -530,8 +561,8 @@ func (gs *GossipSubRouter) heartbeat() {
 	gs.sendGraftPrune(tograft, toprune)
 
 	// advance the message history window
-	for _, c := range gs.configs {
-		c.GetCacher().Shift()
+	for _, s := range gs.strategies {
+		s.GetCacher().Shift()
 	}
 }
 
@@ -540,6 +571,7 @@ func (gs *GossipSubRouter) sendGraftPrune(tograft, toprune map[peer.ID][]string)
 		graft := make([]*pb.ControlGraft, 0, len(topics))
 		for _, topic := range topics {
 			graft = append(graft, &pb.ControlGraft{TopicID: &topic})
+			gs.topicStrategies[topic].OnGraft(gs, topic, p)
 		}
 
 		var prune []*pb.ControlPrune
@@ -569,17 +601,17 @@ func (gs *GossipSubRouter) sendGraftPrune(tograft, toprune map[peer.ID][]string)
 }
 
 func (gs *GossipSubRouter) emitGossip(topic string, peers map[peer.ID]struct{}) {
-	config, ok := gs.topicConfigs[topic]
+	strategy, ok := gs.topicStrategies[topic]
 	if !ok {
 		return
 	}
 
-	mids := config.GetCacher().GetGossipIDs(topic)
+	mids := strategy.GetCacher().GetGossipIDs(topic)
 	if len(mids) == 0 {
 		return
 	}
 
-	emitPeers := config.GetEmitPeers(gs.wrapGetPeers(topic), peers)
+	emitPeers := strategy.GetEmitPeers(gs.wrapGetPeers(topic), peers)
 
 	for p := range emitPeers {
 		gs.pushGossip(p, &pb.ControlIHave{TopicID: &topic, MessageIDs: mids})
@@ -587,9 +619,9 @@ func (gs *GossipSubRouter) emitGossip(topic string, peers map[peer.ID]struct{}) 
 }
 
 func (gs *GossipSubRouter) wrapGetPeers(topic string) GetFilteredPeers {
-	return func (count int, filter func(peer.ID) bool) []peer.ID  {
-		return gs.getPeers(topic, count, filter);
-	};
+	return func(count int, filter func(peer.ID) bool) []peer.ID {
+		return gs.getPeers(topic, count, filter)
+	}
 }
 
 func (gs *GossipSubRouter) flush() {
@@ -598,6 +630,13 @@ func (gs *GossipSubRouter) flush() {
 		delete(gs.gossip, p)
 		out := rpcWithControl(nil, ihave, nil, nil, nil)
 		gs.sendRPC(p, out)
+	}
+
+	// send requests next, which will also piggyback control
+	for p := range gs.requests {
+		out := rpcWithControl(nil, nil, nil, nil, nil)
+		gs.sendRPC(p, out)
+		delete(gs.requests, p)
 	}
 
 	// send the remaining control messages
@@ -622,6 +661,15 @@ func (gs *GossipSubRouter) piggybackGossip(p peer.ID, out *RPC, ihave []*pb.Cont
 	}
 
 	ctl.Ihave = ihave
+}
+
+func (gs *GossipSubRouter) piggybackGossipRequests(out *RPC, msgIDs []string) {
+	ctl := out.GetControl()
+	if ctl == nil {
+		ctl = &pb.ControlMessage{}
+		out.Control = ctl
+	}
+	ctl.Iwant = []*pb.ControlIWant{&pb.ControlIWant{MessageIDs: msgIDs}}
 }
 
 func (gs *GossipSubRouter) pushControl(p peer.ID, ctl *pb.ControlMessage) {
@@ -687,7 +735,7 @@ func (gs *GossipSubRouter) getPeers(topic string, count int, filter func(peer.ID
 		return nil
 	}
 
-	gossipProtocol := gs.topicConfigs[topic].Protocol()
+	gossipProtocol := gs.topicStrategies[topic].Protocol()
 
 	peers := make([]peer.ID, 0, len(tmap))
 	for p := range tmap {
