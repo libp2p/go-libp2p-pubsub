@@ -1025,7 +1025,7 @@ func TestImproperlySignedMessageNotRelayed(t *testing.T) {
 		}
 	}(adversaryContext)
 
-	<-time.After(2 * time.Second)
+	<-time.After(1 * time.Second)
 	adversaryCancel()
 
 	if len(adversaryMessages) != 2 {
@@ -1051,7 +1051,7 @@ func TestImproperlySignedMessageNotRelayed(t *testing.T) {
 		}
 	}(honestPeerContext)
 
-	<-time.After(2 * time.Second)
+	<-time.After(1 * time.Second)
 	honestPeerCancel()
 
 	if len(honestPeerMessages) != 1 {
