@@ -984,7 +984,7 @@ func TestImproperlySignedMessageNotRelayed(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	adversaryPeerSubscription, err := adversaryPubSub.Subscribe(topic)
+	adversarySubscription, err := adversaryPubSub.Subscribe(topic)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1016,7 +1016,7 @@ func TestImproperlySignedMessageNotRelayed(t *testing.T) {
 			case <-ctx.Done():
 				return
 			default:
-				msg, err := adversaryPeerSubscription.Next(ctx)
+				msg, err := adversarySubscription.Next(ctx)
 				if err != nil {
 					return
 				}
