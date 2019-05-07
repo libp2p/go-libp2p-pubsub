@@ -954,14 +954,14 @@ func TestImproperlySignedMessageNotRelayed(t *testing.T) {
 	defer cancel()
 
 	hosts := getNetHosts(t, ctx, 2)
-	adversarialPeer := hosts[0]
+	adversary := hosts[0]
 	honestPeer := hosts[1]
 
 	// The adversary enables signing, but disables verification to let through
 	// an incorrectly signed message.
 	adversaryPubSub := getPubsub(
 		ctx,
-		adversarialPeer,
+		adversary,
 		WithMessageSigning(true),
 		WithStrictSignatureVerification(false),
 	)
@@ -984,7 +984,7 @@ func TestImproperlySignedMessageNotRelayed(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	adversarialPeerSubscription, err := adversaryPubSub.Subscribe(topic)
+	adversaryPeerSubscription, err := adversaryPubSub.Subscribe(topic)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1016,7 +1016,7 @@ func TestImproperlySignedMessageNotRelayed(t *testing.T) {
 			case <-ctx.Done():
 				return
 			default:
-				msg, err := adversarialPeerSubscription.Next(ctx)
+				msg, err := adversaryPeerSubscription.Next(ctx)
 				if err != nil {
 					return
 				}
