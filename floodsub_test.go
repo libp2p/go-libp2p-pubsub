@@ -1057,4 +1057,11 @@ func TestImproperlySignedMessageNotRelayed(t *testing.T) {
 	if len(honestPeerMessages) != 1 {
 		t.Fatalf("got %d messages, expected 1", len(honestPeerMessages))
 	}
+	if string(honestPeerMessages[0].GetData()) != string(correctMessage) {
+		t.Fatalf(
+			"got %s, expected message %s",
+			honestPeerMessages[0].GetData(),
+			correctMessage,
+		)
+	}
 }
