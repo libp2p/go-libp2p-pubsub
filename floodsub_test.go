@@ -12,10 +12,11 @@ import (
 
 	host "github.com/libp2p/go-libp2p-host"
 	peer "github.com/libp2p/go-libp2p-peer"
+	protocol "github.com/libp2p/go-libp2p-protocol"
 	swarmt "github.com/libp2p/go-libp2p-swarm/testing"
+
 	//bhost "github.com/libp2p/go-libp2p/p2p/host/basic"
 	bhost "github.com/libp2p/go-libp2p-blankhost"
-	"github.com/libp2p/go-libp2p-protocol"
 )
 
 func checkMessageRouting(t *testing.T, topic string, pubs []*PubSub, subs []*Subscription) {
@@ -90,14 +91,18 @@ func connectAll(t *testing.T, hosts []host.Host) {
 	}
 }
 
+func getPubsub(ctx context.Context, h host.Host, opts ...Option) *PubSub {
+	ps, err := NewFloodSub(ctx, h, opts...)
+	if err != nil {
+		panic(err)
+	}
+	return ps
+}
+
 func getPubsubs(ctx context.Context, hs []host.Host, opts ...Option) []*PubSub {
 	var psubs []*PubSub
 	for _, h := range hs {
-		ps, err := NewFloodSub(ctx, h, opts...)
-		if err != nil {
-			panic(err)
-		}
-		psubs = append(psubs, ps)
+		psubs = append(psubs, getPubsub(ctx, h, opts...))
 	}
 	return psubs
 }
@@ -941,5 +946,115 @@ func TestWithSigning(t *testing.T) {
 	}
 	if string(msg.Data) != string(data) {
 		t.Fatalf("unexpected data: %s", string(msg.Data))
+	}
+}
+
+func TestImproperlySignedMessageNotRelayed(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	hosts := getNetHosts(t, ctx, 2)
+	adversarialPeer := hosts[0]
+	honestPeer := hosts[1]
+
+	// The adversary enables signing, but disables verification to let through
+	// an incorrectly signed message.
+	adversaryPubSub := getPubsub(
+		ctx,
+		adversarialPeer,
+		WithMessageSigning(true),
+		WithStrictSignatureVerification(false),
+	)
+	honestPubSub := getPubsub(
+		ctx,
+		honestPeer,
+		WithStrictSignatureVerification(true),
+	)
+
+	connect(t, hosts[0], hosts[1])
+
+	var (
+		topic            = "foobar"
+		correctMessage   = []byte("this is a correct message")
+		incorrectMessage = []byte("this is the incorrect message")
+	)
+
+	_, err := adversaryPubSub.Subscribe(topic)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	adversarialPeerSubscription, err := adversaryPubSub.Subscribe(topic)
+	if err != nil {
+		t.Fatal(err)
+	}
+	honestPeerSubscription, err := honestPubSub.Subscribe(topic)
+	if err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(time.Millisecond * 10)
+
+	// First the adversary sends the correct message.
+	err = adversaryPubSub.Publish(topic, correctMessage)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Change the sign key for the adversarial peer, and send the second message.
+	adversaryPubSub.signID = honestPubSub.signID
+	adversaryPubSub.signKey = honestPubSub.host.Peerstore().PrivKey(honestPubSub.signID)
+	err = adversaryPubSub.Publish(topic, incorrectMessage)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var adversaryMessages []*Message
+	adversaryContext, adversaryCancel := context.WithCancel(ctx)
+	go func(ctx context.Context) {
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			default:
+				msg, err := adversarialPeerSubscription.Next(ctx)
+				if err != nil {
+					return
+				}
+				adversaryMessages = append(adversaryMessages, msg)
+			}
+		}
+	}(adversaryContext)
+
+	<-time.After(2 * time.Second)
+	adversaryCancel()
+
+	if len(adversaryMessages) != 2 {
+		t.Fatalf("got %d messages, expected 2", len(adversaryMessages))
+	}
+
+	// the honest peer's validation process will drop the message;
+	// next will never furnish the incorrect message.
+	var honestPeerMessages []*Message
+	honestPeerContext, honestPeerCancel := context.WithCancel(ctx)
+	go func(ctx context.Context) {
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			default:
+				msg, err := honestPeerSubscription.Next(ctx)
+				if err != nil {
+					return
+				}
+				honestPeerMessages = append(honestPeerMessages, msg)
+			}
+		}
+	}(honestPeerContext)
+
+	<-time.After(2 * time.Second)
+	honestPeerCancel()
+
+	if len(honestPeerMessages) != 1 {
+		t.Fatalf("got %d messages, expected 1", len(honestPeerMessages))
 	}
 }
