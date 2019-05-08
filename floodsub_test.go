@@ -978,11 +978,6 @@ func TestImproperlySignedMessageRejected(t *testing.T) {
 		incorrectMessage = []byte("this is the incorrect message")
 	)
 
-	_, err := adversaryPubSub.Subscribe(topic)
-	if err != nil {
-		t.Fatal(err)
-	}
-
 	adversarySubscription, err := adversaryPubSub.Subscribe(topic)
 	if err != nil {
 		t.Fatal(err)
