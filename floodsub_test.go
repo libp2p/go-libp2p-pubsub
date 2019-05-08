@@ -948,7 +948,7 @@ func TestWithSigning(t *testing.T) {
 	}
 }
 
-func TestImproperlySignedMessageNotRelayed(t *testing.T) {
+func TestImproperlySignedMessageRejected(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
