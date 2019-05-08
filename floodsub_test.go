@@ -10,12 +10,11 @@ import (
 	"testing"
 	"time"
 
+	bhost "github.com/libp2p/go-libp2p-blankhost"
 	host "github.com/libp2p/go-libp2p-host"
 	peer "github.com/libp2p/go-libp2p-peer"
 	protocol "github.com/libp2p/go-libp2p-protocol"
 	swarmt "github.com/libp2p/go-libp2p-swarm/testing"
-
-	bhost "github.com/libp2p/go-libp2p-blankhost"
 )
 
 func checkMessageRouting(t *testing.T, topic string, pubs []*PubSub, subs []*Subscription) {
