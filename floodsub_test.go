@@ -1022,6 +1022,9 @@ func TestImproperlySignedMessageRejected(t *testing.T) {
 	<-time.After(1 * time.Second)
 	adversaryCancel()
 
+	// Ensure the adversary successfully publishes the incorrectly signed
+	// message. If the adversary "sees" this, we successfully got through
+	// their local validation.
 	if len(adversaryMessages) != 2 {
 		t.Fatalf("got %d messages, expected 2", len(adversaryMessages))
 	}
