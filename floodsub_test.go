@@ -970,7 +970,7 @@ func TestImproperlySignedMessageRejected(t *testing.T) {
 		WithStrictSignatureVerification(true),
 	)
 
-	connect(t, hosts[0], hosts[1])
+	connect(t, adversary, honestPeer)
 
 	var (
 		topic            = "foobar"
