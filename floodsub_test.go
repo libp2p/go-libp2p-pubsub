@@ -994,7 +994,8 @@ func TestImproperlySignedMessageRejected(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Change the sign key for the adversarial peer, and send the second message.
+	// Change the sign key for the adversarial peer, and send the second,
+	// incorrectly signed, message.
 	adversaryPubSub.signID = honestPubSub.signID
 	adversaryPubSub.signKey = honestPubSub.host.Peerstore().PrivKey(honestPubSub.signID)
 	err = adversaryPubSub.Publish(topic, incorrectMessage)
