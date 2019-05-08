@@ -986,7 +986,7 @@ func TestImproperlySignedMessageRejected(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	time.Sleep(time.Millisecond * 10)
+	time.Sleep(time.Millisecond * 50)
 
 	// First the adversary sends the correct message.
 	err = adversaryPubSub.Publish(topic, correctMessage)
