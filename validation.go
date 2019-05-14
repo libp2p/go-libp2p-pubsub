@@ -309,10 +309,7 @@ loop:
 func (v *validation) validateSingleTopic(val *topicVal, src peer.ID, msg *Message) bool {
 	select {
 	case val.validateThrottle <- struct{}{}:
-		ctx, cancel := context.WithCancel(v.p.ctx)
-		defer cancel()
-
-		res := val.validateMsg(ctx, src, msg)
+		res := val.validateMsg(v.p.ctx, src, msg)
 		<-val.validateThrottle
 
 		return res
