@@ -20,7 +20,14 @@ type Validator func(context.Context, peer.ID, *Message) bool
 // ValidatorOpt is an option for RegisterTopicValidator.
 type ValidatorOpt func(addVal *addValReq) error
 
-// validation represents the validator pipeline
+// validation represents the validator pipeline.
+// The validator pipeline performs signature validation and runs a
+// sequence of user-configured validators per-topic. It is possible to
+// adjust various concurrency parameters, such as the number of
+// workers and the max number of simultaneous validations. The user
+// can also attach inline validators that will be executed
+// synchronously; this may be useful to prevent superfluous
+// context-switching for lightweight tasks.
 type validation struct {
 	p *PubSub
 
@@ -344,6 +351,10 @@ func WithValidateThrottle(n int) Option {
 
 // WithValidateWorkers sets the number of synchronous validation worker goroutines.
 // Defaults to NumCPU.
+//
+// The synchronous validation workers perform signature validation, apply inline
+// user validators, and schedule asynchronous user validators.
+// You can adjust this parameter to devote less cpu time to synchronous validation.
 func WithValidateWorkers(n int) Option {
 	return func(ps *PubSub) error {
 		if n > 0 {
