@@ -231,7 +231,7 @@ func (gs *GossipSubRouter) Publish(from peer.ID, msg *pb.Message) {
 		if !ok {
 			// we are not in the mesh for topic, use fanout peers
 			gmap, ok = gs.fanout[topic]
-			if !ok {
+			if !ok || len(gmap) == 0 {
 				// we don't have any, pick some
 				peers := gs.getPeers(topic, GossipSubD, func(peer.ID) bool { return true })
 
