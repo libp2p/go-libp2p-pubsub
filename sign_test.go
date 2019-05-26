@@ -5,8 +5,8 @@ import (
 
 	pb "github.com/libp2p/go-libp2p-pubsub/pb"
 
-	crypto "github.com/libp2p/go-libp2p-crypto"
-	peer "github.com/libp2p/go-libp2p-peer"
+	"github.com/libp2p/go-libp2p-core/crypto"
+	"github.com/libp2p/go-libp2p-core/peer"
 )
 
 func TestSigning(t *testing.T) {
