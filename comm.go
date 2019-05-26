@@ -5,12 +5,14 @@ import (
 	"context"
 	"io"
 
-	pb "github.com/libp2p/go-libp2p-pubsub/pb"
+	"github.com/libp2p/go-libp2p-core/helpers"
+	"github.com/libp2p/go-libp2p-core/network"
+	"github.com/libp2p/go-libp2p-core/peer"
 
 	ggio "github.com/gogo/protobuf/io"
 	proto "github.com/gogo/protobuf/proto"
-	inet "github.com/libp2p/go-libp2p-net"
-	peer "github.com/libp2p/go-libp2p-peer"
+	pb "github.com/libp2p/go-libp2p-pubsub/pb"
+
 	ms "github.com/multiformats/go-multistream"
 )
 
@@ -27,7 +29,7 @@ func (p *PubSub) getHelloPacket() *RPC {
 	return &rpc
 }
 
-func (p *PubSub) handleNewStream(s inet.Stream) {
+func (p *PubSub) handleNewStream(s network.Stream) {
 	r := ggio.NewDelimitedReader(s, 1<<20)
 	for {
 		rpc := new(RPC)
@@ -82,7 +84,7 @@ func (p *PubSub) handleNewPeer(ctx context.Context, pid peer.ID, outgoing <-chan
 	}
 }
 
-func (p *PubSub) handlePeerEOF(ctx context.Context, s inet.Stream) {
+func (p *PubSub) handlePeerEOF(ctx context.Context, s network.Stream) {
 	r := ggio.NewDelimitedReader(s, 1<<20)
 	rpc := new(RPC)
 	for {
@@ -98,7 +100,7 @@ func (p *PubSub) handlePeerEOF(ctx context.Context, s inet.Stream) {
 	}
 }
 
-func (p *PubSub) handleSendingMessages(ctx context.Context, s inet.Stream, outgoing <-chan *RPC) {
+func (p *PubSub) handleSendingMessages(ctx context.Context, s network.Stream, outgoing <-chan *RPC) {
 	bufw := bufio.NewWriter(s)
 	wc := ggio.NewDelimitedWriter(bufw)
 
@@ -111,7 +113,7 @@ func (p *PubSub) handleSendingMessages(ctx context.Context, s inet.Stream, outgo
 		return bufw.Flush()
 	}
 
-	defer inet.FullClose(s)
+	defer helpers.FullClose(s)
 	for {
 		select {
 		case rpc, ok := <-outgoing:

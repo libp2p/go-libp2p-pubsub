@@ -11,12 +11,13 @@ import (
 
 	pb "github.com/libp2p/go-libp2p-pubsub/pb"
 
+	"github.com/libp2p/go-libp2p-core/crypto"
+	"github.com/libp2p/go-libp2p-core/host"
+	"github.com/libp2p/go-libp2p-core/network"
+	"github.com/libp2p/go-libp2p-core/peer"
+	"github.com/libp2p/go-libp2p-core/protocol"
+
 	logging "github.com/ipfs/go-log"
-	crypto "github.com/libp2p/go-libp2p-crypto"
-	host "github.com/libp2p/go-libp2p-host"
-	inet "github.com/libp2p/go-libp2p-net"
-	peer "github.com/libp2p/go-libp2p-peer"
-	protocol "github.com/libp2p/go-libp2p-protocol"
 	timecache "github.com/whyrusleeping/timecache"
 )
 
@@ -63,7 +64,7 @@ type PubSub struct {
 	newPeers chan peer.ID
 
 	// a notification channel for new outoging peer streams
-	newPeerStream chan inet.Stream
+	newPeerStream chan network.Stream
 
 	// a notification channel for errors opening new peer streams
 	newPeerError chan peer.ID
@@ -162,7 +163,7 @@ func NewPubSub(ctx context.Context, h host.Host, rt PubSubRouter, opts ...Option
 		incoming:      make(chan *RPC, 32),
 		publish:       make(chan *Message),
 		newPeers:      make(chan peer.ID),
-		newPeerStream: make(chan inet.Stream),
+		newPeerStream: make(chan network.Stream),
 		newPeerError:  make(chan peer.ID),
 		peerDead:      make(chan peer.ID),
 		cancelCh:      make(chan *Subscription),
@@ -320,7 +321,7 @@ func (p *PubSub) processLoop(ctx context.Context) {
 
 			close(ch)
 
-			if p.host.Network().Connectedness(pid) == inet.Connected {
+			if p.host.Network().Connectedness(pid) == network.Connected {
 				// still connected, must be a duplicate connection being closed.
 				// we respawn the writer as we need to ensure there is a stream active
 				log.Warning("peer declared dead but still connected; respawning writer: ", pid)

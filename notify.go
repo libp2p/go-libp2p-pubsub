@@ -1,21 +1,21 @@
 package pubsub
 
 import (
-	inet "github.com/libp2p/go-libp2p-net"
+	"github.com/libp2p/go-libp2p-core/network"
 	ma "github.com/multiformats/go-multiaddr"
 )
 
-var _ inet.Notifiee = (*PubSubNotif)(nil)
+var _ network.Notifiee = (*PubSubNotif)(nil)
 
 type PubSubNotif PubSub
 
-func (p *PubSubNotif) OpenedStream(n inet.Network, s inet.Stream) {
+func (p *PubSubNotif) OpenedStream(n network.Network, s network.Stream) {
 }
 
-func (p *PubSubNotif) ClosedStream(n inet.Network, s inet.Stream) {
+func (p *PubSubNotif) ClosedStream(n network.Network, s network.Stream) {
 }
 
-func (p *PubSubNotif) Connected(n inet.Network, c inet.Conn) {
+func (p *PubSubNotif) Connected(n network.Network, c network.Conn) {
 	go func() {
 		select {
 		case p.newPeers <- c.RemotePeer():
@@ -24,11 +24,11 @@ func (p *PubSubNotif) Connected(n inet.Network, c inet.Conn) {
 	}()
 }
 
-func (p *PubSubNotif) Disconnected(n inet.Network, c inet.Conn) {
+func (p *PubSubNotif) Disconnected(n network.Network, c network.Conn) {
 }
 
-func (p *PubSubNotif) Listen(n inet.Network, _ ma.Multiaddr) {
+func (p *PubSubNotif) Listen(n network.Network, _ ma.Multiaddr) {
 }
 
-func (p *PubSubNotif) ListenClose(n inet.Network, _ ma.Multiaddr) {
+func (p *PubSubNotif) ListenClose(n network.Network, _ ma.Multiaddr) {
 }
