@@ -1063,3 +1063,45 @@ func TestImproperlySignedMessageRejected(t *testing.T) {
 		)
 	}
 }
+
+func TestSubscriptionNotification(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	const numHosts = 20
+	hosts := getNetHosts(t, ctx, numHosts)
+
+	psubs := getPubsubs(ctx, hosts)
+
+	msgs := make([]*Subscription, numHosts)
+	subPeersFound := make([]map[peer.ID]struct{}, numHosts)
+	for i, ps := range psubs {
+		subch, err := ps.Subscribe("foobar")
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		msgs[i] = subch
+		peersFound := make(map[peer.ID]struct{})
+		subPeersFound[i] = peersFound
+		go func(peersFound map[peer.ID]struct{}) {
+			for i := 0; i < numHosts-1; i++ {
+				pid, err := subch.NextSubscribedPeer(ctx)
+				if err != nil {
+					t.Fatal(err)
+				}
+				peersFound[pid] = struct{}{}
+			}
+		}(peersFound)
+	}
+
+	connectAll(t, hosts)
+
+	time.Sleep(time.Millisecond * 100)
+
+	for _, peersFound := range subPeersFound {
+		if len(peersFound) != numHosts-1 {
+			t.Fatal("incorrect number of peers found")
+		}
+	}
+}

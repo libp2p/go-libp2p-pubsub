@@ -78,6 +78,9 @@ type PubSub struct {
 	// topics tracks which topics each of our peers are subscribed to
 	topics map[string]map[peer.ID]struct{}
 
+	// a set of notification channels for newly subscribed peers
+	newSubs map[string]chan peer.ID
+
 	// sendMsg handles messages that have been validated
 	sendMsg chan *sendReq
 
@@ -418,6 +421,7 @@ func (p *PubSub) handleRemoveSubscription(sub *Subscription) {
 
 	sub.err = fmt.Errorf("subscription cancelled by calling sub.Cancel()")
 	close(sub.ch)
+	close(sub.inboundSubs)
 	delete(subs, sub)
 
 	if len(subs) == 0 {
@@ -447,6 +451,7 @@ func (p *PubSub) handleAddSubscription(req *addSubReq) {
 		subs = p.myTopics[sub.topic]
 	}
 
+	sub.inboundSubs = make(chan peer.ID, 32)
 	sub.ch = make(chan *Message, 32)
 	sub.cancelCh = p.cancelCh
 
@@ -570,7 +575,19 @@ func (p *PubSub) handleIncomingRPC(rpc *RPC) {
 				p.topics[t] = tmap
 			}
 
-			tmap[rpc.from] = struct{}{}
+			if _, ok = tmap[rpc.from]; !ok {
+				tmap[rpc.from] = struct{}{}
+				if subs, ok := p.myTopics[t]; ok {
+					inboundPeer := rpc.from
+					for s := range subs {
+						select {
+						case s.inboundSubs <- inboundPeer:
+						default:
+							log.Infof("Can't deliver event to subscription for topic %s; subscriber too slow", t)
+						}
+					}
+				}
+			}
 		} else {
 			tmap, ok := p.topics[t]
 			if !ok {
