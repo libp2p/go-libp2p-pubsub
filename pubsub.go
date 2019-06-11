@@ -336,8 +336,9 @@ func (p *PubSub) processLoop(ctx context.Context) {
 			}
 
 			delete(p.peers, pid)
-			for _, t := range p.topics {
-				delete(t, pid)
+			for t, tmap := range p.topics {
+				delete(tmap, pid)
+				p.notifySubscriberLeft(t, pid)
 			}
 
 			p.rt.RemovePeer(pid)
@@ -395,8 +396,9 @@ func (p *PubSub) processLoop(ctx context.Context) {
 			if ok {
 				close(ch)
 				delete(p.peers, pid)
-				for _, t := range p.topics {
-					delete(t, pid)
+				for t, tmap := range p.topics {
+					delete(tmap, pid)
+					p.notifySubscriberLeft(t, pid)
 				}
 				p.rt.RemovePeer(pid)
 			}
@@ -422,6 +424,7 @@ func (p *PubSub) handleRemoveSubscription(sub *Subscription) {
 	sub.err = fmt.Errorf("subscription cancelled by calling sub.Cancel()")
 	close(sub.ch)
 	close(sub.inboundSubs)
+	close(sub.leavingSubs)
 	delete(subs, sub)
 
 	if len(subs) == 0 {
@@ -451,9 +454,20 @@ func (p *PubSub) handleAddSubscription(req *addSubReq) {
 		subs = p.myTopics[sub.topic]
 	}
 
-	sub.inboundSubs = make(chan peer.ID, 32)
+	tmap := p.topics[sub.topic]
+	inboundBufSize := len(tmap)
+	if inboundBufSize < 32 {
+		inboundBufSize = 32
+	}
+
 	sub.ch = make(chan *Message, 32)
+	sub.inboundSubs = make(chan peer.ID, inboundBufSize)
+	sub.leavingSubs = make(chan peer.ID, 32)
 	sub.cancelCh = p.cancelCh
+
+	for pid := range tmap {
+		sub.inboundSubs <- pid
+	}
 
 	p.myTopics[sub.topic][sub] = struct{}{}
 
@@ -565,6 +579,18 @@ func (p *PubSub) subscribedToMsg(msg *pb.Message) bool {
 	return false
 }
 
+func (p *PubSub) notifySubscriberLeft(topic string, pid peer.ID) {
+	if subs, ok := p.myTopics[topic]; ok {
+		for s := range subs {
+			select {
+			case s.leavingSubs <- pid:
+			default:
+				log.Infof("Can't deliver leave event to subscription for topic %s; subscriber too slow", topic)
+			}
+		}
+	}
+}
+
 func (p *PubSub) handleIncomingRPC(rpc *RPC) {
 	for _, subopt := range rpc.GetSubscriptions() {
 		t := subopt.GetTopicid()
@@ -583,7 +609,7 @@ func (p *PubSub) handleIncomingRPC(rpc *RPC) {
 						select {
 						case s.inboundSubs <- inboundPeer:
 						default:
-							log.Infof("Can't deliver event to subscription for topic %s; subscriber too slow", t)
+							log.Infof("Can't deliver join event to subscription for topic %s; subscriber too slow", t)
 						}
 					}
 				}
@@ -594,6 +620,7 @@ func (p *PubSub) handleIncomingRPC(rpc *RPC) {
 				continue
 			}
 			delete(tmap, rpc.from)
+			p.notifySubscriberLeft(t, rpc.from)
 		}
 	}
 

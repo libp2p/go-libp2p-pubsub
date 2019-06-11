@@ -10,6 +10,7 @@ type Subscription struct {
 	ch          chan *Message
 	cancelCh    chan<- *Subscription
 	inboundSubs chan peer.ID
+	leavingSubs chan peer.ID
 	err         error
 }
 
@@ -34,7 +35,7 @@ func (sub *Subscription) Cancel() {
 	sub.cancelCh <- sub
 }
 
-func (sub *Subscription) NextSubscribedPeer(ctx context.Context) (peer.ID, error) {
+func (sub *Subscription) NextPeerJoin(ctx context.Context) (peer.ID, error) {
 	select {
 	case newPeer, ok := <-sub.inboundSubs:
 		if !ok {
@@ -42,6 +43,19 @@ func (sub *Subscription) NextSubscribedPeer(ctx context.Context) (peer.ID, error
 		}
 
 		return newPeer, nil
+	case <-ctx.Done():
+		return "", ctx.Err()
+	}
+}
+
+func (sub *Subscription) NextPeerLeave(ctx context.Context) (peer.ID, error) {
+	select {
+	case leavingPeer, ok := <-sub.leavingSubs:
+		if !ok {
+			return leavingPeer, sub.err
+		}
+
+		return leavingPeer, nil
 	case <-ctx.Done():
 		return "", ctx.Err()
 	}

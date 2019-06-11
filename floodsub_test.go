@@ -1064,7 +1064,72 @@ func TestImproperlySignedMessageRejected(t *testing.T) {
 	}
 }
 
-func TestSubscriptionNotification(t *testing.T) {
+func TestSubscriptionJoinNotification(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	const numLateSubscribers = 10
+	const numHosts = 20
+	hosts := getNetHosts(t, ctx, numHosts)
+
+	psubs := getPubsubs(ctx, hosts)
+
+	msgs := make([]*Subscription, numHosts)
+	subPeersFound := make([]map[peer.ID]struct{}, numHosts)
+
+	// Have some peers subscribe earlier than other peers.
+	// This exercises whether we get subscription notifications from
+	// existing peers.
+	for i, ps := range psubs[numLateSubscribers:] {
+		subch, err := ps.Subscribe("foobar")
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		msgs[i] = subch
+	}
+
+	connectAll(t, hosts)
+
+	time.Sleep(time.Millisecond * 100)
+
+	// Have the rest subscribe
+	for i, ps := range psubs[:numLateSubscribers] {
+		subch, err := ps.Subscribe("foobar")
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		msgs[i+numLateSubscribers] = subch
+	}
+
+	wg := sync.WaitGroup{}
+	for i := 0; i < numHosts; i++ {
+		peersFound := make(map[peer.ID]struct{})
+		subPeersFound[i] = peersFound
+		sub := msgs[i]
+		wg.Add(1)
+		go func(peersFound map[peer.ID]struct{}) {
+			defer wg.Done()
+			for i := 0; i < numHosts-1; i++ {
+				pid, err := sub.NextPeerJoin(ctx)
+				if err != nil {
+					t.Fatal(err)
+				}
+				peersFound[pid] = struct{}{}
+			}
+		}(peersFound)
+	}
+
+	wg.Wait()
+	for _, peersFound := range subPeersFound {
+		if len(peersFound) != numHosts-1 {
+			t.Fatal("incorrect number of peers found")
+		}
+	}
+}
+
+func TestSubscriptionLeaveNotification(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -1076,7 +1141,7 @@ func TestSubscriptionNotification(t *testing.T) {
 	msgs := make([]*Subscription, numHosts)
 	subPeersFound := make([]map[peer.ID]struct{}, numHosts)
 
-	wg := sync.WaitGroup{}
+	// Subscribe all peers and wait until they've all been found
 	for i, ps := range psubs {
 		subch, err := ps.Subscribe("foobar")
 		if err != nil {
@@ -1084,13 +1149,22 @@ func TestSubscriptionNotification(t *testing.T) {
 		}
 
 		msgs[i] = subch
+	}
+
+	connectAll(t, hosts)
+
+	time.Sleep(time.Millisecond * 100)
+
+	wg := sync.WaitGroup{}
+	for i := 0; i < numHosts; i++ {
 		peersFound := make(map[peer.ID]struct{})
 		subPeersFound[i] = peersFound
+		sub := msgs[i]
 		wg.Add(1)
 		go func(peersFound map[peer.ID]struct{}) {
 			defer wg.Done()
 			for i := 0; i < numHosts-1; i++ {
-				pid, err := subch.NextSubscribedPeer(ctx)
+				pid, err := sub.NextPeerJoin(ctx)
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -1099,14 +1173,34 @@ func TestSubscriptionNotification(t *testing.T) {
 		}(peersFound)
 	}
 
-	connectAll(t, hosts)
-
-	time.Sleep(time.Millisecond * 100)
-
 	wg.Wait()
 	for _, peersFound := range subPeersFound {
 		if len(peersFound) != numHosts-1 {
 			t.Fatal("incorrect number of peers found")
 		}
+	}
+
+	// Test removing peers and verifying that they cause events
+	msgs[1].Cancel()
+	hosts[2].Close()
+	psubs[0].BlacklistPeer(hosts[3].ID())
+
+	leavingPeers := make(map[peer.ID]struct{})
+	for i := 0; i < 3; i++ {
+		pid, err := msgs[0].NextPeerLeave(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		leavingPeers[pid] = struct{}{}
+	}
+
+	if _, ok := leavingPeers[hosts[1].ID()]; !ok {
+		t.Fatal(fmt.Errorf("canceling subscription did not cause a leave event"))
+	}
+	if _, ok := leavingPeers[hosts[2].ID()]; !ok {
+		t.Fatal(fmt.Errorf("closing host did not cause a leave event"))
+	}
+	if _, ok := leavingPeers[hosts[3].ID()]; !ok {
+		t.Fatal(fmt.Errorf("blacklisting peer did not cause a leave event"))
 	}
 }
