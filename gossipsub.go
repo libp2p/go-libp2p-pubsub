@@ -358,7 +358,7 @@ func (gs *GossipSubRouter) sendRPC(p peer.ID, out *RPC) {
 	}
 
 	// push control messages that need to be retried
-	ctl := out.GetControl()
+	ctl = out.GetControl()
 	if ctl != nil {
 		gs.pushControl(p, ctl)
 	}
