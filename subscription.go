@@ -5,19 +5,33 @@ import (
 	"github.com/libp2p/go-libp2p-core/peer"
 )
 
+type EventType uint8
+
+const (
+	UNKNOWN EventType = iota
+	PEER_JOIN
+	PEER_LEAVE
+)
+
 type Subscription struct {
-	topic       string
-	ch          chan *Message
-	cancelCh    chan<- *Subscription
-	inboundSubs chan peer.ID
-	leavingSubs chan peer.ID
-	err         error
+	topic    string
+	ch       chan *Message
+	cancelCh chan<- *Subscription
+	joinCh   chan peer.ID
+	leaveCh  chan peer.ID
+	err      error
+}
+
+type PeerEvent struct {
+	Type EventType
+	Peer peer.ID
 }
 
 func (sub *Subscription) Topic() string {
 	return sub.topic
 }
 
+// Next returns the next message in our subscription
 func (sub *Subscription) Next(ctx context.Context) (*Message, error) {
 	select {
 	case msg, ok := <-sub.ch:
@@ -35,28 +49,26 @@ func (sub *Subscription) Cancel() {
 	sub.cancelCh <- sub
 }
 
-func (sub *Subscription) NextPeerJoin(ctx context.Context) (peer.ID, error) {
+// NextPeerEvent returns the next event regarding subscribed peers
+// Note: There is no guarantee that the Peer Join event will fire before
+// the related Peer Leave event for a given peer
+func (sub *Subscription) NextPeerEvent(ctx context.Context) (PeerEvent, error) {
 	select {
-	case newPeer, ok := <-sub.inboundSubs:
+	case newPeer, ok := <-sub.joinCh:
+		event := PeerEvent{Type: PEER_JOIN, Peer: newPeer}
 		if !ok {
-			return newPeer, sub.err
+			return event, sub.err
 		}
 
-		return newPeer, nil
-	case <-ctx.Done():
-		return "", ctx.Err()
-	}
-}
-
-func (sub *Subscription) NextPeerLeave(ctx context.Context) (peer.ID, error) {
-	select {
-	case leavingPeer, ok := <-sub.leavingSubs:
+		return event, nil
+	case leavingPeer, ok := <-sub.leaveCh:
+		event := PeerEvent{Type: PEER_LEAVE, Peer: leavingPeer}
 		if !ok {
-			return leavingPeer, sub.err
+			return event, sub.err
 		}
 
-		return leavingPeer, nil
+		return event, nil
 	case <-ctx.Done():
-		return "", ctx.Err()
+		return PeerEvent{}, ctx.Err()
 	}
 }

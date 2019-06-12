@@ -1111,12 +1111,14 @@ func TestSubscriptionJoinNotification(t *testing.T) {
 		wg.Add(1)
 		go func(peersFound map[peer.ID]struct{}) {
 			defer wg.Done()
-			for i := 0; i < numHosts-1; i++ {
-				pid, err := sub.NextPeerJoin(ctx)
+			for len(peersFound) < numHosts-1 {
+				event, err := sub.NextPeerEvent(ctx)
 				if err != nil {
 					t.Fatal(err)
 				}
-				peersFound[pid] = struct{}{}
+				if event.Type == PEER_JOIN {
+					peersFound[event.Peer] = struct{}{}
+				}
 			}
 		}(peersFound)
 	}
@@ -1163,12 +1165,14 @@ func TestSubscriptionLeaveNotification(t *testing.T) {
 		wg.Add(1)
 		go func(peersFound map[peer.ID]struct{}) {
 			defer wg.Done()
-			for i := 0; i < numHosts-1; i++ {
-				pid, err := sub.NextPeerJoin(ctx)
+			for len(peersFound) < numHosts-1 {
+				event, err := sub.NextPeerEvent(ctx)
 				if err != nil {
 					t.Fatal(err)
 				}
-				peersFound[pid] = struct{}{}
+				if event.Type == PEER_JOIN {
+					peersFound[event.Peer] = struct{}{}
+				}
 			}
 		}(peersFound)
 	}
@@ -1186,12 +1190,14 @@ func TestSubscriptionLeaveNotification(t *testing.T) {
 	psubs[0].BlacklistPeer(hosts[3].ID())
 
 	leavingPeers := make(map[peer.ID]struct{})
-	for i := 0; i < 3; i++ {
-		pid, err := msgs[0].NextPeerLeave(ctx)
+	for len(leavingPeers) < 3 {
+		event, err := msgs[0].NextPeerEvent(ctx)
 		if err != nil {
 			t.Fatal(err)
 		}
-		leavingPeers[pid] = struct{}{}
+		if event.Type == PEER_LEAVE {
+			leavingPeers[event.Peer] = struct{}{}
+		}
 	}
 
 	if _, ok := leavingPeers[hosts[1].ID()]; !ok {
