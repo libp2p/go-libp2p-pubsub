@@ -26,10 +26,10 @@ var (
 )
 
 const (
-	// maxRPCSize is the maximum size of any RPC protobuf.
-	maxRPCSize = maxMessageSize + (64 * 1024) // a message + 64 KiB.
 	/// maxMessageSize is the maximum size of outbound message.
 	maxMessageSize = 1 << 20 // 1MiB
+	// maxRPCSize is the maximum size of any RPC protobuf.
+	maxRPCSize = maxMessageSize + (64 * 1024) // a message + 64 KiB.
 )
 
 var log = logging.Logger("pubsub")
