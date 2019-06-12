@@ -706,7 +706,7 @@ func (p *PubSub) GetTopics() []string {
 //
 // The message data must be less than the maximum message size, 1MiB.
 func (p *PubSub) Publish(topic string, data []byte) error {
-	if len(data) > 0 {
+	if len(data) > maxMessageSize {
 		return fmt.Errorf("message too large: %d > %d", len(data), maxMessageSize)
 	}
 	seqno := p.nextSeqno()
