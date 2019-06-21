@@ -5,7 +5,7 @@ import (
 	"github.com/libp2p/go-libp2p-core/peer"
 )
 
-type EventType uint8
+type EventType int8
 
 const (
 	UNKNOWN EventType = iota
@@ -47,6 +47,12 @@ func (sub *Subscription) Next(ctx context.Context) (*Message, error) {
 
 func (sub *Subscription) Cancel() {
 	sub.cancelCh <- sub
+}
+
+func (sub *Subscription) close(){
+	close(sub.ch)
+	close(sub.joinCh)
+	close(sub.leaveCh)
 }
 
 // NextPeerEvent returns the next event regarding subscribed peers
