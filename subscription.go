@@ -49,7 +49,7 @@ func (sub *Subscription) Cancel() {
 	sub.cancelCh <- sub
 }
 
-func (sub *Subscription) close(){
+func (sub *Subscription) close() {
 	close(sub.ch)
 	close(sub.joinCh)
 	close(sub.leaveCh)
