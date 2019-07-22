@@ -5,11 +5,10 @@ import (
 	"github.com/libp2p/go-libp2p-core/peer"
 )
 
-type EventType int8
+type EventType int
 
 const (
-	UNKNOWN EventType = iota
-	PEER_JOIN
+	PEER_JOIN EventType = iota
 	PEER_LEAVE
 )
 
