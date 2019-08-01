@@ -3,6 +3,7 @@ package pubsub
 import (
 	"context"
 	"github.com/libp2p/go-libp2p-core/peer"
+	"sync"
 )
 
 type EventType int
@@ -16,9 +17,12 @@ type Subscription struct {
 	topic    string
 	ch       chan *Message
 	cancelCh chan<- *Subscription
-	joinCh   chan peer.ID
-	leaveCh  chan peer.ID
 	err      error
+
+	peerEvtCh  chan PeerEvent
+	eventMx    sync.Mutex
+	evtBacklog map[peer.ID]EventType
+	backlogCh  chan PeerEvent
 }
 
 type PeerEvent struct {
@@ -50,29 +54,77 @@ func (sub *Subscription) Cancel() {
 
 func (sub *Subscription) close() {
 	close(sub.ch)
-	close(sub.joinCh)
-	close(sub.leaveCh)
+}
+
+func (sub *Subscription) sendNotification(evt PeerEvent) {
+	sub.eventMx.Lock()
+	defer sub.eventMx.Unlock()
+
+	e, ok := sub.evtBacklog[evt.Peer]
+	if ok && e != evt.Type {
+		delete(sub.evtBacklog, evt.Peer)
+	}
+
+	select {
+	case sub.peerEvtCh <- evt:
+	default:
+		// Empty event queue into backlog
+	emptyqueue:
+		for {
+			select {
+			case e := <-sub.peerEvtCh:
+				sub.addToBacklog(e)
+			default:
+				break emptyqueue
+			}
+		}
+		sub.addToBacklog(evt)
+		if e, ok := sub.pullFromBacklog(); ok {
+			sub.peerEvtCh <- e
+		}
+	}
+}
+
+// addToBacklog assumes a lock has been taken to protect the backlog
+func (sub *Subscription) addToBacklog(evt PeerEvent) {
+	e, ok := sub.evtBacklog[evt.Peer]
+	if !ok {
+		sub.evtBacklog[evt.Peer] = evt.Type
+	} else if e != evt.Type {
+		delete(sub.evtBacklog, evt.Peer)
+	}
+}
+
+// pullFromBacklog assumes a lock has been taken to protect the backlog
+func (sub *Subscription) pullFromBacklog() (PeerEvent, bool) {
+	for k, v := range sub.evtBacklog {
+		evt := PeerEvent{Peer: k, Type: v}
+		delete(sub.evtBacklog, k)
+		return evt, true
+	}
+	return PeerEvent{}, false
 }
 
 // NextPeerEvent returns the next event regarding subscribed peers
-// Note: There is no guarantee that the Peer Join event will fire before
-// the related Peer Leave event for a given peer
+// Guarantees: Peer Join and Peer Leave events for a given peer will fire in order.
+// Unless a peer both Joins and Leaves before NextPeerEvent emits either event
+// all events will eventually be received from NextPeerEvent.
 func (sub *Subscription) NextPeerEvent(ctx context.Context) (PeerEvent, error) {
+	sub.eventMx.Lock()
+	evt, ok := sub.pullFromBacklog()
+	sub.eventMx.Unlock()
+
+	if ok {
+		return evt, nil
+	}
+
 	select {
-	case newPeer, ok := <-sub.joinCh:
-		event := PeerEvent{Type: PEER_JOIN, Peer: newPeer}
+	case evt, ok := <-sub.peerEvtCh:
 		if !ok {
-			return event, sub.err
+			return PeerEvent{}, sub.err
 		}
 
-		return event, nil
-	case leavingPeer, ok := <-sub.leaveCh:
-		event := PeerEvent{Type: PEER_LEAVE, Peer: leavingPeer}
-		if !ok {
-			return event, sub.err
-		}
-
-		return event, nil
+		return evt, nil
 	case <-ctx.Done():
 		return PeerEvent{}, ctx.Err()
 	}

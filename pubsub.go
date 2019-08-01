@@ -454,19 +454,11 @@ func (p *PubSub) handleAddSubscription(req *addSubReq) {
 	}
 
 	tmap := p.topics[sub.topic]
-	inboundBufSize := len(tmap)
-	if inboundBufSize < 32 {
-		inboundBufSize = 32
-	}
 
-	sub.ch = make(chan *Message, 32)
-	sub.joinCh = make(chan peer.ID, inboundBufSize)
-	sub.leaveCh = make(chan peer.ID, 32)
+	for p := range tmap {
+		sub.evtBacklog[p] = PEER_JOIN
+	}
 	sub.cancelCh = p.cancelCh
-
-	for pid := range tmap {
-		sub.joinCh <- pid
-	}
 
 	p.myTopics[sub.topic][sub] = struct{}{}
 
@@ -581,11 +573,7 @@ func (p *PubSub) subscribedToMsg(msg *pb.Message) bool {
 func (p *PubSub) notifyLeave(topic string, pid peer.ID) {
 	if subs, ok := p.myTopics[topic]; ok {
 		for s := range subs {
-			select {
-			case s.leaveCh <- pid:
-			default:
-				log.Infof("Can't deliver leave event to subscription for topic %s; subscriber too slow", topic)
-			}
+			s.sendNotification(PeerEvent{PEER_LEAVE, pid})
 		}
 	}
 }
@@ -605,11 +593,7 @@ func (p *PubSub) handleIncomingRPC(rpc *RPC) {
 				if subs, ok := p.myTopics[t]; ok {
 					peer := rpc.from
 					for s := range subs {
-						select {
-						case s.joinCh <- peer:
-						default:
-							log.Infof("Can't deliver join event to subscription for topic %s; subscriber too slow", t)
-						}
+						s.sendNotification(PeerEvent{PEER_JOIN, peer})
 					}
 				}
 			}
@@ -712,6 +696,11 @@ func (p *PubSub) SubscribeByTopicDescriptor(td *pb.TopicDescriptor, opts ...SubO
 
 	sub := &Subscription{
 		topic: td.GetName(),
+
+		ch:         make(chan *Message, 32),
+		peerEvtCh:  make(chan PeerEvent, 32),
+		evtBacklog: make(map[peer.ID]EventType),
+		backlogCh:  make(chan PeerEvent, 1),
 	}
 
 	for _, opt := range opts {

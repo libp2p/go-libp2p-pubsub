@@ -1210,3 +1210,166 @@ func TestSubscriptionLeaveNotification(t *testing.T) {
 		t.Fatal(fmt.Errorf("blacklisting peer did not cause a leave event"))
 	}
 }
+
+func TestSubscriptionNotificationOverflow(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	const topic = "foobar"
+
+	const numHosts = 35
+	hosts := getNetHosts(t, ctx, numHosts)
+
+	psubs := getPubsubs(ctx, hosts)
+
+	msgs := make([]*Subscription, numHosts)
+	subPeersFound := make([]map[peer.ID]struct{}, numHosts)
+
+	// Subscribe all peers except one and wait until they've all been found
+	for i := 1; i < numHosts; i++ {
+		subch, err := psubs[i].Subscribe(topic)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		msgs[i] = subch
+	}
+
+	connectAll(t, hosts)
+
+	time.Sleep(time.Millisecond * 100)
+
+	wg := sync.WaitGroup{}
+	for i := 1; i < numHosts; i++ {
+		peersFound := make(map[peer.ID]struct{})
+		subPeersFound[i] = peersFound
+		sub := msgs[i]
+		wg.Add(1)
+		go func(peersFound map[peer.ID]struct{}) {
+			defer wg.Done()
+			for len(peersFound) < numHosts-2 {
+				event, err := sub.NextPeerEvent(ctx)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if event.Type == PEER_JOIN {
+					peersFound[event.Peer] = struct{}{}
+				}
+			}
+		}(peersFound)
+	}
+
+	wg.Wait()
+	for _, peersFound := range subPeersFound[1:] {
+		if len(peersFound) != numHosts-2 {
+			t.Fatalf("found %d peers, expected %d", len(peersFound), numHosts-2)
+		}
+	}
+
+	// Wait for remaining peer to find other peers
+	for len(psubs[0].ListPeers(topic)) < numHosts-1 {
+		time.Sleep(time.Millisecond * 100)
+	}
+
+	// Subscribe the remaining peer and check that all the events came through
+	sub, err := psubs[0].Subscribe(topic)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	msgs[0] = sub
+
+	peerState := readAllQueuedEvents(ctx, t, sub)
+
+	if len(peerState) != numHosts-1 {
+		t.Fatal("incorrect number of peers found")
+	}
+
+	for _, e := range peerState {
+		if e != PEER_JOIN {
+			t.Fatal("non JOIN event occurred")
+		}
+	}
+
+	// Unsubscribe all peers except one and check that all the events came through
+	for i := 1; i < numHosts; i++ {
+		msgs[i].Cancel()
+	}
+
+	// Wait for remaining peer to find other peers
+	for len(psubs[0].ListPeers(topic)) != 0 {
+		time.Sleep(time.Millisecond * 100)
+	}
+
+	peerState = readAllQueuedEvents(ctx, t, sub)
+
+	if len(peerState) != numHosts-1 {
+		t.Fatal("incorrect number of peers found")
+	}
+
+	for _, e := range peerState {
+		if e != PEER_LEAVE {
+			t.Fatal("non LEAVE event occurred")
+		}
+	}
+
+	// Resubscribe and Unsubscribe a peers and check the state for consistency
+	notifSubThenUnSub(ctx, t, topic, psubs, msgs, 10)
+	notifSubThenUnSub(ctx, t, topic, psubs, msgs, numHosts-1)
+}
+
+func notifSubThenUnSub(ctx context.Context, t *testing.T, topic string,
+	psubs []*PubSub, msgs []*Subscription, checkSize int) {
+
+	ps := psubs[0]
+	sub := msgs[0]
+
+	var err error
+
+	for i := 1; i < checkSize+1; i++ {
+		msgs[i], err = psubs[i].Subscribe(topic)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	for len(ps.ListPeers(topic)) < checkSize {
+		time.Sleep(time.Millisecond * 100)
+	}
+
+	for i := 1; i < checkSize+1; i++ {
+		msgs[i].Cancel()
+	}
+
+	// Wait for subscriptions to register
+	for len(ps.ListPeers(topic)) < 0 {
+		time.Sleep(time.Millisecond * 100)
+	}
+
+	peerState := readAllQueuedEvents(ctx, t, sub)
+
+	if len(peerState) != 0 {
+		t.Fatal("Received incorrect events")
+	}
+}
+
+func readAllQueuedEvents(ctx context.Context, t *testing.T, sub *Subscription) map[peer.ID]EventType {
+	peerState := make(map[peer.ID]EventType)
+	for {
+		ctx, _ := context.WithTimeout(ctx, time.Millisecond*100)
+		event, err := sub.NextPeerEvent(ctx)
+		if err == context.DeadlineExceeded {
+			break
+		} else if err != nil {
+			t.Fatal(err)
+		}
+
+		e, ok := peerState[event.Peer]
+		if !ok {
+			peerState[event.Peer] = event.Type
+		} else if e != event.Type {
+			delete(peerState, event.Peer)
+		}
+	}
+	return peerState
+}
