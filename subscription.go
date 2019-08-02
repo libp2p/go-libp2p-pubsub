@@ -60,9 +60,11 @@ func (sub *Subscription) sendNotification(evt PeerEvent) {
 	sub.eventMx.Lock()
 	defer sub.eventMx.Unlock()
 
-	e, ok := sub.evtBacklog[evt.Peer]
-	if ok && e != evt.Type {
-		delete(sub.evtBacklog, evt.Peer)
+	if e, ok := sub.evtBacklog[evt.Peer]; ok {
+		if e != evt.Type {
+			delete(sub.evtBacklog, evt.Peer)
+		}
+		return
 	}
 
 	select {
