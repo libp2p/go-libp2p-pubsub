@@ -456,7 +456,7 @@ func (p *PubSub) handleAddSubscription(req *addSubReq) {
 	tmap := p.topics[sub.topic]
 
 	for p := range tmap {
-		sub.evtBacklog[p] = PEER_JOIN
+		sub.evtBacklog[p] = PeerJoin
 	}
 	sub.cancelCh = p.cancelCh
 
@@ -573,7 +573,7 @@ func (p *PubSub) subscribedToMsg(msg *pb.Message) bool {
 func (p *PubSub) notifyLeave(topic string, pid peer.ID) {
 	if subs, ok := p.myTopics[topic]; ok {
 		for s := range subs {
-			s.sendNotification(PeerEvent{PEER_LEAVE, pid})
+			s.sendNotification(PeerEvent{PeerLeave, pid})
 		}
 	}
 }
@@ -593,7 +593,7 @@ func (p *PubSub) handleIncomingRPC(rpc *RPC) {
 				if subs, ok := p.myTopics[t]; ok {
 					peer := rpc.from
 					for s := range subs {
-						s.sendNotification(PeerEvent{PEER_JOIN, peer})
+						s.sendNotification(PeerEvent{PeerJoin, peer})
 					}
 				}
 			}

@@ -9,8 +9,8 @@ import (
 type EventType int
 
 const (
-	PEER_JOIN EventType = iota
-	PEER_LEAVE
+	PeerJoin EventType = iota
+	PeerLeave
 )
 
 type Subscription struct {

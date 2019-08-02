@@ -1116,7 +1116,7 @@ func TestSubscriptionJoinNotification(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				if event.Type == PEER_JOIN {
+				if event.Type == PeerJoin {
 					peersFound[event.Peer] = struct{}{}
 				}
 			}
@@ -1170,7 +1170,7 @@ func TestSubscriptionLeaveNotification(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				if event.Type == PEER_JOIN {
+				if event.Type == PeerJoin {
 					peersFound[event.Peer] = struct{}{}
 				}
 			}
@@ -1195,7 +1195,7 @@ func TestSubscriptionLeaveNotification(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if event.Type == PEER_LEAVE {
+		if event.Type == PeerLeave {
 			leavingPeers[event.Peer] = struct{}{}
 		}
 	}
@@ -1252,7 +1252,7 @@ func TestSubscriptionNotificationOverflowSimple(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				if event.Type == PEER_JOIN {
+				if event.Type == PeerJoin {
 					peersFound[event.Peer] = struct{}{}
 				}
 			}
@@ -1286,8 +1286,8 @@ func TestSubscriptionNotificationOverflowSimple(t *testing.T) {
 	}
 
 	for _, e := range peerState {
-		if e != PEER_JOIN {
-			t.Fatal("non JOIN event occurred")
+		if e != PeerJoin {
+			t.Fatal("non Join event occurred")
 		}
 	}
 
@@ -1308,8 +1308,8 @@ func TestSubscriptionNotificationOverflowSimple(t *testing.T) {
 	}
 
 	for _, e := range peerState {
-		if e != PEER_LEAVE {
-			t.Fatal("non LEAVE event occurred")
+		if e != PeerLeave {
+			t.Fatal("non Leave event occurred")
 		}
 	}
 }
