@@ -698,9 +698,9 @@ func (p *PubSub) SubscribeByTopicDescriptor(td *pb.TopicDescriptor, opts ...SubO
 		topic: td.GetName(),
 
 		ch:         make(chan *Message, 32),
-		peerEvtCh:  make(chan PeerEvent, 32),
+		peerEvtCh:  make(chan PeerEvent, 1),
 		evtBacklog: make(map[peer.ID]EventType),
-		backlogCh:  make(chan PeerEvent, 1),
+		backlogCh:  make(chan struct{}, 1),
 	}
 
 	for _, opt := range opts {
