@@ -19,11 +19,10 @@ type Subscription struct {
 	cancelCh chan<- *Subscription
 	err      error
 
-	peerEvtCh   chan PeerEvent
-	backlogMx   sync.Mutex
-	evtBacklog  map[peer.ID]EventType
-	backlogCh   chan struct{}
-	nextEventMx sync.Mutex
+	peerEvtCh chan PeerEvent
+	evtLogMx  sync.Mutex
+	evtLog    map[peer.ID]EventType
+	evtLogCh  chan struct{}
 }
 
 type PeerEvent struct {
@@ -58,32 +57,32 @@ func (sub *Subscription) close() {
 }
 
 func (sub *Subscription) sendNotification(evt PeerEvent) {
-	sub.backlogMx.Lock()
-	defer sub.backlogMx.Unlock()
+	sub.evtLogMx.Lock()
+	defer sub.evtLogMx.Unlock()
 
-	sub.addToBacklog(evt)
-
-	select {
-	case sub.backlogCh <- struct{}{}:
-	default:
-	}
+	sub.addToEventLog(evt)
 }
 
-// addToBacklog assumes a lock has been taken to protect the backlog
-func (sub *Subscription) addToBacklog(evt PeerEvent) {
-	e, ok := sub.evtBacklog[evt.Peer]
+// addToEventLog assumes a lock has been taken to protect the event log
+func (sub *Subscription) addToEventLog(evt PeerEvent) {
+	e, ok := sub.evtLog[evt.Peer]
 	if !ok {
-		sub.evtBacklog[evt.Peer] = evt.Type
+		sub.evtLog[evt.Peer] = evt.Type
+		// send signal that an event has been added to the event log
+		select {
+		case sub.evtLogCh <- struct{}{}:
+		default:
+		}
 	} else if e != evt.Type {
-		delete(sub.evtBacklog, evt.Peer)
+		delete(sub.evtLog, evt.Peer)
 	}
 }
 
-// pullFromBacklog assumes a lock has been taken to protect the backlog
-func (sub *Subscription) pullFromBacklog() (PeerEvent, bool) {
-	for k, v := range sub.evtBacklog {
+// pullFromEventLog assumes a lock has been taken to protect the event log
+func (sub *Subscription) pullFromEventLog() (PeerEvent, bool) {
+	for k, v := range sub.evtLog {
 		evt := PeerEvent{Peer: k, Type: v}
-		delete(sub.evtBacklog, k)
+		delete(sub.evtLog, k)
 		return evt, true
 	}
 	return PeerEvent{}, false
@@ -94,20 +93,24 @@ func (sub *Subscription) pullFromBacklog() (PeerEvent, bool) {
 // Unless a peer both Joins and Leaves before NextPeerEvent emits either event
 // all events will eventually be received from NextPeerEvent.
 func (sub *Subscription) NextPeerEvent(ctx context.Context) (PeerEvent, error) {
-	sub.nextEventMx.Lock()
-	defer sub.nextEventMx.Unlock()
-
 	for {
-		sub.backlogMx.Lock()
-		evt, ok := sub.pullFromBacklog()
-		sub.backlogMx.Unlock()
-
+		sub.evtLogMx.Lock()
+		evt, ok := sub.pullFromEventLog()
 		if ok {
+			// make sure an event log signal is available if there are events in the event log
+			if len(sub.evtLog) > 0 {
+				select {
+				case sub.evtLogCh <- struct{}{}:
+				default:
+				}
+			}
+			sub.evtLogMx.Unlock()
 			return evt, nil
 		}
+		sub.evtLogMx.Unlock()
 
 		select {
-		case <-sub.backlogCh:
+		case <-sub.evtLogCh:
 			continue
 		case <-ctx.Done():
 			return PeerEvent{}, ctx.Err()

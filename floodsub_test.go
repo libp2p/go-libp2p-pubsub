@@ -1211,7 +1211,7 @@ func TestSubscriptionLeaveNotification(t *testing.T) {
 	}
 }
 
-func TestSubscriptionNotificationOverflowSimple(t *testing.T) {
+func TestSubscriptionManyNotifications(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -1315,25 +1315,6 @@ func TestSubscriptionNotificationOverflowSimple(t *testing.T) {
 }
 
 func TestSubscriptionNotificationSubUnSub(t *testing.T) {
-	// Resubscribe and Unsubscribe a peers and check the state for consistency
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	const topic = "foobar"
-
-	const numHosts = 35
-	hosts := getNetHosts(t, ctx, numHosts)
-	psubs := getPubsubs(ctx, hosts)
-
-	for i := 1; i < numHosts; i++ {
-		connect(t, hosts[0], hosts[i])
-	}
-	time.Sleep(time.Millisecond * 100)
-
-	notifSubThenUnSub(ctx, t, topic, psubs[:11])
-}
-
-func TestSubscriptionNotificationOverflowSubUnSub(t *testing.T) {
 	// Resubscribe and Unsubscribe a peers and check the state for consistency
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

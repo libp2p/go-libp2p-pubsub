@@ -456,7 +456,7 @@ func (p *PubSub) handleAddSubscription(req *addSubReq) {
 	tmap := p.topics[sub.topic]
 
 	for p := range tmap {
-		sub.evtBacklog[p] = PeerJoin
+		sub.evtLog[p] = PeerJoin
 	}
 	sub.cancelCh = p.cancelCh
 
@@ -697,10 +697,10 @@ func (p *PubSub) SubscribeByTopicDescriptor(td *pb.TopicDescriptor, opts ...SubO
 	sub := &Subscription{
 		topic: td.GetName(),
 
-		ch:         make(chan *Message, 32),
-		peerEvtCh:  make(chan PeerEvent, 1),
-		evtBacklog: make(map[peer.ID]EventType),
-		backlogCh:  make(chan struct{}, 1),
+		ch:        make(chan *Message, 32),
+		peerEvtCh: make(chan PeerEvent, 1),
+		evtLog:    make(map[peer.ID]EventType),
+		evtLogCh:  make(chan struct{}, 1),
 	}
 
 	for _, opt := range opts {
