@@ -333,8 +333,11 @@ func (p *PubSub) processLoop(ctx context.Context) {
 			}
 
 			delete(p.peers, pid)
-			for _, t := range p.topics {
-				delete(t, pid)
+			for t, tmap := range p.topics {
+				if _, ok := tmap[pid]; ok {
+					delete(tmap, pid)
+					p.notifyLeave(t, pid)
+				}
 			}
 
 			p.rt.RemovePeer(pid)
@@ -392,8 +395,11 @@ func (p *PubSub) processLoop(ctx context.Context) {
 			if ok {
 				close(ch)
 				delete(p.peers, pid)
-				for _, t := range p.topics {
-					delete(t, pid)
+				for t, tmap := range p.topics {
+					if _, ok := tmap[pid]; ok {
+						delete(tmap, pid)
+						p.notifyLeave(t, pid)
+					}
 				}
 				p.rt.RemovePeer(pid)
 			}
@@ -417,7 +423,7 @@ func (p *PubSub) handleRemoveSubscription(sub *Subscription) {
 	}
 
 	sub.err = fmt.Errorf("subscription cancelled by calling sub.Cancel()")
-	close(sub.ch)
+	sub.close()
 	delete(subs, sub)
 
 	if len(subs) == 0 {
@@ -447,7 +453,11 @@ func (p *PubSub) handleAddSubscription(req *addSubReq) {
 		subs = p.myTopics[sub.topic]
 	}
 
-	sub.ch = make(chan *Message, 32)
+	tmap := p.topics[sub.topic]
+
+	for p := range tmap {
+		sub.evtLog[p] = PeerJoin
+	}
 	sub.cancelCh = p.cancelCh
 
 	p.myTopics[sub.topic][sub] = struct{}{}
@@ -560,6 +570,14 @@ func (p *PubSub) subscribedToMsg(msg *pb.Message) bool {
 	return false
 }
 
+func (p *PubSub) notifyLeave(topic string, pid peer.ID) {
+	if subs, ok := p.myTopics[topic]; ok {
+		for s := range subs {
+			s.sendNotification(PeerEvent{PeerLeave, pid})
+		}
+	}
+}
+
 func (p *PubSub) handleIncomingRPC(rpc *RPC) {
 	for _, subopt := range rpc.GetSubscriptions() {
 		t := subopt.GetTopicid()
@@ -570,13 +588,25 @@ func (p *PubSub) handleIncomingRPC(rpc *RPC) {
 				p.topics[t] = tmap
 			}
 
-			tmap[rpc.from] = struct{}{}
+			if _, ok = tmap[rpc.from]; !ok {
+				tmap[rpc.from] = struct{}{}
+				if subs, ok := p.myTopics[t]; ok {
+					peer := rpc.from
+					for s := range subs {
+						s.sendNotification(PeerEvent{PeerJoin, peer})
+					}
+				}
+			}
 		} else {
 			tmap, ok := p.topics[t]
 			if !ok {
 				continue
 			}
-			delete(tmap, rpc.from)
+
+			if _, ok := tmap[rpc.from]; ok {
+				delete(tmap, rpc.from)
+				p.notifyLeave(t, rpc.from)
+			}
 		}
 	}
 
@@ -666,6 +696,11 @@ func (p *PubSub) SubscribeByTopicDescriptor(td *pb.TopicDescriptor, opts ...SubO
 
 	sub := &Subscription{
 		topic: td.GetName(),
+
+		ch:        make(chan *Message, 32),
+		peerEvtCh: make(chan PeerEvent, 1),
+		evtLog:    make(map[peer.ID]EventType),
+		evtLogCh:  make(chan struct{}, 1),
 	}
 
 	for _, opt := range opts {
