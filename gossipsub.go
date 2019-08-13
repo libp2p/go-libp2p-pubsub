@@ -268,6 +268,17 @@ func (gs *GossipSubRouter) Join(topic string) {
 
 	gmap, ok = gs.fanout[topic]
 	if ok {
+		if len(gmap) < GossipSubD {
+			// we need more peers; eager, as this would get fixed in the next heartbeat
+			more := gs.getPeers(topic, GossipSubD-len(gmap), func(p peer.ID) bool {
+				// filter our current peers
+				_, ok := gmap[p]
+				return !ok
+			})
+			for _, p := range more {
+				gmap[p] = struct{}{}
+			}
+		}
 		gs.mesh[topic] = gmap
 		delete(gs.fanout, topic)
 		delete(gs.lastpub, topic)
