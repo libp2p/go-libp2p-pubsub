@@ -138,12 +138,14 @@ type PubSubRouter interface {
 type PubSubControl interface {
 	// PeersForTopic returns the set of peers in a topic; the boolean indicator will be false
 	// if the topic is unknown.
+	// This method is not safe to call outside the pubsub process loop.
 	PeersForTopic(topic string) (map[peer.ID]struct{}, bool)
 
 	// SendMsg sends a message to a peer.
 	// It returns nil if the message was successfully enqueued for transmission.
 	// If the message was dropped due to full queues, it returns ErrQueueFull.
 	// If the peer was unknown, it returns ErrUnknownPeer.
+	// This method is not safe to call outside the pubsub process loop.
 	SendMessage(p peer.ID, msg *RPC) error
 
 	// SeenMessage returns true if the message identified by mid has been seen before
