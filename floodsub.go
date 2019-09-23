@@ -28,7 +28,7 @@ func NewFloodSub(ctx context.Context, h host.Host, opts ...Option) (*PubSub, err
 }
 
 type FloodSubRouter struct {
-	p         *PubSub
+	p         PubSubControl
 	protocols []protocol.ID
 }
 
@@ -36,7 +36,7 @@ func (fs *FloodSubRouter) Protocols() []protocol.ID {
 	return fs.protocols
 }
 
-func (fs *FloodSubRouter) Attach(p *PubSub) {
+func (fs *FloodSubRouter) Attach(p PubSubControl) {
 	fs.p = p
 }
 
@@ -49,7 +49,7 @@ func (fs *FloodSubRouter) HandleRPC(rpc *RPC) {}
 func (fs *FloodSubRouter) Publish(from peer.ID, msg *pb.Message) {
 	tosend := make(map[peer.ID]struct{})
 	for _, topic := range msg.GetTopicIDs() {
-		tmap, ok := fs.p.topics[topic]
+		tmap, ok := fs.p.PeersForTopic(topic)
 		if !ok {
 			continue
 		}
@@ -65,17 +65,7 @@ func (fs *FloodSubRouter) Publish(from peer.ID, msg *pb.Message) {
 			continue
 		}
 
-		mch, ok := fs.p.peers[pid]
-		if !ok {
-			continue
-		}
-
-		select {
-		case mch <- out:
-		default:
-			log.Infof("dropping message to peer %s: queue full", pid)
-			// Drop it. The peer is too slow.
-		}
+		fs.p.SendMessage(pid, out)
 	}
 }
 

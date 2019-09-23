@@ -3,6 +3,7 @@ package pubsub
 import (
 	"context"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"math/rand"
 	"sync"
@@ -115,7 +116,7 @@ type PubSubRouter interface {
 	Protocols() []protocol.ID
 	// Attach is invoked by the PubSub constructor to attach the router to a
 	// freshly initialized PubSub instance.
-	Attach(*PubSub)
+	Attach(PubSubControl)
 	// AddPeer notifies the router that a new peer has been connected.
 	AddPeer(peer.ID, protocol.ID)
 	// RemovePeer notifies the router that a peer has been disconnected.
@@ -132,6 +133,35 @@ type PubSubRouter interface {
 	// It is invoked after the unsubscription announcement.
 	Leave(topic string)
 }
+
+// PubSubControl is the control interface presented by the pubsub system to routers.
+type PubSubControl interface {
+	// PeersForTopic returns the set of peers in a topic; the boolean indicator will be false
+	// if the topic is unknown.
+	PeersForTopic(topic string) (map[peer.ID]struct{}, bool)
+
+	// SendMsg sends a message to a peer.
+	// It returns nil if the message was successfully enqueued for transmission.
+	// If the message was dropped due to full queues, it returns ErrQueueFull.
+	// If the peer was unknown, it returns ErrUnknownPeer.
+	SendMessage(p peer.ID, msg *RPC) error
+
+	// SeenMessage returns true if the message identified by mid has been seen before
+	// by the pubsub system.
+	SeenMessage(mid string) bool
+
+	// Eval schedules a thunk for evaluation in the pubsub process loop.
+	// Returns false if the evaluation was aborted because the pubsub system has been shutdown.
+	Eval(thunk func()) bool
+
+	// Context returns the pubsub process context
+	Context() context.Context
+
+	// Host returns the pubsub process host
+	Host() host.Host
+}
+
+type PubSubControlView PubSub
 
 type Message struct {
 	*pb.Message
@@ -194,7 +224,7 @@ func NewPubSub(ctx context.Context, h host.Host, rt PubSubRouter, opts ...Option
 		return nil, fmt.Errorf("strict signature verification enabled but message signing is disabled")
 	}
 
-	rt.Attach(ps)
+	rt.Attach((*PubSubControlView)(ps))
 
 	for _, id := range rt.Protocols() {
 		h.SetStreamHandler(id, ps.handleNewStream)
@@ -816,4 +846,49 @@ func (p *PubSub) UnregisterTopicValidator(topic string) error {
 
 	p.rmVal <- rmVal
 	return <-rmVal.resp
+}
+
+// PubSubControl view
+var ErrUnknownPeer = errors.New("unknown peer")
+var ErrQueueFull = errors.New("queue full")
+
+func (p *PubSubControlView) PeersForTopic(topic string) (map[peer.ID]struct{}, bool) {
+	tmap, ok := p.topics[topic]
+	return tmap, ok
+}
+
+func (p *PubSubControlView) SendMessage(pid peer.ID, msg *RPC) error {
+	mch, ok := p.peers[pid]
+	if !ok {
+		return ErrUnknownPeer
+	}
+
+	select {
+	case mch <- msg:
+		return nil
+	default:
+		log.Infof("dropping message to peer %s: queue full", p)
+		return ErrQueueFull
+	}
+}
+
+func (p *PubSubControlView) SeenMessage(mid string) bool {
+	return (*PubSub)(p).seenMessage(mid)
+}
+
+func (p *PubSubControlView) Eval(thunk func()) bool {
+	select {
+	case p.eval <- thunk:
+		return true
+	case <-p.ctx.Done():
+		return false
+	}
+}
+
+func (p *PubSubControlView) Context() context.Context {
+	return p.ctx
+}
+
+func (p *PubSubControlView) Host() host.Host {
+	return p.host
 }

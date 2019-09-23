@@ -57,7 +57,7 @@ func NewGossipSub(ctx context.Context, h host.Host, opts ...Option) (*PubSub, er
 // is the fanout map. Fanout peer lists are expired if we don't publish any
 // messages to their topic for GossipSubFanoutTTL.
 type GossipSubRouter struct {
-	p       *PubSub
+	p       PubSubControl
 	peers   map[peer.ID]protocol.ID         // peer protocols
 	mesh    map[string]map[peer.ID]struct{} // topic meshes
 	fanout  map[string]map[peer.ID]struct{} // topic fanout
@@ -71,7 +71,7 @@ func (gs *GossipSubRouter) Protocols() []protocol.ID {
 	return []protocol.ID{GossipSubID, FloodSubID}
 }
 
-func (gs *GossipSubRouter) Attach(p *PubSub) {
+func (gs *GossipSubRouter) Attach(p PubSubControl) {
 	gs.p = p
 	go gs.heartbeatTimer()
 }
@@ -124,7 +124,7 @@ func (gs *GossipSubRouter) handleIHave(p peer.ID, ctl *pb.ControlMessage) []*pb.
 		}
 
 		for _, mid := range ihave.GetMessageIDs() {
-			if gs.p.seenMessage(mid) {
+			if gs.p.SeenMessage(mid) {
 				continue
 			}
 			iwant[mid] = struct{}{}
@@ -214,7 +214,7 @@ func (gs *GossipSubRouter) Publish(from peer.ID, msg *pb.Message) {
 	tosend := make(map[peer.ID]struct{})
 	for _, topic := range msg.GetTopicIDs() {
 		// any peers in the topic?
-		tmap, ok := gs.p.topics[topic]
+		tmap, ok := gs.p.PeersForTopic(topic)
 		if !ok {
 			continue
 		}
@@ -337,15 +337,8 @@ func (gs *GossipSubRouter) sendRPC(p peer.ID, out *RPC) {
 		delete(gs.gossip, p)
 	}
 
-	mch, ok := gs.p.peers[p]
-	if !ok {
-		return
-	}
-
-	select {
-	case mch <- out:
-	default:
-		log.Infof("dropping message to peer %s: queue full", p)
+	err := gs.p.SendMessage(p, out)
+	if err == ErrQueueFull {
 		// push control messages that need to be retried
 		ctl := out.GetControl()
 		if ctl != nil {
@@ -356,9 +349,7 @@ func (gs *GossipSubRouter) sendRPC(p peer.ID, out *RPC) {
 
 func (gs *GossipSubRouter) heartbeatTimer() {
 	time.Sleep(GossipSubHeartbeatInitialDelay)
-	select {
-	case gs.p.eval <- gs.heartbeat:
-	case <-gs.p.ctx.Done():
+	if !gs.p.Eval(gs.heartbeat) {
 		return
 	}
 
@@ -368,19 +359,17 @@ func (gs *GossipSubRouter) heartbeatTimer() {
 	for {
 		select {
 		case <-ticker.C:
-			select {
-			case gs.p.eval <- gs.heartbeat:
-			case <-gs.p.ctx.Done():
+			if !gs.p.Eval(gs.heartbeat) {
 				return
 			}
-		case <-gs.p.ctx.Done():
+		case <-gs.p.Context().Done():
 			return
 		}
 	}
 }
 
 func (gs *GossipSubRouter) heartbeat() {
-	defer log.EventBegin(gs.p.ctx, "heartbeat").Done()
+	defer log.EventBegin(gs.p.Context(), "heartbeat").Done()
 
 	// flush pending control message from retries and gossip
 	// that hasn't been piggybacked since the last heartbeat
@@ -441,7 +430,9 @@ func (gs *GossipSubRouter) heartbeat() {
 	for topic, peers := range gs.fanout {
 		// check whether our peers are still in the topic
 		for p := range peers {
-			_, ok := gs.p.topics[topic][p]
+			tmap, _ := gs.p.PeersForTopic(topic)
+			_, ok := tmap[p]
+
 			if !ok {
 				delete(peers, p)
 			}
@@ -610,7 +601,7 @@ func (gs *GossipSubRouter) piggybackControl(p peer.ID, out *RPC, ctl *pb.Control
 }
 
 func (gs *GossipSubRouter) getPeers(topic string, count int, filter func(peer.ID) bool) []peer.ID {
-	tmap, ok := gs.p.topics[topic]
+	tmap, ok := gs.p.PeersForTopic(topic)
 	if !ok {
 		return nil
 	}
@@ -633,12 +624,12 @@ func (gs *GossipSubRouter) getPeers(topic string, count int, filter func(peer.ID
 
 func (gs *GossipSubRouter) tagPeer(p peer.ID, topic string) {
 	tag := topicTag(topic)
-	gs.p.host.ConnManager().TagPeer(p, tag, 2)
+	gs.p.Host().ConnManager().TagPeer(p, tag, 2)
 }
 
 func (gs *GossipSubRouter) untagPeer(p peer.ID, topic string) {
 	tag := topicTag(topic)
-	gs.p.host.ConnManager().UntagPeer(p, tag)
+	gs.p.Host().ConnManager().UntagPeer(p, tag)
 }
 
 func topicTag(topic string) string {
