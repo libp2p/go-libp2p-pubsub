@@ -12,7 +12,7 @@ message RPC {
 	}
 
 	optional ControlMessage control = 3;
-    optional bytes extData = 4; // protocol extension data
+	optional bytes extData = 4; // protocol extension data
 }
 
 message Message {
