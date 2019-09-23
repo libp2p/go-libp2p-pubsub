@@ -46,7 +46,7 @@ func (p *PubSub) handleNewStream(s network.Stream) {
 			return
 		}
 
-		rpc.from = s.Conn().RemotePeer()
+		rpc.From = s.Conn().RemotePeer()
 		select {
 		case p.incoming <- rpc:
 		case <-p.ctx.Done():

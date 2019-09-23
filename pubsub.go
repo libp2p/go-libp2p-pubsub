@@ -173,11 +173,12 @@ func (m *Message) GetFrom() peer.ID {
 	return peer.ID(m.Message.GetFrom())
 }
 
+// RPC is the message envelope for all pubsub messages.
 type RPC struct {
 	pb.RPC
 
-	// unexported on purpose, not sending this over the wire
-	from peer.ID
+	// From is the immediate source of a message.
+	From peer.ID
 }
 
 type Option func(*PubSub) error
@@ -620,10 +621,10 @@ func (p *PubSub) handleIncomingRPC(rpc *RPC) {
 				p.topics[t] = tmap
 			}
 
-			if _, ok = tmap[rpc.from]; !ok {
-				tmap[rpc.from] = struct{}{}
+			if _, ok = tmap[rpc.From]; !ok {
+				tmap[rpc.From] = struct{}{}
 				if subs, ok := p.myTopics[t]; ok {
-					peer := rpc.from
+					peer := rpc.From
 					for s := range subs {
 						s.sendNotification(PeerEvent{PeerJoin, peer})
 					}
@@ -635,9 +636,9 @@ func (p *PubSub) handleIncomingRPC(rpc *RPC) {
 				continue
 			}
 
-			if _, ok := tmap[rpc.from]; ok {
-				delete(tmap, rpc.from)
-				p.notifyLeave(t, rpc.from)
+			if _, ok := tmap[rpc.From]; ok {
+				delete(tmap, rpc.From)
+				p.notifyLeave(t, rpc.From)
 			}
 		}
 	}
@@ -649,7 +650,7 @@ func (p *PubSub) handleIncomingRPC(rpc *RPC) {
 		}
 
 		msg := &Message{pmsg}
-		p.pushMsg(rpc.from, msg)
+		p.pushMsg(rpc.From, msg)
 	}
 
 	p.rt.HandleRPC(rpc)
