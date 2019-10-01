@@ -696,6 +696,7 @@ func (p *PubSub) SubscribeByTopicDescriptor(td *pb.TopicDescriptor, opts ...SubO
 
 	sub := &Subscription{
 		topic: td.GetName(),
+		ctx:   p.ctx,
 
 		ch:        make(chan *Message, 32),
 		peerEvtCh: make(chan PeerEvent, 1),

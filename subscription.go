@@ -18,6 +18,7 @@ type Subscription struct {
 	ch       chan *Message
 	cancelCh chan<- *Subscription
 	err      error
+	ctx      context.Context
 
 	peerEvtCh chan PeerEvent
 	evtLogMx  sync.Mutex
@@ -49,7 +50,10 @@ func (sub *Subscription) Next(ctx context.Context) (*Message, error) {
 }
 
 func (sub *Subscription) Cancel() {
-	sub.cancelCh <- sub
+	select {
+	case sub.cancelCh <- sub:
+	case <-sub.ctx.Done():
+	}
 }
 
 func (sub *Subscription) close() {
