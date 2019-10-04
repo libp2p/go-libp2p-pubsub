@@ -23,22 +23,68 @@ func getGossipsubs(ctx context.Context, hs []host.Host, opts ...Option) []*PubSu
 	return psubs
 }
 
-func waitForMeshConstruction(topic string, psubs []*PubSub) {
+func waitForMeshConstruction(t *testing.T, parentCtx context.Context, topic string, psubs []*PubSub) {
+	mChan := make(chan int, 1)
+	defer close(mChan)
 	for _, ps := range psubs {
+		// Do not wait for more than 10 seconds  for one peer to catch up
+		ctx, cancel := context.WithTimeout(parentCtx, 10*time.Second)
+		defer cancel()
 		grt := ps.rt.(*GossipSubRouter)
-		for len(grt.mesh[topic]) < GossipSubDlo {
-			time.Sleep(100 * time.Millisecond)
+
+	LOOP:
+		for {
+			select {
+			case <-ctx.Done():
+				t.Fatalf("err: timed out waiting for mesh construction, host: %s", ps.host.ID())
+			case ps.eval <- func() {
+				mChan <- len(grt.mesh[topic])
+			}:
+				select {
+				case <-ctx.Done():
+					t.Fatalf("err: timed out waiting for mesh construction, host: %s", ps.host.ID())
+				case mLen := <-mChan:
+					if mLen < GossipSubDlo {
+						time.Sleep(100 * time.Millisecond)
+					} else {
+						break LOOP
+					}
+				}
+			}
 		}
 	}
 }
 
 // wait for all incoming subscription messages to be processed
 // this method should ONLY be called if all connected peers subscribe to the same topic
-func waitForSubscriptionProcessing(topic string, psubs []*PubSub) {
+func waitForSubscriptionProcessing(t *testing.T, parentCtx context.Context, topic string, psubs []*PubSub) {
+	sChan := make(chan int, 1)
+	defer close(sChan)
 	for _, ps := range psubs {
-		nConns := len(ps.host.Network().Conns())
-		for nConns != len(ps.topics[topic]) {
-			time.Sleep(100 * time.Millisecond)
+		// Do not wait for more than 5 minutes for one peer to catch up
+		// TODO Come up with a reasonable default or allow caller test to pass in a timeout
+		ctx, cancel := context.WithTimeout(parentCtx, 5*time.Minute)
+		defer cancel()
+
+	LOOP:
+		for {
+			select {
+			case <-ctx.Done():
+				t.Fatalf("err: timed out waiting for mesh construction, host: %s", ps.host.ID())
+			case ps.eval <- func() {
+				sChan <- len(ps.topics[topic])
+			}:
+				select {
+				case <-ctx.Done():
+					t.Fatalf("err: timed out waiting for mesh construction, host: %s", ps.host.ID())
+				case sLen := <-sChan:
+					if len(ps.host.Network().Conns()) != sLen {
+						time.Sleep(100 * time.Millisecond)
+					} else {
+						break LOOP
+					}
+				}
+			}
 		}
 	}
 }
@@ -354,8 +400,8 @@ func TestGossipsubGossip(t *testing.T) {
 	}
 
 	denseConnect(t, hosts)
-	waitForMeshConstruction("foobar", psubs)
-	waitForSubscriptionProcessing("foobar", psubs)
+	waitForMeshConstruction(t, ctx, "foobar", psubs)
+	waitForSubscriptionProcessing(t, ctx, "foobar", psubs)
 
 	for i := 0; i < 100; i++ {
 		msg := []byte(fmt.Sprintf("%d it's not a floooooood %d", i, i))
@@ -411,11 +457,11 @@ func TestGossipsubGossipPiggyback(t *testing.T) {
 
 	denseConnect(t, hosts)
 
-	waitForSubscriptionProcessing("foobar", psubs)
-	waitForSubscriptionProcessing("bazcrux", psubs)
+	waitForSubscriptionProcessing(t, ctx, "foobar", psubs)
+	waitForSubscriptionProcessing(t, ctx, "bazcrux", psubs)
 
-	waitForMeshConstruction("foobar", psubs)
-	waitForMeshConstruction("bazcrux", psubs)
+	waitForMeshConstruction(t, ctx, "foobar", psubs)
+	waitForMeshConstruction(t, ctx, "bazcrux", psubs)
 
 	for i := 0; i < 100; i++ {
 		msg := []byte(fmt.Sprintf("%d it's not a floooooood %d", i, i))
@@ -750,8 +796,8 @@ func TestGossipsubControlPiggyback(t *testing.T) {
 		}(subch)
 	}
 
-	waitForSubscriptionProcessing("flood", psubs)
-	waitForMeshConstruction("flood", psubs)
+	waitForSubscriptionProcessing(t, ctx, "flood", psubs)
+	waitForMeshConstruction(t, ctx, "flood", psubs)
 
 	// create a background flood of messages that overloads the queues
 	done := make(chan struct{})
@@ -783,8 +829,8 @@ func TestGossipsubControlPiggyback(t *testing.T) {
 			subs = append(subs, subch)
 		}
 		msgs = append(msgs, subs)
-		waitForSubscriptionProcessing(topic, psubs)
-		waitForMeshConstruction(topic, psubs)
+		waitForSubscriptionProcessing(t, ctx, topic, psubs)
+		waitForMeshConstruction(t, ctx, topic, psubs)
 	}
 
 	// wait for the flood to stop
