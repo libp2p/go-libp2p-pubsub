@@ -23,6 +23,26 @@ func getGossipsubs(ctx context.Context, hs []host.Host, opts ...Option) []*PubSu
 	return psubs
 }
 
+func waitForMeshConstruction(topic string, psubs []*PubSub) {
+	for _, ps := range psubs {
+		grt := ps.rt.(*GossipSubRouter)
+		for len(grt.mesh[topic]) < GossipSubDlo {
+			time.Sleep(100 * time.Millisecond)
+		}
+	}
+}
+
+// wait for all incoming subscription messages to be processed
+// this method should ONLY be called if all connected peers subscribe to the same topic
+func waitForSubscriptionProcessing(topic string, psubs []*PubSub) {
+	for _, ps := range psubs {
+		nConns := len(ps.host.Network().Conns())
+		for nConns != len(ps.topics[topic]) {
+			time.Sleep(100 * time.Millisecond)
+		}
+	}
+}
+
 func TestSparseGossipsub(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -334,9 +354,8 @@ func TestGossipsubGossip(t *testing.T) {
 	}
 
 	denseConnect(t, hosts)
-
-	// wait for heartbeats to build mesh
-	time.Sleep(time.Second * 2)
+	waitForMeshConstruction("foobar", psubs)
+	waitForSubscriptionProcessing("foobar", psubs)
 
 	for i := 0; i < 100; i++ {
 		msg := []byte(fmt.Sprintf("%d it's not a floooooood %d", i, i))
@@ -392,8 +411,11 @@ func TestGossipsubGossipPiggyback(t *testing.T) {
 
 	denseConnect(t, hosts)
 
-	// wait for heartbeats to build mesh
-	time.Sleep(time.Second * 2)
+	waitForSubscriptionProcessing("foobar", psubs)
+	waitForSubscriptionProcessing("bazcrux", psubs)
+
+	waitForMeshConstruction("foobar", psubs)
+	waitForMeshConstruction("bazcrux", psubs)
 
 	for i := 0; i < 100; i++ {
 		msg := []byte(fmt.Sprintf("%d it's not a floooooood %d", i, i))
@@ -704,7 +726,7 @@ func TestGossipsubGraftPruneRetry(t *testing.T) {
 }
 
 func TestGossipsubControlPiggyback(t *testing.T) {
-	t.Skip("travis regularly fails on this test")
+	//t.Skip("travis regularly fails on this test")
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -728,7 +750,8 @@ func TestGossipsubControlPiggyback(t *testing.T) {
 		}(subch)
 	}
 
-	time.Sleep(time.Second * 1)
+	waitForSubscriptionProcessing("flood", psubs)
+	waitForMeshConstruction("flood", psubs)
 
 	// create a background flood of messages that overloads the queues
 	done := make(chan struct{})
@@ -740,8 +763,6 @@ func TestGossipsubControlPiggyback(t *testing.T) {
 		}
 		done <- struct{}{}
 	}()
-
-	time.Sleep(time.Millisecond * 20)
 
 	// and subscribe to a bunch of topics in the meantime -- this should
 	// result in some dropped control messages, with subsequent piggybacking
@@ -762,6 +783,8 @@ func TestGossipsubControlPiggyback(t *testing.T) {
 			subs = append(subs, subch)
 		}
 		msgs = append(msgs, subs)
+		waitForSubscriptionProcessing(topic, psubs)
+		waitForMeshConstruction(topic, psubs)
 	}
 
 	// wait for the flood to stop
