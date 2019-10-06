@@ -527,13 +527,15 @@ func (gs *GossipSubRouter) emitGossip(topic string, exclude map[peer.ID]struct{}
 		return
 	}
 
-	gpeers := gs.getPeers(topic, GossipSubD, func(peer.ID) bool { return true })
-	for _, p := range gpeers {
-		// skip mesh peers
+	// Send gossip to D peers, skipping over the exclude set.
+	gpeers := gs.getPeers(topic, GossipSubD, func(p peer.ID) bool {
 		_, ok := exclude[p]
-		if !ok {
-			gs.pushGossip(p, &pb.ControlIHave{TopicID: &topic, MessageIDs: mids})
-		}
+		return !ok
+	})
+
+	// Emit the IHAVE gossip to the selected peers.
+	for _, p := range gpeers {
+		gs.pushGossip(p, &pb.ControlIHave{TopicID: &topic, MessageIDs: mids})
 	}
 }
 
