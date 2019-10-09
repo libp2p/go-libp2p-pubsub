@@ -135,10 +135,15 @@ type PubSubRouter interface {
 
 type Message struct {
 	*pb.Message
+	senderID peer.ID
 }
 
 func (m *Message) GetFrom() peer.ID {
 	return peer.ID(m.Message.GetFrom())
+}
+
+func (m *Message) GetSenderID() peer.ID {
+	return m.senderID
 }
 
 type RPC struct {
@@ -527,7 +532,10 @@ func (p *PubSub) notifySubs(msg *pb.Message) {
 		subs := p.myTopics[topic]
 		for f := range subs {
 			select {
-			case f.ch <- &Message{msg}:
+			case f.ch <- &Message{
+				Message:  msg,
+				senderID: p.host.ID(),
+			}:
 			default:
 				log.Infof("Can't deliver message to subscription for topic %s; subscriber too slow", topic)
 			}
@@ -616,7 +624,10 @@ func (p *PubSub) handleIncomingRPC(rpc *RPC) {
 			continue
 		}
 
-		msg := &Message{pmsg}
+		msg := &Message{
+			Message:  pmsg,
+			senderID: p.host.ID(),
+		}
 		p.pushMsg(rpc.from, msg)
 	}
 
@@ -747,7 +758,10 @@ func (p *PubSub) Publish(topic string, data []byte) error {
 			return err
 		}
 	}
-	p.publish <- &Message{m}
+	p.publish <- &Message{
+		Message:  m,
+		senderID: p.host.ID(),
+	}
 	return nil
 }
 

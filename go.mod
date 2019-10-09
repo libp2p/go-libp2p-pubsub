@@ -11,3 +11,5 @@ require (
 	github.com/multiformats/go-multistream v0.1.0
 	github.com/whyrusleeping/timecache v0.0.0-20160911033111-cfcb2f1abfee
 )
+
+go 1.13
