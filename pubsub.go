@@ -527,14 +527,14 @@ func (p *PubSub) doAnnounceRetry(pid peer.ID, topic string, sub bool) {
 
 // notifySubs sends a given message to all corresponding subscribers.
 // Only called from processLoop.
-func (p *PubSub) notifySubs(msg *pb.Message) {
+func (p *PubSub) notifySubs(src peer.ID, msg *pb.Message) {
 	for _, topic := range msg.GetTopicIDs() {
 		subs := p.myTopics[topic]
 		for f := range subs {
 			select {
 			case f.ch <- &Message{
 				Message:  msg,
-				senderID: p.host.ID(),
+				senderID: src,
 			}:
 			default:
 				log.Infof("Can't deliver message to subscription for topic %s; subscriber too slow", topic)
@@ -626,7 +626,7 @@ func (p *PubSub) handleIncomingRPC(rpc *RPC) {
 
 		msg := &Message{
 			Message:  pmsg,
-			senderID: p.host.ID(),
+			senderID: rpc.from,
 		}
 		p.pushMsg(rpc.from, msg)
 	}
@@ -675,7 +675,7 @@ func (p *PubSub) pushMsg(src peer.ID, msg *Message) {
 }
 
 func (p *PubSub) publishMessage(from peer.ID, pmsg *pb.Message) {
-	p.notifySubs(pmsg)
+	p.notifySubs(from, pmsg)
 	p.rt.Publish(from, pmsg)
 }
 
