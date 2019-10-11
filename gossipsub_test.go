@@ -363,6 +363,145 @@ func TestGossipsubGossip(t *testing.T) {
 	time.Sleep(time.Second * 2)
 }
 
+func TestRelayOnlyPeerForwardsMessage(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	hosts := getNetHosts(t, ctx, 8)
+	psubs := getPubsubs(ctx, hosts)
+
+	connect(t, hosts[0], hosts[1])
+	connect(t, hosts[1], hosts[2])
+	connect(t, hosts[2], hosts[3])
+	connect(t, hosts[1], hosts[4])
+
+	connect(t, hosts[0], hosts[5])
+	connect(t, hosts[5], hosts[6])
+	connect(t, hosts[6], hosts[7])
+	/*
+		R= Relay ONLY
+		S = Subscriber
+
+			[0](R) -> [1](R) -> [2](R) -> [3](S)
+			 |      L->[4](S)
+			 v
+			[5](R)
+			 |
+			 v
+			[6](R) -> [7](S)
+	*/
+
+	var subs []*Subscription
+	for i, ps := range psubs {
+		if i == 3 || i == 4 || i == 7 {
+			ch, err := ps.Subscribe("foo")
+			if err != nil {
+				panic(err)
+			}
+			subs = append(subs, ch)
+		} else {
+			_, err := ps.Join("foo")
+			if err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+
+	// wait for heartbeats to build mesh
+	time.Sleep(time.Second * 2)
+
+	// assert that  published message is received
+	for i := 0; i < 100; i++ {
+		msg := []byte(fmt.Sprintf("%d it's not a floooooood %d", i, i))
+
+		owner := rand.Intn(len(psubs))
+
+		psubs[owner].Publish("foo", msg)
+
+		for _, sub := range subs {
+			got, err := sub.Next(ctx)
+			if err != nil {
+				t.Fatal(sub.err)
+			}
+			if !bytes.Equal(msg, got.Data) {
+				t.Fatal("got wrong message!")
+			}
+		}
+	}
+}
+
+func TestGossipsubGossipWithSomeRelayOnlyPeers(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	hosts := getNetHosts(t, ctx, 15)
+
+	psubs := getGossipsubs(ctx, hosts)
+
+	subscribeToTopic := func(topic string) []*Subscription {
+		var msgs []*Subscription
+
+		for i, ps := range psubs {
+			if i%4 != 0 {
+				subch, err := ps.Subscribe(topic)
+				if err != nil {
+					t.Fatal(err)
+				}
+
+				msgs = append(msgs, subch)
+			} else {
+				_, err := ps.Join(topic)
+				if err != nil {
+					t.Fatal(err)
+				}
+			}
+		}
+		return msgs
+	}
+
+	msgs := subscribeToTopic("foobar")
+	xmsgs := subscribeToTopic("bazcrux")
+
+	denseConnect(t, hosts)
+
+	// wait for heartbeats to build mesh
+	time.Sleep(time.Second * 2)
+
+	for i := 0; i < 100; i++ {
+		msg := []byte(fmt.Sprintf("%d it's not a floooooood %d", i, i))
+
+		owner := rand.Intn(len(psubs))
+
+		psubs[owner].Publish("foobar", msg)
+		psubs[owner].Publish("bazcrux", msg)
+
+		for _, sub := range msgs {
+			got, err := sub.Next(ctx)
+			if err != nil {
+				t.Fatal(sub.err)
+			}
+			if !bytes.Equal(msg, got.Data) {
+				t.Fatal("got wrong message!")
+			}
+		}
+
+		for _, sub := range xmsgs {
+			got, err := sub.Next(ctx)
+			if err != nil {
+				t.Fatal(sub.err)
+			}
+			if !bytes.Equal(msg, got.Data) {
+				t.Fatal("got wrong message!")
+			}
+		}
+
+		// wait a bit to have some gossip interleaved
+		time.Sleep(time.Millisecond * 100)
+	}
+
+	// and wait for some gossip flushing
+	time.Sleep(time.Second * 2)
+}
+
 func TestGossipsubGossipPiggyback(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

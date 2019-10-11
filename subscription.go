@@ -14,6 +14,8 @@ const (
 )
 
 type Subscription struct {
+	relay *Relay
+
 	topic    string
 	ch       chan *Message
 	cancelCh chan<- *Subscription

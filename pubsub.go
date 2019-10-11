@@ -10,6 +10,7 @@ import (
 	"time"
 
 	pb "github.com/libp2p/go-libp2p-pubsub/pb"
+	"github.com/pkg/errors"
 
 	"github.com/libp2p/go-libp2p-core/crypto"
 	"github.com/libp2p/go-libp2p-core/host"
@@ -51,6 +52,9 @@ type PubSub struct {
 	// addSub is a control channel for us to add and remove subscriptions
 	addSub chan *addSubReq
 
+	// addRelay is a control channel for us to add relays
+	addRelay chan *addRelayReq
+
 	// get list of topics we are subscribed to
 	getTopics chan *topicReq
 
@@ -58,7 +62,10 @@ type PubSub struct {
 	getPeers chan *listPeerReq
 
 	// send subscription here to cancel it
-	cancelCh chan *Subscription
+	cancelSubCh chan *Subscription
+
+	// send relay here to cancel it
+	cancelRelayCh chan *Relay
 
 	// a notification channel for new peer connections
 	newPeers chan peer.ID
@@ -74,6 +81,10 @@ type PubSub struct {
 
 	// The set of topics we are subscribed to
 	myTopics map[string]map[*Subscription]struct{}
+
+	// The set of topics we relay for. 'myTopics' should be a subset of this as we do not
+	// currently allow Subscription without Relay
+	relayTopics map[string]map[*Relay]struct{}
 
 	// topics tracks which topics each of our peers are subscribed to
 	topics map[string]map[peer.ID]struct{}
@@ -166,15 +177,18 @@ func NewPubSub(ctx context.Context, h host.Host, rt PubSubRouter, opts ...Option
 		newPeerStream: make(chan network.Stream),
 		newPeerError:  make(chan peer.ID),
 		peerDead:      make(chan peer.ID),
-		cancelCh:      make(chan *Subscription),
+		cancelSubCh:   make(chan *Subscription),
+		cancelRelayCh: make(chan *Relay),
 		getPeers:      make(chan *listPeerReq),
 		addSub:        make(chan *addSubReq),
+		addRelay:      make(chan *addRelayReq),
 		getTopics:     make(chan *topicReq),
 		sendMsg:       make(chan *sendReq, 32),
 		addVal:        make(chan *addValReq),
 		rmVal:         make(chan *rmValReq),
 		eval:          make(chan func()),
 		myTopics:      make(map[string]map[*Subscription]struct{}),
+		relayTopics:   make(map[string]map[*Relay]struct{}),
 		topics:        make(map[string]map[peer.ID]struct{}),
 		peers:         make(map[peer.ID]chan *RPC),
 		blacklist:     NewMapBlacklist(),
@@ -348,10 +362,15 @@ func (p *PubSub) processLoop(ctx context.Context) {
 				out = append(out, t)
 			}
 			treq.resp <- out
-		case sub := <-p.cancelCh:
+
+		case r := <-p.cancelRelayCh:
+			p.handleRemoveRelay(r)
+		case sub := <-p.cancelSubCh:
 			p.handleRemoveSubscription(sub)
 		case sub := <-p.addSub:
 			p.handleAddSubscription(sub)
+		case r := <-p.addRelay:
+			p.handleAddRelay(r)
 		case preq := <-p.getPeers:
 			tmap, ok := p.topics[preq.topic]
 			if preq.topic != "" && !ok {
@@ -411,10 +430,28 @@ func (p *PubSub) processLoop(ctx context.Context) {
 	}
 }
 
-// handleRemoveSubscription removes Subscription sub from bookeeping.
-// If this was the last Subscription for a given topic, it will also announce
+// handleRemoveRelay removes Relay r from bookeeping.
+// If it was the last Relay for a given topic, it will also announce
 // that this node is not subscribing to this topic anymore.
 // Only called from processLoop.
+func (p *PubSub) handleRemoveRelay(r *Relay) {
+	relays := p.relayTopics[r.topic]
+
+	if relays == nil {
+		return
+	}
+
+	delete(relays, r)
+
+	if len(relays) == 0 {
+		delete(p.relayTopics, r.topic)
+		p.announce(r.topic, false)
+		p.rt.Leave(r.topic)
+	}
+}
+
+// handleRemoveSubscription removes Subscription sub from bookeeping.
+// It then calls for the removal of the associated Relay.
 func (p *PubSub) handleRemoveSubscription(sub *Subscription) {
 	subs := p.myTopics[sub.topic]
 
@@ -428,24 +465,41 @@ func (p *PubSub) handleRemoveSubscription(sub *Subscription) {
 
 	if len(subs) == 0 {
 		delete(p.myTopics, sub.topic)
-		p.announce(sub.topic, false)
-		p.rt.Leave(sub.topic)
 	}
+	p.handleRemoveRelay(sub.relay)
 }
 
-// handleAddSubscription adds a Subscription for a particular topic. If it is
-// the first Subscription for the topic, it will announce that this node
+// handleAddRelay adds a Relay for a particular topic. If it is
+// the first Relay for the topic, it will announce that this node
 // subscribes to the topic.
+// Only called from processLoop.
+func (p *PubSub) handleAddRelay(req *addRelayReq) {
+	relay := req.r
+	relays := p.relayTopics[relay.topic]
+
+	// announce we want this topic
+	if len(relays) == 0 {
+		p.announce(relay.topic, true)
+		p.rt.Join(relay.topic)
+	}
+
+	// make new if not there
+	if relays == nil {
+		p.relayTopics[relay.topic] = make(map[*Relay]struct{})
+	}
+
+	relay.cancelCh = p.cancelRelayCh
+
+	p.relayTopics[relay.topic][relay] = struct{}{}
+
+	req.resp <- relay
+}
+
+// handleAddSubscription adds a Subscription for a particular topic.
 // Only called from processLoop.
 func (p *PubSub) handleAddSubscription(req *addSubReq) {
 	sub := req.sub
 	subs := p.myTopics[sub.topic]
-
-	// announce we want this topic
-	if len(subs) == 0 {
-		p.announce(sub.topic, true)
-		p.rt.Join(sub.topic)
-	}
 
 	// make new if not there
 	if subs == nil {
@@ -458,7 +512,7 @@ func (p *PubSub) handleAddSubscription(req *addSubReq) {
 	for p := range tmap {
 		sub.evtLog[p] = PeerJoin
 	}
-	sub.cancelCh = p.cancelCh
+	sub.cancelCh = p.cancelSubCh
 
 	p.myTopics[sub.topic][sub] = struct{}{}
 
@@ -570,6 +624,21 @@ func (p *PubSub) subscribedToMsg(msg *pb.Message) bool {
 	return false
 }
 
+// relayForMessage returns whether we relay for one of the topics
+// of a given message
+func (p *PubSub) relayForMessage(msg *pb.Message) bool {
+	if len(p.relayTopics) == 0 {
+		return false
+	}
+
+	for _, t := range msg.GetTopicIDs() {
+		if _, ok := p.relayTopics[t]; ok {
+			return true
+		}
+	}
+	return false
+}
+
 func (p *PubSub) notifyLeave(topic string, pid peer.ID) {
 	if subs, ok := p.myTopics[topic]; ok {
 		for s := range subs {
@@ -611,8 +680,8 @@ func (p *PubSub) handleIncomingRPC(rpc *RPC) {
 	}
 
 	for _, pmsg := range rpc.GetPublish() {
-		if !p.subscribedToMsg(pmsg) {
-			log.Warning("received message we didn't subscribe to. Dropping.")
+		if !(p.subscribedToMsg(pmsg) || p.relayForMessage(pmsg)) {
+			log.Warning("received message we didn't subscribe to or relay for. Dropping.")
 			continue
 		}
 
@@ -673,6 +742,11 @@ type addSubReq struct {
 	resp chan *Subscription
 }
 
+type addRelayReq struct {
+	r    *Relay
+	resp chan *Relay
+}
+
 type SubOpt func(sub *Subscription) error
 
 // Subscribe returns a new Subscription for the given topic.
@@ -682,6 +756,50 @@ func (p *PubSub) Subscribe(topic string, opts ...SubOpt) (*Subscription, error) 
 	td := pb.TopicDescriptor{Name: &topic}
 
 	return p.SubscribeByTopicDescriptor(&td, opts...)
+}
+
+type RelayOpt func(r *Relay) error
+
+// Join returns a new Relay for the given topic which will enable us to
+// propagate messages we receive to other peers without having to 'consume'/'subscribe' them.
+// For now, we ONLY support Relay without subscription.
+// We do NOT allow subscription without Relay.
+// Note that Join is not an instanteneous operation. It may take some time
+// before it is processed by the pubsub main loop and propagated to our peers.
+func (p *PubSub) Join(topic string, opts ...RelayOpt) (*Relay, error) {
+	td := pb.TopicDescriptor{Name: &topic}
+
+	return p.JoinByTopicDescriptor(&td, opts...)
+}
+
+func (p *PubSub) JoinByTopicDescriptor(td *pb.TopicDescriptor, opts ...RelayOpt) (*Relay, error) {
+	if td.GetAuth().GetMode() != pb.TopicDescriptor_AuthOpts_NONE {
+		return nil, fmt.Errorf("auth mode not yet supported for relay")
+	}
+
+	if td.GetEnc().GetMode() != pb.TopicDescriptor_EncOpts_NONE {
+		return nil, fmt.Errorf("encryption mode not yet supported for relay")
+	}
+
+	relay := &Relay{
+		topic: td.GetName(),
+		ctx:   p.ctx,
+	}
+
+	for _, opt := range opts {
+		err := opt(relay)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	out := make(chan *Relay, 1)
+	p.addRelay <- &addRelayReq{
+		r:    relay,
+		resp: out,
+	}
+
+	return <-out, nil
 }
 
 // SubscribeByTopicDescriptor lets you subscribe a topic using a pb.TopicDescriptor.
@@ -694,7 +812,13 @@ func (p *PubSub) SubscribeByTopicDescriptor(td *pb.TopicDescriptor, opts ...SubO
 		return nil, fmt.Errorf("encryption mode not yet supported")
 	}
 
+	relay, err := p.Join(td.GetName())
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to create relay for subscription")
+	}
+
 	sub := &Subscription{
+		relay: relay,
 		topic: td.GetName(),
 		ctx:   p.ctx,
 

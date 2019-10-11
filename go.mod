@@ -9,5 +9,6 @@ require (
 	github.com/libp2p/go-libp2p-swarm v0.1.0
 	github.com/multiformats/go-multiaddr v0.0.4
 	github.com/multiformats/go-multistream v0.1.0
+	github.com/pkg/errors v0.8.1
 	github.com/whyrusleeping/timecache v0.0.0-20160911033111-cfcb2f1abfee
 )
