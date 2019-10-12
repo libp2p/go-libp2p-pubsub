@@ -535,7 +535,7 @@ func (gs *GossipSubRouter) emitGossip(topic string, exclude map[peer.ID]struct{}
 
 	// Emit the IHAVE gossip to the selected peers.
 	for _, p := range gpeers {
-		gs.queueGossip(p, &pb.ControlIHave{TopicID: &topic, MessageIDs: mids})
+		gs.enqueueGossip(p, &pb.ControlIHave{TopicID: &topic, MessageIDs: mids})
 	}
 }
 
@@ -555,7 +555,7 @@ func (gs *GossipSubRouter) flush() {
 	}
 }
 
-func (gs *GossipSubRouter) queueGossip(p peer.ID, ihave *pb.ControlIHave) {
+func (gs *GossipSubRouter) enqueueGossip(p peer.ID, ihave *pb.ControlIHave) {
 	gossip := gs.gossip[p]
 	gossip = append(gossip, ihave)
 	gs.gossip[p] = gossip
