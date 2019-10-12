@@ -436,6 +436,8 @@ func (gs *GossipSubRouter) heartbeat() {
 			}
 		}
 
+		// 2nd arg are mesh peers excluded from gossip. We already push
+		// messages to them, so its redundant to gossip IHAVEs.
 		gs.emitGossip(topic, peers)
 	}
 
@@ -472,6 +474,8 @@ func (gs *GossipSubRouter) heartbeat() {
 			}
 		}
 
+		// 2nd arg are fanout peers excluded from gossip. We already push
+		// messages to them, so its redundant to gossip IHAVEs.
 		gs.emitGossip(topic, peers)
 	}
 
@@ -515,19 +519,23 @@ func (gs *GossipSubRouter) sendGraftPrune(tograft, toprune map[peer.ID][]string)
 
 }
 
-func (gs *GossipSubRouter) emitGossip(topic string, peers map[peer.ID]struct{}) {
+// emitGossip emits IHAVE gossip advertising items in the message cache window
+// of this topic.
+func (gs *GossipSubRouter) emitGossip(topic string, exclude map[peer.ID]struct{}) {
 	mids := gs.mcache.GetGossipIDs(topic)
 	if len(mids) == 0 {
 		return
 	}
 
-	gpeers := gs.getPeers(topic, GossipSubD, func(peer.ID) bool { return true })
+	// Send gossip to D peers, skipping over the exclude set.
+	gpeers := gs.getPeers(topic, GossipSubD, func(p peer.ID) bool {
+		_, ok := exclude[p]
+		return !ok
+	})
+
+	// Emit the IHAVE gossip to the selected peers.
 	for _, p := range gpeers {
-		// skip mesh peers
-		_, ok := peers[p]
-		if !ok {
-			gs.pushGossip(p, &pb.ControlIHave{TopicID: &topic, MessageIDs: mids})
-		}
+		gs.enqueueGossip(p, &pb.ControlIHave{TopicID: &topic, MessageIDs: mids})
 	}
 }
 
@@ -547,7 +555,7 @@ func (gs *GossipSubRouter) flush() {
 	}
 }
 
-func (gs *GossipSubRouter) pushGossip(p peer.ID, ihave *pb.ControlIHave) {
+func (gs *GossipSubRouter) enqueueGossip(p peer.ID, ihave *pb.ControlIHave) {
 	gossip := gs.gossip[p]
 	gossip = append(gossip, ihave)
 	gs.gossip[p] = gossip
