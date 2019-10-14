@@ -228,7 +228,7 @@ func (gs *GossipSubRouter) Publish(from peer.ID, msg *pb.Message) {
 
 		// gossipsub peers
 		gmap, ok := gs.mesh[topic]
-		if !ok {
+		if !ok || len(gmap) == 0 {
 			// we are not in the mesh for topic, use fanout peers
 			gmap, ok = gs.fanout[topic]
 			if !ok || len(gmap) == 0 {
