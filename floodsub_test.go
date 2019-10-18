@@ -1423,7 +1423,7 @@ func TestMessageSender(t *testing.T) {
 
 	time.Sleep(time.Millisecond * 100)
 
-	for i:=0; i < 3; i++ {
+	for i := 0; i < 3; i++ {
 		for j := 0; j < 100; j++ {
 			msg := []byte(fmt.Sprintf("%d sent %d", i, j))
 
