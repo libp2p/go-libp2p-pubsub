@@ -1398,3 +1398,59 @@ func readAllQueuedEvents(ctx context.Context, t *testing.T, sub *Subscription) m
 	}
 	return peerState
 }
+
+func TestMessageSender(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	const topic = "foobar"
+
+	hosts := getNetHosts(t, ctx, 3)
+	psubs := getPubsubs(ctx, hosts)
+
+	var msgs []*Subscription
+	for _, ps := range psubs {
+		subch, err := ps.Subscribe(topic)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		msgs = append(msgs, subch)
+	}
+
+	connect(t, hosts[0], hosts[1])
+	connect(t, hosts[1], hosts[2])
+
+	time.Sleep(time.Millisecond * 100)
+
+	for i:=0; i < 3; i++ {
+		for j := 0; j < 100; j++ {
+			msg := []byte(fmt.Sprintf("%d sent %d", i, j))
+
+			psubs[i].Publish(topic, msg)
+
+			for k, sub := range msgs {
+				got, err := sub.Next(ctx)
+				if err != nil {
+					t.Fatal(sub.err)
+				}
+				if !bytes.Equal(msg, got.Data) {
+					t.Fatal("got wrong message!")
+				}
+
+				var expectedHost int
+				if i == k {
+					expectedHost = i
+				} else if k != 1 {
+					expectedHost = 1
+				} else {
+					expectedHost = i
+				}
+
+				if got.ReceivedFrom != hosts[expectedHost].ID() {
+					t.Fatal("got wrong message sender")
+				}
+			}
+		}
+	}
+}
