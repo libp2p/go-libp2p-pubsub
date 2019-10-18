@@ -736,11 +736,11 @@ func (p *PubSub) GetTopics() []string {
 // Publish publishes data to the given topic.
 func (p *PubSub) Publish(topic string, data []byte) error {
 	seqno := p.nextSeqno()
-	hostID := p.host.ID()
+	id := p.host.ID()
 	m := &pb.Message{
 		Data:     data,
 		TopicIDs: []string{topic},
-		From:     []byte(hostID),
+		From:     []byte(id),
 		Seqno:    seqno,
 	}
 	if p.signKey != nil {
@@ -750,7 +750,7 @@ func (p *PubSub) Publish(topic string, data []byte) error {
 			return err
 		}
 	}
-	p.publish <- &Message{m, hostID}
+	p.publish <- &Message{m, id}
 	return nil
 }
 
