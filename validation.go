@@ -233,10 +233,7 @@ func (v *validation) validate(vals []*topicVal, src peer.ID, msg *Message) {
 	}
 
 	// no async validators, send the message
-	v.p.sendMsg <- &sendReq{
-		from: src,
-		msg:  msg,
-	}
+	v.p.sendMsg <- msg
 }
 
 func (v *validation) validateSignature(msg *Message) bool {
@@ -255,10 +252,7 @@ func (v *validation) doValidateTopic(vals []*topicVal, src peer.ID, msg *Message
 		return
 	}
 
-	v.p.sendMsg <- &sendReq{
-		from: src,
-		msg:  msg,
-	}
+	v.p.sendMsg <- msg
 }
 
 func (v *validation) validateTopic(vals []*topicVal, src peer.ID, msg *Message) bool {
