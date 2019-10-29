@@ -391,8 +391,6 @@ func (gs *GossipSubRouter) heartbeatTimer() {
 }
 
 func (gs *GossipSubRouter) heartbeat() {
-	defer log.EventBegin(gs.p.ctx, "heartbeat").Done()
-
 	// flush pending control message from retries and gossip
 	// that hasn't been piggybacked since the last heartbeat
 	gs.flush()

@@ -147,7 +147,7 @@ func (v *validation) Push(src peer.ID, msg *Message) bool {
 		select {
 		case v.validateQ <- &validateReq{vals, src, msg}:
 		default:
-			log.Warningf("message validation throttled; dropping message from %s", src)
+			log.Warnf("message validation throttled; dropping message from %s", src)
 		}
 		return false
 	}
@@ -189,7 +189,7 @@ func (v *validation) validateWorker() {
 func (v *validation) validate(vals []*topicVal, src peer.ID, msg *Message) {
 	if msg.Signature != nil {
 		if !v.validateSignature(msg) {
-			log.Warningf("message signature validation failed; dropping message from %s", src)
+			log.Warnf("message signature validation failed; dropping message from %s", src)
 			return
 		}
 	}
@@ -227,7 +227,7 @@ func (v *validation) validate(vals []*topicVal, src peer.ID, msg *Message) {
 				<-v.validateThrottle
 			}()
 		default:
-			log.Warningf("message validation throttled; dropping message from %s", src)
+			log.Warnf("message validation throttled; dropping message from %s", src)
 		}
 		return
 	}
@@ -248,7 +248,7 @@ func (v *validation) validateSignature(msg *Message) bool {
 
 func (v *validation) doValidateTopic(vals []*topicVal, src peer.ID, msg *Message) {
 	if !v.validateTopic(vals, src, msg) {
-		log.Warningf("message validation failed; dropping message from %s", src)
+		log.Warnf("message validation failed; dropping message from %s", src)
 		return
 	}
 
