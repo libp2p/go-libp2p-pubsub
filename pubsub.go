@@ -60,6 +60,12 @@ type PubSub struct {
 	// send subscription here to cancel it
 	cancelCh chan *Subscription
 
+	// addSub is a channel for us to add a topic
+	addTopic chan *addTopicReq
+
+	// removeTopic is a topic cancellation channel
+	rmTopic chan *rmTopicReq
+
 	// a notification channel for new peer connections
 	newPeers chan peer.ID
 
@@ -73,7 +79,10 @@ type PubSub struct {
 	peerDead chan peer.ID
 
 	// The set of topics we are subscribed to
-	myTopics map[string]map[*Subscription]struct{}
+	mySubs map[string]map[*Subscription]struct{}
+
+	// The set of topics we are interested in
+	myTopics map[string]*Topic
 
 	// topics tracks which topics each of our peers are subscribed to
 	topics map[string]map[peer.ID]struct{}
@@ -170,12 +179,15 @@ func NewPubSub(ctx context.Context, h host.Host, rt PubSubRouter, opts ...Option
 		cancelCh:      make(chan *Subscription),
 		getPeers:      make(chan *listPeerReq),
 		addSub:        make(chan *addSubReq),
+		addTopic:      make(chan *addTopicReq),
+		rmTopic:       make(chan *rmTopicReq),
 		getTopics:     make(chan *topicReq),
 		sendMsg:       make(chan *Message, 32),
 		addVal:        make(chan *addValReq),
 		rmVal:         make(chan *rmValReq),
 		eval:          make(chan func()),
-		myTopics:      make(map[string]map[*Subscription]struct{}),
+		myTopics:      make(map[string]*Topic),
+		mySubs:        make(map[string]map[*Subscription]struct{}),
 		topics:        make(map[string]map[peer.ID]struct{}),
 		peers:         make(map[peer.ID]chan *RPC),
 		blacklist:     NewMapBlacklist(),
@@ -345,10 +357,14 @@ func (p *PubSub) processLoop(ctx context.Context) {
 
 		case treq := <-p.getTopics:
 			var out []string
-			for t := range p.myTopics {
+			for t := range p.mySubs {
 				out = append(out, t)
 			}
 			treq.resp <- out
+		case topic := <-p.addTopic:
+			p.handleAddTopic(topic)
+		case topic := <-p.rmTopic:
+			p.handleRemoveTopic(topic)
 		case sub := <-p.cancelCh:
 			p.handleRemoveSubscription(sub)
 		case sub := <-p.addSub:
@@ -412,12 +428,47 @@ func (p *PubSub) processLoop(ctx context.Context) {
 	}
 }
 
+// handleAddTopic adds a tracker for a particular topic.
+// Only called from processLoop.
+func (p *PubSub) handleAddTopic(req *addTopicReq) {
+	topic := req.topic
+	topicID := topic.topic
+
+	t, ok := p.myTopics[topicID]
+	if ok {
+		req.resp <- t
+		return
+	}
+
+	p.myTopics[topicID] = topic
+	req.resp <- topic
+}
+
+// handleRemoveTopic removes Topic tracker from bookkeeping.
+// Only called from processLoop.
+func (p *PubSub) handleRemoveTopic(req *rmTopicReq) {
+	topic := p.myTopics[req.topic.topic]
+
+	if topic == nil {
+		req.resp <- nil
+		return
+	}
+
+	if len(topic.evtHandlers) == 0 && len(p.mySubs[req.topic.topic]) == 0 {
+		delete(p.myTopics, topic.topic)
+		req.resp <- nil
+		return
+	}
+
+	req.resp <- fmt.Errorf("cannot close topic: outstanding event handlers or subscriptions")
+}
+
 // handleRemoveSubscription removes Subscription sub from bookeeping.
 // If this was the last Subscription for a given topic, it will also announce
 // that this node is not subscribing to this topic anymore.
 // Only called from processLoop.
 func (p *PubSub) handleRemoveSubscription(sub *Subscription) {
-	subs := p.myTopics[sub.topic]
+	subs := p.mySubs[sub.topic]
 
 	if subs == nil {
 		return
@@ -428,7 +479,7 @@ func (p *PubSub) handleRemoveSubscription(sub *Subscription) {
 	delete(subs, sub)
 
 	if len(subs) == 0 {
-		delete(p.myTopics, sub.topic)
+		delete(p.mySubs, sub.topic)
 		p.announce(sub.topic, false)
 		p.rt.Leave(sub.topic)
 	}
@@ -440,7 +491,7 @@ func (p *PubSub) handleRemoveSubscription(sub *Subscription) {
 // Only called from processLoop.
 func (p *PubSub) handleAddSubscription(req *addSubReq) {
 	sub := req.sub
-	subs := p.myTopics[sub.topic]
+	subs := p.mySubs[sub.topic]
 
 	// announce we want this topic
 	if len(subs) == 0 {
@@ -450,18 +501,12 @@ func (p *PubSub) handleAddSubscription(req *addSubReq) {
 
 	// make new if not there
 	if subs == nil {
-		p.myTopics[sub.topic] = make(map[*Subscription]struct{})
-		subs = p.myTopics[sub.topic]
+		p.mySubs[sub.topic] = make(map[*Subscription]struct{})
 	}
 
-	tmap := p.topics[sub.topic]
-
-	for p := range tmap {
-		sub.evtLog[p] = PeerJoin
-	}
 	sub.cancelCh = p.cancelCh
 
-	p.myTopics[sub.topic][sub] = struct{}{}
+	p.mySubs[sub.topic][sub] = struct{}{}
 
 	req.resp <- sub
 }
@@ -489,7 +534,7 @@ func (p *PubSub) announceRetry(pid peer.ID, topic string, sub bool) {
 	time.Sleep(time.Duration(1+rand.Intn(1000)) * time.Millisecond)
 
 	retry := func() {
-		_, ok := p.myTopics[topic]
+		_, ok := p.mySubs[topic]
 		if (ok && sub) || (!ok && !sub) {
 			p.doAnnounceRetry(pid, topic, sub)
 		}
@@ -525,7 +570,7 @@ func (p *PubSub) doAnnounceRetry(pid peer.ID, topic string, sub bool) {
 // Only called from processLoop.
 func (p *PubSub) notifySubs(msg *Message) {
 	for _, topic := range msg.GetTopicIDs() {
-		subs := p.myTopics[topic]
+		subs := p.mySubs[topic]
 		for f := range subs {
 			select {
 			case f.ch <- msg:
@@ -559,12 +604,12 @@ func (p *PubSub) markSeen(id string) bool {
 // subscribedToMessage returns whether we are subscribed to one of the topics
 // of a given message
 func (p *PubSub) subscribedToMsg(msg *pb.Message) bool {
-	if len(p.myTopics) == 0 {
+	if len(p.mySubs) == 0 {
 		return false
 	}
 
 	for _, t := range msg.GetTopicIDs() {
-		if _, ok := p.myTopics[t]; ok {
+		if _, ok := p.mySubs[t]; ok {
 			return true
 		}
 	}
@@ -572,10 +617,8 @@ func (p *PubSub) subscribedToMsg(msg *pb.Message) bool {
 }
 
 func (p *PubSub) notifyLeave(topic string, pid peer.ID) {
-	if subs, ok := p.myTopics[topic]; ok {
-		for s := range subs {
-			s.sendNotification(PeerEvent{PeerLeave, pid})
-		}
+	if t, ok := p.myTopics[topic]; ok {
+		t.sendNotification(PeerEvent{PeerLeave, pid})
 	}
 }
 
@@ -591,11 +634,9 @@ func (p *PubSub) handleIncomingRPC(rpc *RPC) {
 
 			if _, ok = tmap[rpc.from]; !ok {
 				tmap[rpc.from] = struct{}{}
-				if subs, ok := p.myTopics[t]; ok {
+				if topic, ok := p.myTopics[t]; ok {
 					peer := rpc.from
-					for s := range subs {
-						s.sendNotification(PeerEvent{PeerJoin, peer})
-					}
+					topic.sendNotification(PeerEvent{PeerJoin, peer})
 				}
 			}
 		} else {
@@ -670,6 +711,67 @@ func (p *PubSub) publishMessage(msg *Message) {
 	p.rt.Publish(msg.ReceivedFrom, msg.Message)
 }
 
+type addTopicReq struct {
+	topic *Topic
+	resp  chan *Topic
+}
+
+type rmTopicReq struct {
+	topic *Topic
+	resp  chan error
+}
+
+type TopicOptions struct{}
+
+type TopicOpt func(t *Topic) error
+
+// Join joins the topic and returns a Topic handle. Only one Topic handle should exist per topic, and Join will error if
+// the Topic handle already exists.
+func (p *PubSub) Join(topic string, opts ...TopicOpt) (*Topic, error) {
+	t, ok, err := p.tryJoin(topic, opts...)
+	if err != nil {
+		return nil, err
+	}
+
+	if !ok {
+		return nil, fmt.Errorf("topic already exists")
+	}
+
+	return t, nil
+}
+
+// tryJoin is an internal function that tries to join a topic
+// Returns the topic if it can be created or found
+// Returns true if the topic was newly created, false otherwise
+// Can be removed once pubsub.Publish() and pubsub.Subscribe() are removed
+func (p *PubSub) tryJoin(topic string, opts ...TopicOpt) (*Topic, bool, error) {
+	t := &Topic{
+		p:           p,
+		topic:       topic,
+		evtHandlers: make(map[*TopicEventHandler]struct{}),
+	}
+
+	for _, opt := range opts {
+		err := opt(t)
+		if err != nil {
+			return nil, false, err
+		}
+	}
+
+	resp := make(chan *Topic, 1)
+	t.p.addTopic <- &addTopicReq{
+		topic: t,
+		resp:  resp,
+	}
+	returnedTopic := <-resp
+
+	if returnedTopic != t {
+		return returnedTopic, false, nil
+	}
+
+	return t, true, nil
+}
+
 type addSubReq struct {
 	sub  *Subscription
 	resp chan *Subscription
@@ -680,6 +782,8 @@ type SubOpt func(sub *Subscription) error
 // Subscribe returns a new Subscription for the given topic.
 // Note that subscription is not an instanteneous operation. It may take some time
 // before the subscription is processed by the pubsub main loop and propagated to our peers.
+//
+// Deprecated: use pubsub.Join() and topic.Subscribe() instead
 func (p *PubSub) Subscribe(topic string, opts ...SubOpt) (*Subscription, error) {
 	td := pb.TopicDescriptor{Name: &topic}
 
@@ -687,6 +791,8 @@ func (p *PubSub) Subscribe(topic string, opts ...SubOpt) (*Subscription, error) 
 }
 
 // SubscribeByTopicDescriptor lets you subscribe a topic using a pb.TopicDescriptor.
+//
+// Deprecated: use pubsub.Join() and topic.Subscribe() instead
 func (p *PubSub) SubscribeByTopicDescriptor(td *pb.TopicDescriptor, opts ...SubOpt) (*Subscription, error) {
 	if td.GetAuth().GetMode() != pb.TopicDescriptor_AuthOpts_NONE {
 		return nil, fmt.Errorf("auth mode not yet supported")
@@ -696,30 +802,13 @@ func (p *PubSub) SubscribeByTopicDescriptor(td *pb.TopicDescriptor, opts ...SubO
 		return nil, fmt.Errorf("encryption mode not yet supported")
 	}
 
-	sub := &Subscription{
-		topic: td.GetName(),
-		ctx:   p.ctx,
-
-		ch:        make(chan *Message, 32),
-		peerEvtCh: make(chan PeerEvent, 1),
-		evtLog:    make(map[peer.ID]EventType),
-		evtLogCh:  make(chan struct{}, 1),
+	// ignore whether the topic was newly created or not, since either way we have a valid topic to work with
+	topic, _, err := p.tryJoin(td.GetName())
+	if err != nil {
+		return nil, err
 	}
 
-	for _, opt := range opts {
-		err := opt(sub)
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	out := make(chan *Subscription, 1)
-	p.addSub <- &addSubReq{
-		sub:  sub,
-		resp: out,
-	}
-
-	return <-out, nil
+	return topic.Subscribe(opts...)
 }
 
 type topicReq struct {
@@ -734,24 +823,16 @@ func (p *PubSub) GetTopics() []string {
 }
 
 // Publish publishes data to the given topic.
-func (p *PubSub) Publish(topic string, data []byte) error {
-	seqno := p.nextSeqno()
-	id := p.host.ID()
-	m := &pb.Message{
-		Data:     data,
-		TopicIDs: []string{topic},
-		From:     []byte(id),
-		Seqno:    seqno,
+//
+// Deprecated: use pubsub.Join() and topic.Publish() instead
+func (p *PubSub) Publish(topic string, data []byte, opts ...PubOpt) error {
+	// ignore whether the topic was newly created or not, since either way we have a valid topic to work with
+	t, _, err := p.tryJoin(topic)
+	if err != nil {
+		return err
 	}
-	if p.signKey != nil {
-		m.From = []byte(p.signID)
-		err := signMessage(p.signID, p.signKey, m)
-		if err != nil {
-			return err
-		}
-	}
-	p.publish <- &Message{m, id}
-	return nil
+
+	return t.Publish(context.TODO(), data, opts...)
 }
 
 func (p *PubSub) nextSeqno() []byte {

@@ -19,7 +19,7 @@ import (
 // get the initial RPC containing all of our subscriptions to send to new peers
 func (p *PubSub) getHelloPacket() *RPC {
 	var rpc RPC
-	for t := range p.myTopics {
+	for t := range p.mySubs {
 		as := &pb.RPC_SubOpts{
 			Topicid:   proto.String(t),
 			Subscribe: proto.Bool(true),
