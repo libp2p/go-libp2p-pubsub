@@ -49,6 +49,41 @@ func (rs *RandomSubRouter) RemovePeer(p peer.ID) {
 	delete(rs.peers, p)
 }
 
+func (rs *RandomSubRouter) EnoughPeers(topic string, suggested int) bool {
+	// check all peers in the topic
+	tmap, ok := rs.p.topics[topic]
+	if !ok {
+		return false
+	}
+
+	fsPeers := 0
+	rsPeers := 0
+
+	// count floodsub and randomsub peers
+	for p := range tmap {
+		switch rs.peers[p] {
+		case FloodSubID:
+			fsPeers++
+		case RandomSubID:
+			rsPeers++
+		}
+	}
+
+	if suggested == 0 {
+		suggested = RandomSubD
+	}
+
+	if fsPeers+rsPeers >= suggested {
+		return true
+	}
+
+	if rsPeers >= RandomSubD {
+		return true
+	}
+
+	return false
+}
+
 func (rs *RandomSubRouter) HandleRPC(rpc *RPC) {}
 
 func (rs *RandomSubRouter) Publish(from peer.ID, msg *pb.Message) {

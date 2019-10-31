@@ -82,6 +82,8 @@ func (t *Topic) Subscribe(opts ...SubOpt) (*Subscription, error) {
 
 	out := make(chan *Subscription, 1)
 
+	t.p.disc.Discover(sub.topic)
+
 	t.p.addSub <- &addSubReq{
 		sub:  sub,
 		resp: out,
@@ -90,7 +92,12 @@ func (t *Topic) Subscribe(opts ...SubOpt) (*Subscription, error) {
 	return <-out, nil
 }
 
-type PublishOptions struct{}
+// RouterReady is a function that decides if a router is ready to publish
+type RouterReady func(rt PubSubRouter, topic string) (bool, error)
+
+type PublishOptions struct {
+	ready RouterReady
+}
 
 type PubOpt func(pub *PublishOptions) error
 
@@ -120,9 +127,22 @@ func (t *Topic) Publish(ctx context.Context, data []byte, opts ...PubOpt) error 
 		}
 	}
 
+	if pub.ready != nil {
+		t.p.disc.Bootstrap(ctx, t.topic, pub.ready)
+	}
+
 	t.p.publish <- &Message{m, id}
 
 	return nil
+}
+
+// WithReadiness returns a publishing option for only publishing when the router is ready.
+// This option is not useful unless PubSub is also using WithDiscovery
+func WithReadiness(ready RouterReady) PubOpt {
+	return func(pub *PublishOptions) error {
+		pub.ready = ready
+		return nil
+	}
 }
 
 // Close closes down the topic. Will return an error unless there are no active event handlers or subscriptions.

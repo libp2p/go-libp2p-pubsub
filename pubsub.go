@@ -12,6 +12,7 @@ import (
 	pb "github.com/libp2p/go-libp2p-pubsub/pb"
 
 	"github.com/libp2p/go-libp2p-core/crypto"
+	"github.com/libp2p/go-libp2p-core/discovery"
 	"github.com/libp2p/go-libp2p-core/host"
 	"github.com/libp2p/go-libp2p-core/network"
 	"github.com/libp2p/go-libp2p-core/peer"
@@ -41,6 +42,8 @@ type PubSub struct {
 	rt PubSubRouter
 
 	val *validation
+
+	disc *discover
 
 	// incoming messages from other peers
 	incoming chan *RPC
@@ -129,6 +132,9 @@ type PubSubRouter interface {
 	AddPeer(peer.ID, protocol.ID)
 	// RemovePeer notifies the router that a peer has been disconnected.
 	RemovePeer(peer.ID)
+	// EnoughPeers returns whether the router needs more peers before it's ready to publish new records.
+	// Suggested (if greater than 0) is a suggested number of peers that the router should need.
+	EnoughPeers(topic string, suggested int) bool
 	// HandleRPC is invoked to process control messages in the RPC envelope.
 	// It is invoked after subscriptions and payload messages have been processed.
 	HandleRPC(*RPC)
@@ -167,6 +173,7 @@ func NewPubSub(ctx context.Context, h host.Host, rt PubSubRouter, opts ...Option
 		ctx:           ctx,
 		rt:            rt,
 		val:           newValidation(),
+		disc:          &discover{},
 		signID:        h.ID(),
 		signKey:       h.Peerstore().PrivKey(h.ID()),
 		signStrict:    true,
@@ -205,6 +212,10 @@ func NewPubSub(ctx context.Context, h host.Host, rt PubSubRouter, opts ...Option
 
 	if ps.signStrict && ps.signKey == nil {
 		return nil, fmt.Errorf("strict signature verification enabled but message signing is disabled")
+	}
+
+	if err := ps.disc.Start(ps); err != nil {
+		return nil, err
 	}
 
 	rt.Attach(ps)
@@ -271,6 +282,23 @@ func WithStrictSignatureVerification(required bool) Option {
 func WithBlacklist(b Blacklist) Option {
 	return func(p *PubSub) error {
 		p.blacklist = b
+		return nil
+	}
+}
+
+// WithDiscovery provides a discovery mechanism used to bootstrap and provide peers into PubSub
+func WithDiscovery(d discovery.Discovery, opts ...DiscoverOpt) Option {
+	return func(p *PubSub) error {
+		discoverOpts := defaultDiscoverOptions()
+		for _, opt := range opts {
+			err := opt(discoverOpts)
+			if err != nil {
+				return err
+			}
+		}
+
+		p.disc.discovery = &pubSubDiscovery{Discovery: d, opts: discoverOpts.opts}
+		p.disc.options = discoverOpts
 		return nil
 	}
 }
@@ -480,6 +508,7 @@ func (p *PubSub) handleRemoveSubscription(sub *Subscription) {
 
 	if len(subs) == 0 {
 		delete(p.mySubs, sub.topic)
+		p.disc.StopAdvertise(sub.topic)
 		p.announce(sub.topic, false)
 		p.rt.Leave(sub.topic)
 	}
@@ -495,6 +524,7 @@ func (p *PubSub) handleAddSubscription(req *addSubReq) {
 
 	// announce we want this topic
 	if len(subs) == 0 {
+		p.disc.Advertise(sub.topic)
 		p.announce(sub.topic, true)
 		p.rt.Join(sub.topic)
 	}

@@ -11,14 +11,18 @@ import (
 	"github.com/libp2p/go-libp2p-core/host"
 )
 
+func getGossipsub(ctx context.Context, h host.Host, opts ...Option) *PubSub {
+	ps, err := NewGossipSub(ctx, h, opts...)
+	if err != nil {
+		panic(err)
+	}
+	return ps
+}
+
 func getGossipsubs(ctx context.Context, hs []host.Host, opts ...Option) []*PubSub {
 	var psubs []*PubSub
 	for _, h := range hs {
-		ps, err := NewGossipSub(ctx, h, opts...)
-		if err != nil {
-			panic(err)
-		}
-		psubs = append(psubs, ps)
+		psubs = append(psubs, getGossipsub(ctx, h, opts...))
 	}
 	return psubs
 }

@@ -11,7 +11,8 @@ import (
 )
 
 const (
-	FloodSubID = protocol.ID("/floodsub/1.0.0")
+	FloodSubID              = protocol.ID("/floodsub/1.0.0")
+	FloodSubTopicSearchSize = 5
 )
 
 // NewFloodsubWithProtocols returns a new floodsub-enabled PubSub objecting using the protocols specified in ps.
@@ -43,6 +44,24 @@ func (fs *FloodSubRouter) Attach(p *PubSub) {
 func (fs *FloodSubRouter) AddPeer(peer.ID, protocol.ID) {}
 
 func (fs *FloodSubRouter) RemovePeer(peer.ID) {}
+
+func (fs *FloodSubRouter) EnoughPeers(topic string, suggested int) bool {
+	// check all peers in the topic
+	tmap, ok := fs.p.topics[topic]
+	if !ok {
+		return false
+	}
+
+	if suggested == 0 {
+		suggested = FloodSubTopicSearchSize
+	}
+
+	if len(tmap) >= suggested {
+		return true
+	}
+
+	return false
+}
 
 func (fs *FloodSubRouter) HandleRPC(rpc *RPC) {}
 
