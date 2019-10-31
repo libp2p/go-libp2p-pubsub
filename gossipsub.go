@@ -94,6 +94,35 @@ func (gs *GossipSubRouter) RemovePeer(p peer.ID) {
 	delete(gs.control, p)
 }
 
+func (gs *GossipSubRouter) EnoughPeers(topic string, suggested int) bool {
+	// check all peers in the topic
+	tmap, ok := gs.p.topics[topic]
+	if !ok {
+		return false
+	}
+
+	fsPeers, gsPeers := 0, 0
+	// floodsub peers
+	for p := range tmap {
+		if gs.peers[p] == FloodSubID {
+			fsPeers++
+		}
+	}
+
+	// gossipsub peers
+	gsPeers = len(gs.mesh[topic])
+
+	if suggested == 0 {
+		suggested = GossipSubDlo
+	}
+
+	if fsPeers+gsPeers >= suggested || gsPeers >= GossipSubDhi {
+		return true
+	}
+
+	return false
+}
+
 func (gs *GossipSubRouter) HandleRPC(rpc *RPC) {
 	ctl := rpc.GetControl()
 	if ctl == nil {
