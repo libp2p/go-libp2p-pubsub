@@ -23,6 +23,7 @@ type Topic struct {
 // Multiple event handlers may be created and will operate independently of each other
 func (t *Topic) EventHandler(opts ...TopicEventHandlerOpt) (*TopicEventHandler, error) {
 	h := &TopicEventHandler{
+		topic: t,
 		err: nil,
 
 		evtLog:   make(map[peer.ID]EventType),
