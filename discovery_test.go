@@ -108,6 +108,21 @@ func (d *mockDiscoveryClient) FindPeers(ctx context.Context, ns string, opts ...
 	return d.server.FindPeers(ns, options.Limit)
 }
 
+type dummyDiscovery struct{}
+
+func (d *dummyDiscovery) Advertise(ctx context.Context, ns string, opts ...discovery.Option) (time.Duration, error) {
+	return time.Hour, nil
+}
+
+func (d *dummyDiscovery) FindPeers(ctx context.Context, ns string, opts ...discovery.Option) (<-chan peer.AddrInfo, error) {
+	retCh := make(chan peer.AddrInfo)
+	go func() {
+		time.Sleep(time.Second)
+		close(retCh)
+	}()
+	return retCh, nil
+}
+
 func TestSimpleDiscovery(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
