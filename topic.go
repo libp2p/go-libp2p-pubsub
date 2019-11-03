@@ -51,7 +51,9 @@ func (t *Topic) EventHandler(opts ...TopicEventHandlerOpt) (*TopicEventHandler, 
 	}
 
 	done := make(chan struct{}, 1)
-	t.p.eval <- func() {
+
+	select {
+	case t.p.eval <- func() {
 		tmap := t.p.topics[t.topic]
 		for p := range tmap {
 			h.evtLog[p] = PeerJoin
@@ -61,6 +63,9 @@ func (t *Topic) EventHandler(opts ...TopicEventHandlerOpt) (*TopicEventHandler, 
 		t.evtHandlers[h] = struct{}{}
 		t.evtHandlerMux.Unlock()
 		done <- struct{}{}
+	}:
+	case <-t.p.ctx.Done():
+		return nil, t.p.ctx.Err()
 	}
 
 	<-done
@@ -104,9 +109,13 @@ func (t *Topic) Subscribe(opts ...SubOpt) (*Subscription, error) {
 
 	t.p.disc.Discover(sub.topic)
 
-	t.p.addSub <- &addSubReq{
+	select {
+	case t.p.addSub <- &addSubReq{
 		sub:  sub,
 		resp: out,
+	}:
+	case <-t.p.ctx.Done():
+		return nil, t.p.ctx.Err()
 	}
 
 	return <-out, nil
@@ -157,7 +166,11 @@ func (t *Topic) Publish(ctx context.Context, data []byte, opts ...PubOpt) error 
 		t.p.disc.Bootstrap(ctx, t.topic, pub.ready)
 	}
 
-	t.p.publish <- &Message{m, id}
+	select {
+	case t.p.publish <- &Message{m, id}:
+	case <-t.p.ctx.Done():
+		return t.p.ctx.Err()
+	}
 
 	return nil
 }
@@ -181,7 +194,13 @@ func (t *Topic) Close() error {
 	}
 
 	req := &rmTopicReq{t, make(chan error, 1)}
-	t.p.rmTopic <- req
+
+	select {
+	case t.p.rmTopic <- req:
+	case <-t.p.ctx.Done():
+		return t.p.ctx.Err()
+	}
+
 	err := <-req.resp
 
 	if err == nil {

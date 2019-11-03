@@ -789,9 +789,13 @@ func (p *PubSub) tryJoin(topic string, opts ...TopicOpt) (*Topic, bool, error) {
 	}
 
 	resp := make(chan *Topic, 1)
-	t.p.addTopic <- &addTopicReq{
+	select {
+	case t.p.addTopic <- &addTopicReq{
 		topic: t,
 		resp:  resp,
+	}:
+	case <-t.p.ctx.Done():
+		return nil, false, t.p.ctx.Err()
 	}
 	returnedTopic := <-resp
 
@@ -848,7 +852,11 @@ type topicReq struct {
 // GetTopics returns the topics this node is subscribed to.
 func (p *PubSub) GetTopics() []string {
 	out := make(chan []string, 1)
-	p.getTopics <- &topicReq{resp: out}
+	select {
+	case p.getTopics <- &topicReq{resp: out}:
+	case <-p.ctx.Done():
+		return nil
+	}
 	return <-out
 }
 
@@ -880,16 +888,23 @@ type listPeerReq struct {
 // ListPeers returns a list of peers we are connected to in the given topic.
 func (p *PubSub) ListPeers(topic string) []peer.ID {
 	out := make(chan []peer.ID)
-	p.getPeers <- &listPeerReq{
+	select {
+	case p.getPeers <- &listPeerReq{
 		resp:  out,
 		topic: topic,
+	}:
+	case <-p.ctx.Done():
+		return nil
 	}
 	return <-out
 }
 
 // BlacklistPeer blacklists a peer; all messages from this peer will be unconditionally dropped.
 func (p *PubSub) BlacklistPeer(pid peer.ID) {
-	p.blacklistPeer <- pid
+	select {
+	case p.blacklistPeer <- pid:
+	case <-p.ctx.Done():
+	}
 }
 
 // RegisterTopicValidator registers a validator for topic.
@@ -910,7 +925,11 @@ func (p *PubSub) RegisterTopicValidator(topic string, val Validator, opts ...Val
 		}
 	}
 
-	p.addVal <- addVal
+	select {
+	case p.addVal <- addVal:
+	case <-p.ctx.Done():
+		return p.ctx.Err()
+	}
 	return <-addVal.resp
 }
 
@@ -922,6 +941,10 @@ func (p *PubSub) UnregisterTopicValidator(topic string) error {
 		resp:  make(chan error, 1),
 	}
 
-	p.rmVal <- rmVal
+	select {
+	case p.rmVal <- rmVal:
+	case <-p.ctx.Done():
+		return p.ctx.Err()
+	}
 	return <-rmVal.resp
 }
