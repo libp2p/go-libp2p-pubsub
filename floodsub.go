@@ -31,6 +31,7 @@ func NewFloodSub(ctx context.Context, h host.Host, opts ...Option) (*PubSub, err
 type FloodSubRouter struct {
 	p         *PubSub
 	protocols []protocol.ID
+	tracer    *pubsubTracer
 }
 
 func (fs *FloodSubRouter) Protocols() []protocol.ID {
@@ -39,11 +40,18 @@ func (fs *FloodSubRouter) Protocols() []protocol.ID {
 
 func (fs *FloodSubRouter) Attach(p *PubSub) {
 	fs.p = p
+	if p.tracer != nil {
+		fs.tracer = p.tracer
+	}
 }
 
-func (fs *FloodSubRouter) AddPeer(peer.ID, protocol.ID) {}
+func (fs *FloodSubRouter) AddPeer(p peer.ID, proto protocol.ID) {
+	fs.tracer.AddPeer(p, proto)
+}
 
-func (fs *FloodSubRouter) RemovePeer(peer.ID) {}
+func (fs *FloodSubRouter) RemovePeer(p peer.ID) {
+	fs.tracer.RemovePeer(p)
+}
 
 func (fs *FloodSubRouter) EnoughPeers(topic string, suggested int) bool {
 	// check all peers in the topic
@@ -91,13 +99,19 @@ func (fs *FloodSubRouter) Publish(from peer.ID, msg *pb.Message) {
 
 		select {
 		case mch <- out:
+			fs.tracer.SendRPC(out, pid)
 		default:
 			log.Infof("dropping message to peer %s: queue full", pid)
+			fs.tracer.DropRPC(out, pid)
 			// Drop it. The peer is too slow.
 		}
 	}
 }
 
-func (fs *FloodSubRouter) Join(topic string) {}
+func (fs *FloodSubRouter) Join(topic string) {
+	fs.tracer.Join(topic)
+}
 
-func (fs *FloodSubRouter) Leave(topic string) {}
+func (fs *FloodSubRouter) Leave(topic string) {
+	fs.tracer.Join(topic)
+}
