@@ -446,6 +446,7 @@ func (p *PubSub) processLoop(ctx context.Context) {
 			p.handleIncomingRPC(rpc)
 
 		case msg := <-p.publish:
+			p.tracer.PublishMessage(msg)
 			p.pushMsg(msg)
 
 		case msg := <-p.sendMsg:

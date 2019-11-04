@@ -14,6 +14,12 @@ type pubsubTracer struct {
 	tracer EventTracer
 }
 
+func (t *pubsubTracer) PublishMessage(msg *Message) {
+	if t != nil {
+		// TODO
+	}
+}
+
 func (t *pubsubTracer) RejectMessage(msg *Message, reason string) {
 	if t != nil {
 		// TODO
