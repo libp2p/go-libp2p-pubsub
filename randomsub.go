@@ -40,9 +40,7 @@ func (rs *RandomSubRouter) Protocols() []protocol.ID {
 
 func (rs *RandomSubRouter) Attach(p *PubSub) {
 	rs.p = p
-	if p.tracer != nil {
-		rs.tracer = p.tracer
-	}
+	rs.tracer = p.tracer
 }
 
 func (rs *RandomSubRouter) AddPeer(p peer.ID, proto protocol.ID) {

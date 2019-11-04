@@ -40,9 +40,7 @@ func (fs *FloodSubRouter) Protocols() []protocol.ID {
 
 func (fs *FloodSubRouter) Attach(p *PubSub) {
 	fs.p = p
-	if p.tracer != nil {
-		fs.tracer = p.tracer
-	}
+	fs.tracer = p.tracer
 }
 
 func (fs *FloodSubRouter) AddPeer(p peer.ID, proto protocol.ID) {

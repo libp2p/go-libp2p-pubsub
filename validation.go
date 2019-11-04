@@ -92,9 +92,7 @@ func newValidation() *validation {
 // workers
 func (v *validation) Start(p *PubSub) {
 	v.p = p
-	if p.tracer != nil {
-		v.tracer = p.tracer
-	}
+	v.tracer = p.tracer
 	for i := 0; i < v.validateWorkers; i++ {
 		go v.validateWorker()
 	}

@@ -74,9 +74,7 @@ func (gs *GossipSubRouter) Protocols() []protocol.ID {
 
 func (gs *GossipSubRouter) Attach(p *PubSub) {
 	gs.p = p
-	if p.tracer != nil {
-		gs.tracer = p.tracer
-	}
+	gs.tracer = p.tracer
 	go gs.heartbeatTimer()
 }
 
