@@ -1,6 +1,7 @@
 package pubsub
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"sync"
@@ -38,7 +39,39 @@ func getTopicEvts(topics []*Topic, opts ...TopicEventHandlerOpt) []*TopicEventHa
 	return handlers
 }
 
-func TestTopicClose(t *testing.T) {
+func TestTopicCloseWithOpenSubscription(t *testing.T) {
+	var sub *Subscription
+	var err error
+	testTopicCloseWithOpenResource(t,
+		func(topic *Topic) {
+			sub, err = topic.Subscribe()
+			if err != nil {
+				t.Fatal(err)
+			}
+		},
+		func() {
+			sub.Cancel()
+		},
+	)
+}
+
+func TestTopicCloseWithOpenEventHandler(t *testing.T) {
+	var evts *TopicEventHandler
+	var err error
+	testTopicCloseWithOpenResource(t,
+		func(topic *Topic) {
+			evts, err = topic.EventHandler()
+			if err != nil {
+				t.Fatal(err)
+			}
+		},
+		func() {
+			evts.Cancel()
+		},
+	)
+}
+
+func testTopicCloseWithOpenResource(t *testing.T, openResource func(topic *Topic), closeResource func()) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -57,27 +90,150 @@ func TestTopicClose(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Try create and cancel topic while there's an outstanding subscription
+	// Try create and cancel topic while there's an outstanding subscription/event handler
 	topic, err = ps.Join(topicID)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	sub, err := topic.Subscribe()
-	if err != nil {
-		t.Fatal(err)
-	}
+	openResource(topic)
 
 	if err := topic.Close(); err == nil {
-		t.Fatal("expected an error closing a topic with an open subscription")
+		t.Fatal("expected an error closing a topic with an open resource")
 	}
 
-	// Check if the topic closes properly after canceling the outstanding subscription
-	sub.Cancel()
+	// Check if the topic closes properly after closing the resource
+	closeResource()
 	time.Sleep(time.Millisecond * 100)
 
 	if err := topic.Close(); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestTopicReuse(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	const numHosts = 2
+	topicID := "foobar"
+	hosts := getNetHosts(t, ctx, numHosts)
+
+	sender := getPubsub(ctx, hosts[0], WithDiscovery(&dummyDiscovery{}))
+	receiver := getPubsub(ctx, hosts[1])
+
+	connectAll(t, hosts)
+
+	// Sender creates topic
+	sendTopic, err := sender.Join(topicID)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Receiver creates and subscribes to the topic
+	receiveTopic, err := receiver.Join(topicID)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	sub, err := receiveTopic.Subscribe()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	firstMsg := []byte("1")
+	if err := sendTopic.Publish(ctx, firstMsg, WithReadiness(MinTopicSize(1))); err != nil {
+		t.Fatal(err)
+	}
+
+	msg, err := sub.Next(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bytes.Compare(msg.GetData(), firstMsg) != 0 {
+		t.Fatal("received incorrect message")
+	}
+
+	if err := sendTopic.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	// Recreate the same topic
+	newSendTopic, err := sender.Join(topicID)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Try sending data with original topic
+	illegalSend := []byte("illegal")
+	if err := sendTopic.Publish(ctx, illegalSend); err != ErrTopicClosed {
+		t.Fatal(err)
+	}
+
+	timeoutCtx, timeoutCancel := context.WithTimeout(ctx, time.Second*2)
+	defer timeoutCancel()
+	msg, err = sub.Next(timeoutCtx)
+	if err != context.DeadlineExceeded {
+		if err != nil {
+			t.Fatal(err)
+		}
+		if bytes.Compare(msg.GetData(), illegalSend) != 0 {
+			t.Fatal("received incorrect message from illegal topic")
+		}
+		t.Fatal("received message sent by illegal topic")
+	}
+	timeoutCancel()
+
+	// Try cancelling the new topic by using the original topic
+	if err := sendTopic.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	secondMsg := []byte("2")
+	if err := newSendTopic.Publish(ctx, secondMsg); err != nil {
+		t.Fatal(err)
+	}
+
+	timeoutCtx, timeoutCancel = context.WithTimeout(ctx, time.Second*2)
+	defer timeoutCancel()
+	msg, err = sub.Next(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bytes.Compare(msg.GetData(), secondMsg) != 0 {
+		t.Fatal("received incorrect message")
+	}
+}
+
+func TestTopicEventHandlerCancel(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	const numHosts = 5
+	topicID := "foobar"
+	hosts := getNetHosts(t, ctx, numHosts)
+	ps := getPubsub(ctx, hosts[0])
+
+	// Try create and cancel topic
+	topic, err := ps.Join(topicID)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	evts, err := topic.EventHandler()
+	if err != nil {
+		t.Fatal(err)
+	}
+	evts.Cancel()
+	timeoutCtx, timeoutCancel := context.WithTimeout(ctx, time.Second*2)
+	defer timeoutCancel()
+	connectAll(t, hosts)
+	_, err = evts.NextPeerEvent(timeoutCtx)
+	if err != context.DeadlineExceeded {
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Fatal("received event after cancel")
 	}
 }
 

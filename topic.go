@@ -2,6 +2,7 @@ package pubsub
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync"
 
@@ -10,6 +11,9 @@ import (
 	"github.com/libp2p/go-libp2p-core/peer"
 )
 
+// ErrTopicClosed is returned if a Topic is utilized after it has been closed
+var ErrTopicClosed = errors.New("this Topic is closed, try opening a new one")
+
 // Topic is the handle for a pubsub topic
 type Topic struct {
 	p     *PubSub
@@ -17,13 +21,23 @@ type Topic struct {
 
 	evtHandlerMux sync.RWMutex
 	evtHandlers   map[*TopicEventHandler]struct{}
+
+	mux    sync.RWMutex
+	closed bool
 }
 
 // EventHandler creates a handle for topic specific events
 // Multiple event handlers may be created and will operate independently of each other
 func (t *Topic) EventHandler(opts ...TopicEventHandlerOpt) (*TopicEventHandler, error) {
+	t.mux.RLock()
+	defer t.mux.RUnlock()
+	if t.closed {
+		return nil, ErrTopicClosed
+	}
+
 	h := &TopicEventHandler{
-		err: nil,
+		topic: t,
+		err:   nil,
 
 		evtLog:   make(map[peer.ID]EventType),
 		evtLogCh: make(chan struct{}, 1),
@@ -37,7 +51,9 @@ func (t *Topic) EventHandler(opts ...TopicEventHandlerOpt) (*TopicEventHandler, 
 	}
 
 	done := make(chan struct{}, 1)
-	t.p.eval <- func() {
+
+	select {
+	case t.p.eval <- func() {
 		tmap := t.p.topics[t.topic]
 		for p := range tmap {
 			h.evtLog[p] = PeerJoin
@@ -47,6 +63,9 @@ func (t *Topic) EventHandler(opts ...TopicEventHandlerOpt) (*TopicEventHandler, 
 		t.evtHandlers[h] = struct{}{}
 		t.evtHandlerMux.Unlock()
 		done <- struct{}{}
+	}:
+	case <-t.p.ctx.Done():
+		return nil, t.p.ctx.Err()
 	}
 
 	<-done
@@ -67,6 +86,12 @@ func (t *Topic) sendNotification(evt PeerEvent) {
 // Note that subscription is not an instanteneous operation. It may take some time
 // before the subscription is processed by the pubsub main loop and propagated to our peers.
 func (t *Topic) Subscribe(opts ...SubOpt) (*Subscription, error) {
+	t.mux.RLock()
+	defer t.mux.RUnlock()
+	if t.closed {
+		return nil, ErrTopicClosed
+	}
+
 	sub := &Subscription{
 		topic: t.topic,
 		ch:    make(chan *Message, 32),
@@ -84,9 +109,13 @@ func (t *Topic) Subscribe(opts ...SubOpt) (*Subscription, error) {
 
 	t.p.disc.Discover(sub.topic)
 
-	t.p.addSub <- &addSubReq{
+	select {
+	case t.p.addSub <- &addSubReq{
 		sub:  sub,
 		resp: out,
+	}:
+	case <-t.p.ctx.Done():
+		return nil, t.p.ctx.Err()
 	}
 
 	return <-out, nil
@@ -103,6 +132,12 @@ type PubOpt func(pub *PublishOptions) error
 
 // Publish publishes data to topic.
 func (t *Topic) Publish(ctx context.Context, data []byte, opts ...PubOpt) error {
+	t.mux.RLock()
+	defer t.mux.RUnlock()
+	if t.closed {
+		return ErrTopicClosed
+	}
+
 	seqno := t.p.nextSeqno()
 	id := t.p.host.ID()
 	m := &pb.Message{
@@ -131,7 +166,11 @@ func (t *Topic) Publish(ctx context.Context, data []byte, opts ...PubOpt) error 
 		t.p.disc.Bootstrap(ctx, t.topic, pub.ready)
 	}
 
-	t.p.publish <- &Message{m, id}
+	select {
+	case t.p.publish <- &Message{m, id}:
+	case <-t.p.ctx.Done():
+		return t.p.ctx.Err()
+	}
 
 	return nil
 }
@@ -148,13 +187,37 @@ func WithReadiness(ready RouterReady) PubOpt {
 // Close closes down the topic. Will return an error unless there are no active event handlers or subscriptions.
 // Does not error if the topic is already closed.
 func (t *Topic) Close() error {
+	t.mux.Lock()
+	defer t.mux.Unlock()
+	if t.closed {
+		return nil
+	}
+
 	req := &rmTopicReq{t, make(chan error, 1)}
-	t.p.rmTopic <- req
-	return <-req.resp
+
+	select {
+	case t.p.rmTopic <- req:
+	case <-t.p.ctx.Done():
+		return t.p.ctx.Err()
+	}
+
+	err := <-req.resp
+
+	if err == nil {
+		t.closed = true
+	}
+
+	return err
 }
 
 // ListPeers returns a list of peers we are connected to in the given topic.
 func (t *Topic) ListPeers() []peer.ID {
+	t.mux.RLock()
+	defer t.mux.RUnlock()
+	if t.closed {
+		return []peer.ID{}
+	}
+
 	return t.p.ListPeers(t.topic)
 }
 
