@@ -12,6 +12,7 @@ type EventTracer interface {
 
 type pubsubTracer struct {
 	tracer EventTracer
+	pid    peer.ID
 }
 
 func (t *pubsubTracer) PublishMessage(msg *Message) {
