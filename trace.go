@@ -31,6 +31,7 @@ func (t *pubsubTracer) PublishMessage(msg *Message) {
 		Timestamp: &now,
 		PublishMessage: &pb.TraceEvent_PublishMessage{
 			MessageID: []byte(msgID(msg.Message)),
+			Topics:    msg.Message.TopicIDs,
 		},
 	}
 
@@ -192,11 +193,14 @@ func (t *pubsubTracer) DropRPC(rpc *RPC, p peer.ID) {
 func traceRPCMeta(rpc *RPC) *pb.TraceEvent_RPCMeta {
 	rpcMeta := new(pb.TraceEvent_RPCMeta)
 
-	var mids [][]byte
+	var msgs []*pb.TraceEvent_MessageMeta
 	for _, m := range rpc.Publish {
-		mids = append(mids, []byte(msgID(m)))
+		msgs = append(msgs, &pb.TraceEvent_MessageMeta{
+			MessageID: []byte(msgID(m)),
+			Topics:    m.TopicIDs,
+		})
 	}
-	rpcMeta.MessageIDs = mids
+	rpcMeta.Messages = msgs
 
 	var subs []*pb.TraceEvent_SubMeta
 	for _, sub := range rpc.Subscriptions {

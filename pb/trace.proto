@@ -39,6 +39,7 @@ message TraceEvent {
 
   message PublishMessage {
     optional bytes messageID = 1;
+    repeated string topics = 2;
   }
 
   message RejectMessage {
@@ -99,9 +100,14 @@ message TraceEvent {
   }
 
   message RPCMeta {
-    repeated bytes messageIDs = 1;
+    repeated MessageMeta messages = 1;
     repeated SubMeta subscription = 2;
     optional ControlMeta control = 3;
+  }
+
+  message MessageMeta {
+    optional bytes messageID = 1;
+    repeated string topics = 2;
   }
 
   message SubMeta {
