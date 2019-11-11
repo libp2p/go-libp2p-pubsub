@@ -5,7 +5,7 @@ package pubsub.pb;
 message TraceEvent {
   optional Type type = 1;
   optional bytes peerID = 2;
-  optional uint64 timestap = 3;
+  optional int64 timestamp = 3;
 
   optional PublishMessage publishMessage = 4;
   optional RejectMessage rejectMessage = 5;
@@ -32,7 +32,7 @@ message TraceEvent {
     SEND_RPC = 7;
     DROP_RPC = 8;
     JOIN = 9;
-    LEAE = 10;
+    LEAVE = 10;
     GRAFT = 11;
     PRUNE = 12;
   }
@@ -100,8 +100,8 @@ message TraceEvent {
 
   message RPCMeta {
     repeated bytes messageIDs = 1;
-    repeated SubMeta subMeta = 2;
-    optional ControlMeta controlMeta = 3;
+    repeated SubMeta subscription = 2;
+    optional ControlMeta control = 3;
   }
 
   message SubMeta {
