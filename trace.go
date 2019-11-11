@@ -152,15 +152,41 @@ func (t *pubsubTracer) RecvRPC(rpc *RPC) {
 }
 
 func (t *pubsubTracer) SendRPC(rpc *RPC, p peer.ID) {
-	if t != nil {
-		// TODO
+	if t == nil {
+		return
 	}
+
+	now := time.Now().UnixNano()
+	evt := &pb.TraceEvent{
+		Type:      pb.TraceEvent_SEND_RPC.Enum(),
+		PeerID:    []byte(t.pid),
+		Timestamp: &now,
+		SendRPC: &pb.TraceEvent_SendRPC{
+			SendTo: []byte(rpc.from),
+			Meta:   traceRPCMeta(rpc),
+		},
+	}
+
+	t.tracer.Trace(evt)
 }
 
 func (t *pubsubTracer) DropRPC(rpc *RPC, p peer.ID) {
-	if t != nil {
-		// TODO
+	if t == nil {
+		return
 	}
+
+	now := time.Now().UnixNano()
+	evt := &pb.TraceEvent{
+		Type:      pb.TraceEvent_DROP_RPC.Enum(),
+		PeerID:    []byte(t.pid),
+		Timestamp: &now,
+		DropRPC: &pb.TraceEvent_DropRPC{
+			SendTo: []byte(rpc.from),
+			Meta:   traceRPCMeta(rpc),
+		},
+	}
+
+	t.tracer.Trace(evt)
 }
 
 func traceRPCMeta(rpc *RPC) *pb.TraceEvent_RPCMeta {
