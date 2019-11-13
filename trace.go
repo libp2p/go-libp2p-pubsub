@@ -11,7 +11,7 @@ import (
 
 // Generic event tracer interface
 type EventTracer interface {
-	Trace(evt interface{})
+	Trace(evt *pb.TraceEvent)
 }
 
 // pubsub tracer details

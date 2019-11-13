@@ -14,10 +14,10 @@ import (
 type basicTracer struct {
 	ch  chan struct{}
 	mx  sync.Mutex
-	buf []interface{}
+	buf []*pb.TraceEvent
 }
 
-func (t *basicTracer) Trace(evt interface{}) {
+func (t *basicTracer) Trace(evt *pb.TraceEvent) {
 	t.mx.Lock()
 	t.buf = append(t.buf, evt)
 	t.mx.Unlock()
@@ -57,7 +57,7 @@ func OpenJSONTracer(file string, flags int, perm os.FileMode) (*JSONTracer, erro
 }
 
 func (t *JSONTracer) doWrite() {
-	var buf []interface{}
+	var buf []*pb.TraceEvent
 	enc := json.NewEncoder(t.w)
 	for {
 		_, ok := <-t.ch
@@ -109,7 +109,7 @@ func OpenPBTracer(file string, flags int, perm os.FileMode) (*PBTracer, error) {
 }
 
 func (t *PBTracer) doWrite() {
-	var buf []interface{}
+	var buf []*pb.TraceEvent
 	w := ggio.NewDelimitedWriter(t.w)
 	for {
 		_, ok := <-t.ch
@@ -121,7 +121,7 @@ func (t *PBTracer) doWrite() {
 		t.mx.Unlock()
 
 		for i, evt := range buf {
-			err := w.WriteMsg(evt.(*pb.TraceEvent))
+			err := w.WriteMsg(evt)
 			if err != nil {
 				log.Errorf("error writing event trace: %s", err.Error())
 			}
