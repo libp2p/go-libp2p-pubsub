@@ -139,3 +139,11 @@ message TraceEvent {
     optional string topic = 1;
   }
 }
+
+message TraceEventBatch {
+  repeated TraceEvent batch = 1;
+}
+
+message CompressedTraceEventBatch {
+  optional bytes data = 1;
+}

@@ -1,14 +1,24 @@
 package pubsub
 
 import (
+	"bytes"
+	"compress/gzip"
+	"context"
 	"encoding/json"
 	"io"
 	"os"
 	"sync"
-
-	ggio "github.com/gogo/protobuf/io"
+	"time"
 
 	pb "github.com/libp2p/go-libp2p-pubsub/pb"
+
+	"github.com/libp2p/go-libp2p-core/helpers"
+	"github.com/libp2p/go-libp2p-core/host"
+	"github.com/libp2p/go-libp2p-core/network"
+	"github.com/libp2p/go-libp2p-core/peer"
+	"github.com/libp2p/go-libp2p-core/protocol"
+
+	ggio "github.com/gogo/protobuf/io"
 )
 
 type basicTracer struct {
@@ -136,3 +146,152 @@ func (t *PBTracer) doWrite() {
 }
 
 var _ EventTracer = (*PBTracer)(nil)
+
+const RemoteTracerProtoID = protocol.ID("/libp2p/pubsub/tracer/1.0.0")
+
+// RemoteTracer is a tracer that sends trace events to a remote peer
+type RemoteTracer struct {
+	basicTracer
+	ctx  context.Context
+	host host.Host
+	pi   peer.AddrInfo
+}
+
+// NewRemoteTracer constructs a RemoteTracer, tracing to the peer identified by pi
+func NewRemoteTracer(ctx context.Context, host host.Host, pi peer.AddrInfo) (*RemoteTracer, error) {
+	tr := &RemoteTracer{ctx: ctx, host: host, pi: pi, basicTracer: basicTracer{ch: make(chan struct{}, 1)}}
+	go tr.doWrite()
+	return tr, nil
+}
+
+func (t *RemoteTracer) doWrite() {
+	var buf []*pb.TraceEvent
+
+	s, err := t.openStream()
+	if err != nil {
+		log.Errorf("error opening remote tracer stream: %s", err.Error())
+		return
+	}
+
+	w := ggio.NewDelimitedWriter(s)
+
+	for {
+		_, ok := <-t.ch
+
+		// nil out the buffer to gc events
+		for i := range buf {
+			buf[i] = nil
+		}
+
+		t.mx.Lock()
+		tmp := t.buf
+		t.buf = buf[:0]
+		buf = tmp
+		t.mx.Unlock()
+
+		if len(buf) == 0 {
+			goto end
+		}
+
+		{
+			batch := &pb.TraceEventBatch{Batch: buf}
+			blob, err := batch.Marshal()
+			if err != nil {
+				log.Errorf("error marshalling trace event batch: %s", err.Error())
+				goto end
+			}
+
+			// compress batch
+			var cbuf bytes.Buffer
+			gzipW := gzip.NewWriter(&cbuf)
+			_, err = gzipW.Write(blob)
+			if err != nil {
+				log.Errorf("error compressing trace event batch: %s", err.Error())
+				goto end
+			}
+			err = gzipW.Close()
+			if err != nil {
+				log.Errorf("error compressing trace event batch: %s", err.Error())
+				goto end
+			}
+
+			cblob := cbuf.Bytes()
+			cbatch := &pb.CompressedTraceEventBatch{Data: cblob}
+			err = w.WriteMsg(cbatch)
+			if err != nil {
+				log.Errorf("error writing trace event data: %s", err.Error())
+				if !ok {
+					goto end
+				}
+
+				// reset output
+				s.Reset()
+				s, err = t.openStream()
+				if err != nil {
+					log.Errorf("error opening remote tracer stream: %s", err.Error())
+					return
+				}
+				w = ggio.NewDelimitedWriter(s)
+			}
+		}
+
+	end:
+		if !ok {
+			helpers.FullClose(s)
+			return
+		}
+	}
+}
+
+func (t *RemoteTracer) connect() error {
+	for {
+		ctx, cancel := context.WithTimeout(t.ctx, time.Minute)
+		err := t.host.Connect(ctx, t.pi)
+		cancel()
+		if err != nil {
+			if t.ctx.Err() != nil {
+				return err
+			}
+
+			// wait a minute and try again, to account for transient server downtime
+			select {
+			case <-time.After(time.Minute):
+				continue
+			case <-t.ctx.Done():
+				return t.ctx.Err()
+			}
+		}
+
+		return nil
+	}
+}
+
+func (t *RemoteTracer) openStream() (network.Stream, error) {
+	for {
+		err := t.connect()
+		if err != nil {
+			return nil, err
+		}
+
+		ctx, cancel := context.WithTimeout(t.ctx, time.Minute)
+		s, err := t.host.NewStream(ctx, t.pi.ID, RemoteTracerProtoID)
+		cancel()
+		if err != nil {
+			if t.ctx.Err() != nil {
+				return nil, err
+			}
+
+			// wait a minute and try again, to account for transient server downtime
+			select {
+			case <-time.After(time.Minute):
+				continue
+			case <-t.ctx.Done():
+				return nil, t.ctx.Err()
+			}
+		}
+
+		return s, nil
+	}
+}
+
+var _ EventTracer = (*RemoteTracer)(nil)
