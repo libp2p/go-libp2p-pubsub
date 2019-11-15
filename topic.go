@@ -24,6 +24,8 @@ type Topic struct {
 
 	mux    sync.RWMutex
 	closed bool
+
+	relay *Relay
 }
 
 // EventHandler creates a handle for topic specific events
@@ -93,9 +95,10 @@ func (t *Topic) Subscribe(opts ...SubOpt) (*Subscription, error) {
 	}
 
 	sub := &Subscription{
-		topic: t.topic,
-		ch:    make(chan *Message, 32),
-		ctx:   t.p.ctx,
+		topicHandle: t,
+		topic:       t.topic,
+		ch:          make(chan *Message, 32),
+		ctx:         t.p.ctx,
 	}
 
 	for _, opt := range opts {
@@ -105,6 +108,67 @@ func (t *Topic) Subscribe(opts ...SubOpt) (*Subscription, error) {
 		}
 	}
 
+	s, err := t.addSubscriptionToPubSub(sub)
+	if err != nil {
+		return nil, err
+	}
+	return s, err
+}
+
+// Relay tries to create a `Relay` for a topic which means that
+// we will ONLY forward messages for this topic & not "consume" the messages
+// Only one Relay will exist for a topic
+// Returns the Relay if it can be created or found
+// Returns true if the Relay was newly created, false otherwise
+// Returns false if an error occurs
+func (t *Topic) Relay(opts ...RelayOpt) (*Relay, bool, error) {
+	t.mux.Lock()
+	defer t.mux.Unlock()
+	if t.closed {
+		return nil, false, ErrTopicClosed
+	}
+
+	// check if we already have a relay for this topic
+	if t.relay != nil {
+		return t.relay, false, nil
+	}
+
+	sub := &Subscription{
+		topicHandle: t,
+		topic:       t.topic,
+		ctx:         t.p.ctx,
+		relayOnly:   true,
+	}
+
+	r := &Relay{sub}
+
+	// apply options to relay
+	for _, opt := range opts {
+		err := opt(r)
+		if err != nil {
+			return nil, false, err
+		}
+	}
+
+	_, err := t.addSubscriptionToPubSub(sub)
+	if err != nil {
+		return nil, false, err
+	}
+
+	t.relay = r
+	return r, true, err
+}
+
+func (t *Topic) removeRelay(r *Relay) {
+	t.mux.Lock()
+	defer t.mux.Unlock()
+
+	if t.relay == r {
+		t.relay = nil
+	}
+}
+
+func (t *Topic) addSubscriptionToPubSub(sub *Subscription) (*Subscription, error) {
 	out := make(chan *Subscription, 1)
 
 	t.p.disc.Discover(sub.topic)

@@ -602,6 +602,9 @@ func (p *PubSub) notifySubs(msg *Message) {
 	for _, topic := range msg.GetTopicIDs() {
 		subs := p.mySubs[topic]
 		for f := range subs {
+			if f.relayOnly {
+				continue
+			}
 			select {
 			case f.ch <- msg:
 			default:

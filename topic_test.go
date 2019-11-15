@@ -4,11 +4,13 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"math/rand"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/libp2p/go-libp2p-core/peer"
+	"github.com/stretchr/testify/require"
 )
 
 func getTopics(psubs []*PubSub, topicID string, opts ...TopicOpt) []*Topic {
@@ -109,6 +111,128 @@ func testTopicCloseWithOpenResource(t *testing.T, openResource func(topic *Topic
 	if err := topic.Close(); err != nil {
 		t.Fatal(err)
 	}
+}
+
+func TestTopicRelay(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	hosts := getNetHosts(t, ctx, 8)
+	topicHandles := getTopics(getPubsubs(ctx, hosts), "foobar")
+
+	connect(t, hosts[0], hosts[1])
+	connect(t, hosts[1], hosts[2])
+	connect(t, hosts[2], hosts[3])
+	connect(t, hosts[1], hosts[4])
+
+	connect(t, hosts[0], hosts[5])
+	connect(t, hosts[5], hosts[6])
+	connect(t, hosts[6], hosts[7])
+	/*
+		R= Relay ONLY
+		S = Subscriber
+			[0](R) -> [1](R) -> [2](R) -> [3](S)
+			 |      L->[4](S)
+			 v
+			[5](R)
+			 |
+			 v
+			[6](R) -> [7](S)
+	*/
+
+	var subs []*Subscription
+	var relays []*Relay
+	for i, ps := range topicHandles {
+		if i == 3 || i == 4 || i == 7 {
+			ch, err := ps.Subscribe()
+			require.NoError(t, err)
+			subs = append(subs, ch)
+		} else {
+			r, b, err := ps.Relay()
+			require.True(t, b)
+			require.NoError(t, err)
+			relays = append(relays, r)
+		}
+	}
+
+	// wait for heartbeats to build mesh
+	time.Sleep(time.Second * 2)
+
+	// assert that  published message is received
+	for i := 0; i < 100; i++ {
+		msg := []byte(fmt.Sprintf("%d it's not a floooooood %d", i, i))
+
+		owner := rand.Intn(len(topicHandles))
+
+		require.NoError(t, topicHandles[owner].Publish(ctx, msg))
+
+		for _, sub := range subs {
+			got, err := sub.Next(ctx)
+			require.NoError(t, err)
+			require.Equal(t, msg, got.Data)
+		}
+	}
+
+	// cancel relays
+	for _, r := range relays {
+		r.Cancel()
+	}
+}
+
+func TestRelayReUse(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	hosts := getNetHosts(t, ctx, 1)
+
+	sender := getPubsub(ctx, hosts[0], WithDiscovery(&dummyDiscovery{}))
+	topicID := "foobar"
+	sendTopic, err := sender.Join(topicID)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// create relay
+	r1, b, err := sendTopic.Relay()
+	require.True(t, b)
+	require.NoError(t, err)
+	require.NotNil(t, r1)
+
+	// try to create another relay..should get back the first relay
+	r2, b, err := sendTopic.Relay()
+	require.False(t, b)
+	require.NoError(t, err)
+	require.Equal(t, r1, r2)
+
+	// cancel the first relay
+	r1.Cancel()
+
+	// create relay should now create a new relay
+	r3, b, err := sendTopic.Relay()
+	require.True(t, b)
+	require.NoError(t, err)
+	require.NotEqual(t, r1, r3)
+}
+
+func TestRelayOnClosedTopic(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	hosts := getNetHosts(t, ctx, 1)
+
+	sender := getPubsub(ctx, hosts[0], WithDiscovery(&dummyDiscovery{}))
+	topicID := "foobar"
+	sendTopic, err := sender.Join(topicID)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	require.NoError(t, sendTopic.Close())
+	r, b, err := sendTopic.Relay()
+
+	require.False(t, b)
+	require.Nil(t, r)
+	require.Equal(t, ErrTopicClosed, err)
 }
 
 func TestTopicReuse(t *testing.T) {

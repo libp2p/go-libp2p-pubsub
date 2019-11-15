@@ -7,11 +7,14 @@ import (
 // Subscription handles the details of a particular Topic subscription.
 // There may be many subscriptions for a given Topic.
 type Subscription struct {
-	topic    string
-	ch       chan *Message
-	cancelCh chan<- *Subscription
-	ctx      context.Context
-	err      error
+	topicHandle *Topic
+	topic       string
+	ch          chan *Message
+	cancelCh    chan<- *Subscription
+	ctx         context.Context
+	err         error
+
+	relayOnly bool // message channel "ch" will be nil if this is set to true
 }
 
 // Topic returns the topic string associated with the Subscription
@@ -43,5 +46,7 @@ func (sub *Subscription) Cancel() {
 }
 
 func (sub *Subscription) close() {
-	close(sub.ch)
+	if !sub.relayOnly {
+		close(sub.ch)
+	}
 }
