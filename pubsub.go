@@ -241,8 +241,8 @@ func NewPubSub(ctx context.Context, h host.Host, rt PubSubRouter, opts ...Option
 // We start dropping messages to a peer if the outbound queue if full
 func WithPeerOutboundQueueSize(size int) Option {
 	return func(p *PubSub) error {
-		if size < 0 {
-			return errors.New("outbound queue size can't be negative")
+		if size <= 0 {
+			return errors.New("outbound queue size must always be positive")
 		}
 		p.peerOutboundQueueSize = size
 		return nil
