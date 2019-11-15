@@ -155,6 +155,7 @@ type PubSubRouter interface {
 type Message struct {
 	*pb.Message
 	ReceivedFrom peer.ID
+	VaidatorData interface{}
 }
 
 func (m *Message) GetFrom() peer.ID {
@@ -705,7 +706,7 @@ func (p *PubSub) handleIncomingRPC(rpc *RPC) {
 			continue
 		}
 
-		msg := &Message{pmsg, rpc.from}
+		msg := &Message{pmsg, rpc.from, nil}
 		p.pushMsg(msg)
 	}
 
