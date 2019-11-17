@@ -175,7 +175,6 @@ func (t *Topic) Publish(ctx context.Context, data []byte, opts ...PubOpt) error 
 	}
 
 	var waitForMsgQueuedNotifications bool
-	var notifChan chan *msgQueuedNotification
 	var msgQueuedTargetAchieved chan error
 	// setup for receiving notifications when a message is added to a peer's outbound queue
 	if pub.nQueuedNotifs != 0 {
@@ -183,7 +182,7 @@ func (t *Topic) Publish(ctx context.Context, data []byte, opts ...PubOpt) error 
 
 		// create & register the listener
 		listenerContext, cancel := context.WithCancel(ctx)
-		notifChan = make(chan *msgQueuedNotification)
+		notifChan := make(chan *msgQueuedNotification)
 		listener := &msgQueuedEventListener{listenerContext, notifChan}
 
 		done := make(chan struct{}, 1)

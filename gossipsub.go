@@ -279,7 +279,7 @@ func (gs *GossipSubRouter) Publish(from peer.ID, msg *pb.Message) {
 
 	out := rpcWithMessages(msg)
 
-	// fetch channel we can write to after we attempt to add a message to on a peer's outbound queue
+	// fetch listener to send notification to after we attempt to add a message to a peer's outbound queue
 	listener, hasListener := gs.p.msgQueuedEventListeners[msgID(msg)]
 
 	// add message to the outbound queues for receiver peers
