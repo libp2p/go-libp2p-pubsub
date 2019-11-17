@@ -135,7 +135,7 @@ func TestPublishWithWaitUntilQueued(t *testing.T) {
 		[5]
 		 |
 		 v
-		[6] -> [7](
+		[6] -> [7]
 	*/
 
 	var subs []*Subscription
@@ -150,21 +150,31 @@ func TestPublishWithWaitUntilQueued(t *testing.T) {
 
 	tests := map[string]struct {
 		publisher     int
+		waitOpt       PublishWaitUntilQueued
 		nPeers        int
 		expectedError error
 	}{
-		"ErrFailedToAddToPeerQueue if we want more notifications than is possible ": {
+		"ErrFailedToAddToPeerQueue for PublishWaitUntilNQueued": {
 			5,
-			3,
+			PublishWaitUntilNQueued,
+			3, // not possible because peer 5 has only two neighbours
 			ErrFailedToAddToPeerQueue,
 		},
-		"Success if we get enough notifications": {
+		"Success for PublishWaitUntilNQueued": {
 			1,
+			PublishWaitUntilNQueued,
 			3,
 			nil,
 		},
-		"Successful if we want to wait for all peers": {
+		"Success for PublishWaitUntilAllQueued": {
 			0,
+			PublishWaitUntilAllQueued,
+			-1,
+			nil,
+		},
+		"Successful for PublishWaitUntilOneQueued": {
+			7,
+			PublishWaitUntilOneQueued,
 			-1,
 			nil,
 		},
@@ -174,7 +184,7 @@ func TestPublishWithWaitUntilQueued(t *testing.T) {
 		for i := 0; i < 100; i++ {
 			msg := []byte(fmt.Sprintf("%d it's not a floooooood %d", i, i))
 
-			require.Equal(t, test.expectedError, topicHandles[test.publisher].Publish(ctx, msg, WithWaitUntilQueued(test.nPeers)), name)
+			require.Equal(t, test.expectedError, topicHandles[test.publisher].Publish(ctx, msg, WithWaitUntilQueued(test.waitOpt, test.nPeers)), name)
 
 			for _, sub := range subs {
 				got, err := sub.Next(ctx)

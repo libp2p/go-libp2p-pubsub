@@ -13,6 +13,15 @@ import (
 	pkgerrors "github.com/pkg/errors"
 )
 
+type PublishWaitUntilQueued int
+
+const (
+	NoOp PublishWaitUntilQueued = iota
+	PublishWaitUntilOneQueued
+	PublishWaitUntilAllQueued
+	PublishWaitUntilNQueued
+)
+
 // ErrTopicClosed is returned if a Topic is utilized after it has been closed
 var ErrTopicClosed = errors.New("this Topic is closed, try opening a new one")
 
@@ -132,8 +141,13 @@ func (t *Topic) Subscribe(opts ...SubOpt) (*Subscription, error) {
 type RouterReady func(rt PubSubRouter, topic string) (bool, error)
 
 type PublishOptions struct {
-	ready         RouterReady
-	nQueuedNotifs int
+	ready              RouterReady
+	waitUntilQueuedOpt waitUntilQueuedOpt
+}
+
+type waitUntilQueuedOpt struct {
+	opt      PublishWaitUntilQueued
+	numPeers int
 }
 
 type PubOpt func(pub *PublishOptions) error
@@ -174,11 +188,9 @@ func (t *Topic) Publish(ctx context.Context, data []byte, opts ...PubOpt) error 
 		t.p.disc.Bootstrap(ctx, t.topic, pub.ready)
 	}
 
-	var waitForMsgQueuedNotifications bool
 	var msgQueuedTargetAchieved chan error
 	// setup for receiving notifications when a message is added to a peer's outbound queue
-	if pub.nQueuedNotifs != 0 {
-		waitForMsgQueuedNotifications = true
+	if pub.waitUntilQueuedOpt.opt != NoOp {
 
 		// create & register the listener
 		listenerContext, cancel := context.WithCancel(ctx)
@@ -226,17 +238,17 @@ func (t *Topic) Publish(ctx context.Context, data []byte, opts ...PubOpt) error 
 					if !ok {
 						// notification channel is closed
 
-						if pub.nQueuedNotifs == -1 {
+						if pub.waitUntilQueuedOpt.opt == PublishWaitUntilAllQueued {
 							if len(failedPeers) == 0 {
 								msgQueuedTargetAchieved <- nil
 							} else {
-								topicHandleLog.Warningf("Publish: failed on the -1/ALL option: failed to add messageID %s to queues for peers %v",
+								topicHandleLog.Warningf("publish: PublishWaitUntilAllQueued failed: failed to add messageID %s to queues for peers %v",
 									msgID(m), failedPeers)
 
 								msgQueuedTargetAchieved <- ErrFailedToAddToPeerQueue
 							}
 						} else {
-							topicHandleLog.Warningf("Publish: did not achieve desired count: "+
+							topicHandleLog.Warningf("publish: did not achieve desired count: "+
 								"failed to add messageID %s to queues for peers %v, success count is %d", msgID(m), failedPeers, nSuccess)
 
 							msgQueuedTargetAchieved <- ErrFailedToAddToPeerQueue
@@ -247,8 +259,8 @@ func (t *Topic) Publish(ctx context.Context, data []byte, opts ...PubOpt) error 
 							failedPeers = append(failedPeers, notif.peer)
 						} else {
 							nSuccess++
-							if pub.nQueuedNotifs != -1 {
-								if nSuccess == pub.nQueuedNotifs {
+							if pub.waitUntilQueuedOpt.opt != PublishWaitUntilAllQueued {
+								if nSuccess == pub.waitUntilQueuedOpt.numPeers {
 									msgQueuedTargetAchieved <- nil
 									return
 								}
@@ -267,7 +279,7 @@ func (t *Topic) Publish(ctx context.Context, data []byte, opts ...PubOpt) error 
 	}
 
 	// wait for msg queued notifications
-	if waitForMsgQueuedNotifications {
+	if pub.waitUntilQueuedOpt.opt != NoOp {
 		select {
 		case err := <-msgQueuedTargetAchieved:
 			return err
@@ -291,18 +303,25 @@ func WithReadiness(ready RouterReady) PubOpt {
 }
 
 // WithWaitUntilQueued blocks the publish until the message has been added to the outbound message queue for
-// as many peers as the arg indicates
-// A value of -1 means all peers in mesh/fanout for gossipsub & all subscribed peers in floodsub
-// Please note that if nPeers is -1, the behavior is not fail fast
-// If we fail to achieve the desired target because of full outbound peer queues, Publish will return ErrFailedToAddToPeerQueues
-// However, the message could still have been added to the outbound queue for other peers
-func WithWaitUntilQueued(nPeers int) PubOpt {
+// as many peers as the arg indicates.
+// PublishWaitUntilOneQueued waits till the msg gets queued on atleast one peer -> numPeers value is ignored.
+// PublishWaitUntilNQueued waits till the msg gets queued on atleast 'numPeers'.
+// PublishWaitUntilAllQueued waits till the message gets queued on all peers in mesh/fanout for gossipsub & all subscribed peers in floodsub
+// and the numPeers value is ignored and the behaviour is not fail fast i.e. Publish
+// will not return even if we fail to add the message to any one peer's outbound queue.
+// If we fail to achieve the desired target, Publish will return ErrFailedToAddToPeerQueues.
+// However, the message could still have been added to the outbound queue for other peers.
+func WithWaitUntilQueued(opt PublishWaitUntilQueued, numPeers int) PubOpt {
 	return func(pub *PublishOptions) error {
-		if nPeers < -1 {
-			return errors.New("nPeers should be greater than or equal to -1, please refer to the docs for WithWaitUntilQueued")
+		pub.waitUntilQueuedOpt.opt = opt
+		if opt == PublishWaitUntilOneQueued {
+			pub.waitUntilQueuedOpt.numPeers = 1
+		} else if opt == PublishWaitUntilNQueued {
+			if numPeers <= 0 {
+				return errors.New("numPeers should be positive for the PublishWaitUntilNQueued option")
+			}
+			pub.waitUntilQueuedOpt.numPeers = numPeers
 		}
-
-		pub.nQueuedNotifs = nPeers
 		return nil
 	}
 }
