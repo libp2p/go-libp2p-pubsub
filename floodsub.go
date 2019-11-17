@@ -79,6 +79,11 @@ func (fs *FloodSubRouter) Publish(from peer.ID, msg *pb.Message) {
 	}
 
 	out := rpcWithMessages(msg)
+
+	// fetch channel we can write to after we attempt to add a message to on a peer's outbound queue
+	listener, hasListener := fs.p.msgQueuedEventListeners[msgID(msg)]
+
+	// start adding the message to the outbound queue for receiver peers
 	for pid := range tosend {
 		if pid == from || pid == peer.ID(msg.GetFrom()) {
 			continue
@@ -89,12 +94,26 @@ func (fs *FloodSubRouter) Publish(from peer.ID, msg *pb.Message) {
 			continue
 		}
 
+		var success bool
 		select {
 		case mch <- out:
+			success = true
 		default:
+			success = false
 			log.Infof("dropping message to peer %s: queue full", pid)
 			// Drop it. The peer is too slow.
 		}
+
+		if hasListener {
+			select {
+			case <-listener.ctx.Done():
+			case listener.notifChan <- &msgQueuedNotification{pid, success}:
+			}
+		}
+	}
+
+	if hasListener {
+		close(listener.notifChan)
 	}
 }
 

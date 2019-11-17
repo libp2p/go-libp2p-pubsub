@@ -6,13 +6,20 @@ import (
 	"fmt"
 	"sync"
 
+	logging "github.com/ipfs/go-log"
 	pb "github.com/libp2p/go-libp2p-pubsub/pb"
 
 	"github.com/libp2p/go-libp2p-core/peer"
+	pkgerrors "github.com/pkg/errors"
 )
 
 // ErrTopicClosed is returned if a Topic is utilized after it has been closed
 var ErrTopicClosed = errors.New("this Topic is closed, try opening a new one")
+
+// ErrFailedToAddToPeerQueue is returned if we fail to achieve the desired target for WithWaitUntilQueued because of full outbound peer queues
+var ErrFailedToAddToPeerQueue = errors.New("failed to achieve desired WithWaitUntilQueued target")
+
+var topicHandleLog = logging.Logger("topicHandle")
 
 // Topic is the handle for a pubsub topic
 type Topic struct {
@@ -125,7 +132,8 @@ func (t *Topic) Subscribe(opts ...SubOpt) (*Subscription, error) {
 type RouterReady func(rt PubSubRouter, topic string) (bool, error)
 
 type PublishOptions struct {
-	ready RouterReady
+	ready         RouterReady
+	nQueuedNotifs int
 }
 
 type PubOpt func(pub *PublishOptions) error
@@ -166,10 +174,109 @@ func (t *Topic) Publish(ctx context.Context, data []byte, opts ...PubOpt) error 
 		t.p.disc.Bootstrap(ctx, t.topic, pub.ready)
 	}
 
+	var waitForMsgQueuedNotifications bool
+	var notifChan chan *msgQueuedNotification
+	var msgQueuedTargetAchieved chan error
+	// setup for receiving notifications when a message is added to a peer's outbound queue
+	if pub.nQueuedNotifs != 0 {
+		waitForMsgQueuedNotifications = true
+
+		// create & register the listener
+		listenerContext, cancel := context.WithCancel(ctx)
+		notifChan = make(chan *msgQueuedNotification)
+		listener := &msgQueuedEventListener{listenerContext, notifChan}
+
+		done := make(chan struct{}, 1)
+		select {
+		case t.p.eval <- func() {
+			t.p.msgQueuedEventListeners[msgID(m)] = listener
+			done <- struct{}{}
+		}:
+		case <-t.p.ctx.Done():
+			return t.p.ctx.Err()
+		}
+		<-done
+
+		// remove the listener & cancel the listener context before we return
+		defer func() {
+			cancel()
+
+			done := make(chan struct{}, 1)
+			select {
+			case t.p.eval <- func() {
+				delete(t.p.msgQueuedEventListeners, msgID(m))
+				done <- struct{}{}
+			}:
+			case <-t.p.ctx.Done():
+				return
+			}
+			<-done
+		}()
+
+		// start listening to notifications
+		msgQueuedTargetAchieved = make(chan error, 1)
+		go func() {
+			nSuccess := 0
+			var failedPeers []peer.ID
+
+			for {
+				select {
+				case <-listenerContext.Done():
+					return
+				case notif, ok := <-notifChan:
+					if !ok {
+						// notification channel is closed
+
+						if pub.nQueuedNotifs == -1 {
+							if len(failedPeers) == 0 {
+								msgQueuedTargetAchieved <- nil
+							} else {
+								topicHandleLog.Warningf("Publish: failed on the -1/ALL option: failed to add messageID %s to queues for peers %v",
+									msgID(m), failedPeers)
+
+								msgQueuedTargetAchieved <- ErrFailedToAddToPeerQueue
+							}
+						} else {
+							topicHandleLog.Warningf("Publish: did not achieve desired count: "+
+								"failed to add messageID %s to queues for peers %v, success count is %d", msgID(m), failedPeers, nSuccess)
+
+							msgQueuedTargetAchieved <- ErrFailedToAddToPeerQueue
+						}
+						return
+					} else {
+						if !notif.success {
+							failedPeers = append(failedPeers, notif.peer)
+						} else {
+							nSuccess++
+							if pub.nQueuedNotifs != -1 {
+								if nSuccess == pub.nQueuedNotifs {
+									msgQueuedTargetAchieved <- nil
+									return
+								}
+							}
+						}
+					}
+				}
+			}
+		}()
+	}
+
 	select {
 	case t.p.publish <- &Message{m, id, nil}:
 	case <-t.p.ctx.Done():
 		return t.p.ctx.Err()
+	}
+
+	// wait for msg queued notifications
+	if waitForMsgQueuedNotifications {
+		select {
+		case err := <-msgQueuedTargetAchieved:
+			return err
+		case <-ctx.Done():
+			return pkgerrors.Wrap(ctx.Err(), "context expired while waiting for msg queued notifs")
+		case <-t.p.ctx.Done():
+			return pkgerrors.Wrap(t.p.ctx.Err(), "pubsub context expired while waiting for msg queued notifs")
+		}
 	}
 
 	return nil
@@ -180,6 +287,23 @@ func (t *Topic) Publish(ctx context.Context, data []byte, opts ...PubOpt) error 
 func WithReadiness(ready RouterReady) PubOpt {
 	return func(pub *PublishOptions) error {
 		pub.ready = ready
+		return nil
+	}
+}
+
+// WithWaitUntilQueued blocks the publish until the message has been added to the outbound message queue for
+// as many peers as the arg indicates
+// A value of -1 means all peers in mesh/fanout for gossipsub & all subscribed peers in floodsub
+// Please note that if nPeers is -1, the behavior is not fail fast
+// If we fail to achieve the desired target because of full outbound peer queues, Publish will return ErrFailedToAddToPeerQueues
+// However, the message could still have been added to the outbound queue for other peers
+func WithWaitUntilQueued(nPeers int) PubOpt {
+	return func(pub *PublishOptions) error {
+		if nPeers < -1 {
+			return errors.New("nPeers should be greater than or equal to -1, please refer to the docs for WithWaitUntilQueued")
+		}
+
+		pub.nQueuedNotifs = nPeers
 		return nil
 	}
 }

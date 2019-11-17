@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/libp2p/go-libp2p-core/peer"
+	"github.com/stretchr/testify/require"
 )
 
 func getTopics(psubs []*PubSub, topicID string, opts ...TopicOpt) []*Topic {
@@ -108,6 +109,79 @@ func testTopicCloseWithOpenResource(t *testing.T, openResource func(topic *Topic
 
 	if err := topic.Close(); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestPublishWithWaitUntilQueued(t *testing.T) {
+	// block until all successful
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	hosts := getNetHosts(t, ctx, 8)
+	topicHandles := getTopics(getPubsubs(ctx, hosts), "foobar")
+
+	connect(t, hosts[0], hosts[1])
+	connect(t, hosts[1], hosts[2])
+	connect(t, hosts[2], hosts[3])
+	connect(t, hosts[1], hosts[4])
+
+	connect(t, hosts[0], hosts[5])
+	connect(t, hosts[5], hosts[6])
+	connect(t, hosts[6], hosts[7])
+	/*
+		[0] -> [1] -> [2] -> [3]
+		 |      L->[4]
+		 v
+		[5]
+		 |
+		 v
+		[6] -> [7](
+	*/
+
+	var subs []*Subscription
+	for _, ps := range topicHandles {
+		ch, err := ps.Subscribe()
+		require.NoError(t, err)
+		subs = append(subs, ch)
+	}
+
+	// wait for heartbeats to build mesh
+	time.Sleep(time.Second * 2)
+
+	tests := map[string]struct {
+		publisher     int
+		nPeers        int
+		expectedError error
+	}{
+		"ErrFailedToAddToPeerQueue if we want more notifications than is possible ": {
+			5,
+			3,
+			ErrFailedToAddToPeerQueue,
+		},
+		"Success if we get enough notifications": {
+			1,
+			3,
+			nil,
+		},
+		"Successful if we want to wait for all peers": {
+			0,
+			-1,
+			nil,
+		},
+	}
+
+	for name, test := range tests {
+		for i := 0; i < 100; i++ {
+			msg := []byte(fmt.Sprintf("%d it's not a floooooood %d", i, i))
+
+			require.Equal(t, test.expectedError, topicHandles[test.publisher].Publish(ctx, msg, WithWaitUntilQueued(test.nPeers)), name)
+
+			for _, sub := range subs {
+				got, err := sub.Next(ctx)
+				require.NoError(t, err, name)
+				require.Equal(t, msg, got.Data, name)
+			}
+		}
 	}
 }
 

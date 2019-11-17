@@ -88,6 +88,9 @@ type PubSub struct {
 	// The set of topics we are subscribed to
 	mySubs map[string]map[*Subscription]struct{}
 
+	// listeners for when we attempt to add a message to a peer's outbound queue
+	msgQueuedEventListeners map[string]*msgQueuedEventListener
+
 	// The set of topics we are interested in
 	myTopics map[string]*Topic
 
@@ -174,39 +177,40 @@ type Option func(*PubSub) error
 // NewPubSub returns a new PubSub management object.
 func NewPubSub(ctx context.Context, h host.Host, rt PubSubRouter, opts ...Option) (*PubSub, error) {
 	ps := &PubSub{
-		host:                  h,
-		ctx:                   ctx,
-		rt:                    rt,
-		val:                   newValidation(),
-		disc:                  &discover{},
-		peerOutboundQueueSize: 32,
-		signID:                h.ID(),
-		signKey:               h.Peerstore().PrivKey(h.ID()),
-		signStrict:            true,
-		incoming:              make(chan *RPC, 32),
-		publish:               make(chan *Message),
-		newPeers:              make(chan peer.ID),
-		newPeerStream:         make(chan network.Stream),
-		newPeerError:          make(chan peer.ID),
-		peerDead:              make(chan peer.ID),
-		cancelCh:              make(chan *Subscription),
-		getPeers:              make(chan *listPeerReq),
-		addSub:                make(chan *addSubReq),
-		addTopic:              make(chan *addTopicReq),
-		rmTopic:               make(chan *rmTopicReq),
-		getTopics:             make(chan *topicReq),
-		sendMsg:               make(chan *Message, 32),
-		addVal:                make(chan *addValReq),
-		rmVal:                 make(chan *rmValReq),
-		eval:                  make(chan func()),
-		myTopics:              make(map[string]*Topic),
-		mySubs:                make(map[string]map[*Subscription]struct{}),
-		topics:                make(map[string]map[peer.ID]struct{}),
-		peers:                 make(map[peer.ID]chan *RPC),
-		blacklist:             NewMapBlacklist(),
-		blacklistPeer:         make(chan peer.ID),
-		seenMessages:          timecache.NewTimeCache(TimeCacheDuration),
-		counter:               uint64(time.Now().UnixNano()),
+		host:                    h,
+		ctx:                     ctx,
+		rt:                      rt,
+		val:                     newValidation(),
+		disc:                    &discover{},
+		peerOutboundQueueSize:   32,
+		signID:                  h.ID(),
+		signKey:                 h.Peerstore().PrivKey(h.ID()),
+		signStrict:              true,
+		incoming:                make(chan *RPC, 32),
+		publish:                 make(chan *Message),
+		newPeers:                make(chan peer.ID),
+		newPeerStream:           make(chan network.Stream),
+		newPeerError:            make(chan peer.ID),
+		peerDead:                make(chan peer.ID),
+		cancelCh:                make(chan *Subscription),
+		getPeers:                make(chan *listPeerReq),
+		addSub:                  make(chan *addSubReq),
+		addTopic:                make(chan *addTopicReq),
+		rmTopic:                 make(chan *rmTopicReq),
+		getTopics:               make(chan *topicReq),
+		sendMsg:                 make(chan *Message, 32),
+		addVal:                  make(chan *addValReq),
+		rmVal:                   make(chan *rmValReq),
+		eval:                    make(chan func()),
+		myTopics:                make(map[string]*Topic),
+		mySubs:                  make(map[string]map[*Subscription]struct{}),
+		msgQueuedEventListeners: make(map[string]*msgQueuedEventListener),
+		topics:                  make(map[string]map[peer.ID]struct{}),
+		peers:                   make(map[peer.ID]chan *RPC),
+		blacklist:               NewMapBlacklist(),
+		blacklistPeer:           make(chan peer.ID),
+		seenMessages:            timecache.NewTimeCache(TimeCacheDuration),
+		counter:                 uint64(time.Now().UnixNano()),
 	}
 
 	for _, opt := range opts {
@@ -757,6 +761,16 @@ func (p *PubSub) pushMsg(msg *Message) {
 func (p *PubSub) publishMessage(msg *Message) {
 	p.notifySubs(msg)
 	p.rt.Publish(msg.ReceivedFrom, msg.Message)
+}
+
+type msgQueuedNotification struct {
+	peer    peer.ID
+	success bool
+}
+
+type msgQueuedEventListener struct {
+	ctx       context.Context             // context of the listener
+	notifChan chan *msgQueuedNotification // channel we will write the event notification to
 }
 
 type addTopicReq struct {

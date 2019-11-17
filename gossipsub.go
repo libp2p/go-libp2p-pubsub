@@ -278,12 +278,30 @@ func (gs *GossipSubRouter) Publish(from peer.ID, msg *pb.Message) {
 	}
 
 	out := rpcWithMessages(msg)
+
+	// fetch channel we can write to after we attempt to add a message to on a peer's outbound queue
+	listener, hasListener := gs.p.msgQueuedEventListeners[msgID(msg)]
+
+	// add message to the outbound queues for receiver peers
 	for pid := range tosend {
 		if pid == from || pid == peer.ID(msg.GetFrom()) {
 			continue
 		}
 
-		gs.sendRPC(pid, out)
+		success := gs.sendRPC(pid, out)
+
+		// send notification to the listener about the message queue attempt
+		if hasListener {
+			select {
+			case <-listener.ctx.Done():
+			case listener.notifChan <- &msgQueuedNotification{pid, success}:
+			}
+		}
+	}
+
+	// close the listener channel because we have no more notifications to send for this message
+	if hasListener {
+		close(listener.notifChan)
 	}
 }
 
@@ -353,7 +371,8 @@ func (gs *GossipSubRouter) sendPrune(p peer.ID, topic string) {
 	gs.sendRPC(p, out)
 }
 
-func (gs *GossipSubRouter) sendRPC(p peer.ID, out *RPC) {
+// returns true if the rpc was successfully added to the peer's outbound queue
+func (gs *GossipSubRouter) sendRPC(p peer.ID, out *RPC) bool {
 	// do we own the RPC?
 	own := false
 
@@ -379,11 +398,12 @@ func (gs *GossipSubRouter) sendRPC(p peer.ID, out *RPC) {
 
 	mch, ok := gs.p.peers[p]
 	if !ok {
-		return
+		return false
 	}
 
 	select {
 	case mch <- out:
+		return true
 	default:
 		log.Infof("dropping message to peer %s: queue full", p)
 		// push control messages that need to be retried
@@ -392,6 +412,8 @@ func (gs *GossipSubRouter) sendRPC(p peer.ID, out *RPC) {
 			gs.pushControl(p, ctl)
 		}
 	}
+
+	return false
 }
 
 func (gs *GossipSubRouter) heartbeatTimer() {
