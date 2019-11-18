@@ -15,6 +15,7 @@ import (
 	"github.com/libp2p/go-libp2p-core/host"
 	"github.com/libp2p/go-libp2p-core/network"
 	"github.com/libp2p/go-libp2p-core/peer"
+	"github.com/libp2p/go-libp2p-core/peerstore"
 	"github.com/libp2p/go-libp2p-core/protocol"
 
 	ggio "github.com/gogo/protobuf/io"
@@ -161,12 +162,15 @@ type RemoteTracer struct {
 	basicTracer
 	ctx  context.Context
 	host host.Host
-	pi   peer.AddrInfo
+	peer peer.ID
 }
 
 // NewRemoteTracer constructs a RemoteTracer, tracing to the peer identified by pi
 func NewRemoteTracer(ctx context.Context, host host.Host, pi peer.AddrInfo) (*RemoteTracer, error) {
-	tr := &RemoteTracer{ctx: ctx, host: host, pi: pi, basicTracer: basicTracer{ch: make(chan struct{}, 1), lossy: true}}
+	tr := &RemoteTracer{ctx: ctx, host: host, peer: pi.ID, basicTracer: basicTracer{ch: make(chan struct{}, 1), lossy: true}}
+	for _, addr := range pi.Addrs {
+		host.Peerstore().AddAddr(pi.ID, addr, peerstore.PermanentAddrTTL)
+	}
 	go tr.doWrite()
 	return tr, nil
 }
@@ -251,38 +255,10 @@ func (t *RemoteTracer) doWrite() {
 	}
 }
 
-func (t *RemoteTracer) connect() error {
-	for {
-		ctx, cancel := context.WithTimeout(t.ctx, time.Minute)
-		err := t.host.Connect(ctx, t.pi)
-		cancel()
-		if err != nil {
-			if t.ctx.Err() != nil {
-				return err
-			}
-
-			// wait a minute and try again, to account for transient server downtime
-			select {
-			case <-time.After(time.Minute):
-				continue
-			case <-t.ctx.Done():
-				return t.ctx.Err()
-			}
-		}
-
-		return nil
-	}
-}
-
 func (t *RemoteTracer) openStream() (network.Stream, error) {
 	for {
-		err := t.connect()
-		if err != nil {
-			return nil, err
-		}
-
 		ctx, cancel := context.WithTimeout(t.ctx, time.Minute)
-		s, err := t.host.NewStream(ctx, t.pi.ID, RemoteTracerProtoID)
+		s, err := t.host.NewStream(ctx, t.peer, RemoteTracerProtoID)
 		cancel()
 		if err != nil {
 			if t.ctx.Err() != nil {
