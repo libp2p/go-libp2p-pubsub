@@ -187,11 +187,6 @@ func (t *RemoteTracer) doWrite() {
 	for {
 		_, ok := <-t.ch
 
-		// nil out the buffer to gc events when swapping buffers
-		for i := range buf {
-			buf[i] = nil
-		}
-
 		// wait a bit to accumulate a batch
 		time.Sleep(time.Second)
 
@@ -220,6 +215,11 @@ func (t *RemoteTracer) doWrite() {
 		}
 
 	end:
+		// nil out the buffer to gc consumed events
+		for i := range buf {
+			buf[i] = nil
+		}
+
 		if !ok {
 			if err != nil {
 				s.Reset()
