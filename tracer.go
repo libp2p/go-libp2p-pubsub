@@ -214,12 +214,17 @@ func (t *RemoteTracer) doWrite() {
 
 	end:
 		if !ok {
-			gzipW.Close()
-			helpers.FullClose(s)
+			if err != nil {
+				s.Reset()
+			} else {
+				gzipW.Close()
+				helpers.FullClose(s)
+			}
 			return
 		}
 
 		if err != nil {
+			s.Reset()
 			s, err = t.openStream()
 			if err != nil {
 				log.Errorf("error opening remote tracer stream: %s", err.Error())
