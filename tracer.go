@@ -21,6 +21,7 @@ import (
 )
 
 var TraceBufferSize = 1 << 16 // 64K ought to be enough for everyone; famous last words.
+var MinTraceBatchSize = 16
 
 type basicTracer struct {
 	ch    chan struct{}
@@ -187,10 +188,17 @@ func (t *RemoteTracer) doWrite() {
 	for {
 		_, ok := <-t.ch
 
-		// wait a bit to accumulate a batch
-		time.Sleep(time.Second)
+		// deadline for batch accumulation
+		deadline := time.Now().Add(time.Second)
 
+	again:
 		t.mx.Lock()
+		if len(t.buf) < MinTraceBatchSize && time.Now().Before(deadline) {
+			t.mx.Unlock()
+			time.Sleep(100 * time.Millisecond)
+			goto again
+		}
+
 		tmp := t.buf
 		t.buf = buf[:0]
 		buf = tmp
