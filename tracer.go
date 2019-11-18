@@ -20,15 +20,22 @@ import (
 	ggio "github.com/gogo/protobuf/io"
 )
 
+var TraceBufferSize = 1 << 16 // 64K ought to be enough for everyone; famous last words.
+
 type basicTracer struct {
-	ch  chan struct{}
-	mx  sync.Mutex
-	buf []*pb.TraceEvent
+	ch    chan struct{}
+	mx    sync.Mutex
+	buf   []*pb.TraceEvent
+	lossy bool
 }
 
 func (t *basicTracer) Trace(evt *pb.TraceEvent) {
 	t.mx.Lock()
-	t.buf = append(t.buf, evt)
+	if t.lossy && len(t.buf) > TraceBufferSize {
+		log.Warningf("trace buffer overflow; dropping trace event")
+	} else {
+		t.buf = append(t.buf, evt)
+	}
 	t.mx.Unlock()
 
 	select {
@@ -158,7 +165,7 @@ type RemoteTracer struct {
 
 // NewRemoteTracer constructs a RemoteTracer, tracing to the peer identified by pi
 func NewRemoteTracer(ctx context.Context, host host.Host, pi peer.AddrInfo) (*RemoteTracer, error) {
-	tr := &RemoteTracer{ctx: ctx, host: host, pi: pi, basicTracer: basicTracer{ch: make(chan struct{}, 1)}}
+	tr := &RemoteTracer{ctx: ctx, host: host, pi: pi, basicTracer: basicTracer{ch: make(chan struct{}, 1), lossy: true}}
 	go tr.doWrite()
 	return tr, nil
 }
