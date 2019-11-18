@@ -25,14 +25,20 @@ var TraceBufferSize = 1 << 16 // 64K ought to be enough for everyone; famous las
 var MinTraceBatchSize = 16
 
 type basicTracer struct {
-	ch    chan struct{}
-	mx    sync.Mutex
-	buf   []*pb.TraceEvent
-	lossy bool
+	ch     chan struct{}
+	mx     sync.Mutex
+	buf    []*pb.TraceEvent
+	lossy  bool
+	closed bool
 }
 
 func (t *basicTracer) Trace(evt *pb.TraceEvent) {
 	t.mx.Lock()
+	if t.closed {
+		t.mx.Unlock()
+		return
+	}
+
 	if t.lossy && len(t.buf) > TraceBufferSize {
 		log.Warningf("trace buffer overflow; dropping trace event")
 	} else {
@@ -47,7 +53,12 @@ func (t *basicTracer) Trace(evt *pb.TraceEvent) {
 }
 
 func (t *basicTracer) Close() {
-	close(t.ch)
+	t.mx.Lock()
+	defer t.mx.Unlock()
+	if !t.closed {
+		t.closed = true
+		close(t.ch)
+	}
 }
 
 // JSONTracer is a tracer that writes events to a file, encoded in ndjson.
