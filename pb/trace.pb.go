@@ -3,11 +3,12 @@
 
 package pubsub_pb
 
-import proto "github.com/gogo/protobuf/proto"
-import fmt "fmt"
-import math "math"
-
-import io "io"
+import (
+	fmt "fmt"
+	proto "github.com/gogo/protobuf/proto"
+	io "io"
+	math "math"
+)
 
 // Reference imports to suppress errors if they are not otherwise used.
 var _ = proto.Marshal
@@ -53,6 +54,7 @@ var TraceEvent_Type_name = map[int32]string{
 	11: "GRAFT",
 	12: "PRUNE",
 }
+
 var TraceEvent_Type_value = map[string]int32{
 	"PUBLISH_MESSAGE":   0,
 	"REJECT_MESSAGE":    1,
@@ -74,9 +76,11 @@ func (x TraceEvent_Type) Enum() *TraceEvent_Type {
 	*p = x
 	return p
 }
+
 func (x TraceEvent_Type) String() string {
 	return proto.EnumName(TraceEvent_Type_name, int32(x))
 }
+
 func (x *TraceEvent_Type) UnmarshalJSON(data []byte) error {
 	value, err := proto.UnmarshalJSONEnum(TraceEvent_Type_value, data, "TraceEvent_Type")
 	if err != nil {
@@ -85,8 +89,9 @@ func (x *TraceEvent_Type) UnmarshalJSON(data []byte) error {
 	*x = TraceEvent_Type(value)
 	return nil
 }
+
 func (TraceEvent_Type) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_trace_a154d83c271edb68, []int{0, 0}
+	return fileDescriptor_0571941a1d628a80, []int{0, 0}
 }
 
 type TraceEvent struct {
@@ -115,7 +120,7 @@ func (m *TraceEvent) Reset()         { *m = TraceEvent{} }
 func (m *TraceEvent) String() string { return proto.CompactTextString(m) }
 func (*TraceEvent) ProtoMessage()    {}
 func (*TraceEvent) Descriptor() ([]byte, []int) {
-	return fileDescriptor_trace_a154d83c271edb68, []int{0}
+	return fileDescriptor_0571941a1d628a80, []int{0}
 }
 func (m *TraceEvent) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -132,8 +137,8 @@ func (m *TraceEvent) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 		return b[:n], nil
 	}
 }
-func (dst *TraceEvent) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_TraceEvent.Merge(dst, src)
+func (m *TraceEvent) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_TraceEvent.Merge(m, src)
 }
 func (m *TraceEvent) XXX_Size() int {
 	return m.Size()
@@ -268,7 +273,7 @@ func (m *TraceEvent_PublishMessage) Reset()         { *m = TraceEvent_PublishMes
 func (m *TraceEvent_PublishMessage) String() string { return proto.CompactTextString(m) }
 func (*TraceEvent_PublishMessage) ProtoMessage()    {}
 func (*TraceEvent_PublishMessage) Descriptor() ([]byte, []int) {
-	return fileDescriptor_trace_a154d83c271edb68, []int{0, 0}
+	return fileDescriptor_0571941a1d628a80, []int{0, 0}
 }
 func (m *TraceEvent_PublishMessage) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -285,8 +290,8 @@ func (m *TraceEvent_PublishMessage) XXX_Marshal(b []byte, deterministic bool) ([
 		return b[:n], nil
 	}
 }
-func (dst *TraceEvent_PublishMessage) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_TraceEvent_PublishMessage.Merge(dst, src)
+func (m *TraceEvent_PublishMessage) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_TraceEvent_PublishMessage.Merge(m, src)
 }
 func (m *TraceEvent_PublishMessage) XXX_Size() int {
 	return m.Size()
@@ -324,7 +329,7 @@ func (m *TraceEvent_RejectMessage) Reset()         { *m = TraceEvent_RejectMessa
 func (m *TraceEvent_RejectMessage) String() string { return proto.CompactTextString(m) }
 func (*TraceEvent_RejectMessage) ProtoMessage()    {}
 func (*TraceEvent_RejectMessage) Descriptor() ([]byte, []int) {
-	return fileDescriptor_trace_a154d83c271edb68, []int{0, 1}
+	return fileDescriptor_0571941a1d628a80, []int{0, 1}
 }
 func (m *TraceEvent_RejectMessage) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -341,8 +346,8 @@ func (m *TraceEvent_RejectMessage) XXX_Marshal(b []byte, deterministic bool) ([]
 		return b[:n], nil
 	}
 }
-func (dst *TraceEvent_RejectMessage) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_TraceEvent_RejectMessage.Merge(dst, src)
+func (m *TraceEvent_RejectMessage) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_TraceEvent_RejectMessage.Merge(m, src)
 }
 func (m *TraceEvent_RejectMessage) XXX_Size() int {
 	return m.Size()
@@ -386,7 +391,7 @@ func (m *TraceEvent_DuplicateMessage) Reset()         { *m = TraceEvent_Duplicat
 func (m *TraceEvent_DuplicateMessage) String() string { return proto.CompactTextString(m) }
 func (*TraceEvent_DuplicateMessage) ProtoMessage()    {}
 func (*TraceEvent_DuplicateMessage) Descriptor() ([]byte, []int) {
-	return fileDescriptor_trace_a154d83c271edb68, []int{0, 2}
+	return fileDescriptor_0571941a1d628a80, []int{0, 2}
 }
 func (m *TraceEvent_DuplicateMessage) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -403,8 +408,8 @@ func (m *TraceEvent_DuplicateMessage) XXX_Marshal(b []byte, deterministic bool) 
 		return b[:n], nil
 	}
 }
-func (dst *TraceEvent_DuplicateMessage) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_TraceEvent_DuplicateMessage.Merge(dst, src)
+func (m *TraceEvent_DuplicateMessage) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_TraceEvent_DuplicateMessage.Merge(m, src)
 }
 func (m *TraceEvent_DuplicateMessage) XXX_Size() int {
 	return m.Size()
@@ -440,7 +445,7 @@ func (m *TraceEvent_DeliverMessage) Reset()         { *m = TraceEvent_DeliverMes
 func (m *TraceEvent_DeliverMessage) String() string { return proto.CompactTextString(m) }
 func (*TraceEvent_DeliverMessage) ProtoMessage()    {}
 func (*TraceEvent_DeliverMessage) Descriptor() ([]byte, []int) {
-	return fileDescriptor_trace_a154d83c271edb68, []int{0, 3}
+	return fileDescriptor_0571941a1d628a80, []int{0, 3}
 }
 func (m *TraceEvent_DeliverMessage) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -457,8 +462,8 @@ func (m *TraceEvent_DeliverMessage) XXX_Marshal(b []byte, deterministic bool) ([
 		return b[:n], nil
 	}
 }
-func (dst *TraceEvent_DeliverMessage) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_TraceEvent_DeliverMessage.Merge(dst, src)
+func (m *TraceEvent_DeliverMessage) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_TraceEvent_DeliverMessage.Merge(m, src)
 }
 func (m *TraceEvent_DeliverMessage) XXX_Size() int {
 	return m.Size()
@@ -488,7 +493,7 @@ func (m *TraceEvent_AddPeer) Reset()         { *m = TraceEvent_AddPeer{} }
 func (m *TraceEvent_AddPeer) String() string { return proto.CompactTextString(m) }
 func (*TraceEvent_AddPeer) ProtoMessage()    {}
 func (*TraceEvent_AddPeer) Descriptor() ([]byte, []int) {
-	return fileDescriptor_trace_a154d83c271edb68, []int{0, 4}
+	return fileDescriptor_0571941a1d628a80, []int{0, 4}
 }
 func (m *TraceEvent_AddPeer) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -505,8 +510,8 @@ func (m *TraceEvent_AddPeer) XXX_Marshal(b []byte, deterministic bool) ([]byte, 
 		return b[:n], nil
 	}
 }
-func (dst *TraceEvent_AddPeer) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_TraceEvent_AddPeer.Merge(dst, src)
+func (m *TraceEvent_AddPeer) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_TraceEvent_AddPeer.Merge(m, src)
 }
 func (m *TraceEvent_AddPeer) XXX_Size() int {
 	return m.Size()
@@ -542,7 +547,7 @@ func (m *TraceEvent_RemovePeer) Reset()         { *m = TraceEvent_RemovePeer{} }
 func (m *TraceEvent_RemovePeer) String() string { return proto.CompactTextString(m) }
 func (*TraceEvent_RemovePeer) ProtoMessage()    {}
 func (*TraceEvent_RemovePeer) Descriptor() ([]byte, []int) {
-	return fileDescriptor_trace_a154d83c271edb68, []int{0, 5}
+	return fileDescriptor_0571941a1d628a80, []int{0, 5}
 }
 func (m *TraceEvent_RemovePeer) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -559,8 +564,8 @@ func (m *TraceEvent_RemovePeer) XXX_Marshal(b []byte, deterministic bool) ([]byt
 		return b[:n], nil
 	}
 }
-func (dst *TraceEvent_RemovePeer) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_TraceEvent_RemovePeer.Merge(dst, src)
+func (m *TraceEvent_RemovePeer) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_TraceEvent_RemovePeer.Merge(m, src)
 }
 func (m *TraceEvent_RemovePeer) XXX_Size() int {
 	return m.Size()
@@ -590,7 +595,7 @@ func (m *TraceEvent_RecvRPC) Reset()         { *m = TraceEvent_RecvRPC{} }
 func (m *TraceEvent_RecvRPC) String() string { return proto.CompactTextString(m) }
 func (*TraceEvent_RecvRPC) ProtoMessage()    {}
 func (*TraceEvent_RecvRPC) Descriptor() ([]byte, []int) {
-	return fileDescriptor_trace_a154d83c271edb68, []int{0, 6}
+	return fileDescriptor_0571941a1d628a80, []int{0, 6}
 }
 func (m *TraceEvent_RecvRPC) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -607,8 +612,8 @@ func (m *TraceEvent_RecvRPC) XXX_Marshal(b []byte, deterministic bool) ([]byte, 
 		return b[:n], nil
 	}
 }
-func (dst *TraceEvent_RecvRPC) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_TraceEvent_RecvRPC.Merge(dst, src)
+func (m *TraceEvent_RecvRPC) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_TraceEvent_RecvRPC.Merge(m, src)
 }
 func (m *TraceEvent_RecvRPC) XXX_Size() int {
 	return m.Size()
@@ -645,7 +650,7 @@ func (m *TraceEvent_SendRPC) Reset()         { *m = TraceEvent_SendRPC{} }
 func (m *TraceEvent_SendRPC) String() string { return proto.CompactTextString(m) }
 func (*TraceEvent_SendRPC) ProtoMessage()    {}
 func (*TraceEvent_SendRPC) Descriptor() ([]byte, []int) {
-	return fileDescriptor_trace_a154d83c271edb68, []int{0, 7}
+	return fileDescriptor_0571941a1d628a80, []int{0, 7}
 }
 func (m *TraceEvent_SendRPC) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -662,8 +667,8 @@ func (m *TraceEvent_SendRPC) XXX_Marshal(b []byte, deterministic bool) ([]byte, 
 		return b[:n], nil
 	}
 }
-func (dst *TraceEvent_SendRPC) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_TraceEvent_SendRPC.Merge(dst, src)
+func (m *TraceEvent_SendRPC) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_TraceEvent_SendRPC.Merge(m, src)
 }
 func (m *TraceEvent_SendRPC) XXX_Size() int {
 	return m.Size()
@@ -700,7 +705,7 @@ func (m *TraceEvent_DropRPC) Reset()         { *m = TraceEvent_DropRPC{} }
 func (m *TraceEvent_DropRPC) String() string { return proto.CompactTextString(m) }
 func (*TraceEvent_DropRPC) ProtoMessage()    {}
 func (*TraceEvent_DropRPC) Descriptor() ([]byte, []int) {
-	return fileDescriptor_trace_a154d83c271edb68, []int{0, 8}
+	return fileDescriptor_0571941a1d628a80, []int{0, 8}
 }
 func (m *TraceEvent_DropRPC) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -717,8 +722,8 @@ func (m *TraceEvent_DropRPC) XXX_Marshal(b []byte, deterministic bool) ([]byte, 
 		return b[:n], nil
 	}
 }
-func (dst *TraceEvent_DropRPC) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_TraceEvent_DropRPC.Merge(dst, src)
+func (m *TraceEvent_DropRPC) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_TraceEvent_DropRPC.Merge(m, src)
 }
 func (m *TraceEvent_DropRPC) XXX_Size() int {
 	return m.Size()
@@ -754,7 +759,7 @@ func (m *TraceEvent_Join) Reset()         { *m = TraceEvent_Join{} }
 func (m *TraceEvent_Join) String() string { return proto.CompactTextString(m) }
 func (*TraceEvent_Join) ProtoMessage()    {}
 func (*TraceEvent_Join) Descriptor() ([]byte, []int) {
-	return fileDescriptor_trace_a154d83c271edb68, []int{0, 9}
+	return fileDescriptor_0571941a1d628a80, []int{0, 9}
 }
 func (m *TraceEvent_Join) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -771,8 +776,8 @@ func (m *TraceEvent_Join) XXX_Marshal(b []byte, deterministic bool) ([]byte, err
 		return b[:n], nil
 	}
 }
-func (dst *TraceEvent_Join) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_TraceEvent_Join.Merge(dst, src)
+func (m *TraceEvent_Join) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_TraceEvent_Join.Merge(m, src)
 }
 func (m *TraceEvent_Join) XXX_Size() int {
 	return m.Size()
@@ -801,7 +806,7 @@ func (m *TraceEvent_Leave) Reset()         { *m = TraceEvent_Leave{} }
 func (m *TraceEvent_Leave) String() string { return proto.CompactTextString(m) }
 func (*TraceEvent_Leave) ProtoMessage()    {}
 func (*TraceEvent_Leave) Descriptor() ([]byte, []int) {
-	return fileDescriptor_trace_a154d83c271edb68, []int{0, 10}
+	return fileDescriptor_0571941a1d628a80, []int{0, 10}
 }
 func (m *TraceEvent_Leave) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -818,8 +823,8 @@ func (m *TraceEvent_Leave) XXX_Marshal(b []byte, deterministic bool) ([]byte, er
 		return b[:n], nil
 	}
 }
-func (dst *TraceEvent_Leave) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_TraceEvent_Leave.Merge(dst, src)
+func (m *TraceEvent_Leave) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_TraceEvent_Leave.Merge(m, src)
 }
 func (m *TraceEvent_Leave) XXX_Size() int {
 	return m.Size()
@@ -849,7 +854,7 @@ func (m *TraceEvent_Graft) Reset()         { *m = TraceEvent_Graft{} }
 func (m *TraceEvent_Graft) String() string { return proto.CompactTextString(m) }
 func (*TraceEvent_Graft) ProtoMessage()    {}
 func (*TraceEvent_Graft) Descriptor() ([]byte, []int) {
-	return fileDescriptor_trace_a154d83c271edb68, []int{0, 11}
+	return fileDescriptor_0571941a1d628a80, []int{0, 11}
 }
 func (m *TraceEvent_Graft) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -866,8 +871,8 @@ func (m *TraceEvent_Graft) XXX_Marshal(b []byte, deterministic bool) ([]byte, er
 		return b[:n], nil
 	}
 }
-func (dst *TraceEvent_Graft) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_TraceEvent_Graft.Merge(dst, src)
+func (m *TraceEvent_Graft) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_TraceEvent_Graft.Merge(m, src)
 }
 func (m *TraceEvent_Graft) XXX_Size() int {
 	return m.Size()
@@ -904,7 +909,7 @@ func (m *TraceEvent_Prune) Reset()         { *m = TraceEvent_Prune{} }
 func (m *TraceEvent_Prune) String() string { return proto.CompactTextString(m) }
 func (*TraceEvent_Prune) ProtoMessage()    {}
 func (*TraceEvent_Prune) Descriptor() ([]byte, []int) {
-	return fileDescriptor_trace_a154d83c271edb68, []int{0, 12}
+	return fileDescriptor_0571941a1d628a80, []int{0, 12}
 }
 func (m *TraceEvent_Prune) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -921,8 +926,8 @@ func (m *TraceEvent_Prune) XXX_Marshal(b []byte, deterministic bool) ([]byte, er
 		return b[:n], nil
 	}
 }
-func (dst *TraceEvent_Prune) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_TraceEvent_Prune.Merge(dst, src)
+func (m *TraceEvent_Prune) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_TraceEvent_Prune.Merge(m, src)
 }
 func (m *TraceEvent_Prune) XXX_Size() int {
 	return m.Size()
@@ -960,7 +965,7 @@ func (m *TraceEvent_RPCMeta) Reset()         { *m = TraceEvent_RPCMeta{} }
 func (m *TraceEvent_RPCMeta) String() string { return proto.CompactTextString(m) }
 func (*TraceEvent_RPCMeta) ProtoMessage()    {}
 func (*TraceEvent_RPCMeta) Descriptor() ([]byte, []int) {
-	return fileDescriptor_trace_a154d83c271edb68, []int{0, 13}
+	return fileDescriptor_0571941a1d628a80, []int{0, 13}
 }
 func (m *TraceEvent_RPCMeta) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -977,8 +982,8 @@ func (m *TraceEvent_RPCMeta) XXX_Marshal(b []byte, deterministic bool) ([]byte, 
 		return b[:n], nil
 	}
 }
-func (dst *TraceEvent_RPCMeta) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_TraceEvent_RPCMeta.Merge(dst, src)
+func (m *TraceEvent_RPCMeta) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_TraceEvent_RPCMeta.Merge(m, src)
 }
 func (m *TraceEvent_RPCMeta) XXX_Size() int {
 	return m.Size()
@@ -1022,7 +1027,7 @@ func (m *TraceEvent_MessageMeta) Reset()         { *m = TraceEvent_MessageMeta{}
 func (m *TraceEvent_MessageMeta) String() string { return proto.CompactTextString(m) }
 func (*TraceEvent_MessageMeta) ProtoMessage()    {}
 func (*TraceEvent_MessageMeta) Descriptor() ([]byte, []int) {
-	return fileDescriptor_trace_a154d83c271edb68, []int{0, 14}
+	return fileDescriptor_0571941a1d628a80, []int{0, 14}
 }
 func (m *TraceEvent_MessageMeta) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1039,8 +1044,8 @@ func (m *TraceEvent_MessageMeta) XXX_Marshal(b []byte, deterministic bool) ([]by
 		return b[:n], nil
 	}
 }
-func (dst *TraceEvent_MessageMeta) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_TraceEvent_MessageMeta.Merge(dst, src)
+func (m *TraceEvent_MessageMeta) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_TraceEvent_MessageMeta.Merge(m, src)
 }
 func (m *TraceEvent_MessageMeta) XXX_Size() int {
 	return m.Size()
@@ -1077,7 +1082,7 @@ func (m *TraceEvent_SubMeta) Reset()         { *m = TraceEvent_SubMeta{} }
 func (m *TraceEvent_SubMeta) String() string { return proto.CompactTextString(m) }
 func (*TraceEvent_SubMeta) ProtoMessage()    {}
 func (*TraceEvent_SubMeta) Descriptor() ([]byte, []int) {
-	return fileDescriptor_trace_a154d83c271edb68, []int{0, 15}
+	return fileDescriptor_0571941a1d628a80, []int{0, 15}
 }
 func (m *TraceEvent_SubMeta) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1094,8 +1099,8 @@ func (m *TraceEvent_SubMeta) XXX_Marshal(b []byte, deterministic bool) ([]byte, 
 		return b[:n], nil
 	}
 }
-func (dst *TraceEvent_SubMeta) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_TraceEvent_SubMeta.Merge(dst, src)
+func (m *TraceEvent_SubMeta) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_TraceEvent_SubMeta.Merge(m, src)
 }
 func (m *TraceEvent_SubMeta) XXX_Size() int {
 	return m.Size()
@@ -1134,7 +1139,7 @@ func (m *TraceEvent_ControlMeta) Reset()         { *m = TraceEvent_ControlMeta{}
 func (m *TraceEvent_ControlMeta) String() string { return proto.CompactTextString(m) }
 func (*TraceEvent_ControlMeta) ProtoMessage()    {}
 func (*TraceEvent_ControlMeta) Descriptor() ([]byte, []int) {
-	return fileDescriptor_trace_a154d83c271edb68, []int{0, 16}
+	return fileDescriptor_0571941a1d628a80, []int{0, 16}
 }
 func (m *TraceEvent_ControlMeta) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1151,8 +1156,8 @@ func (m *TraceEvent_ControlMeta) XXX_Marshal(b []byte, deterministic bool) ([]by
 		return b[:n], nil
 	}
 }
-func (dst *TraceEvent_ControlMeta) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_TraceEvent_ControlMeta.Merge(dst, src)
+func (m *TraceEvent_ControlMeta) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_TraceEvent_ControlMeta.Merge(m, src)
 }
 func (m *TraceEvent_ControlMeta) XXX_Size() int {
 	return m.Size()
@@ -1203,7 +1208,7 @@ func (m *TraceEvent_ControlIHaveMeta) Reset()         { *m = TraceEvent_ControlI
 func (m *TraceEvent_ControlIHaveMeta) String() string { return proto.CompactTextString(m) }
 func (*TraceEvent_ControlIHaveMeta) ProtoMessage()    {}
 func (*TraceEvent_ControlIHaveMeta) Descriptor() ([]byte, []int) {
-	return fileDescriptor_trace_a154d83c271edb68, []int{0, 17}
+	return fileDescriptor_0571941a1d628a80, []int{0, 17}
 }
 func (m *TraceEvent_ControlIHaveMeta) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1220,8 +1225,8 @@ func (m *TraceEvent_ControlIHaveMeta) XXX_Marshal(b []byte, deterministic bool) 
 		return b[:n], nil
 	}
 }
-func (dst *TraceEvent_ControlIHaveMeta) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_TraceEvent_ControlIHaveMeta.Merge(dst, src)
+func (m *TraceEvent_ControlIHaveMeta) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_TraceEvent_ControlIHaveMeta.Merge(m, src)
 }
 func (m *TraceEvent_ControlIHaveMeta) XXX_Size() int {
 	return m.Size()
@@ -1257,7 +1262,7 @@ func (m *TraceEvent_ControlIWantMeta) Reset()         { *m = TraceEvent_ControlI
 func (m *TraceEvent_ControlIWantMeta) String() string { return proto.CompactTextString(m) }
 func (*TraceEvent_ControlIWantMeta) ProtoMessage()    {}
 func (*TraceEvent_ControlIWantMeta) Descriptor() ([]byte, []int) {
-	return fileDescriptor_trace_a154d83c271edb68, []int{0, 18}
+	return fileDescriptor_0571941a1d628a80, []int{0, 18}
 }
 func (m *TraceEvent_ControlIWantMeta) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1274,8 +1279,8 @@ func (m *TraceEvent_ControlIWantMeta) XXX_Marshal(b []byte, deterministic bool) 
 		return b[:n], nil
 	}
 }
-func (dst *TraceEvent_ControlIWantMeta) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_TraceEvent_ControlIWantMeta.Merge(dst, src)
+func (m *TraceEvent_ControlIWantMeta) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_TraceEvent_ControlIWantMeta.Merge(m, src)
 }
 func (m *TraceEvent_ControlIWantMeta) XXX_Size() int {
 	return m.Size()
@@ -1304,7 +1309,7 @@ func (m *TraceEvent_ControlGraftMeta) Reset()         { *m = TraceEvent_ControlG
 func (m *TraceEvent_ControlGraftMeta) String() string { return proto.CompactTextString(m) }
 func (*TraceEvent_ControlGraftMeta) ProtoMessage()    {}
 func (*TraceEvent_ControlGraftMeta) Descriptor() ([]byte, []int) {
-	return fileDescriptor_trace_a154d83c271edb68, []int{0, 19}
+	return fileDescriptor_0571941a1d628a80, []int{0, 19}
 }
 func (m *TraceEvent_ControlGraftMeta) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1321,8 +1326,8 @@ func (m *TraceEvent_ControlGraftMeta) XXX_Marshal(b []byte, deterministic bool) 
 		return b[:n], nil
 	}
 }
-func (dst *TraceEvent_ControlGraftMeta) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_TraceEvent_ControlGraftMeta.Merge(dst, src)
+func (m *TraceEvent_ControlGraftMeta) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_TraceEvent_ControlGraftMeta.Merge(m, src)
 }
 func (m *TraceEvent_ControlGraftMeta) XXX_Size() int {
 	return m.Size()
@@ -1351,7 +1356,7 @@ func (m *TraceEvent_ControlPruneMeta) Reset()         { *m = TraceEvent_ControlP
 func (m *TraceEvent_ControlPruneMeta) String() string { return proto.CompactTextString(m) }
 func (*TraceEvent_ControlPruneMeta) ProtoMessage()    {}
 func (*TraceEvent_ControlPruneMeta) Descriptor() ([]byte, []int) {
-	return fileDescriptor_trace_a154d83c271edb68, []int{0, 20}
+	return fileDescriptor_0571941a1d628a80, []int{0, 20}
 }
 func (m *TraceEvent_ControlPruneMeta) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1368,8 +1373,8 @@ func (m *TraceEvent_ControlPruneMeta) XXX_Marshal(b []byte, deterministic bool) 
 		return b[:n], nil
 	}
 }
-func (dst *TraceEvent_ControlPruneMeta) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_TraceEvent_ControlPruneMeta.Merge(dst, src)
+func (m *TraceEvent_ControlPruneMeta) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_TraceEvent_ControlPruneMeta.Merge(m, src)
 }
 func (m *TraceEvent_ControlPruneMeta) XXX_Size() int {
 	return m.Size()
@@ -1398,7 +1403,7 @@ func (m *TraceEventBatch) Reset()         { *m = TraceEventBatch{} }
 func (m *TraceEventBatch) String() string { return proto.CompactTextString(m) }
 func (*TraceEventBatch) ProtoMessage()    {}
 func (*TraceEventBatch) Descriptor() ([]byte, []int) {
-	return fileDescriptor_trace_a154d83c271edb68, []int{1}
+	return fileDescriptor_0571941a1d628a80, []int{1}
 }
 func (m *TraceEventBatch) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1415,8 +1420,8 @@ func (m *TraceEventBatch) XXX_Marshal(b []byte, deterministic bool) ([]byte, err
 		return b[:n], nil
 	}
 }
-func (dst *TraceEventBatch) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_TraceEventBatch.Merge(dst, src)
+func (m *TraceEventBatch) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_TraceEventBatch.Merge(m, src)
 }
 func (m *TraceEventBatch) XXX_Size() int {
 	return m.Size()
@@ -1434,54 +1439,8 @@ func (m *TraceEventBatch) GetBatch() []*TraceEvent {
 	return nil
 }
 
-type CompressedTraceEventBatch struct {
-	Data                 []byte   `protobuf:"bytes,1,opt,name=data" json:"data,omitempty"`
-	XXX_NoUnkeyedLiteral struct{} `json:"-"`
-	XXX_unrecognized     []byte   `json:"-"`
-	XXX_sizecache        int32    `json:"-"`
-}
-
-func (m *CompressedTraceEventBatch) Reset()         { *m = CompressedTraceEventBatch{} }
-func (m *CompressedTraceEventBatch) String() string { return proto.CompactTextString(m) }
-func (*CompressedTraceEventBatch) ProtoMessage()    {}
-func (*CompressedTraceEventBatch) Descriptor() ([]byte, []int) {
-	return fileDescriptor_trace_a154d83c271edb68, []int{2}
-}
-func (m *CompressedTraceEventBatch) XXX_Unmarshal(b []byte) error {
-	return m.Unmarshal(b)
-}
-func (m *CompressedTraceEventBatch) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
-	if deterministic {
-		return xxx_messageInfo_CompressedTraceEventBatch.Marshal(b, m, deterministic)
-	} else {
-		b = b[:cap(b)]
-		n, err := m.MarshalTo(b)
-		if err != nil {
-			return nil, err
-		}
-		return b[:n], nil
-	}
-}
-func (dst *CompressedTraceEventBatch) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_CompressedTraceEventBatch.Merge(dst, src)
-}
-func (m *CompressedTraceEventBatch) XXX_Size() int {
-	return m.Size()
-}
-func (m *CompressedTraceEventBatch) XXX_DiscardUnknown() {
-	xxx_messageInfo_CompressedTraceEventBatch.DiscardUnknown(m)
-}
-
-var xxx_messageInfo_CompressedTraceEventBatch proto.InternalMessageInfo
-
-func (m *CompressedTraceEventBatch) GetData() []byte {
-	if m != nil {
-		return m.Data
-	}
-	return nil
-}
-
 func init() {
+	proto.RegisterEnum("pubsub.pb.TraceEvent_Type", TraceEvent_Type_name, TraceEvent_Type_value)
 	proto.RegisterType((*TraceEvent)(nil), "pubsub.pb.TraceEvent")
 	proto.RegisterType((*TraceEvent_PublishMessage)(nil), "pubsub.pb.TraceEvent.PublishMessage")
 	proto.RegisterType((*TraceEvent_RejectMessage)(nil), "pubsub.pb.TraceEvent.RejectMessage")
@@ -1505,9 +1464,70 @@ func init() {
 	proto.RegisterType((*TraceEvent_ControlGraftMeta)(nil), "pubsub.pb.TraceEvent.ControlGraftMeta")
 	proto.RegisterType((*TraceEvent_ControlPruneMeta)(nil), "pubsub.pb.TraceEvent.ControlPruneMeta")
 	proto.RegisterType((*TraceEventBatch)(nil), "pubsub.pb.TraceEventBatch")
-	proto.RegisterType((*CompressedTraceEventBatch)(nil), "pubsub.pb.CompressedTraceEventBatch")
-	proto.RegisterEnum("pubsub.pb.TraceEvent_Type", TraceEvent_Type_name, TraceEvent_Type_value)
 }
+
+func init() { proto.RegisterFile("trace.proto", fileDescriptor_0571941a1d628a80) }
+
+var fileDescriptor_0571941a1d628a80 = []byte{
+	// 889 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xa4, 0x95, 0xd1, 0x6e, 0xe2, 0x46,
+	0x14, 0x86, 0xeb, 0x80, 0x63, 0x7c, 0x30, 0x8e, 0x99, 0x36, 0x95, 0xe5, 0xb6, 0x11, 0x9b, 0x5d,
+	0x45, 0xa8, 0x2b, 0xa1, 0x2a, 0xdb, 0x55, 0xa5, 0xb6, 0x17, 0x25, 0x78, 0x92, 0x10, 0x91, 0xc4,
+	0x32, 0x24, 0xbd, 0x8c, 0x8c, 0x99, 0x6e, 0xbc, 0x02, 0xdb, 0xb2, 0x07, 0xaa, 0x7d, 0xa2, 0xbe,
+	0x4a, 0xef, 0xda, 0x47, 0xa8, 0x72, 0xb7, 0x6f, 0x51, 0xcd, 0x0c, 0x36, 0xc1, 0x31, 0x6c, 0xd4,
+	0xde, 0xcd, 0x0c, 0xdf, 0x7f, 0xce, 0xe1, 0xcc, 0x7f, 0xc6, 0x50, 0xa7, 0x89, 0xe7, 0x93, 0x4e,
+	0x9c, 0x44, 0x34, 0x42, 0x6a, 0x3c, 0x1f, 0xa7, 0xf3, 0x71, 0x27, 0x1e, 0x1f, 0x7e, 0x6c, 0x02,
+	0x8c, 0xd8, 0x4f, 0x78, 0x41, 0x42, 0x8a, 0xda, 0x50, 0xa5, 0x1f, 0x62, 0x62, 0x4a, 0x2d, 0xa9,
+	0xad, 0x1f, 0x5b, 0x9d, 0x1c, 0xec, 0xac, 0xa0, 0xce, 0xe8, 0x43, 0x4c, 0x90, 0x0e, 0xbb, 0x31,
+	0x21, 0x49, 0xdf, 0x36, 0x77, 0x5a, 0x52, 0x5b, 0x43, 0x4d, 0x50, 0x69, 0x30, 0x23, 0x29, 0xf5,
+	0x66, 0xb1, 0x59, 0x69, 0x49, 0xed, 0x0a, 0xfa, 0x19, 0xf4, 0x78, 0x3e, 0x9e, 0x06, 0xe9, 0xfd,
+	0x25, 0x49, 0x53, 0xef, 0x1d, 0x31, 0xab, 0x2d, 0xa9, 0x5d, 0x3f, 0x7e, 0x55, 0x1e, 0xd6, 0x59,
+	0x63, 0xd1, 0x8f, 0xd0, 0x48, 0xc8, 0x7b, 0xe2, 0xd3, 0x4c, 0x2c, 0x73, 0xf1, 0xcb, 0x72, 0xb1,
+	0xfb, 0x18, 0x45, 0xbf, 0x80, 0x31, 0x99, 0xc7, 0xd3, 0xc0, 0xf7, 0x28, 0xc9, 0xe4, 0xbb, 0x5c,
+	0x7e, 0x54, 0x2e, 0xb7, 0x0b, 0x34, 0xab, 0x7d, 0x42, 0xa6, 0xc1, 0x82, 0x24, 0x99, 0x5e, 0xd9,
+	0x56, 0xbb, 0xbd, 0xc6, 0xa2, 0x0e, 0x28, 0xde, 0x64, 0xe2, 0x10, 0x92, 0x98, 0x35, 0x2e, 0xfb,
+	0xa6, 0x5c, 0xd6, 0x15, 0x10, 0xfa, 0x1e, 0x20, 0x21, 0xb3, 0x68, 0x41, 0xb8, 0x44, 0xe5, 0x92,
+	0xd6, 0xa6, 0x3f, 0x9a, 0x71, 0x2c, 0x4b, 0x42, 0xfc, 0x85, 0xeb, 0xf4, 0x4c, 0xd8, 0x96, 0xc5,
+	0x15, 0x10, 0xe3, 0x53, 0x12, 0x4e, 0x18, 0x5f, 0xdf, 0xc6, 0x0f, 0x05, 0xc4, 0xf8, 0x49, 0x12,
+	0xc5, 0x8c, 0xd7, 0xb6, 0xf1, 0xb6, 0x80, 0x98, 0x79, 0xde, 0x47, 0x41, 0x68, 0x36, 0x38, 0xbc,
+	0xc1, 0x3c, 0x17, 0x51, 0x10, 0xa2, 0x6f, 0x41, 0x9e, 0x12, 0x6f, 0x41, 0x4c, 0x9d, 0xa3, 0x5f,
+	0x95, 0xa3, 0x03, 0x86, 0x30, 0xf6, 0x5d, 0xe2, 0xfd, 0x46, 0xcd, 0xbd, 0x6d, 0xec, 0x19, 0x43,
+	0x18, 0x1b, 0x27, 0xf3, 0x90, 0x98, 0xc6, 0x36, 0xd6, 0x61, 0x88, 0xf5, 0x06, 0xf4, 0x82, 0xe3,
+	0x9a, 0xa0, 0xce, 0xc4, 0xb2, 0x6f, 0xf3, 0x09, 0xd0, 0x98, 0xcb, 0x69, 0x14, 0x07, 0x7e, 0x6a,
+	0xee, 0xb4, 0x2a, 0x6d, 0xd5, 0x3a, 0x87, 0xc6, 0xba, 0xd3, 0x4a, 0x34, 0x5f, 0x80, 0x96, 0x10,
+	0x9f, 0x04, 0x0b, 0x32, 0x39, 0x4d, 0xa2, 0xd9, 0x72, 0x3e, 0x74, 0xd8, 0x4d, 0x88, 0x97, 0x46,
+	0x21, 0x1f, 0x0e, 0xd5, 0xfa, 0x09, 0x8c, 0x27, 0xa6, 0x7b, 0x6e, 0x30, 0xeb, 0x25, 0xe8, 0x05,
+	0xc7, 0x3d, 0x95, 0x5a, 0x6d, 0x50, 0x32, 0x7f, 0xad, 0x86, 0x55, 0x44, 0x6d, 0xb0, 0x3e, 0x45,
+	0x34, 0xe2, 0xe1, 0x54, 0xeb, 0x6b, 0x80, 0x47, 0xb6, 0x2a, 0xc0, 0xd6, 0x00, 0x94, 0xcc, 0x41,
+	0xc5, 0x6a, 0x44, 0xb4, 0xd7, 0x50, 0x9d, 0x11, 0xea, 0xf1, 0x60, 0x9b, 0x4d, 0xe8, 0xf4, 0x2e,
+	0x09, 0xf5, 0xac, 0x53, 0x50, 0x32, 0x7f, 0xe9, 0xb0, 0xcb, 0xfc, 0x38, 0x8a, 0xfe, 0x63, 0x9c,
+	0xcc, 0x77, 0xff, 0x2b, 0xce, 0x3e, 0x54, 0xb9, 0x25, 0x1b, 0x20, 0xf3, 0x9b, 0xe6, 0x31, 0x54,
+	0xeb, 0x4b, 0x90, 0x85, 0xfd, 0xf2, 0x73, 0xd1, 0xaa, 0x23, 0x90, 0x85, 0xd5, 0x4a, 0x5a, 0x5a,
+	0xe0, 0xb8, 0xcd, 0x3e, 0xc5, 0xfd, 0x21, 0x81, 0xb2, 0x2c, 0x05, 0xbd, 0x81, 0xda, 0xf2, 0x0e,
+	0x53, 0x53, 0x6a, 0x55, 0xda, 0xf5, 0xe3, 0x17, 0xe5, 0xb5, 0x2f, 0x2f, 0x7d, 0x29, 0xd2, 0xd2,
+	0xf9, 0x38, 0xf5, 0x93, 0x20, 0xa6, 0x41, 0x14, 0x72, 0x9f, 0x6e, 0x9e, 0xec, 0xf9, 0x98, 0x8b,
+	0x8e, 0x41, 0xf1, 0xa3, 0x90, 0x26, 0xd1, 0x94, 0xbb, 0x71, 0x63, 0xa2, 0x9e, 0x80, 0x78, 0xa3,
+	0xbe, 0x83, 0xfa, 0xe3, 0xbc, 0xcf, 0x18, 0x96, 0xd7, 0xa0, 0x64, 0x09, 0x9b, 0xa0, 0x2e, 0xab,
+	0x1c, 0x8b, 0x8f, 0x4b, 0xad, 0xd8, 0x88, 0x8f, 0x12, 0xd4, 0x1f, 0xa5, 0x43, 0x6f, 0x41, 0x0e,
+	0xee, 0xd9, 0x13, 0x21, 0x3a, 0x71, 0xb4, 0xb5, 0xc0, 0xfe, 0xb9, 0xb7, 0x20, 0xb9, 0xec, 0x77,
+	0x2f, 0xa4, 0xcb, 0x3e, 0x7c, 0x42, 0xf6, 0xab, 0x17, 0xd2, 0x4c, 0x26, 0x1e, 0x99, 0xca, 0x33,
+	0x64, 0xdc, 0x00, 0x99, 0x4c, 0xbc, 0x37, 0xd5, 0x67, 0xc8, 0xb8, 0x1f, 0x78, 0x2b, 0xdf, 0x82,
+	0xf1, 0xa4, 0xf0, 0x75, 0xff, 0x21, 0x04, 0x90, 0xb7, 0x57, 0xf4, 0x53, 0xb3, 0x8e, 0x56, 0xb2,
+	0xbc, 0xf0, 0x75, 0x4e, 0xe2, 0xdc, 0x8b, 0x9c, 0x5b, 0x55, 0x5a, 0xb0, 0xf7, 0x0a, 0xc9, 0xab,
+	0x2a, 0x20, 0x87, 0x7f, 0x49, 0x50, 0xe5, 0x5f, 0xfa, 0xcf, 0x61, 0xcf, 0xb9, 0x39, 0x19, 0xf4,
+	0x87, 0xe7, 0x77, 0x97, 0x78, 0x38, 0xec, 0x9e, 0x61, 0xe3, 0x33, 0x84, 0x40, 0x77, 0xf1, 0x05,
+	0xee, 0x8d, 0xf2, 0x33, 0x09, 0xed, 0x43, 0xd3, 0xbe, 0x71, 0x06, 0xfd, 0x5e, 0x77, 0x84, 0xf3,
+	0xe3, 0x1d, 0xa6, 0xb7, 0xf1, 0xa0, 0x7f, 0x8b, 0xdd, 0xfc, 0xb0, 0x82, 0x34, 0xa8, 0x75, 0x6d,
+	0xfb, 0xce, 0xc1, 0xd8, 0x35, 0xaa, 0x68, 0x0f, 0xea, 0x2e, 0xbe, 0xbc, 0xbe, 0xc5, 0xe2, 0x40,
+	0x66, 0x3f, 0xbb, 0xb8, 0x77, 0x7b, 0xe7, 0x3a, 0x3d, 0x63, 0x97, 0xed, 0x86, 0xf8, 0xca, 0xe6,
+	0x3b, 0x85, 0xed, 0x6c, 0xf7, 0xda, 0xe1, 0xbb, 0x1a, 0xaa, 0x41, 0xf5, 0xe2, 0xba, 0x7f, 0x65,
+	0xa8, 0x48, 0x05, 0x79, 0x80, 0xbb, 0xb7, 0xd8, 0x00, 0xb6, 0x3c, 0x73, 0xbb, 0xa7, 0x23, 0xa3,
+	0xce, 0x96, 0x8e, 0x7b, 0x73, 0x85, 0x0d, 0xed, 0xf0, 0x07, 0xd8, 0x5b, 0xdd, 0xca, 0x89, 0x47,
+	0xfd, 0x7b, 0xf4, 0x0a, 0xe4, 0x31, 0x5b, 0x2c, 0x5d, 0xb6, 0x5f, 0x7a, 0x81, 0x27, 0xda, 0x9f,
+	0x0f, 0x07, 0xd2, 0xdf, 0x0f, 0x07, 0xd2, 0x3f, 0x0f, 0x07, 0xd2, 0xbf, 0x01, 0x00, 0x00, 0xff,
+	0xff, 0xa3, 0xb7, 0xeb, 0x75, 0x4b, 0x09, 0x00, 0x00,
+}
+
 func (m *TraceEvent) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
@@ -2463,33 +2483,6 @@ func (m *TraceEventBatch) MarshalTo(dAtA []byte) (int, error) {
 	return i, nil
 }
 
-func (m *CompressedTraceEventBatch) Marshal() (dAtA []byte, err error) {
-	size := m.Size()
-	dAtA = make([]byte, size)
-	n, err := m.MarshalTo(dAtA)
-	if err != nil {
-		return nil, err
-	}
-	return dAtA[:n], nil
-}
-
-func (m *CompressedTraceEventBatch) MarshalTo(dAtA []byte) (int, error) {
-	var i int
-	_ = i
-	var l int
-	_ = l
-	if m.Data != nil {
-		dAtA[i] = 0xa
-		i++
-		i = encodeVarintTrace(dAtA, i, uint64(len(m.Data)))
-		i += copy(dAtA[i:], m.Data)
-	}
-	if m.XXX_unrecognized != nil {
-		i += copy(dAtA[i:], m.XXX_unrecognized)
-	}
-	return i, nil
-}
-
 func encodeVarintTrace(dAtA []byte, offset int, v uint64) int {
 	for v >= 1<<7 {
 		dAtA[offset] = uint8(v&0x7f | 0x80)
@@ -3018,22 +3011,6 @@ func (m *TraceEventBatch) Size() (n int) {
 	return n
 }
 
-func (m *CompressedTraceEventBatch) Size() (n int) {
-	if m == nil {
-		return 0
-	}
-	var l int
-	_ = l
-	if m.Data != nil {
-		l = len(m.Data)
-		n += 1 + l + sovTrace(uint64(l))
-	}
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
-	return n
-}
-
 func sovTrace(x uint64) (n int) {
 	for {
 		n++
@@ -3062,7 +3039,7 @@ func (m *TraceEvent) Unmarshal(dAtA []byte) error {
 			}
 			b := dAtA[iNdEx]
 			iNdEx++
-			wire |= (uint64(b) & 0x7F) << shift
+			wire |= uint64(b&0x7F) << shift
 			if b < 0x80 {
 				break
 			}
@@ -3090,7 +3067,7 @@ func (m *TraceEvent) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				v |= (TraceEvent_Type(b) & 0x7F) << shift
+				v |= TraceEvent_Type(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -3110,7 +3087,7 @@ func (m *TraceEvent) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				byteLen |= (int(b) & 0x7F) << shift
+				byteLen |= int(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -3119,6 +3096,9 @@ func (m *TraceEvent) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthTrace
 			}
 			postIndex := iNdEx + byteLen
+			if postIndex < 0 {
+				return ErrInvalidLengthTrace
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -3141,7 +3121,7 @@ func (m *TraceEvent) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				v |= (int64(b) & 0x7F) << shift
+				v |= int64(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -3161,7 +3141,7 @@ func (m *TraceEvent) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				msglen |= (int(b) & 0x7F) << shift
+				msglen |= int(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -3170,6 +3150,9 @@ func (m *TraceEvent) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthTrace
 			}
 			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthTrace
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -3194,7 +3177,7 @@ func (m *TraceEvent) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				msglen |= (int(b) & 0x7F) << shift
+				msglen |= int(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -3203,6 +3186,9 @@ func (m *TraceEvent) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthTrace
 			}
 			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthTrace
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -3227,7 +3213,7 @@ func (m *TraceEvent) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				msglen |= (int(b) & 0x7F) << shift
+				msglen |= int(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -3236,6 +3222,9 @@ func (m *TraceEvent) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthTrace
 			}
 			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthTrace
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -3260,7 +3249,7 @@ func (m *TraceEvent) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				msglen |= (int(b) & 0x7F) << shift
+				msglen |= int(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -3269,6 +3258,9 @@ func (m *TraceEvent) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthTrace
 			}
 			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthTrace
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -3293,7 +3285,7 @@ func (m *TraceEvent) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				msglen |= (int(b) & 0x7F) << shift
+				msglen |= int(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -3302,6 +3294,9 @@ func (m *TraceEvent) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthTrace
 			}
 			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthTrace
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -3326,7 +3321,7 @@ func (m *TraceEvent) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				msglen |= (int(b) & 0x7F) << shift
+				msglen |= int(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -3335,6 +3330,9 @@ func (m *TraceEvent) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthTrace
 			}
 			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthTrace
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -3359,7 +3357,7 @@ func (m *TraceEvent) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				msglen |= (int(b) & 0x7F) << shift
+				msglen |= int(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -3368,6 +3366,9 @@ func (m *TraceEvent) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthTrace
 			}
 			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthTrace
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -3392,7 +3393,7 @@ func (m *TraceEvent) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				msglen |= (int(b) & 0x7F) << shift
+				msglen |= int(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -3401,6 +3402,9 @@ func (m *TraceEvent) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthTrace
 			}
 			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthTrace
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -3425,7 +3429,7 @@ func (m *TraceEvent) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				msglen |= (int(b) & 0x7F) << shift
+				msglen |= int(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -3434,6 +3438,9 @@ func (m *TraceEvent) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthTrace
 			}
 			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthTrace
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -3458,7 +3465,7 @@ func (m *TraceEvent) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				msglen |= (int(b) & 0x7F) << shift
+				msglen |= int(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -3467,6 +3474,9 @@ func (m *TraceEvent) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthTrace
 			}
 			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthTrace
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -3491,7 +3501,7 @@ func (m *TraceEvent) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				msglen |= (int(b) & 0x7F) << shift
+				msglen |= int(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -3500,6 +3510,9 @@ func (m *TraceEvent) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthTrace
 			}
 			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthTrace
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -3524,7 +3537,7 @@ func (m *TraceEvent) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				msglen |= (int(b) & 0x7F) << shift
+				msglen |= int(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -3533,6 +3546,9 @@ func (m *TraceEvent) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthTrace
 			}
 			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthTrace
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -3557,7 +3573,7 @@ func (m *TraceEvent) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				msglen |= (int(b) & 0x7F) << shift
+				msglen |= int(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -3566,6 +3582,9 @@ func (m *TraceEvent) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthTrace
 			}
 			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthTrace
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -3583,6 +3602,9 @@ func (m *TraceEvent) Unmarshal(dAtA []byte) error {
 				return err
 			}
 			if skippy < 0 {
+				return ErrInvalidLengthTrace
+			}
+			if (iNdEx + skippy) < 0 {
 				return ErrInvalidLengthTrace
 			}
 			if (iNdEx + skippy) > l {
@@ -3613,7 +3635,7 @@ func (m *TraceEvent_PublishMessage) Unmarshal(dAtA []byte) error {
 			}
 			b := dAtA[iNdEx]
 			iNdEx++
-			wire |= (uint64(b) & 0x7F) << shift
+			wire |= uint64(b&0x7F) << shift
 			if b < 0x80 {
 				break
 			}
@@ -3641,7 +3663,7 @@ func (m *TraceEvent_PublishMessage) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				byteLen |= (int(b) & 0x7F) << shift
+				byteLen |= int(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -3650,6 +3672,9 @@ func (m *TraceEvent_PublishMessage) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthTrace
 			}
 			postIndex := iNdEx + byteLen
+			if postIndex < 0 {
+				return ErrInvalidLengthTrace
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -3672,7 +3697,7 @@ func (m *TraceEvent_PublishMessage) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				stringLen |= (uint64(b) & 0x7F) << shift
+				stringLen |= uint64(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -3682,6 +3707,9 @@ func (m *TraceEvent_PublishMessage) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthTrace
 			}
 			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthTrace
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -3694,6 +3722,9 @@ func (m *TraceEvent_PublishMessage) Unmarshal(dAtA []byte) error {
 				return err
 			}
 			if skippy < 0 {
+				return ErrInvalidLengthTrace
+			}
+			if (iNdEx + skippy) < 0 {
 				return ErrInvalidLengthTrace
 			}
 			if (iNdEx + skippy) > l {
@@ -3724,7 +3755,7 @@ func (m *TraceEvent_RejectMessage) Unmarshal(dAtA []byte) error {
 			}
 			b := dAtA[iNdEx]
 			iNdEx++
-			wire |= (uint64(b) & 0x7F) << shift
+			wire |= uint64(b&0x7F) << shift
 			if b < 0x80 {
 				break
 			}
@@ -3752,7 +3783,7 @@ func (m *TraceEvent_RejectMessage) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				byteLen |= (int(b) & 0x7F) << shift
+				byteLen |= int(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -3761,6 +3792,9 @@ func (m *TraceEvent_RejectMessage) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthTrace
 			}
 			postIndex := iNdEx + byteLen
+			if postIndex < 0 {
+				return ErrInvalidLengthTrace
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -3783,7 +3817,7 @@ func (m *TraceEvent_RejectMessage) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				byteLen |= (int(b) & 0x7F) << shift
+				byteLen |= int(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -3792,6 +3826,9 @@ func (m *TraceEvent_RejectMessage) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthTrace
 			}
 			postIndex := iNdEx + byteLen
+			if postIndex < 0 {
+				return ErrInvalidLengthTrace
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -3814,7 +3851,7 @@ func (m *TraceEvent_RejectMessage) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				stringLen |= (uint64(b) & 0x7F) << shift
+				stringLen |= uint64(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -3824,6 +3861,9 @@ func (m *TraceEvent_RejectMessage) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthTrace
 			}
 			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthTrace
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -3837,6 +3877,9 @@ func (m *TraceEvent_RejectMessage) Unmarshal(dAtA []byte) error {
 				return err
 			}
 			if skippy < 0 {
+				return ErrInvalidLengthTrace
+			}
+			if (iNdEx + skippy) < 0 {
 				return ErrInvalidLengthTrace
 			}
 			if (iNdEx + skippy) > l {
@@ -3867,7 +3910,7 @@ func (m *TraceEvent_DuplicateMessage) Unmarshal(dAtA []byte) error {
 			}
 			b := dAtA[iNdEx]
 			iNdEx++
-			wire |= (uint64(b) & 0x7F) << shift
+			wire |= uint64(b&0x7F) << shift
 			if b < 0x80 {
 				break
 			}
@@ -3895,7 +3938,7 @@ func (m *TraceEvent_DuplicateMessage) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				byteLen |= (int(b) & 0x7F) << shift
+				byteLen |= int(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -3904,6 +3947,9 @@ func (m *TraceEvent_DuplicateMessage) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthTrace
 			}
 			postIndex := iNdEx + byteLen
+			if postIndex < 0 {
+				return ErrInvalidLengthTrace
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -3926,7 +3972,7 @@ func (m *TraceEvent_DuplicateMessage) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				byteLen |= (int(b) & 0x7F) << shift
+				byteLen |= int(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -3935,6 +3981,9 @@ func (m *TraceEvent_DuplicateMessage) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthTrace
 			}
 			postIndex := iNdEx + byteLen
+			if postIndex < 0 {
+				return ErrInvalidLengthTrace
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -3950,6 +3999,9 @@ func (m *TraceEvent_DuplicateMessage) Unmarshal(dAtA []byte) error {
 				return err
 			}
 			if skippy < 0 {
+				return ErrInvalidLengthTrace
+			}
+			if (iNdEx + skippy) < 0 {
 				return ErrInvalidLengthTrace
 			}
 			if (iNdEx + skippy) > l {
@@ -3980,7 +4032,7 @@ func (m *TraceEvent_DeliverMessage) Unmarshal(dAtA []byte) error {
 			}
 			b := dAtA[iNdEx]
 			iNdEx++
-			wire |= (uint64(b) & 0x7F) << shift
+			wire |= uint64(b&0x7F) << shift
 			if b < 0x80 {
 				break
 			}
@@ -4008,7 +4060,7 @@ func (m *TraceEvent_DeliverMessage) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				byteLen |= (int(b) & 0x7F) << shift
+				byteLen |= int(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -4017,6 +4069,9 @@ func (m *TraceEvent_DeliverMessage) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthTrace
 			}
 			postIndex := iNdEx + byteLen
+			if postIndex < 0 {
+				return ErrInvalidLengthTrace
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -4032,6 +4087,9 @@ func (m *TraceEvent_DeliverMessage) Unmarshal(dAtA []byte) error {
 				return err
 			}
 			if skippy < 0 {
+				return ErrInvalidLengthTrace
+			}
+			if (iNdEx + skippy) < 0 {
 				return ErrInvalidLengthTrace
 			}
 			if (iNdEx + skippy) > l {
@@ -4062,7 +4120,7 @@ func (m *TraceEvent_AddPeer) Unmarshal(dAtA []byte) error {
 			}
 			b := dAtA[iNdEx]
 			iNdEx++
-			wire |= (uint64(b) & 0x7F) << shift
+			wire |= uint64(b&0x7F) << shift
 			if b < 0x80 {
 				break
 			}
@@ -4090,7 +4148,7 @@ func (m *TraceEvent_AddPeer) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				byteLen |= (int(b) & 0x7F) << shift
+				byteLen |= int(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -4099,6 +4157,9 @@ func (m *TraceEvent_AddPeer) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthTrace
 			}
 			postIndex := iNdEx + byteLen
+			if postIndex < 0 {
+				return ErrInvalidLengthTrace
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -4121,7 +4182,7 @@ func (m *TraceEvent_AddPeer) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				stringLen |= (uint64(b) & 0x7F) << shift
+				stringLen |= uint64(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -4131,6 +4192,9 @@ func (m *TraceEvent_AddPeer) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthTrace
 			}
 			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthTrace
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -4144,6 +4208,9 @@ func (m *TraceEvent_AddPeer) Unmarshal(dAtA []byte) error {
 				return err
 			}
 			if skippy < 0 {
+				return ErrInvalidLengthTrace
+			}
+			if (iNdEx + skippy) < 0 {
 				return ErrInvalidLengthTrace
 			}
 			if (iNdEx + skippy) > l {
@@ -4174,7 +4241,7 @@ func (m *TraceEvent_RemovePeer) Unmarshal(dAtA []byte) error {
 			}
 			b := dAtA[iNdEx]
 			iNdEx++
-			wire |= (uint64(b) & 0x7F) << shift
+			wire |= uint64(b&0x7F) << shift
 			if b < 0x80 {
 				break
 			}
@@ -4202,7 +4269,7 @@ func (m *TraceEvent_RemovePeer) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				byteLen |= (int(b) & 0x7F) << shift
+				byteLen |= int(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -4211,6 +4278,9 @@ func (m *TraceEvent_RemovePeer) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthTrace
 			}
 			postIndex := iNdEx + byteLen
+			if postIndex < 0 {
+				return ErrInvalidLengthTrace
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -4226,6 +4296,9 @@ func (m *TraceEvent_RemovePeer) Unmarshal(dAtA []byte) error {
 				return err
 			}
 			if skippy < 0 {
+				return ErrInvalidLengthTrace
+			}
+			if (iNdEx + skippy) < 0 {
 				return ErrInvalidLengthTrace
 			}
 			if (iNdEx + skippy) > l {
@@ -4256,7 +4329,7 @@ func (m *TraceEvent_RecvRPC) Unmarshal(dAtA []byte) error {
 			}
 			b := dAtA[iNdEx]
 			iNdEx++
-			wire |= (uint64(b) & 0x7F) << shift
+			wire |= uint64(b&0x7F) << shift
 			if b < 0x80 {
 				break
 			}
@@ -4284,7 +4357,7 @@ func (m *TraceEvent_RecvRPC) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				byteLen |= (int(b) & 0x7F) << shift
+				byteLen |= int(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -4293,6 +4366,9 @@ func (m *TraceEvent_RecvRPC) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthTrace
 			}
 			postIndex := iNdEx + byteLen
+			if postIndex < 0 {
+				return ErrInvalidLengthTrace
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -4315,7 +4391,7 @@ func (m *TraceEvent_RecvRPC) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				msglen |= (int(b) & 0x7F) << shift
+				msglen |= int(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -4324,6 +4400,9 @@ func (m *TraceEvent_RecvRPC) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthTrace
 			}
 			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthTrace
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -4341,6 +4420,9 @@ func (m *TraceEvent_RecvRPC) Unmarshal(dAtA []byte) error {
 				return err
 			}
 			if skippy < 0 {
+				return ErrInvalidLengthTrace
+			}
+			if (iNdEx + skippy) < 0 {
 				return ErrInvalidLengthTrace
 			}
 			if (iNdEx + skippy) > l {
@@ -4371,7 +4453,7 @@ func (m *TraceEvent_SendRPC) Unmarshal(dAtA []byte) error {
 			}
 			b := dAtA[iNdEx]
 			iNdEx++
-			wire |= (uint64(b) & 0x7F) << shift
+			wire |= uint64(b&0x7F) << shift
 			if b < 0x80 {
 				break
 			}
@@ -4399,7 +4481,7 @@ func (m *TraceEvent_SendRPC) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				byteLen |= (int(b) & 0x7F) << shift
+				byteLen |= int(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -4408,6 +4490,9 @@ func (m *TraceEvent_SendRPC) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthTrace
 			}
 			postIndex := iNdEx + byteLen
+			if postIndex < 0 {
+				return ErrInvalidLengthTrace
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -4430,7 +4515,7 @@ func (m *TraceEvent_SendRPC) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				msglen |= (int(b) & 0x7F) << shift
+				msglen |= int(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -4439,6 +4524,9 @@ func (m *TraceEvent_SendRPC) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthTrace
 			}
 			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthTrace
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -4456,6 +4544,9 @@ func (m *TraceEvent_SendRPC) Unmarshal(dAtA []byte) error {
 				return err
 			}
 			if skippy < 0 {
+				return ErrInvalidLengthTrace
+			}
+			if (iNdEx + skippy) < 0 {
 				return ErrInvalidLengthTrace
 			}
 			if (iNdEx + skippy) > l {
@@ -4486,7 +4577,7 @@ func (m *TraceEvent_DropRPC) Unmarshal(dAtA []byte) error {
 			}
 			b := dAtA[iNdEx]
 			iNdEx++
-			wire |= (uint64(b) & 0x7F) << shift
+			wire |= uint64(b&0x7F) << shift
 			if b < 0x80 {
 				break
 			}
@@ -4514,7 +4605,7 @@ func (m *TraceEvent_DropRPC) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				byteLen |= (int(b) & 0x7F) << shift
+				byteLen |= int(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -4523,6 +4614,9 @@ func (m *TraceEvent_DropRPC) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthTrace
 			}
 			postIndex := iNdEx + byteLen
+			if postIndex < 0 {
+				return ErrInvalidLengthTrace
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -4545,7 +4639,7 @@ func (m *TraceEvent_DropRPC) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				msglen |= (int(b) & 0x7F) << shift
+				msglen |= int(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -4554,6 +4648,9 @@ func (m *TraceEvent_DropRPC) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthTrace
 			}
 			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthTrace
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -4571,6 +4668,9 @@ func (m *TraceEvent_DropRPC) Unmarshal(dAtA []byte) error {
 				return err
 			}
 			if skippy < 0 {
+				return ErrInvalidLengthTrace
+			}
+			if (iNdEx + skippy) < 0 {
 				return ErrInvalidLengthTrace
 			}
 			if (iNdEx + skippy) > l {
@@ -4601,7 +4701,7 @@ func (m *TraceEvent_Join) Unmarshal(dAtA []byte) error {
 			}
 			b := dAtA[iNdEx]
 			iNdEx++
-			wire |= (uint64(b) & 0x7F) << shift
+			wire |= uint64(b&0x7F) << shift
 			if b < 0x80 {
 				break
 			}
@@ -4629,7 +4729,7 @@ func (m *TraceEvent_Join) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				stringLen |= (uint64(b) & 0x7F) << shift
+				stringLen |= uint64(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -4639,6 +4739,9 @@ func (m *TraceEvent_Join) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthTrace
 			}
 			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthTrace
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -4652,6 +4755,9 @@ func (m *TraceEvent_Join) Unmarshal(dAtA []byte) error {
 				return err
 			}
 			if skippy < 0 {
+				return ErrInvalidLengthTrace
+			}
+			if (iNdEx + skippy) < 0 {
 				return ErrInvalidLengthTrace
 			}
 			if (iNdEx + skippy) > l {
@@ -4682,7 +4788,7 @@ func (m *TraceEvent_Leave) Unmarshal(dAtA []byte) error {
 			}
 			b := dAtA[iNdEx]
 			iNdEx++
-			wire |= (uint64(b) & 0x7F) << shift
+			wire |= uint64(b&0x7F) << shift
 			if b < 0x80 {
 				break
 			}
@@ -4710,7 +4816,7 @@ func (m *TraceEvent_Leave) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				stringLen |= (uint64(b) & 0x7F) << shift
+				stringLen |= uint64(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -4720,6 +4826,9 @@ func (m *TraceEvent_Leave) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthTrace
 			}
 			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthTrace
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -4733,6 +4842,9 @@ func (m *TraceEvent_Leave) Unmarshal(dAtA []byte) error {
 				return err
 			}
 			if skippy < 0 {
+				return ErrInvalidLengthTrace
+			}
+			if (iNdEx + skippy) < 0 {
 				return ErrInvalidLengthTrace
 			}
 			if (iNdEx + skippy) > l {
@@ -4763,7 +4875,7 @@ func (m *TraceEvent_Graft) Unmarshal(dAtA []byte) error {
 			}
 			b := dAtA[iNdEx]
 			iNdEx++
-			wire |= (uint64(b) & 0x7F) << shift
+			wire |= uint64(b&0x7F) << shift
 			if b < 0x80 {
 				break
 			}
@@ -4791,7 +4903,7 @@ func (m *TraceEvent_Graft) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				byteLen |= (int(b) & 0x7F) << shift
+				byteLen |= int(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -4800,6 +4912,9 @@ func (m *TraceEvent_Graft) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthTrace
 			}
 			postIndex := iNdEx + byteLen
+			if postIndex < 0 {
+				return ErrInvalidLengthTrace
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -4822,7 +4937,7 @@ func (m *TraceEvent_Graft) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				stringLen |= (uint64(b) & 0x7F) << shift
+				stringLen |= uint64(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -4832,6 +4947,9 @@ func (m *TraceEvent_Graft) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthTrace
 			}
 			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthTrace
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -4845,6 +4963,9 @@ func (m *TraceEvent_Graft) Unmarshal(dAtA []byte) error {
 				return err
 			}
 			if skippy < 0 {
+				return ErrInvalidLengthTrace
+			}
+			if (iNdEx + skippy) < 0 {
 				return ErrInvalidLengthTrace
 			}
 			if (iNdEx + skippy) > l {
@@ -4875,7 +4996,7 @@ func (m *TraceEvent_Prune) Unmarshal(dAtA []byte) error {
 			}
 			b := dAtA[iNdEx]
 			iNdEx++
-			wire |= (uint64(b) & 0x7F) << shift
+			wire |= uint64(b&0x7F) << shift
 			if b < 0x80 {
 				break
 			}
@@ -4903,7 +5024,7 @@ func (m *TraceEvent_Prune) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				byteLen |= (int(b) & 0x7F) << shift
+				byteLen |= int(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -4912,6 +5033,9 @@ func (m *TraceEvent_Prune) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthTrace
 			}
 			postIndex := iNdEx + byteLen
+			if postIndex < 0 {
+				return ErrInvalidLengthTrace
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -4934,7 +5058,7 @@ func (m *TraceEvent_Prune) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				stringLen |= (uint64(b) & 0x7F) << shift
+				stringLen |= uint64(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -4944,6 +5068,9 @@ func (m *TraceEvent_Prune) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthTrace
 			}
 			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthTrace
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -4957,6 +5084,9 @@ func (m *TraceEvent_Prune) Unmarshal(dAtA []byte) error {
 				return err
 			}
 			if skippy < 0 {
+				return ErrInvalidLengthTrace
+			}
+			if (iNdEx + skippy) < 0 {
 				return ErrInvalidLengthTrace
 			}
 			if (iNdEx + skippy) > l {
@@ -4987,7 +5117,7 @@ func (m *TraceEvent_RPCMeta) Unmarshal(dAtA []byte) error {
 			}
 			b := dAtA[iNdEx]
 			iNdEx++
-			wire |= (uint64(b) & 0x7F) << shift
+			wire |= uint64(b&0x7F) << shift
 			if b < 0x80 {
 				break
 			}
@@ -5015,7 +5145,7 @@ func (m *TraceEvent_RPCMeta) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				msglen |= (int(b) & 0x7F) << shift
+				msglen |= int(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -5024,6 +5154,9 @@ func (m *TraceEvent_RPCMeta) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthTrace
 			}
 			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthTrace
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -5046,7 +5179,7 @@ func (m *TraceEvent_RPCMeta) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				msglen |= (int(b) & 0x7F) << shift
+				msglen |= int(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -5055,6 +5188,9 @@ func (m *TraceEvent_RPCMeta) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthTrace
 			}
 			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthTrace
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -5077,7 +5213,7 @@ func (m *TraceEvent_RPCMeta) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				msglen |= (int(b) & 0x7F) << shift
+				msglen |= int(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -5086,6 +5222,9 @@ func (m *TraceEvent_RPCMeta) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthTrace
 			}
 			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthTrace
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -5103,6 +5242,9 @@ func (m *TraceEvent_RPCMeta) Unmarshal(dAtA []byte) error {
 				return err
 			}
 			if skippy < 0 {
+				return ErrInvalidLengthTrace
+			}
+			if (iNdEx + skippy) < 0 {
 				return ErrInvalidLengthTrace
 			}
 			if (iNdEx + skippy) > l {
@@ -5133,7 +5275,7 @@ func (m *TraceEvent_MessageMeta) Unmarshal(dAtA []byte) error {
 			}
 			b := dAtA[iNdEx]
 			iNdEx++
-			wire |= (uint64(b) & 0x7F) << shift
+			wire |= uint64(b&0x7F) << shift
 			if b < 0x80 {
 				break
 			}
@@ -5161,7 +5303,7 @@ func (m *TraceEvent_MessageMeta) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				byteLen |= (int(b) & 0x7F) << shift
+				byteLen |= int(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -5170,6 +5312,9 @@ func (m *TraceEvent_MessageMeta) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthTrace
 			}
 			postIndex := iNdEx + byteLen
+			if postIndex < 0 {
+				return ErrInvalidLengthTrace
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -5192,7 +5337,7 @@ func (m *TraceEvent_MessageMeta) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				stringLen |= (uint64(b) & 0x7F) << shift
+				stringLen |= uint64(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -5202,6 +5347,9 @@ func (m *TraceEvent_MessageMeta) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthTrace
 			}
 			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthTrace
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -5214,6 +5362,9 @@ func (m *TraceEvent_MessageMeta) Unmarshal(dAtA []byte) error {
 				return err
 			}
 			if skippy < 0 {
+				return ErrInvalidLengthTrace
+			}
+			if (iNdEx + skippy) < 0 {
 				return ErrInvalidLengthTrace
 			}
 			if (iNdEx + skippy) > l {
@@ -5244,7 +5395,7 @@ func (m *TraceEvent_SubMeta) Unmarshal(dAtA []byte) error {
 			}
 			b := dAtA[iNdEx]
 			iNdEx++
-			wire |= (uint64(b) & 0x7F) << shift
+			wire |= uint64(b&0x7F) << shift
 			if b < 0x80 {
 				break
 			}
@@ -5272,7 +5423,7 @@ func (m *TraceEvent_SubMeta) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				v |= (int(b) & 0x7F) << shift
+				v |= int(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -5293,7 +5444,7 @@ func (m *TraceEvent_SubMeta) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				stringLen |= (uint64(b) & 0x7F) << shift
+				stringLen |= uint64(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -5303,6 +5454,9 @@ func (m *TraceEvent_SubMeta) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthTrace
 			}
 			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthTrace
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -5316,6 +5470,9 @@ func (m *TraceEvent_SubMeta) Unmarshal(dAtA []byte) error {
 				return err
 			}
 			if skippy < 0 {
+				return ErrInvalidLengthTrace
+			}
+			if (iNdEx + skippy) < 0 {
 				return ErrInvalidLengthTrace
 			}
 			if (iNdEx + skippy) > l {
@@ -5346,7 +5503,7 @@ func (m *TraceEvent_ControlMeta) Unmarshal(dAtA []byte) error {
 			}
 			b := dAtA[iNdEx]
 			iNdEx++
-			wire |= (uint64(b) & 0x7F) << shift
+			wire |= uint64(b&0x7F) << shift
 			if b < 0x80 {
 				break
 			}
@@ -5374,7 +5531,7 @@ func (m *TraceEvent_ControlMeta) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				msglen |= (int(b) & 0x7F) << shift
+				msglen |= int(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -5383,6 +5540,9 @@ func (m *TraceEvent_ControlMeta) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthTrace
 			}
 			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthTrace
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -5405,7 +5565,7 @@ func (m *TraceEvent_ControlMeta) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				msglen |= (int(b) & 0x7F) << shift
+				msglen |= int(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -5414,6 +5574,9 @@ func (m *TraceEvent_ControlMeta) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthTrace
 			}
 			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthTrace
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -5436,7 +5599,7 @@ func (m *TraceEvent_ControlMeta) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				msglen |= (int(b) & 0x7F) << shift
+				msglen |= int(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -5445,6 +5608,9 @@ func (m *TraceEvent_ControlMeta) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthTrace
 			}
 			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthTrace
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -5467,7 +5633,7 @@ func (m *TraceEvent_ControlMeta) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				msglen |= (int(b) & 0x7F) << shift
+				msglen |= int(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -5476,6 +5642,9 @@ func (m *TraceEvent_ControlMeta) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthTrace
 			}
 			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthTrace
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -5491,6 +5660,9 @@ func (m *TraceEvent_ControlMeta) Unmarshal(dAtA []byte) error {
 				return err
 			}
 			if skippy < 0 {
+				return ErrInvalidLengthTrace
+			}
+			if (iNdEx + skippy) < 0 {
 				return ErrInvalidLengthTrace
 			}
 			if (iNdEx + skippy) > l {
@@ -5521,7 +5693,7 @@ func (m *TraceEvent_ControlIHaveMeta) Unmarshal(dAtA []byte) error {
 			}
 			b := dAtA[iNdEx]
 			iNdEx++
-			wire |= (uint64(b) & 0x7F) << shift
+			wire |= uint64(b&0x7F) << shift
 			if b < 0x80 {
 				break
 			}
@@ -5549,7 +5721,7 @@ func (m *TraceEvent_ControlIHaveMeta) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				stringLen |= (uint64(b) & 0x7F) << shift
+				stringLen |= uint64(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -5559,6 +5731,9 @@ func (m *TraceEvent_ControlIHaveMeta) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthTrace
 			}
 			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthTrace
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -5579,7 +5754,7 @@ func (m *TraceEvent_ControlIHaveMeta) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				byteLen |= (int(b) & 0x7F) << shift
+				byteLen |= int(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -5588,6 +5763,9 @@ func (m *TraceEvent_ControlIHaveMeta) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthTrace
 			}
 			postIndex := iNdEx + byteLen
+			if postIndex < 0 {
+				return ErrInvalidLengthTrace
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -5601,6 +5779,9 @@ func (m *TraceEvent_ControlIHaveMeta) Unmarshal(dAtA []byte) error {
 				return err
 			}
 			if skippy < 0 {
+				return ErrInvalidLengthTrace
+			}
+			if (iNdEx + skippy) < 0 {
 				return ErrInvalidLengthTrace
 			}
 			if (iNdEx + skippy) > l {
@@ -5631,7 +5812,7 @@ func (m *TraceEvent_ControlIWantMeta) Unmarshal(dAtA []byte) error {
 			}
 			b := dAtA[iNdEx]
 			iNdEx++
-			wire |= (uint64(b) & 0x7F) << shift
+			wire |= uint64(b&0x7F) << shift
 			if b < 0x80 {
 				break
 			}
@@ -5659,7 +5840,7 @@ func (m *TraceEvent_ControlIWantMeta) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				byteLen |= (int(b) & 0x7F) << shift
+				byteLen |= int(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -5668,6 +5849,9 @@ func (m *TraceEvent_ControlIWantMeta) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthTrace
 			}
 			postIndex := iNdEx + byteLen
+			if postIndex < 0 {
+				return ErrInvalidLengthTrace
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -5681,6 +5865,9 @@ func (m *TraceEvent_ControlIWantMeta) Unmarshal(dAtA []byte) error {
 				return err
 			}
 			if skippy < 0 {
+				return ErrInvalidLengthTrace
+			}
+			if (iNdEx + skippy) < 0 {
 				return ErrInvalidLengthTrace
 			}
 			if (iNdEx + skippy) > l {
@@ -5711,7 +5898,7 @@ func (m *TraceEvent_ControlGraftMeta) Unmarshal(dAtA []byte) error {
 			}
 			b := dAtA[iNdEx]
 			iNdEx++
-			wire |= (uint64(b) & 0x7F) << shift
+			wire |= uint64(b&0x7F) << shift
 			if b < 0x80 {
 				break
 			}
@@ -5739,7 +5926,7 @@ func (m *TraceEvent_ControlGraftMeta) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				stringLen |= (uint64(b) & 0x7F) << shift
+				stringLen |= uint64(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -5749,6 +5936,9 @@ func (m *TraceEvent_ControlGraftMeta) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthTrace
 			}
 			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthTrace
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -5762,6 +5952,9 @@ func (m *TraceEvent_ControlGraftMeta) Unmarshal(dAtA []byte) error {
 				return err
 			}
 			if skippy < 0 {
+				return ErrInvalidLengthTrace
+			}
+			if (iNdEx + skippy) < 0 {
 				return ErrInvalidLengthTrace
 			}
 			if (iNdEx + skippy) > l {
@@ -5792,7 +5985,7 @@ func (m *TraceEvent_ControlPruneMeta) Unmarshal(dAtA []byte) error {
 			}
 			b := dAtA[iNdEx]
 			iNdEx++
-			wire |= (uint64(b) & 0x7F) << shift
+			wire |= uint64(b&0x7F) << shift
 			if b < 0x80 {
 				break
 			}
@@ -5820,7 +6013,7 @@ func (m *TraceEvent_ControlPruneMeta) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				stringLen |= (uint64(b) & 0x7F) << shift
+				stringLen |= uint64(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -5830,6 +6023,9 @@ func (m *TraceEvent_ControlPruneMeta) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthTrace
 			}
 			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthTrace
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -5843,6 +6039,9 @@ func (m *TraceEvent_ControlPruneMeta) Unmarshal(dAtA []byte) error {
 				return err
 			}
 			if skippy < 0 {
+				return ErrInvalidLengthTrace
+			}
+			if (iNdEx + skippy) < 0 {
 				return ErrInvalidLengthTrace
 			}
 			if (iNdEx + skippy) > l {
@@ -5873,7 +6072,7 @@ func (m *TraceEventBatch) Unmarshal(dAtA []byte) error {
 			}
 			b := dAtA[iNdEx]
 			iNdEx++
-			wire |= (uint64(b) & 0x7F) << shift
+			wire |= uint64(b&0x7F) << shift
 			if b < 0x80 {
 				break
 			}
@@ -5901,7 +6100,7 @@ func (m *TraceEventBatch) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				msglen |= (int(b) & 0x7F) << shift
+				msglen |= int(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -5910,6 +6109,9 @@ func (m *TraceEventBatch) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthTrace
 			}
 			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthTrace
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -5927,86 +6129,7 @@ func (m *TraceEventBatch) Unmarshal(dAtA []byte) error {
 			if skippy < 0 {
 				return ErrInvalidLengthTrace
 			}
-			if (iNdEx + skippy) > l {
-				return io.ErrUnexpectedEOF
-			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
-			iNdEx += skippy
-		}
-	}
-
-	if iNdEx > l {
-		return io.ErrUnexpectedEOF
-	}
-	return nil
-}
-func (m *CompressedTraceEventBatch) Unmarshal(dAtA []byte) error {
-	l := len(dAtA)
-	iNdEx := 0
-	for iNdEx < l {
-		preIndex := iNdEx
-		var wire uint64
-		for shift := uint(0); ; shift += 7 {
-			if shift >= 64 {
-				return ErrIntOverflowTrace
-			}
-			if iNdEx >= l {
-				return io.ErrUnexpectedEOF
-			}
-			b := dAtA[iNdEx]
-			iNdEx++
-			wire |= (uint64(b) & 0x7F) << shift
-			if b < 0x80 {
-				break
-			}
-		}
-		fieldNum := int32(wire >> 3)
-		wireType := int(wire & 0x7)
-		if wireType == 4 {
-			return fmt.Errorf("proto: CompressedTraceEventBatch: wiretype end group for non-group")
-		}
-		if fieldNum <= 0 {
-			return fmt.Errorf("proto: CompressedTraceEventBatch: illegal tag %d (wire type %d)", fieldNum, wire)
-		}
-		switch fieldNum {
-		case 1:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Data", wireType)
-			}
-			var byteLen int
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowTrace
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				byteLen |= (int(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			if byteLen < 0 {
-				return ErrInvalidLengthTrace
-			}
-			postIndex := iNdEx + byteLen
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			m.Data = append(m.Data[:0], dAtA[iNdEx:postIndex]...)
-			if m.Data == nil {
-				m.Data = []byte{}
-			}
-			iNdEx = postIndex
-		default:
-			iNdEx = preIndex
-			skippy, err := skipTrace(dAtA[iNdEx:])
-			if err != nil {
-				return err
-			}
-			if skippy < 0 {
+			if (iNdEx + skippy) < 0 {
 				return ErrInvalidLengthTrace
 			}
 			if (iNdEx + skippy) > l {
@@ -6076,8 +6199,11 @@ func skipTrace(dAtA []byte) (n int, err error) {
 					break
 				}
 			}
-			iNdEx += length
 			if length < 0 {
+				return 0, ErrInvalidLengthTrace
+			}
+			iNdEx += length
+			if iNdEx < 0 {
 				return 0, ErrInvalidLengthTrace
 			}
 			return iNdEx, nil
@@ -6108,6 +6234,9 @@ func skipTrace(dAtA []byte) (n int, err error) {
 					return 0, err
 				}
 				iNdEx = start + next
+				if iNdEx < 0 {
+					return 0, ErrInvalidLengthTrace
+				}
 			}
 			return iNdEx, nil
 		case 4:
@@ -6126,72 +6255,3 @@ var (
 	ErrInvalidLengthTrace = fmt.Errorf("proto: negative length found during unmarshaling")
 	ErrIntOverflowTrace   = fmt.Errorf("proto: integer overflow")
 )
-
-func init() { proto.RegisterFile("trace.proto", fileDescriptor_trace_a154d83c271edb68) }
-
-var fileDescriptor_trace_a154d83c271edb68 = []byte{
-	// 1006 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xac, 0x96, 0xdd, 0x6e, 0xe3, 0x44,
-	0x14, 0xc7, 0x71, 0x3e, 0x36, 0xc9, 0x49, 0x9a, 0x9a, 0x81, 0x22, 0x63, 0x76, 0xab, 0x10, 0x56,
-	0xab, 0x48, 0x48, 0x41, 0x5b, 0x09, 0xed, 0x05, 0xbb, 0x88, 0x34, 0x76, 0xdb, 0x54, 0x69, 0x6b,
-	0x9d, 0xa4, 0xe5, 0xb2, 0x38, 0xc9, 0xb0, 0xf5, 0x2a, 0xb1, 0x2d, 0x7b, 0x12, 0xb4, 0x0f, 0xc0,
-	0xbb, 0xed, 0x1d, 0x3c, 0x02, 0xea, 0x15, 0x8f, 0x81, 0x66, 0xc6, 0x8e, 0xe3, 0xd4, 0xf1, 0x2e,
-	0x0b, 0x77, 0x73, 0xc6, 0xff, 0xdf, 0x99, 0xaf, 0xf3, 0x3f, 0x32, 0xd4, 0x59, 0x60, 0x4f, 0x69,
-	0xd7, 0x0f, 0x3c, 0xe6, 0x91, 0x9a, 0xbf, 0x9c, 0x84, 0xcb, 0x49, 0xd7, 0x9f, 0xb4, 0xff, 0x3e,
-	0x00, 0x18, 0xf3, 0x4f, 0xe6, 0x8a, 0xba, 0x8c, 0x74, 0xa1, 0xc4, 0xde, 0xfa, 0x54, 0x53, 0x5a,
-	0x4a, 0xa7, 0x79, 0xa4, 0x77, 0xd7, 0xc2, 0x6e, 0x22, 0xea, 0x8e, 0xdf, 0xfa, 0x14, 0x85, 0x8e,
-	0x7c, 0x01, 0x8f, 0x7c, 0x4a, 0x83, 0x81, 0xa1, 0x15, 0x5a, 0x4a, 0xa7, 0x81, 0x51, 0x44, 0x1e,
-	0x43, 0x8d, 0x39, 0x0b, 0x1a, 0x32, 0x7b, 0xe1, 0x6b, 0xc5, 0x96, 0xd2, 0x29, 0x62, 0x32, 0x41,
-	0x86, 0xd0, 0xf4, 0x97, 0x93, 0xb9, 0x13, 0xde, 0x5d, 0xd0, 0x30, 0xb4, 0x5f, 0x53, 0xad, 0xd4,
-	0x52, 0x3a, 0xf5, 0xa3, 0xa7, 0xd9, 0xeb, 0x59, 0x29, 0x2d, 0x6e, 0xb1, 0x64, 0x00, 0x7b, 0x01,
-	0x7d, 0x43, 0xa7, 0x2c, 0x4e, 0x56, 0x16, 0xc9, 0xbe, 0xc9, 0x4e, 0x86, 0x9b, 0x52, 0x4c, 0x93,
-	0x04, 0x41, 0x9d, 0x2d, 0xfd, 0xb9, 0x33, 0xb5, 0x19, 0x8d, 0xb3, 0x3d, 0x12, 0xd9, 0x9e, 0x65,
-	0x67, 0x33, 0xb6, 0xd4, 0xf8, 0x80, 0xe7, 0x87, 0x9d, 0xd1, 0xb9, 0xb3, 0xa2, 0x41, 0x9c, 0xb1,
-	0x92, 0x77, 0x58, 0x23, 0xa5, 0xc5, 0x2d, 0x96, 0xbc, 0x80, 0x8a, 0x3d, 0x9b, 0x59, 0x94, 0x06,
-	0x5a, 0x55, 0xa4, 0x79, 0x92, 0x9d, 0xa6, 0x27, 0x45, 0x18, 0xab, 0xc9, 0x4f, 0x00, 0x01, 0x5d,
-	0x78, 0x2b, 0x2a, 0xd8, 0x9a, 0x60, 0x5b, 0xbb, 0xae, 0x28, 0xd6, 0xe1, 0x06, 0xc3, 0x97, 0x0e,
-	0xe8, 0x74, 0x85, 0x56, 0x5f, 0x83, 0xbc, 0xa5, 0x51, 0x8a, 0x30, 0x56, 0x73, 0x30, 0xa4, 0xee,
-	0x8c, 0x83, 0xf5, 0x3c, 0x70, 0x24, 0x45, 0x18, 0xab, 0x39, 0x38, 0x0b, 0x3c, 0x9f, 0x83, 0x8d,
-	0x3c, 0xd0, 0x90, 0x22, 0x8c, 0xd5, 0xbc, 0x8c, 0xdf, 0x78, 0x8e, 0xab, 0xed, 0x09, 0x6a, 0x47,
-	0x19, 0x9f, 0x7b, 0x8e, 0x8b, 0x42, 0x47, 0x9e, 0x43, 0x79, 0x4e, 0xed, 0x15, 0xd5, 0x9a, 0x02,
-	0xf8, 0x2a, 0x1b, 0x18, 0x72, 0x09, 0x4a, 0x25, 0x47, 0x5e, 0x07, 0xf6, 0xaf, 0x4c, 0xdb, 0xcf,
-	0x43, 0x4e, 0xb9, 0x04, 0xa5, 0x92, 0x23, 0x7e, 0xb0, 0x74, 0xa9, 0xa6, 0xe6, 0x21, 0x16, 0x97,
-	0xa0, 0x54, 0xea, 0x27, 0xd0, 0x4c, 0x57, 0x3f, 0x77, 0xd6, 0x42, 0x0e, 0x07, 0x86, 0xb0, 0x69,
-	0x03, 0x93, 0x09, 0xee, 0x47, 0xe6, 0xf9, 0xce, 0x34, 0xd4, 0x0a, 0xad, 0x62, 0xa7, 0x86, 0x51,
-	0xa4, 0x3b, 0xb0, 0x97, 0x2a, 0xfc, 0xf7, 0xa4, 0x69, 0x43, 0x23, 0xa0, 0x53, 0xea, 0xac, 0xe8,
-	0xec, 0x24, 0xf0, 0x16, 0x91, 0xb9, 0x53, 0x73, 0x7c, 0xa9, 0x80, 0xda, 0xa1, 0xe7, 0x0a, 0x7f,
-	0xd7, 0x30, 0x8a, 0xf4, 0x31, 0xa8, 0xdb, 0xae, 0xf8, 0xef, 0xab, 0xe9, 0x5d, 0x68, 0xa6, 0x9d,
-	0x91, 0x9f, 0x53, 0x7f, 0x01, 0x95, 0xc8, 0x02, 0x1b, 0x3d, 0x4a, 0x49, 0xf5, 0xa8, 0xcf, 0xf9,
-	0x73, 0x78, 0xcc, 0x13, 0xeb, 0xd5, 0x50, 0x06, 0xfa, 0x53, 0x80, 0xa4, 0xfe, 0x77, 0xb1, 0xfa,
-	0x2f, 0x50, 0x89, 0xca, 0xfc, 0xc1, 0xee, 0x95, 0x8c, 0xbb, 0x7a, 0x0e, 0xa5, 0x05, 0x65, 0xb6,
-	0x58, 0x69, 0xb7, 0x6f, 0xac, 0xfe, 0x05, 0x65, 0x36, 0x0a, 0xa9, 0x3e, 0x86, 0x4a, 0xe4, 0x07,
-	0xbe, 0x09, 0xee, 0x88, 0xb1, 0x17, 0x6f, 0x42, 0x46, 0x1f, 0x99, 0x35, 0x32, 0xcb, 0xff, 0x99,
-	0xf5, 0x31, 0x94, 0xb8, 0x99, 0xf8, 0x8d, 0x8a, 0x7a, 0x13, 0x19, 0x6b, 0x28, 0x03, 0xfd, 0x09,
-	0x94, 0x85, 0x73, 0x92, 0xcf, 0x85, 0xcd, 0xcf, 0xdf, 0x43, 0x59, 0xb8, 0x24, 0xef, 0x9d, 0xb2,
-	0x31, 0xe1, 0x94, 0x7f, 0x89, 0xbd, 0x53, 0xa0, 0x12, 0x6d, 0x9e, 0xbc, 0x82, 0x6a, 0x54, 0x30,
-	0xa1, 0xa6, 0xb4, 0x8a, 0x9d, 0xfa, 0xd1, 0xd7, 0xd9, 0xa7, 0x8d, 0x4a, 0x4e, 0x9c, 0x78, 0x8d,
-	0x90, 0x1e, 0x34, 0xc2, 0xe5, 0x24, 0x9c, 0x06, 0x8e, 0xcf, 0x1c, 0xcf, 0x15, 0x8e, 0xdb, 0xdd,
-	0xdb, 0x96, 0x13, 0x81, 0xa7, 0x10, 0xf2, 0x03, 0x54, 0xa6, 0x9e, 0xcb, 0x02, 0x6f, 0x2e, 0x4c,
-	0xb4, 0x73, 0x03, 0x7d, 0x29, 0x12, 0x19, 0x62, 0x42, 0xef, 0x43, 0x7d, 0x63, 0x63, 0x1f, 0xd9,
-	0x18, 0x5e, 0x41, 0x25, 0xda, 0x1a, 0x4f, 0x10, 0x6d, 0x6e, 0x22, 0x7f, 0x00, 0xaa, 0x98, 0x4c,
-	0xec, 0xb8, 0xce, 0xdf, 0x0b, 0x50, 0xdf, 0xd8, 0x1c, 0x79, 0x09, 0x65, 0xe7, 0x8e, 0x37, 0x52,
-	0x79, 0x9f, 0xcf, 0x72, 0x8f, 0x33, 0x38, 0xb3, 0x57, 0xf2, 0x52, 0x25, 0x24, 0xe8, 0xdf, 0x6c,
-	0x97, 0x45, 0x57, 0xf9, 0x1e, 0xfa, 0x67, 0xdb, 0x65, 0x11, 0xcd, 0x21, 0x4e, 0xcb, 0x8e, 0x5c,
-	0xfc, 0x00, 0x5a, 0x94, 0x9c, 0xa4, 0x65, 0x73, 0x7e, 0x19, 0x37, 0xe7, 0xd2, 0x07, 0xd0, 0xa2,
-	0xf2, 0x24, 0x2d, 0xfb, 0xf4, 0x19, 0xa8, 0xdb, 0x87, 0xca, 0x76, 0x03, 0x39, 0x04, 0x58, 0xbf,
-	0x8a, 0x7c, 0x8c, 0x06, 0x6e, 0xcc, 0xe8, 0x47, 0x49, 0xa6, 0xf8, 0x80, 0x5b, 0x8c, 0xf2, 0x80,
-	0xe9, 0xac, 0x99, 0xf5, 0xb1, 0x76, 0x78, 0x31, 0x51, 0xae, 0x8f, 0x90, 0xad, 0x6c, 0xff, 0xa1,
-	0x40, 0x89, 0xff, 0xe8, 0x91, 0xcf, 0x60, 0xdf, 0xba, 0x3e, 0x1e, 0x0e, 0x46, 0x67, 0xb7, 0x17,
-	0xe6, 0x68, 0xd4, 0x3b, 0x35, 0xd5, 0x4f, 0x08, 0x81, 0x26, 0x9a, 0xe7, 0x66, 0x7f, 0xbc, 0x9e,
-	0x53, 0xc8, 0x01, 0x7c, 0x6a, 0x5c, 0x5b, 0xc3, 0x41, 0xbf, 0x37, 0x36, 0xd7, 0xd3, 0x05, 0xce,
-	0x1b, 0xe6, 0x70, 0x70, 0x63, 0xe2, 0x7a, 0xb2, 0x48, 0x1a, 0x50, 0xed, 0x19, 0xc6, 0xad, 0x65,
-	0x9a, 0xa8, 0x96, 0xc8, 0x3e, 0xd4, 0xd1, 0xbc, 0xb8, 0xba, 0x31, 0xe5, 0x44, 0x99, 0x7f, 0x46,
-	0xb3, 0x7f, 0x73, 0x8b, 0x56, 0x5f, 0x7d, 0xc4, 0xa3, 0x91, 0x79, 0x69, 0x88, 0xa8, 0xc2, 0x23,
-	0x03, 0xaf, 0x2c, 0x11, 0x55, 0x49, 0x15, 0x4a, 0xe7, 0x57, 0x83, 0x4b, 0xb5, 0x46, 0x6a, 0x50,
-	0x1e, 0x9a, 0xbd, 0x1b, 0x53, 0x05, 0x3e, 0x3c, 0xc5, 0xde, 0xc9, 0x58, 0xad, 0xf3, 0xa1, 0x85,
-	0xd7, 0x97, 0xa6, 0xda, 0x68, 0xff, 0x08, 0xfb, 0xc9, 0x4b, 0x1e, 0xdb, 0x6c, 0x7a, 0x47, 0xbe,
-	0x85, 0xf2, 0x84, 0x0f, 0xa2, 0x72, 0x3d, 0xc8, 0x7c, 0x74, 0x94, 0x9a, 0xf6, 0x77, 0xf0, 0x65,
-	0xdf, 0x5b, 0xf8, 0x01, 0x0d, 0x43, 0x3a, 0xdb, 0xce, 0x44, 0xa0, 0x34, 0xb3, 0x99, 0x1d, 0x19,
-	0x4f, 0x8c, 0x8f, 0x1b, 0xef, 0xee, 0x0f, 0x95, 0x3f, 0xef, 0x0f, 0x95, 0xbf, 0xee, 0x0f, 0x95,
-	0x7f, 0x02, 0x00, 0x00, 0xff, 0xff, 0xe4, 0x80, 0x70, 0x3c, 0x82, 0x0b, 0x00, 0x00,
-}

@@ -143,7 +143,3 @@ message TraceEvent {
 message TraceEventBatch {
   repeated TraceEvent batch = 1;
 }
-
-message CompressedTraceEventBatch {
-  optional bytes data = 1;
-}
