@@ -46,6 +46,8 @@ type PubSub struct {
 
 	disc *discover
 
+	tracer *pubsubTracer
+
 	// size of the outbound message channel that we maintain for each peer
 	peerOutboundQueueSize int
 
@@ -321,6 +323,14 @@ func WithDiscovery(d discovery.Discovery, opts ...DiscoverOpt) Option {
 	}
 }
 
+// WithEventTracer provides a tracer for the pubsub system
+func WithEventTracer(tracer EventTracer) Option {
+	return func(p *PubSub) error {
+		p.tracer = &pubsubTracer{tracer: tracer, pid: p.host.ID()}
+		return nil
+	}
+}
+
 // processLoop handles all inputs arriving on the channels
 func (p *PubSub) processLoop(ctx context.Context) {
 	defer func() {
@@ -436,6 +446,7 @@ func (p *PubSub) processLoop(ctx context.Context) {
 			p.handleIncomingRPC(rpc)
 
 		case msg := <-p.publish:
+			p.tracer.PublishMessage(msg)
 			p.pushMsg(msg)
 
 		case msg := <-p.sendMsg:
@@ -571,8 +582,10 @@ func (p *PubSub) announce(topic string, sub bool) {
 	for pid, peer := range p.peers {
 		select {
 		case peer <- out:
+			p.tracer.SendRPC(out, pid)
 		default:
 			log.Infof("Can't send announce message to peer %s: queue full; scheduling retry", pid)
+			p.tracer.DropRPC(out, pid)
 			go p.announceRetry(pid, topic, sub)
 		}
 	}
@@ -608,8 +621,10 @@ func (p *PubSub) doAnnounceRetry(pid peer.ID, topic string, sub bool) {
 	out := rpcWithSubs(subopt)
 	select {
 	case peer <- out:
+		p.tracer.SendRPC(out, pid)
 	default:
 		log.Infof("Can't send announce message to peer %s: queue full; scheduling retry", pid)
+		p.tracer.DropRPC(out, pid)
 		go p.announceRetry(pid, topic, sub)
 	}
 }
@@ -671,6 +686,8 @@ func (p *PubSub) notifyLeave(topic string, pid peer.ID) {
 }
 
 func (p *PubSub) handleIncomingRPC(rpc *RPC) {
+	p.tracer.RecvRPC(rpc)
+
 	for _, subopt := range rpc.GetSubscriptions() {
 		t := subopt.GetTopicid()
 		if subopt.GetSubscribe() {
@@ -724,24 +741,28 @@ func (p *PubSub) pushMsg(msg *Message) {
 	// reject messages from blacklisted peers
 	if p.blacklist.Contains(src) {
 		log.Warningf("dropping message from blacklisted peer %s", src)
+		p.tracer.RejectMessage(msg, "blacklisted peer")
 		return
 	}
 
 	// even if they are forwarded by good peers
 	if p.blacklist.Contains(msg.GetFrom()) {
 		log.Warningf("dropping message from blacklisted source %s", src)
+		p.tracer.RejectMessage(msg, "blacklisted source")
 		return
 	}
 
 	// reject unsigned messages when strict before we even process the id
 	if p.signStrict && msg.Signature == nil {
 		log.Debugf("dropping unsigned message from %s", src)
+		p.tracer.RejectMessage(msg, "missing signature")
 		return
 	}
 
 	// have we already seen and validated this message?
 	id := msgID(msg.Message)
 	if p.seenMessage(id) {
+		p.tracer.DuplicateMessage(msg)
 		return
 	}
 
@@ -755,6 +776,7 @@ func (p *PubSub) pushMsg(msg *Message) {
 }
 
 func (p *PubSub) publishMessage(msg *Message) {
+	p.tracer.DeliverMessage(msg)
 	p.notifySubs(msg)
 	p.rt.Publish(msg.ReceivedFrom, msg.Message)
 }

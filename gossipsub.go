@@ -65,6 +65,7 @@ type GossipSubRouter struct {
 	gossip  map[peer.ID][]*pb.ControlIHave  // pending gossip
 	control map[peer.ID]*pb.ControlMessage  // pending control messages
 	mcache  *MessageCache
+	tracer  *pubsubTracer
 }
 
 func (gs *GossipSubRouter) Protocols() []protocol.ID {
@@ -73,16 +74,19 @@ func (gs *GossipSubRouter) Protocols() []protocol.ID {
 
 func (gs *GossipSubRouter) Attach(p *PubSub) {
 	gs.p = p
+	gs.tracer = p.tracer
 	go gs.heartbeatTimer()
 }
 
 func (gs *GossipSubRouter) AddPeer(p peer.ID, proto protocol.ID) {
 	log.Debugf("PEERUP: Add new peer %s using %s", p, proto)
+	gs.tracer.AddPeer(p, proto)
 	gs.peers[p] = proto
 }
 
 func (gs *GossipSubRouter) RemovePeer(p peer.ID) {
 	log.Debugf("PEERDOWN: Remove disconnected peer %s", p)
+	gs.tracer.RemovePeer(p)
 	delete(gs.peers, p)
 	for _, peers := range gs.mesh {
 		delete(peers, p)
@@ -208,6 +212,7 @@ func (gs *GossipSubRouter) handleGraft(p peer.ID, ctl *pb.ControlMessage) []*pb.
 			prune = append(prune, topic)
 		} else {
 			log.Debugf("GRAFT: Add mesh link from %s in %s", p, topic)
+			gs.tracer.Graft(p, topic)
 			peers[p] = struct{}{}
 			gs.tagPeer(p, topic)
 		}
@@ -231,6 +236,7 @@ func (gs *GossipSubRouter) handlePrune(p peer.ID, ctl *pb.ControlMessage) {
 		peers, ok := gs.mesh[topic]
 		if ok {
 			log.Debugf("PRUNE: Remove mesh link to %s in %s", p, topic)
+			gs.tracer.Prune(p, topic)
 			delete(peers, p)
 			gs.untagPeer(p, topic)
 		}
@@ -294,6 +300,7 @@ func (gs *GossipSubRouter) Join(topic string) {
 	}
 
 	log.Debugf("JOIN %s", topic)
+	gs.tracer.Join(topic)
 
 	gmap, ok = gs.fanout[topic]
 	if ok {
@@ -319,6 +326,7 @@ func (gs *GossipSubRouter) Join(topic string) {
 
 	for p := range gmap {
 		log.Debugf("JOIN: Add mesh link to %s in %s", p, topic)
+		gs.tracer.Graft(p, topic)
 		gs.sendGraft(p, topic)
 		gs.tagPeer(p, topic)
 	}
@@ -331,11 +339,13 @@ func (gs *GossipSubRouter) Leave(topic string) {
 	}
 
 	log.Debugf("LEAVE %s", topic)
+	gs.tracer.Leave(topic)
 
 	delete(gs.mesh, topic)
 
 	for p := range gmap {
 		log.Debugf("LEAVE: Remove mesh link to %s in %s", p, topic)
+		gs.tracer.Prune(p, topic)
 		gs.sendPrune(p, topic)
 		gs.untagPeer(p, topic)
 	}
@@ -384,8 +394,10 @@ func (gs *GossipSubRouter) sendRPC(p peer.ID, out *RPC) {
 
 	select {
 	case mch <- out:
+		gs.tracer.SendRPC(out, p)
 	default:
 		log.Infof("dropping message to peer %s: queue full", p)
+		gs.tracer.DropRPC(out, p)
 		// push control messages that need to be retried
 		ctl := out.GetControl()
 		if ctl != nil {
@@ -443,6 +455,7 @@ func (gs *GossipSubRouter) heartbeat() {
 
 			for _, p := range plst {
 				log.Debugf("HEARTBEAT: Add mesh link to %s in %s", p, topic)
+				gs.tracer.Graft(p, topic)
 				peers[p] = struct{}{}
 				gs.tagPeer(p, topic)
 				topics := tograft[p]
@@ -458,6 +471,7 @@ func (gs *GossipSubRouter) heartbeat() {
 
 			for _, p := range plst[:idontneed] {
 				log.Debugf("HEARTBEAT: Remove mesh link to %s in %s", p, topic)
+				gs.tracer.Prune(p, topic)
 				delete(peers, p)
 				gs.untagPeer(p, topic)
 				topics := toprune[p]

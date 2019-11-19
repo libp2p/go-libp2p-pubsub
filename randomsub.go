@@ -29,8 +29,9 @@ func NewRandomSub(ctx context.Context, h host.Host, opts ...Option) (*PubSub, er
 // RandomSubRouter is a router that implements a random propagation strategy.
 // For each message, it selects RandomSubD peers and forwards the message to them.
 type RandomSubRouter struct {
-	p     *PubSub
-	peers map[peer.ID]protocol.ID
+	p      *PubSub
+	peers  map[peer.ID]protocol.ID
+	tracer *pubsubTracer
 }
 
 func (rs *RandomSubRouter) Protocols() []protocol.ID {
@@ -39,13 +40,16 @@ func (rs *RandomSubRouter) Protocols() []protocol.ID {
 
 func (rs *RandomSubRouter) Attach(p *PubSub) {
 	rs.p = p
+	rs.tracer = p.tracer
 }
 
 func (rs *RandomSubRouter) AddPeer(p peer.ID, proto protocol.ID) {
+	rs.tracer.AddPeer(p, proto)
 	rs.peers[p] = proto
 }
 
 func (rs *RandomSubRouter) RemovePeer(p peer.ID) {
+	rs.tracer.RemovePeer(p)
 	delete(rs.peers, p)
 }
 
@@ -132,12 +136,18 @@ func (rs *RandomSubRouter) Publish(from peer.ID, msg *pb.Message) {
 
 		select {
 		case mch <- out:
+			rs.tracer.SendRPC(out, p)
 		default:
 			log.Infof("dropping message to peer %s: queue full", p)
+			rs.tracer.DropRPC(out, p)
 		}
 	}
 }
 
-func (rs *RandomSubRouter) Join(topic string) {}
+func (rs *RandomSubRouter) Join(topic string) {
+	rs.tracer.Join(topic)
+}
 
-func (rs *RandomSubRouter) Leave(topic string) {}
+func (rs *RandomSubRouter) Leave(topic string) {
+	rs.tracer.Join(topic)
+}
