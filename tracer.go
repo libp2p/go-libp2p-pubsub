@@ -179,9 +179,7 @@ type RemoteTracer struct {
 // NewRemoteTracer constructs a RemoteTracer, tracing to the peer identified by pi
 func NewRemoteTracer(ctx context.Context, host host.Host, pi peer.AddrInfo) (*RemoteTracer, error) {
 	tr := &RemoteTracer{ctx: ctx, host: host, peer: pi.ID, basicTracer: basicTracer{ch: make(chan struct{}, 1), lossy: true}}
-	for _, addr := range pi.Addrs {
-		host.Peerstore().AddAddr(pi.ID, addr, peerstore.PermanentAddrTTL)
-	}
+	host.Peerstore().AddAddrs(pi.ID, pi.Addrs, peerstore.PermanentAddrTTL)
 	go tr.doWrite()
 	return tr, nil
 }
@@ -206,12 +204,11 @@ func (t *RemoteTracer) doWrite() {
 		// deadline for batch accumulation
 		deadline := time.Now().Add(time.Second)
 
-	again:
 		t.mx.Lock()
-		if len(t.buf) < MinTraceBatchSize && time.Now().Before(deadline) {
+		for len(t.buf) < MinTraceBatchSize && time.Now().Before(deadline) {
 			t.mx.Unlock()
 			time.Sleep(100 * time.Millisecond)
-			goto again
+			t.mx.Lock()
 		}
 
 		tmp := t.buf
