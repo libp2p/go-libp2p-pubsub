@@ -98,6 +98,7 @@ type connectInfo struct {
 
 func (gs *GossipSubRouter) Protocols() []protocol.ID {
 	return []protocol.ID{GossipSubID_v11, GossipSubID_v10, FloodSubID}
+	return []protocol.ID{GossipSubID_v11, GossipSubID, FloodSubID}
 }
 
 func (gs *GossipSubRouter) Attach(p *PubSub) {
@@ -863,6 +864,7 @@ func (gs *GossipSubRouter) getPeers(topic string, count int, filter func(peer.ID
 	peers := make([]peer.ID, 0, len(tmap))
 	for p := range tmap {
 		if (gs.peers[p] == GossipSubID_v10 || gs.peers[p] == GossipSubID_v11) && filter(p) {
+		if (gs.peers[p] == GossipSubID || gs.peers[p] == GossipSubID_v11) && filter(p) {
 			peers = append(peers, p)
 		}
 	}
