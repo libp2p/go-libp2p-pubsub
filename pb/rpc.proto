@@ -45,6 +45,12 @@ message ControlGraft {
 
 message ControlPrune {
 	optional string topicID = 1;
+	repeated PeerInfo peers = 2;
+}
+
+message PeerInfo {
+	optional bytes peerID = 1;
+	optional bytes signedAddrs = 2;
 }
 
 message TopicDescriptor {
