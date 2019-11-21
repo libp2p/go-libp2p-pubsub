@@ -12,6 +12,9 @@ require (
 	github.com/libp2p/go-libp2p-core v0.3.1-0.20200122190321-33890dd41845
 	github.com/libp2p/go-libp2p-discovery v0.2.0
 	github.com/libp2p/go-libp2p-peerstore v0.1.5-0.20200122195148-d32f2a2039d9 // indirect
+	github.com/libp2p/go-libp2p-core v0.2.6-0.20191121175514-5fa975301271
+	github.com/libp2p/go-libp2p-discovery v0.2.0
+	github.com/libp2p/go-libp2p-peerstore v0.1.5-0.20191121180145-50b0a8d4d5d1 // indirect
 	github.com/libp2p/go-libp2p-swarm v0.2.2
 	github.com/multiformats/go-multiaddr v0.2.0
 	github.com/multiformats/go-multistream v0.1.1
