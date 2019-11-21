@@ -14,7 +14,8 @@ import (
 )
 
 const (
-	GossipSubID = protocol.ID("/meshsub/1.0.0")
+	GossipSubID     = protocol.ID("/meshsub/1.0.0")
+	GossipSubID_v11 = protocol.ID("/meshsub/1.1.0")
 )
 
 var (
@@ -69,7 +70,7 @@ type GossipSubRouter struct {
 }
 
 func (gs *GossipSubRouter) Protocols() []protocol.ID {
-	return []protocol.ID{GossipSubID, FloodSubID}
+	return []protocol.ID{GossipSubID_v11, GossipSubID, FloodSubID}
 }
 
 func (gs *GossipSubRouter) Attach(p *PubSub) {
@@ -681,7 +682,7 @@ func (gs *GossipSubRouter) getPeers(topic string, count int, filter func(peer.ID
 
 	peers := make([]peer.ID, 0, len(tmap))
 	for p := range tmap {
-		if gs.peers[p] == GossipSubID && filter(p) {
+		if (gs.peers[p] == GossipSubID || gs.peers[p] == GossipSubID_v11) && filter(p) {
 			peers = append(peers, p)
 		}
 	}
