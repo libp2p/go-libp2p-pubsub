@@ -373,6 +373,15 @@ func (gs *GossipSubRouter) connector() {
 	}
 }
 
+func (gs *GossipSubRouter) addBackoff(p peer.ID, topic string) {
+	backoff, ok := gs.backoff[topic]
+	if !ok {
+		backoff = make(map[peer.ID]time.Time)
+		gs.backoff[topic] = backoff
+	}
+	backoff[p] = time.Now().Add(GossipSubPruneBackoff)
+}
+
 func (gs *GossipSubRouter) Publish(from peer.ID, msg *pb.Message) {
 	gs.mcache.Put(msg)
 
