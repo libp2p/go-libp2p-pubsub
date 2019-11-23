@@ -964,6 +964,13 @@ func TestGossipsubStarTopology(t *testing.T) {
 	// wait a bit for the mesh to build
 	time.Sleep(10 * time.Second)
 
+	// check that all peers have > 1 connection
+	for _, h := range hosts {
+		if len(h.Network().Conns()) == 1 {
+			t.Error("peer has ony a single connection")
+		}
+	}
+
 	// send a message from each peer and assert it was propagated
 	for i := 0; i < 20; i++ {
 		msg := []byte(fmt.Sprintf("message %d", i))
