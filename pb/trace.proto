@@ -137,6 +137,7 @@ message TraceEvent {
 
   message ControlPruneMeta {
     optional string topic = 1;
+    repeated bytes peers = 2;
   }
 }
 
