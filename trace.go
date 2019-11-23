@@ -245,8 +245,13 @@ func traceRPCMeta(rpc *RPC) *pb.TraceEvent_RPCMeta {
 
 		var prune []*pb.TraceEvent_ControlPruneMeta
 		for _, ctl := range rpc.Control.Prune {
+			peers := make([][]byte, 0, len(ctl.Peers))
+			for _, pi := range ctl.Peers {
+				peers = append(peers, pi.PeerID)
+			}
 			prune = append(prune, &pb.TraceEvent_ControlPruneMeta{
 				Topic: ctl.TopicID,
+				Peers: peers,
 			})
 		}
 
