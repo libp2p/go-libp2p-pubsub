@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/libp2p/go-libp2p-core/host"
+	"github.com/libp2p/go-libp2p-core/peerstore"
 )
 
 func getGossipsub(ctx context.Context, h host.Host, opts ...Option) *PubSub {
@@ -922,4 +923,54 @@ func TestGossipsubTreeTopology(t *testing.T) {
 	assertPeerLists(t, hosts, psubs[2], 1, 3)
 
 	checkMessageRouting(t, "fizzbuzz", []*PubSub{psubs[9], psubs[3]}, chs)
+}
+
+// this tests overlay bootstrapping through px in Gossipsub v1.1
+// we start with a star topology and rely on px through prune to build the mesh
+func TestGossipsubStarTopology(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	hosts := getNetHosts(t, ctx, 20)
+	psubs := getGossipsubs(ctx, hosts)
+
+	// add all peer addresses to the peerstores
+	// this is necessary because we can't have signed address records witout identify
+	// pushing them
+	for i := range hosts {
+		for j := range hosts {
+			if i == j {
+				continue
+			}
+			hosts[i].Peerstore().AddAddrs(hosts[j].ID(), hosts[j].Addrs(), peerstore.PermanentAddrTTL)
+		}
+	}
+
+	// build the star
+	for i := 1; i < 20; i++ {
+		connect(t, hosts[0], hosts[i])
+	}
+
+	// build the mesh
+	var subs []*Subscription
+	for _, ps := range psubs {
+		sub, err := ps.Subscribe("test")
+		if err != nil {
+			t.Fatal(err)
+		}
+		subs = append(subs, sub)
+	}
+
+	// wait a bit for the mesh to build
+	time.Sleep(10 * time.Second)
+
+	// send a message from each peer and assert it was propagated
+	for i := 0; i < 20; i++ {
+		msg := []byte(fmt.Sprintf("message %d", i))
+		psubs[i].Publish("test", msg)
+
+		for _, sub := range subs {
+			assertReceive(t, sub, msg)
+		}
+	}
 }
