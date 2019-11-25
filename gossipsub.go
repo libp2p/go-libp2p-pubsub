@@ -46,6 +46,9 @@ var (
 
 	// number of active connection attempts for peers obtained through px
 	GossipSubConnectors = 16
+
+	// timeout for connection attempts
+	GossipSubConnectionTimeout = 30 * time.Second
 )
 
 // NewGossipSub returns a new PubSub object using GossipSubRouter as the router.
@@ -341,7 +344,7 @@ func (gs *GossipSubRouter) connector() {
 				gs.p.host.Peerstore().AddCertifiedAddrs(ci.srr, peerstore.TempAddrTTL)
 			}
 
-			ctx, cancel := context.WithTimeout(gs.p.ctx, 10*time.Second)
+			ctx, cancel := context.WithTimeout(gs.p.ctx, GossipSubConnectionTimeout)
 			err := gs.p.host.Connect(ctx, peer.AddrInfo{ID: ci.p})
 			cancel()
 			if err != nil {
