@@ -53,6 +53,32 @@ To enable tracing, instantiate the pubsub system using the `WithEventTracer` opt
 accepts a tracer with three available implementations in-package (trace to json, pb, or a remote peer).
 If you want to trace using a remote peer, you can do so using the `traced` daemon from [go-libp2p-pubsub-tracer](https://github.com/libp2p/go-libp2p-pubsub-tracer). The package also includes a utility program, `tracestat`, for analyzing the traces collected by the daemon.
 
+For instance, to capture the trace as a json file, you can use the following option:
+```go
+pubsub.NewGossipSub(..., pubsub.NewEventTracer(pubsub.NewJSONTracer("/path/to/trace.json")))
+```
+
+To capture thet trace as a protobuf, you can use the following option:
+```go
+pubsub.NewGossipSub(..., pubsub.NewEventTracer(pubsub.NewPBTracer("/path/to/trace.pb")))
+```
+
+Finally, to use the remote tracer, you can use the following incantations:
+```go
+// assuming that your tracer runs in x.x.x.x and has a peer ID of QmTracer
+pi, err := peer.AddrInfoFromP2pAddr(ma.StringCast("/ip4/x.x.x.x/tcp/4001/p2p/QmTracer"))
+if err != nil {
+  panic(err)
+}
+
+tracer, err := pubsub.NewRemoteTracer(ctx, host, pi)
+if err != nil {
+  panic(err)
+}
+
+ps, err := pubsub.NewGossipSub(..., pubsub.WithEventTracer(tracer))
+```
+
 ## Contribute
 
 Contributions welcome. Please check out [the issues](https://github.com/libp2p/go-libp2p-pubsub/issues).
