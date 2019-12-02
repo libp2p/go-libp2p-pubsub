@@ -20,6 +20,7 @@ We currently provide three implementations:
 - [Install](#install)
 - [Usage](#usage)
 - [Documentation](#documentation)
+- [Tracing](#tracing)
 - [Contribute](#contribute)
 - [License](#license)
 
@@ -42,6 +43,15 @@ See [libp2p/specs/pubsub#Implementations](https://github.com/libp2p/specs/tree/m
 See the [libp2p specs](https://github.com/libp2p/specs/tree/master/pubsub) for high level documentation
 and [godoc](https://godoc.org/github.com/libp2p/go-libp2p-pubsub) for API documentation.
 
+
+## Tracing
+
+The pubsub system supports _tracing_, which collects all events pertaining to the internals of the system.
+This allows you to recreate the complete message flow and state of the system for analysis purposes.
+
+To enable tracing, instantiate the pubsub system using the `WithEventTracer` option; the option
+accepts a tracer with three available implementations in-package (trace to json, pb, or a remote peer).
+If you want to trace using a remote peer, you can do so using the `traced` daemon from [go-libp2p-pubsub-tracer](https://github.com/libp2p/go-libp2p-pubsub-tracer). The package also includes a utility program, `tracestat`, for analyzing the traces collected by the daemon.
 
 ## Contribute
 
