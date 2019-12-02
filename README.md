@@ -58,7 +58,7 @@ For instance, to capture the trace as a json file, you can use the following opt
 pubsub.NewGossipSub(..., pubsub.NewEventTracer(pubsub.NewJSONTracer("/path/to/trace.json")))
 ```
 
-To capture thet trace as a protobuf, you can use the following option:
+To capture the trace as a protobuf, you can use the following option:
 ```go
 pubsub.NewGossipSub(..., pubsub.NewEventTracer(pubsub.NewPBTracer("/path/to/trace.pb")))
 ```
