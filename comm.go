@@ -1,8 +1,8 @@
 package pubsub
 
 import (
-	"bufio"
 	"context"
+	"errors"
 	"io"
 
 	"github.com/libp2p/go-libp2p-core/helpers"
@@ -11,6 +11,7 @@ import (
 
 	ggio "github.com/gogo/protobuf/io"
 	proto "github.com/gogo/protobuf/proto"
+	pool "github.com/libp2p/go-buffer-pool"
 	pb "github.com/libp2p/go-libp2p-pubsub/pb"
 
 	ms "github.com/multiformats/go-multistream"
@@ -101,18 +102,10 @@ func (p *PubSub) handlePeerEOF(ctx context.Context, s network.Stream) {
 }
 
 func (p *PubSub) handleSendingMessages(ctx context.Context, s network.Stream, outgoing <-chan *RPC) {
-	bufw := bufio.NewWriter(s)
+	bufw := newBufferedWriter(s)
 	wc := ggio.NewDelimitedWriter(bufw)
 
-	writeMsg := func(msg proto.Message) error {
-		err := wc.WriteMsg(msg)
-		if err != nil {
-			return err
-		}
-
-		return bufw.Flush()
-	}
-
+	defer bufw.Release()
 	defer helpers.FullClose(s)
 	for {
 		select {
@@ -121,16 +114,115 @@ func (p *PubSub) handleSendingMessages(ctx context.Context, s network.Stream, ou
 				return
 			}
 
-			err := writeMsg(&rpc.RPC)
+			err := wc.WriteMsg(&rpc.RPC)
 			if err != nil {
 				s.Reset()
-				log.Infof("writing message to %s: %s", s.Conn().RemotePeer(), err)
+				log.Infof("error writing message to %s: %s", s.Conn().RemotePeer(), err)
 				return
 			}
+
+		coalesce:
+			for {
+				select {
+				case rpc, ok = <-outgoing:
+					if !ok {
+						break coalesce
+					}
+
+					err = wc.WriteMsg(&rpc.RPC)
+					if err != nil {
+						s.Reset()
+						log.Infof("error writing message to %s: %s", s.Conn().RemotePeer(), err)
+						return
+					}
+
+				case <-ctx.Done():
+					// don't just return, flush the buffer first
+					break coalesce
+
+				default:
+					break coalesce
+				}
+			}
+
+			err = bufw.Flush()
+			if err != nil {
+				s.Reset()
+				log.Infof("error flushing messages to %s: %s", s.Conn().RemotePeer(), err)
+				return
+			}
+
 		case <-ctx.Done():
 			return
 		}
 	}
+}
+
+type bufferedWriter struct {
+	w   io.Writer
+	buf []byte
+	n   int
+}
+
+func newBufferedWriter(w io.Writer) *bufferedWriter {
+	return &bufferedWriter{w: w}
+}
+
+func (b *bufferedWriter) Write(p []byte) (nn int, err error) {
+	if len(p) > 1<<20 {
+		// that's the max message limit for deserialization (and the buffer size)
+		// error if this happens, we will not be able to deserialize at the other size
+		return 0, errors.New("max message size exceeded")
+	}
+
+	if b.buf == nil {
+		b.buf = pool.Get(1 << 20)
+	}
+
+	for len(p) > b.available() && err == nil {
+		// large write, doesn't fit in the buffer; we need to flush some
+		n := copy(b.buf[b.n:], p)
+		b.n += n
+		nn += n
+		p = p[n:]
+		err = b.doWrite()
+	}
+
+	if err != nil {
+		return nn, err
+	}
+
+	n := copy(b.buf[b.n:], p)
+	b.n += n
+	nn += n
+	return nn, nil
+}
+
+func (b *bufferedWriter) Flush() (err error) {
+	if b.n > 0 {
+		err = b.doWrite()
+	}
+	pool.Put(b.buf)
+	b.buf = nil
+	return err
+}
+
+func (b *bufferedWriter) Release() {
+	if b.buf != nil {
+		pool.Put(b.buf)
+		b.buf = nil
+		b.n = 0
+	}
+}
+
+func (b *bufferedWriter) doWrite() error {
+	_, err := b.w.Write(b.buf[:b.n])
+	b.n = 0
+	return err
+}
+
+func (b *bufferedWriter) available() int {
+	return len(b.buf) - b.n
 }
 
 func rpcWithSubs(subs ...*pb.RPC_SubOpts) *RPC {
