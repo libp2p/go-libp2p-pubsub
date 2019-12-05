@@ -289,6 +289,7 @@ func (gs *GossipSubRouter) addBackoff(p peer.ID, topic string) {
 
 func (gs *GossipSubRouter) pxConnect(peers []*pb.PeerInfo) {
 	if len(peers) > GossipSubPrunePeers {
+		shufflePeerInfo(peers)
 		peers = peers[:GossipSubPrunePeers]
 	}
 
@@ -893,6 +894,13 @@ func peerMapToList(peers map[peer.ID]struct{}) []peer.ID {
 }
 
 func shufflePeers(peers []peer.ID) {
+	for i := range peers {
+		j := rand.Intn(i + 1)
+		peers[i], peers[j] = peers[j], peers[i]
+	}
+}
+
+func shufflePeerInfo(peers []*pb.PeerInfo) {
 	for i := range peers {
 		j := rand.Intn(i + 1)
 		peers[i], peers[j] = peers[j], peers[i]
