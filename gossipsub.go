@@ -288,7 +288,12 @@ func (gs *GossipSubRouter) addBackoff(p peer.ID, topic string) {
 }
 
 func (gs *GossipSubRouter) pxConnect(peers []*pb.PeerInfo) {
+	if len(peers) > GossipSubPrunePeers {
+		peers = peers[:GossipSubPrunePeers]
+	}
+
 	toconnect := make([]connectInfo, 0, len(peers))
+
 	for _, pi := range peers {
 		p := peer.ID(pi.PeerID)
 
