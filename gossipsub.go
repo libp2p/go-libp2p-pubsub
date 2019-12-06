@@ -420,16 +420,14 @@ func (gs *GossipSubRouter) pxConnect(peers []*pb.PeerInfo) {
 		return
 	}
 
-	// initiate connections, without blocking the event loop
-	go func() {
-		for _, ci := range toconnect {
-			select {
-			case gs.connect <- ci:
-			case <-gs.p.ctx.Done():
-				return
-			}
+	for _, ci := range toconnect {
+		select {
+		case gs.connect <- ci:
+		default:
+			log.Debugf("ignoring peer connection attempt; too many pending connections")
+			break
 		}
-	}()
+	}
 }
 
 func (gs *GossipSubRouter) connector() {
