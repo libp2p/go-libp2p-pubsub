@@ -47,6 +47,9 @@ var (
 	// number of active connection attempts for peers obtained through px
 	GossipSubConnectors = 16
 
+	// maximum number of pending connections for peers attempted through px
+	GossipSubMaxPendingConnections = 1024
+
 	// timeout for connection attempts
 	GossipSubConnectionTimeout = 30 * time.Second
 )
@@ -61,7 +64,7 @@ func NewGossipSub(ctx context.Context, h host.Host, opts ...Option) (*PubSub, er
 		gossip:  make(map[peer.ID][]*pb.ControlIHave),
 		control: make(map[peer.ID]*pb.ControlMessage),
 		backoff: make(map[string]map[peer.ID]time.Time),
-		connect: make(chan connectInfo, GossipSubConnectors),
+		connect: make(chan connectInfo, GossipSubMaxPendingConnections),
 		mcache:  NewMessageCache(GossipSubHistoryGossip, GossipSubHistoryLength),
 	}
 	return NewPubSub(ctx, h, rt, opts...)
@@ -325,16 +328,14 @@ func (gs *GossipSubRouter) pxConnect(peers []*pb.PeerInfo) {
 		return
 	}
 
-	// initiate connections, without blocking the event loop
-	go func() {
-		for _, ci := range toconnect {
-			select {
-			case gs.connect <- ci:
-			case <-gs.p.ctx.Done():
-				return
-			}
+	for _, ci := range toconnect {
+		select {
+		case gs.connect <- ci:
+		default:
+			log.Debugf("ignoring peer connection attempt; too many pending connections")
+			break
 		}
-	}()
+	}
 }
 
 func (gs *GossipSubRouter) connector() {
