@@ -28,6 +28,7 @@ func NewMessageCache(gossip, history int) *MessageCache {
 		msgs:    make(map[string]*pb.Message),
 		history: make([][]CacheEntry, history),
 		gossip:  gossip,
+		msgID:   DefaultMsgIdFn,
 	}
 }
 
@@ -35,6 +36,11 @@ type MessageCache struct {
 	msgs    map[string]*pb.Message
 	history [][]CacheEntry
 	gossip  int
+	msgID   MsgIdFunction
+}
+
+func (mc *MessageCache) SetMsgIdFn(msgID MsgIdFunction) {
+	mc.msgID = msgID
 }
 
 type CacheEntry struct {
@@ -43,7 +49,7 @@ type CacheEntry struct {
 }
 
 func (mc *MessageCache) Put(msg *pb.Message) {
-	mid := msgID(msg)
+	mid := mc.msgID(msg)
 	mc.msgs[mid] = msg
 	mc.history[0] = append(mc.history[0], CacheEntry{mid: mid, topics: msg.GetTopicIDs()})
 }

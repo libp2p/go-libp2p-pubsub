@@ -117,6 +117,9 @@ type PubSub struct {
 	seenMessagesMx sync.Mutex
 	seenMessages   *timecache.TimeCache
 
+	// function used to compute the ID for a message
+	msgID MsgIdFunction
+
 	// key for signing messages; nil when signing is disabled (default for now)
 	signKey crypto.PrivKey
 	// source ID for signed messages; corresponds to signKey
@@ -208,6 +211,7 @@ func NewPubSub(ctx context.Context, h host.Host, rt PubSubRouter, opts ...Option
 		blacklist:             NewMapBlacklist(),
 		blacklistPeer:         make(chan peer.ID),
 		seenMessages:          timecache.NewTimeCache(TimeCacheDuration),
+		msgID:                 DefaultMsgIdFn,
 		counter:               uint64(time.Now().UnixNano()),
 	}
 
@@ -238,6 +242,24 @@ func NewPubSub(ctx context.Context, h host.Host, rt PubSubRouter, opts ...Option
 	go ps.processLoop(ctx)
 
 	return ps, nil
+}
+
+// MsgIdFunction returns a unique ID for the passed Message, and PubSub can be customized to use any
+// implementation of this function by configuring it with the Option from WithMessageIdFn.
+type MsgIdFunction func(pmsg *pb.Message) string
+
+// WithMessageIdFn is an option to customize the way a message ID is computed for a pubsub message.
+// The default ID function is DefaultMsgIdFn (concatenate source and seq nr.),
+// but it can be customized to e.g. the hash of the message.
+func WithMessageIdFn(fn MsgIdFunction) Option {
+	return func(p *PubSub) error {
+		p.msgID = fn
+		// the tracer Option may already be set. Update its message ID function to make options order-independent.
+		if p.tracer != nil {
+			p.tracer.msgID = fn
+		}
+		return nil
+	}
 }
 
 // WithPeerOutboundQueueSize is an option to set the buffer size for outbound messages to a peer
@@ -326,7 +348,7 @@ func WithDiscovery(d discovery.Discovery, opts ...DiscoverOpt) Option {
 // WithEventTracer provides a tracer for the pubsub system
 func WithEventTracer(tracer EventTracer) Option {
 	return func(p *PubSub) error {
-		p.tracer = &pubsubTracer{tracer: tracer, pid: p.host.ID()}
+		p.tracer = &pubsubTracer{tracer: tracer, pid: p.host.ID(), msgID: p.msgID}
 		return nil
 	}
 }
@@ -730,8 +752,8 @@ func (p *PubSub) handleIncomingRPC(rpc *RPC) {
 	p.rt.HandleRPC(rpc)
 }
 
-// msgID returns a unique ID of the passed Message
-func msgID(pmsg *pb.Message) string {
+// DefaultMsgIdFn returns a unique ID of the passed Message
+func DefaultMsgIdFn(pmsg *pb.Message) string {
 	return string(pmsg.GetFrom()) + string(pmsg.GetSeqno())
 }
 
@@ -760,7 +782,7 @@ func (p *PubSub) pushMsg(msg *Message) {
 	}
 
 	// have we already seen and validated this message?
-	id := msgID(msg.Message)
+	id := p.msgID(msg.Message)
 	if p.seenMessage(id) {
 		p.tracer.DuplicateMessage(msg)
 		return

@@ -18,6 +18,7 @@ type EventTracer interface {
 type pubsubTracer struct {
 	tracer EventTracer
 	pid    peer.ID
+	msgID  MsgIdFunction
 }
 
 func (t *pubsubTracer) PublishMessage(msg *Message) {
@@ -31,7 +32,7 @@ func (t *pubsubTracer) PublishMessage(msg *Message) {
 		PeerID:    []byte(t.pid),
 		Timestamp: &now,
 		PublishMessage: &pb.TraceEvent_PublishMessage{
-			MessageID: []byte(msgID(msg.Message)),
+			MessageID: []byte(t.msgID(msg.Message)),
 			Topics:    msg.Message.TopicIDs,
 		},
 	}
@@ -50,7 +51,7 @@ func (t *pubsubTracer) RejectMessage(msg *Message, reason string) {
 		PeerID:    []byte(t.pid),
 		Timestamp: &now,
 		RejectMessage: &pb.TraceEvent_RejectMessage{
-			MessageID:    []byte(msgID(msg.Message)),
+			MessageID:    []byte(t.msgID(msg.Message)),
 			ReceivedFrom: []byte(msg.ReceivedFrom),
 			Reason:       &reason,
 		},
@@ -70,7 +71,7 @@ func (t *pubsubTracer) DuplicateMessage(msg *Message) {
 		PeerID:    []byte(t.pid),
 		Timestamp: &now,
 		DuplicateMessage: &pb.TraceEvent_DuplicateMessage{
-			MessageID:    []byte(msgID(msg.Message)),
+			MessageID:    []byte(t.msgID(msg.Message)),
 			ReceivedFrom: []byte(msg.ReceivedFrom),
 		},
 	}
@@ -89,7 +90,7 @@ func (t *pubsubTracer) DeliverMessage(msg *Message) {
 		PeerID:    []byte(t.pid),
 		Timestamp: &now,
 		DeliverMessage: &pb.TraceEvent_DeliverMessage{
-			MessageID: []byte(msgID(msg.Message)),
+			MessageID: []byte(t.msgID(msg.Message)),
 		},
 	}
 
@@ -146,7 +147,7 @@ func (t *pubsubTracer) RecvRPC(rpc *RPC) {
 		Timestamp: &now,
 		RecvRPC: &pb.TraceEvent_RecvRPC{
 			ReceivedFrom: []byte(rpc.from),
-			Meta:         traceRPCMeta(rpc),
+			Meta:         t.traceRPCMeta(rpc),
 		},
 	}
 
@@ -165,7 +166,7 @@ func (t *pubsubTracer) SendRPC(rpc *RPC, p peer.ID) {
 		Timestamp: &now,
 		SendRPC: &pb.TraceEvent_SendRPC{
 			SendTo: []byte(rpc.from),
-			Meta:   traceRPCMeta(rpc),
+			Meta:   t.traceRPCMeta(rpc),
 		},
 	}
 
@@ -184,20 +185,20 @@ func (t *pubsubTracer) DropRPC(rpc *RPC, p peer.ID) {
 		Timestamp: &now,
 		DropRPC: &pb.TraceEvent_DropRPC{
 			SendTo: []byte(rpc.from),
-			Meta:   traceRPCMeta(rpc),
+			Meta:   t.traceRPCMeta(rpc),
 		},
 	}
 
 	t.tracer.Trace(evt)
 }
 
-func traceRPCMeta(rpc *RPC) *pb.TraceEvent_RPCMeta {
+func (t *pubsubTracer) traceRPCMeta(rpc *RPC) *pb.TraceEvent_RPCMeta {
 	rpcMeta := new(pb.TraceEvent_RPCMeta)
 
 	var msgs []*pb.TraceEvent_MessageMeta
 	for _, m := range rpc.Publish {
 		msgs = append(msgs, &pb.TraceEvent_MessageMeta{
-			MessageID: []byte(msgID(m)),
+			MessageID: []byte(t.msgID(m)),
 			Topics:    m.TopicIDs,
 		})
 	}
