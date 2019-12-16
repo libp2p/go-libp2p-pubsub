@@ -254,6 +254,10 @@ type MsgIdFunction func(pmsg *pb.Message) string
 func WithMessageIdFn(fn MsgIdFunction) Option {
 	return func(p *PubSub) error {
 		p.msgID = fn
+		// the tracer Option may already be set. Update its message ID function to make options order-independent.
+		if p.tracer != nil {
+			p.tracer.msgID = fn
+		}
 		return nil
 	}
 }

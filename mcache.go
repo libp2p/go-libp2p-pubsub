@@ -39,7 +39,7 @@ type MessageCache struct {
 	msgID   MsgIdFunction
 }
 
-func (mc *MessageCache) ChangeMsgIdFn(msgID MsgIdFunction) {
+func (mc *MessageCache) SetMsgIdFn(msgID MsgIdFunction) {
 	mc.msgID = msgID
 }
 

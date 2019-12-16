@@ -76,7 +76,7 @@ func (gs *GossipSubRouter) Attach(p *PubSub) {
 	gs.p = p
 	gs.tracer = p.tracer
 	// start using the same msg ID function as PubSub for caching messages.
-	gs.mcache.ChangeMsgIdFn(p.msgID)
+	gs.mcache.SetMsgIdFn(p.msgID)
 	go gs.heartbeatTimer()
 }
 
