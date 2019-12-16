@@ -10,6 +10,7 @@ import (
 
 func TestMessageCache(t *testing.T) {
 	mcache := NewMessageCache(3, 5)
+	msgID := DefaultMsgIdFn
 
 	msgs := make([]*pb.Message, 60)
 	for i := range msgs {
