@@ -160,7 +160,7 @@ type PubSubRouter interface {
 type Message struct {
 	*pb.Message
 	ReceivedFrom peer.ID
-	VaidatorData interface{}
+	ValidatorData interface{}
 }
 
 func (m *Message) GetFrom() peer.ID {
