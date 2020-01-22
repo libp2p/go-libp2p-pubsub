@@ -50,7 +50,7 @@ message ControlPrune {
 
 message PeerInfo {
 	optional bytes peerID = 1;
-	optional bytes signedAddrs = 2;
+	optional bytes signedPeerRecord = 2;
 }
 
 message TopicDescriptor {
