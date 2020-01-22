@@ -3,6 +3,7 @@ package pubsub
 import (
 	"context"
 	"fmt"
+	"github.com/libp2p/go-libp2p-core/record"
 	"math/rand"
 	"time"
 
@@ -311,16 +312,16 @@ func (gs *GossipSubRouter) pxConnect(peers []*pb.PeerInfo) {
 			// the peer sent us a signed record; ensure that it is valid
 			envelope, r, err := record.ConsumeEnvelope(pi.SignedPeerRecord, peer.PeerRecordEnvelopeDomain)
 			if err != nil {
-				log.Warnf("error unmarshalling peer record obtained through px: %s", err)
+				log.Warningf("error unmarshalling peer record obtained through px: %s", err)
 				continue
 			}
 			rec, ok := r.(*peer.PeerRecord)
 			if !ok {
-				log.Warnf("bogus peer record obtained through px: envelope payload is not PeerRecord")
+				log.Warningf("bogus peer record obtained through px: envelope payload is not PeerRecord")
 				continue
 			}
 			if rec.PeerID != p {
-				log.Warnf("bogus peer record obtained through px: peer ID %s doesn't match expected peer %s", rec.PeerID, p)
+				log.Warningf("bogus peer record obtained through px: peer ID %s doesn't match expected peer %s", rec.PeerID, p)
 				continue
 			}
 			spr = envelope
