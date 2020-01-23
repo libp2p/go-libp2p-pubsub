@@ -3,7 +3,6 @@ package pubsub
 import (
 	"context"
 	"fmt"
-	"github.com/libp2p/go-libp2p-core/record"
 	"math/rand"
 	"time"
 
@@ -14,6 +13,7 @@ import (
 	"github.com/libp2p/go-libp2p-core/peer"
 	"github.com/libp2p/go-libp2p-core/peerstore"
 	"github.com/libp2p/go-libp2p-core/protocol"
+	"github.com/libp2p/go-libp2p-core/record"
 )
 
 const (
@@ -830,14 +830,14 @@ func (gs *GossipSubRouter) makePrune(p peer.ID, topic string) *pb.ControlPrune {
 		return p != xp
 	})
 
-	cab, peerstoreSupportsSignedAddrs := peerstore.GetCertifiedAddrBook(gs.p.host.Peerstore())
+	cab, ok := peerstore.GetCertifiedAddrBook(gs.p.host.Peerstore())
 	px := make([]*pb.PeerInfo, 0, len(peers))
 	for _, p := range peers {
 		// see if we have a signed peer record to send back; if we don't, just send
 		// the peer ID and let the pruned peer find them in the DHT -- we can't trust
 		// unsigned address records through px anyway.
 		var recordBytes []byte
-		if peerstoreSupportsSignedAddrs {
+		if ok {
 			spr := cab.GetPeerRecord(p)
 			var err error
 			if spr != nil {
