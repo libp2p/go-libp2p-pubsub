@@ -6,7 +6,7 @@ require (
 	github.com/libp2p/go-libp2p-blankhost v0.1.4
 	github.com/libp2p/go-libp2p-core v0.5.0
 	github.com/libp2p/go-libp2p-discovery v0.2.0
-	github.com/libp2p/go-libp2p-peerstore v0.1.5-0.20191121180145-50b0a8d4d5d1 // indirect
+	github.com/libp2p/go-libp2p-peerstore v0.1.5-0.20200122195148-d32f2a2039d9 // indirect
 	github.com/libp2p/go-libp2p-swarm v0.2.2
 	github.com/libp2p/go-libp2p-transport-upgrader v0.2.0 // indirect
 	github.com/multiformats/go-multiaddr v0.2.1
