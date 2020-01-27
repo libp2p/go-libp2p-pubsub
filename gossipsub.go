@@ -304,27 +304,27 @@ func (gs *GossipSubRouter) pxConnect(peers []*pb.PeerInfo) {
 			continue
 		}
 
-		var srr *record.Envelope
+		var spr *record.Envelope
 		if pi.SignedPeerRecord != nil {
 			// the peer sent us a signed record; ensure that it is valid
 			envelope, r, err := record.ConsumeEnvelope(pi.SignedPeerRecord, peer.PeerRecordEnvelopeDomain)
 			if err != nil {
-				log.Warningf("error unmarshalling routing record obtained through px: %s", err)
+				log.Warnf("error unmarshalling peer record obtained through px: %s", err)
 				continue
 			}
 			rec, ok := r.(*peer.PeerRecord)
 			if !ok {
-				log.Warnf("bogus routing record obtained through px: envelope payload is not PeerRecord")
+				log.Warnf("bogus peer record obtained through px: envelope payload is not PeerRecord")
 				continue
 			}
 			if rec.PeerID != p {
-				log.Warnf("bogus routing record obtained through px: peer ID %s doesn't match expected peer %s", rec.PeerID, p)
+				log.Warnf("bogus peer record obtained through px: peer ID %s doesn't match expected peer %s", rec.PeerID, p)
 				continue
 			}
-			srr = envelope
+			spr = envelope
 		}
 
-		toconnect = append(toconnect, connectInfo{p, srr})
+		toconnect = append(toconnect, connectInfo{p, spr})
 	}
 
 	if len(toconnect) == 0 {
