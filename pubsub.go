@@ -159,7 +159,7 @@ type PubSubRouter interface {
 
 type Message struct {
 	*pb.Message
-	ReceivedFrom peer.ID
+	ReceivedFrom  peer.ID
 	ValidatorData interface{}
 }
 
