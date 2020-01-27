@@ -315,6 +315,7 @@ func (gs *GossipSubRouter) pxConnect(peers []*pb.PeerInfo) {
 			rec, ok := r.(*peer.PeerRecord)
 			if !ok {
 				log.Warnf("bogus routing record obtained through px: envelope payload is not PeerRecord")
+				continue
 			}
 			if rec.PeerID != p {
 				log.Warnf("bogus routing record obtained through px: peer ID %s doesn't match expected peer %s", rec.PeerID, p)
