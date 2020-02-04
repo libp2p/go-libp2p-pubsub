@@ -20,8 +20,8 @@ func TestMapBlacklist(t *testing.T) {
 
 }
 
-func TestLRUBlacklist(t *testing.T) {
-	b, err := NewLRUBlacklist(10)
+func TestTimeCachedBlacklist(t *testing.T) {
+	b, err := NewTimeCachedBlacklist(10 * time.Minute)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -32,7 +32,6 @@ func TestLRUBlacklist(t *testing.T) {
 	if !b.Contains(p) {
 		t.Fatal("peer not in the blacklist")
 	}
-
 }
 
 func TestBlacklist(t *testing.T) {
