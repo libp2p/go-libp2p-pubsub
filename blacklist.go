@@ -1,8 +1,11 @@
 package pubsub
 
 import (
-	lru "github.com/hashicorp/golang-lru"
+	"sync"
+	"time"
+
 	"github.com/libp2p/go-libp2p-core/peer"
+	"github.com/whyrusleeping/timecache"
 )
 
 // Blacklist is an interface for peer blacklisting.
@@ -28,26 +31,28 @@ func (b MapBlacklist) Contains(p peer.ID) bool {
 	return ok
 }
 
-// LRUBlacklist is a blacklist implementation using an LRU cache
-type LRUBlacklist struct {
-	lru *lru.Cache
+// TimeCachedBlacklist is a blacklist implementation using a time cache
+type TimeCachedBlacklist struct {
+	sync.RWMutex
+	tc *timecache.TimeCache
 }
 
-// NewLRUBlacklist creates a new LRUBlacklist with capacity cap
-func NewLRUBlacklist(cap int) (Blacklist, error) {
-	c, err := lru.New(cap)
-	if err != nil {
-		return nil, err
-	}
-
-	b := &LRUBlacklist{lru: c}
+// NewTimeCachedBlacklist creates a new TimeCachedBlacklist with the given expiry duration
+func NewTimeCachedBlacklist(expiry time.Duration) (Blacklist, error) {
+	b := &TimeCachedBlacklist{tc: timecache.NewTimeCache(expiry)}
 	return b, nil
 }
 
-func (b LRUBlacklist) Add(p peer.ID) {
-	b.lru.Add(p, nil)
+func (b *TimeCachedBlacklist) Add(p peer.ID) {
+	b.Lock()
+	defer b.Unlock()
+
+	b.tc.Add(p.String())
 }
 
-func (b LRUBlacklist) Contains(p peer.ID) bool {
-	return b.lru.Contains(p)
+func (b *TimeCachedBlacklist) Contains(p peer.ID) bool {
+	b.RLock()
+	defer b.RUnlock()
+
+	return b.tc.Has(p.String())
 }
