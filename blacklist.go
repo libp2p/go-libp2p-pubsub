@@ -1,6 +1,7 @@
 package pubsub
 
 import (
+	"sync"
 	"time"
 
 	"github.com/libp2p/go-libp2p-core/peer"
@@ -32,19 +33,25 @@ func (b MapBlacklist) Contains(p peer.ID) bool {
 
 // TimeCachedBlacklist is a blacklist implementation using a time cache
 type TimeCachedBlacklist struct {
+	sync.RWMutex
 	tc *timecache.TimeCache
 }
 
 // NewTimeCachedBlacklist creates a new TimeCachedBlacklist with the given expiry duration
 func NewTimeCachedBlacklist(expiry time.Duration) (Blacklist, error) {
-	b := &TimeCachedBlacklist{timecache.NewTimeCache(expiry)}
+	b := &TimeCachedBlacklist{tc: timecache.NewTimeCache(expiry)}
 	return b, nil
 }
 
-func (b TimeCachedBlacklist) Add(p peer.ID) {
+func (b *TimeCachedBlacklist) Add(p peer.ID) {
+	b.Lock()
 	b.tc.Add(p.String())
+	b.Unlock()
 }
 
-func (b TimeCachedBlacklist) Contains(p peer.ID) bool {
+func (b *TimeCachedBlacklist) Contains(p peer.ID) bool {
+	b.RLock()
+	defer b.RUnlock()
+
 	return b.tc.Has(p.String())
 }
