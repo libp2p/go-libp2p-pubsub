@@ -45,8 +45,9 @@ func NewTimeCachedBlacklist(expiry time.Duration) (Blacklist, error) {
 
 func (b *TimeCachedBlacklist) Add(p peer.ID) {
 	b.Lock()
+	defer b.Unlock()
+
 	b.tc.Add(p.String())
-	b.Unlock()
 }
 
 func (b *TimeCachedBlacklist) Contains(p peer.ID) bool {
