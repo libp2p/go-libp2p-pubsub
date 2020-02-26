@@ -1119,3 +1119,46 @@ func TestMessageSender(t *testing.T) {
 		}
 	}
 }
+
+func TestConfigurableMaxMessageSize(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	hosts := getNetHosts(t, ctx, 10)
+
+	// use a 4mb limit; default is 1mb; we'll test with a 2mb payload.
+	psubs := getPubsubs(ctx, hosts, WithMaxMessageSize(1<<22))
+
+	sparseConnect(t, hosts)
+	time.Sleep(time.Millisecond * 100)
+
+	const topic = "foobar"
+	var subs []*Subscription
+	for _, ps := range psubs {
+		subch, err := ps.Subscribe(topic)
+		if err != nil {
+			t.Fatal(err)
+		}
+		subs = append(subs, subch)
+	}
+
+	// 2mb payload.
+	msg := make([]byte, 1<<21)
+	rand.Read(msg)
+	err := psubs[0].Publish(topic, msg)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// make sure that all peers received the message.
+	for _, sub := range subs {
+		got, err := sub.Next(ctx)
+		if err != nil {
+			t.Fatal(sub.err)
+		}
+		if !bytes.Equal(msg, got.Data) {
+			t.Fatal("got wrong message!")
+		}
+	}
+
+}

@@ -23,6 +23,9 @@ import (
 	timecache "github.com/whyrusleeping/timecache"
 )
 
+// DefaultMaximumMessageSize is 1mb.
+const DefaultMaxMessageSize = 1 << 20
+
 var (
 	TimeCacheDuration = 120 * time.Second
 )
@@ -47,6 +50,10 @@ type PubSub struct {
 	disc *discover
 
 	tracer *pubsubTracer
+
+	// maxMessageSize is the maximum message size; it applies globally to all
+	// topics.
+	maxMessageSize int
 
 	// size of the outbound message channel that we maintain for each peer
 	peerOutboundQueueSize int
@@ -184,6 +191,7 @@ func NewPubSub(ctx context.Context, h host.Host, rt PubSubRouter, opts ...Option
 		rt:                    rt,
 		val:                   newValidation(),
 		disc:                  &discover{},
+		maxMessageSize:        DefaultMaxMessageSize,
 		peerOutboundQueueSize: 32,
 		signID:                h.ID(),
 		signKey:               h.Peerstore().PrivKey(h.ID()),
@@ -349,6 +357,34 @@ func WithDiscovery(d discovery.Discovery, opts ...DiscoverOpt) Option {
 func WithEventTracer(tracer EventTracer) Option {
 	return func(p *PubSub) error {
 		p.tracer = &pubsubTracer{tracer: tracer, pid: p.host.ID(), msgID: p.msgID}
+		return nil
+	}
+}
+
+// WithMaxMessageSize sets the global maximum message size for pubsub wire
+// messages. The default value is 1MiB (DefaultMaxMessageSize).
+//
+// Observe the following warnings when setting this option.
+//
+// WARNING #1: Make sure to change the default protocol prefixes for floodsub
+// (FloodSubID) and gossipsub (GossipSubID). This avoids accidentally joining
+// the public default network, which uses the default max message size, and
+// therefore will cause messages to be dropped.
+//
+// WARNING #2: Reducing the default max message limit is fine, if you are
+// certain that your application messages will not exceed the new limit.
+// However, be wary of increasing the limit, as pubsub networks are naturally
+// write-amplifying, i.e. for every message we receive, we send D copies of the
+// message to our peers. If those messages are large, the bandwidth requirements
+// will grow linearly. Note that propagation is sent on the uplink, which
+// traditionally is more constrained than the downlink. Instead, consider
+// out-of-band retrieval for large messages, by sending a CID (Content-ID) or
+// another type of locator, such that messages can be fetched on-demand, rather
+// than being pushed proactively. Under this design, you'd use the pubsub layer
+// as a signalling system, rather than a data delivery system.
+func WithMaxMessageSize(maxMessageSize int) Option {
+	return func(ps *PubSub) error {
+		ps.maxMessageSize = maxMessageSize
 		return nil
 	}
 }
