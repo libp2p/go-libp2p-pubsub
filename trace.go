@@ -14,15 +14,33 @@ type EventTracer interface {
 	Trace(evt *pb.TraceEvent)
 }
 
+// internal interface for score tracing
+type scoreTracer interface {
+	AddPeer(p peer.ID, proto protocol.ID)
+	RemovePeer(p peer.ID)
+	Join(topic string)
+	Leave(topic string)
+	Graft(p peer.ID, topic string)
+	Prune(p peer.ID, topic string)
+	DeliverMessage(msg *Message)
+	RejectMessage(msg *Message, reason string)
+	DuplicateMessage(msg *Message)
+}
+
 // pubsub tracer details
 type pubsubTracer struct {
 	tracer EventTracer
+	score  scoreTracer
 	pid    peer.ID
 	msgID  MsgIdFunction
 }
 
 func (t *pubsubTracer) PublishMessage(msg *Message) {
 	if t == nil {
+		return
+	}
+
+	if t.tracer == nil {
 		return
 	}
 
@@ -42,6 +60,14 @@ func (t *pubsubTracer) PublishMessage(msg *Message) {
 
 func (t *pubsubTracer) RejectMessage(msg *Message, reason string) {
 	if t == nil {
+		return
+	}
+
+	if t.score != nil && msg.ReceivedFrom != t.pid {
+		t.score.RejectMessage(msg, reason)
+	}
+
+	if t.tracer == nil {
 		return
 	}
 
@@ -65,6 +91,14 @@ func (t *pubsubTracer) DuplicateMessage(msg *Message) {
 		return
 	}
 
+	if t.score != nil && msg.ReceivedFrom != t.pid {
+		t.score.DuplicateMessage(msg)
+	}
+
+	if t.tracer == nil {
+		return
+	}
+
 	now := time.Now().UnixNano()
 	evt := &pb.TraceEvent{
 		Type:      pb.TraceEvent_DUPLICATE_MESSAGE.Enum(),
@@ -84,6 +118,14 @@ func (t *pubsubTracer) DeliverMessage(msg *Message) {
 		return
 	}
 
+	if t.score != nil && msg.ReceivedFrom != t.pid {
+		t.score.DeliverMessage(msg)
+	}
+
+	if t.tracer == nil {
+		return
+	}
+
 	now := time.Now().UnixNano()
 	evt := &pb.TraceEvent{
 		Type:      pb.TraceEvent_DELIVER_MESSAGE.Enum(),
@@ -99,6 +141,14 @@ func (t *pubsubTracer) DeliverMessage(msg *Message) {
 
 func (t *pubsubTracer) AddPeer(p peer.ID, proto protocol.ID) {
 	if t == nil {
+		return
+	}
+
+	if t.score != nil {
+		t.score.AddPeer(p, proto)
+	}
+
+	if t.tracer == nil {
 		return
 	}
 
@@ -122,6 +172,14 @@ func (t *pubsubTracer) RemovePeer(p peer.ID) {
 		return
 	}
 
+	if t.score != nil {
+		t.score.RemovePeer(p)
+	}
+
+	if t.tracer == nil {
+		return
+	}
+
 	now := time.Now().UnixNano()
 	evt := &pb.TraceEvent{
 		Type:      pb.TraceEvent_REMOVE_PEER.Enum(),
@@ -137,6 +195,10 @@ func (t *pubsubTracer) RemovePeer(p peer.ID) {
 
 func (t *pubsubTracer) RecvRPC(rpc *RPC) {
 	if t == nil {
+		return
+	}
+
+	if t.tracer == nil {
 		return
 	}
 
@@ -159,6 +221,10 @@ func (t *pubsubTracer) SendRPC(rpc *RPC, p peer.ID) {
 		return
 	}
 
+	if t.tracer == nil {
+		return
+	}
+
 	now := time.Now().UnixNano()
 	evt := &pb.TraceEvent{
 		Type:      pb.TraceEvent_SEND_RPC.Enum(),
@@ -175,6 +241,10 @@ func (t *pubsubTracer) SendRPC(rpc *RPC, p peer.ID) {
 
 func (t *pubsubTracer) DropRPC(rpc *RPC, p peer.ID) {
 	if t == nil {
+		return
+	}
+
+	if t.tracer == nil {
 		return
 	}
 
@@ -272,6 +342,14 @@ func (t *pubsubTracer) Join(topic string) {
 		return
 	}
 
+	if t.score != nil {
+		t.score.Join(topic)
+	}
+
+	if t.tracer == nil {
+		return
+	}
+
 	now := time.Now().UnixNano()
 	evt := &pb.TraceEvent{
 		Type:      pb.TraceEvent_JOIN.Enum(),
@@ -287,6 +365,14 @@ func (t *pubsubTracer) Join(topic string) {
 
 func (t *pubsubTracer) Leave(topic string) {
 	if t == nil {
+		return
+	}
+
+	if t.score != nil {
+		t.score.Leave(topic)
+	}
+
+	if t.tracer == nil {
 		return
 	}
 
@@ -308,6 +394,14 @@ func (t *pubsubTracer) Graft(p peer.ID, topic string) {
 		return
 	}
 
+	if t.score != nil {
+		t.score.Graft(p, topic)
+	}
+
+	if t.tracer == nil {
+		return
+	}
+
 	now := time.Now().UnixNano()
 	evt := &pb.TraceEvent{
 		Type:      pb.TraceEvent_GRAFT.Enum(),
@@ -324,6 +418,14 @@ func (t *pubsubTracer) Graft(p peer.ID, topic string) {
 
 func (t *pubsubTracer) Prune(p peer.ID, topic string) {
 	if t == nil {
+		return
+	}
+
+	if t.score != nil {
+		t.score.Prune(p, topic)
+	}
+
+	if t.tracer == nil {
 		return
 	}
 
