@@ -71,6 +71,27 @@ func NewGossipSub(ctx context.Context, h host.Host, opts ...Option) (*PubSub, er
 	return NewPubSub(ctx, h, rt, opts...)
 }
 
+// WithPeerScore is a gossipsub router option that enables peer scoring.
+func WithPeerScore(params *PeerScoreParams) Option {
+	return func(ps *PubSub) error {
+		gs, ok := ps.rt.(*GossipSubRouter)
+		if !ok {
+			return fmt.Errorf("pubsub router is not gossipsub")
+		}
+
+		gs.score = newPeerScore(gs, params)
+
+		// hook the tracer
+		if ps.tracer != nil {
+			ps.tracer.score = gs.score
+		} else {
+			ps.tracer = &pubsubTracer{score: gs.score, pid: ps.host.ID(), msgID: ps.msgID}
+		}
+
+		return nil
+	}
+}
+
 // GossipSubRouter is a router that implements the gossipsub protocol.
 // For each topic we have joined, we maintain an overlay through which
 // messages flow; this is the mesh map.
@@ -90,6 +111,7 @@ type GossipSubRouter struct {
 	connect chan connectInfo                 // px connection requests
 	mcache  *MessageCache
 	tracer  *pubsubTracer
+	score   *peerScore
 }
 
 type connectInfo struct {
