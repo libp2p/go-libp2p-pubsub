@@ -649,7 +649,7 @@ func (gs *GossipSubRouter) heartbeat() {
 
 	tograft := make(map[peer.ID][]string)
 	toprune := make(map[peer.ID][]string)
-	doPX := true
+	doPX := make(map[peer.ID]bool)
 
 	// clean up expired backoffs
 	gs.clearBackoff()
@@ -758,7 +758,7 @@ func (gs *GossipSubRouter) clearBackoff() {
 	}
 }
 
-func (gs *GossipSubRouter) sendGraftPrune(tograft, toprune map[peer.ID][]string, doPX bool) {
+func (gs *GossipSubRouter) sendGraftPrune(tograft, toprune map[peer.ID][]string, doPX map[peer.ID]bool) {
 	for p, topics := range tograft {
 		graft := make([]*pb.ControlGraft, 0, len(topics))
 		for _, topic := range topics {
@@ -771,7 +771,7 @@ func (gs *GossipSubRouter) sendGraftPrune(tograft, toprune map[peer.ID][]string,
 			delete(toprune, p)
 			prune = make([]*pb.ControlPrune, 0, len(pruning))
 			for _, topic := range pruning {
-				prune = append(prune, gs.makePrune(p, topic, doPX))
+				prune = append(prune, gs.makePrune(p, topic, doPX[p]))
 			}
 		}
 
@@ -782,7 +782,7 @@ func (gs *GossipSubRouter) sendGraftPrune(tograft, toprune map[peer.ID][]string,
 	for p, topics := range toprune {
 		prune := make([]*pb.ControlPrune, 0, len(topics))
 		for _, topic := range topics {
-			prune = append(prune, gs.makePrune(p, topic, doPX))
+			prune = append(prune, gs.makePrune(p, topic, doPX[p]))
 		}
 
 		out := rpcWithControl(nil, nil, nil, nil, prune)
