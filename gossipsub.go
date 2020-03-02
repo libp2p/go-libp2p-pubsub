@@ -511,9 +511,10 @@ func (gs *GossipSubRouter) Join(topic string) {
 		if len(gmap) < GossipSubD {
 			// we need more peers; eager, as this would get fixed in the next heartbeat
 			more := gs.getPeers(topic, GossipSubD-len(gmap), func(p peer.ID) bool {
-				// filter our current peers
+				// filter our current peers and peers with negative scores
 				_, ok := gmap[p]
-				return !ok
+				score := gs.score.Score(p)
+				return !ok && score >= 0
 			})
 			for _, p := range more {
 				gmap[p] = struct{}{}
@@ -523,7 +524,11 @@ func (gs *GossipSubRouter) Join(topic string) {
 		delete(gs.fanout, topic)
 		delete(gs.lastpub, topic)
 	} else {
-		peers := gs.getPeers(topic, GossipSubD, func(peer.ID) bool { return true })
+		peers := gs.getPeers(topic, GossipSubD, func(p peer.ID) bool {
+			// filter peers with negative score
+			score := gs.score.Score(p)
+			return score >= 0
+		})
 		gmap = peerListToMap(peers)
 		gs.mesh[topic] = gmap
 	}
