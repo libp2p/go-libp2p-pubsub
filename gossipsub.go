@@ -737,10 +737,11 @@ func (gs *GossipSubRouter) heartbeat() {
 
 	// maintain our fanout for topics we are publishing but we have not joined
 	for topic, peers := range gs.fanout {
-		// check whether our peers are still in the topic
+		// check whether our peers are still in the topic and don't have a negative score
 		for p := range peers {
 			_, ok := gs.p.topics[topic][p]
-			if !ok {
+			score := gs.score.Score(p)
+			if !ok || score < 0 {
 				delete(peers, p)
 			}
 		}
