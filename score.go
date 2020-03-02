@@ -19,7 +19,7 @@ func newPeerScore(gs *GossipSubRouter, params *PeerScoreParams) *peerScore {
 }
 
 // router interface
-func (ps *peerScore) Score(p peer.ID, topic string) float64 {
+func (ps *peerScore) Score(p peer.ID) float64 {
 	return 0
 }
 
