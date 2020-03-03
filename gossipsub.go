@@ -28,7 +28,7 @@ var (
 	GossipSubD      = 6
 	GossipSubDlo    = 5
 	GossipSubDhi    = 12
-	GossipSubDscore = 3
+	GossipSubDscore = 4
 
 	// gossip parameters
 	GossipSubHistoryLength = 5
