@@ -336,6 +336,14 @@ func (gs *GossipSubRouter) handleGraft(p peer.ID, ctl *pb.ControlMessage) []*pb.
 			continue
 		}
 
+		// make sure we are not backing off that peer
+		_, backoff := gs.backoff[topic][p]
+		if backoff {
+			log.Debugf("GRAFT: ignoring backed off peer %s", p)
+			prune = append(prune, topic)
+			continue
+		}
+
 		log.Debugf("GRAFT: Add mesh link from %s in %s", p, topic)
 		gs.tracer.Graft(p, topic)
 		peers[p] = struct{}{}
@@ -708,6 +716,7 @@ func (gs *GossipSubRouter) heartbeat() {
 			gs.tracer.Prune(p, topic)
 			delete(peers, p)
 			gs.untagPeer(p, topic)
+			gs.addBackoff(p, topic)
 			topics := toprune[p]
 			toprune[p] = append(topics, topic)
 		}
