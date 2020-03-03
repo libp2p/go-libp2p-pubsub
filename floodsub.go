@@ -3,8 +3,6 @@ package pubsub
 import (
 	"context"
 
-	pb "github.com/libp2p/go-libp2p-pubsub/pb"
-
 	"github.com/libp2p/go-libp2p-core/host"
 	"github.com/libp2p/go-libp2p-core/peer"
 	"github.com/libp2p/go-libp2p-core/protocol"
@@ -71,7 +69,7 @@ func (fs *FloodSubRouter) EnoughPeers(topic string, suggested int) bool {
 
 func (fs *FloodSubRouter) HandleRPC(rpc *RPC) {}
 
-func (fs *FloodSubRouter) Publish(from peer.ID, msg *pb.Message) {
+func (fs *FloodSubRouter) Publish(from peer.ID, msg *Message) {
 	tosend := make(map[peer.ID]struct{})
 	for _, topic := range msg.GetTopicIDs() {
 		tmap, ok := fs.p.topics[topic]
@@ -84,7 +82,7 @@ func (fs *FloodSubRouter) Publish(from peer.ID, msg *pb.Message) {
 		}
 	}
 
-	out := rpcWithMessages(msg)
+	out := rpcWithMessages(msg.Message)
 	for pid := range tosend {
 		if pid == from || pid == peer.ID(msg.GetFrom()) {
 			continue

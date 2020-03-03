@@ -3,8 +3,6 @@ package pubsub
 import (
 	"context"
 
-	pb "github.com/libp2p/go-libp2p-pubsub/pb"
-
 	"github.com/libp2p/go-libp2p-core/host"
 	"github.com/libp2p/go-libp2p-core/peer"
 	"github.com/libp2p/go-libp2p-core/protocol"
@@ -90,7 +88,7 @@ func (rs *RandomSubRouter) EnoughPeers(topic string, suggested int) bool {
 
 func (rs *RandomSubRouter) HandleRPC(rpc *RPC) {}
 
-func (rs *RandomSubRouter) Publish(from peer.ID, msg *pb.Message) {
+func (rs *RandomSubRouter) Publish(from peer.ID, msg *Message) {
 	tosend := make(map[peer.ID]struct{})
 	rspeers := make(map[peer.ID]struct{})
 	src := peer.ID(msg.GetFrom())
@@ -127,7 +125,7 @@ func (rs *RandomSubRouter) Publish(from peer.ID, msg *pb.Message) {
 		}
 	}
 
-	out := rpcWithMessages(msg)
+	out := rpcWithMessages(msg.Message)
 	for p := range tosend {
 		mch, ok := rs.p.peers[p]
 		if !ok {
