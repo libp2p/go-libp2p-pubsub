@@ -715,7 +715,7 @@ func (gs *GossipSubRouter) heartbeat() {
 
 			// We keep the first D_score peers by score and the remaining up to D_lo randomly
 			shufflePeers(plst[GossipSubDscore:])
-			for _, p := range plst[GossipSubDlo:] {
+			for _, p := range plst[GossipSubD:] {
 				log.Debugf("HEARTBEAT: Remove mesh link to %s in %s", p, topic)
 				prunePeer(p)
 			}
