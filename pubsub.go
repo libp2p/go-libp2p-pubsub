@@ -151,6 +151,11 @@ type PubSubRouter interface {
 	// EnoughPeers returns whether the router needs more peers before it's ready to publish new records.
 	// Suggested (if greater than 0) is a suggested number of peers that the router should need.
 	EnoughPeers(topic string, suggested int) bool
+	// AcceptFrom is invoked on any incoming message before pushing it to the validation pipeline
+	// or processing control information.
+	// Allows routers with internal scoring to vet peers before commiting any processing resources
+	// to the message and implement an affective graylist.
+	AcceptFrom(peer.ID) bool
 	// HandleRPC is invoked to process control messages in the RPC envelope.
 	// It is invoked after subscriptions and payload messages have been processed.
 	HandleRPC(*RPC)
@@ -777,6 +782,12 @@ func (p *PubSub) handleIncomingRPC(rpc *RPC) {
 				p.notifyLeave(t, rpc.from)
 			}
 		}
+	}
+
+	// ask the router to vet the peer before commiting any processing resources
+	if !p.rt.AcceptFrom(rpc.from) {
+		log.Warningf("received message from router graylisted peer %s. Dropping RPC", rpc.from)
+		return
 	}
 
 	for _, pmsg := range rpc.GetPublish() {
