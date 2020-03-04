@@ -42,16 +42,16 @@ var (
 	GossipSubFanoutTTL = 60 * time.Second
 
 	// number of peers to include in prune Peer eXchange
-	GossipSubPrunePeers = 16
+	GossipSubPrunePeers = 6
 
 	// backoff time for pruned peers
 	GossipSubPruneBackoff = time.Minute
 
 	// number of active connection attempts for peers obtained through px
-	GossipSubConnectors = 16
+	GossipSubConnectors = 8
 
 	// maximum number of pending connections for peers attempted through px
-	GossipSubMaxPendingConnections = 1024
+	GossipSubMaxPendingConnections = 128
 
 	// timeout for connection attempts
 	GossipSubConnectionTimeout = 30 * time.Second
@@ -1012,7 +1012,7 @@ func (gs *GossipSubRouter) makePrune(p peer.ID, topic string, doPX bool) *pb.Con
 	if doPX {
 		// select peers for Peer eXchange
 		peers := gs.getPeers(topic, GossipSubPrunePeers, func(xp peer.ID) bool {
-			return p != xp
+			return p != xp && gs.score.Score(xp) >= 0
 		})
 
 		cab, ok := peerstore.GetCertifiedAddrBook(gs.p.host.Peerstore())
