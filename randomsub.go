@@ -88,7 +88,9 @@ func (rs *RandomSubRouter) EnoughPeers(topic string, suggested int) bool {
 
 func (rs *RandomSubRouter) HandleRPC(rpc *RPC) {}
 
-func (rs *RandomSubRouter) Publish(from peer.ID, msg *Message) {
+func (rs *RandomSubRouter) Publish(msg *Message) {
+	from := msg.ReceivedFrom
+
 	tosend := make(map[peer.ID]struct{})
 	rspeers := make(map[peer.ID]struct{})
 	src := peer.ID(msg.GetFrom())

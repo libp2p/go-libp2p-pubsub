@@ -155,7 +155,7 @@ type PubSubRouter interface {
 	// It is invoked after subscriptions and payload messages have been processed.
 	HandleRPC(*RPC)
 	// Publish is invoked to forward a new message that has been validated.
-	Publish(peer.ID, *Message)
+	Publish(*Message)
 	// Join notifies the router that we want to receive and forward messages in a topic.
 	// It is invoked after the subscription announcement.
 	Join(topic string)
@@ -840,7 +840,7 @@ func (p *PubSub) pushMsg(msg *Message) {
 func (p *PubSub) publishMessage(msg *Message) {
 	p.tracer.DeliverMessage(msg)
 	p.notifySubs(msg)
-	p.rt.Publish(msg.ReceivedFrom, msg)
+	p.rt.Publish(msg)
 }
 
 type addTopicReq struct {
