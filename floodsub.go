@@ -69,7 +69,9 @@ func (fs *FloodSubRouter) EnoughPeers(topic string, suggested int) bool {
 
 func (fs *FloodSubRouter) HandleRPC(rpc *RPC) {}
 
-func (fs *FloodSubRouter) Publish(from peer.ID, msg *Message) {
+func (fs *FloodSubRouter) Publish(msg *Message) {
+	from := msg.ReceivedFrom
+
 	tosend := make(map[peer.ID]struct{})
 	for _, topic := range msg.GetTopicIDs() {
 		tmap, ok := fs.p.topics[topic]
