@@ -74,10 +74,18 @@ func NewGossipSub(ctx context.Context, h host.Host, opts ...Option) (*PubSub, er
 }
 
 // WithPeerScore is a gossipsub router option that enables peer scoring.
+//
 // gossipThreshold is the score threshold below which gossip propagation is supressed.
+//
 // publishThreshold is the score threshold below which we shouldn't publish when using flood
-// publishing (also applies to fanout and floodsub peers).
-func WithPeerScore(params *PeerScoreParams, gossipThreshold float64, publishThreshold float64) Option {
+//  publishing (also applies to fanout and floodsub peers).
+//
+// graylistThreshold is the score threshold below which message processing is supressed altogether,
+//  implementing an effective graylist according to peer score.
+//
+// These thresholds should generally be negative, allowing some information to disseminate from low
+//  scoring peers.
+func WithPeerScore(params *PeerScoreParams, gossipThreshold, publishThreshold, graylistThreshold float64) Option {
 	return func(ps *PubSub) error {
 		gs, ok := ps.rt.(*GossipSubRouter)
 		if !ok {
@@ -87,6 +95,7 @@ func WithPeerScore(params *PeerScoreParams, gossipThreshold float64, publishThre
 		gs.score = newPeerScore(gs, params)
 		gs.gossipThreshold = gossipThreshold
 		gs.publishThreshold = publishThreshold
+		gs.graylistThreshold = graylistThreshold
 
 		// hook the tracer
 		if ps.tracer != nil {
@@ -144,6 +153,9 @@ type GossipSubRouter struct {
 	// flood publish score threshold; we only publish to peers with score >= to the threshold
 	// when using flood publishing or the peer is a fanout or floodsub peer.
 	publishThreshold float64
+
+	// threshold for peer score before we graylist the peer and silently ignore its RPCs
+	graylistThreshold float64
 
 	// whether to use flood publishing
 	floodPublish bool
@@ -216,6 +228,10 @@ func (gs *GossipSubRouter) EnoughPeers(topic string, suggested int) bool {
 	}
 
 	return false
+}
+
+func (gs *GossipSubRouter) AcceptFrom(p peer.ID) bool {
+	return gs.score.Score(p) >= gs.graylistThreshold
 }
 
 func (gs *GossipSubRouter) HandleRPC(rpc *RPC) {

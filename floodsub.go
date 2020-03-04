@@ -67,6 +67,10 @@ func (fs *FloodSubRouter) EnoughPeers(topic string, suggested int) bool {
 	return false
 }
 
+func (fs *FloodSubRouter) AcceptFrom(peer.ID) bool {
+	return true
+}
+
 func (fs *FloodSubRouter) HandleRPC(rpc *RPC) {}
 
 func (fs *FloodSubRouter) Publish(msg *Message) {
