@@ -34,6 +34,9 @@ var (
 	GossipSubHistoryLength = 5
 	GossipSubHistoryGossip = 3
 
+	GossipSubDlazy        = 6
+	GossipSubGossipFactor = 0.25
+
 	// heartbeat interval
 	GossipSubHeartbeatInitialDelay = 100 * time.Millisecond
 	GossipSubHeartbeatInterval     = 1 * time.Second
@@ -900,15 +903,32 @@ func (gs *GossipSubRouter) emitGossip(topic string, exclude map[peer.ID]struct{}
 		return
 	}
 
-	// Send gossip to D peers, skipping over the exclude set and peers with score below the threshold
-	gpeers := gs.getPeers(topic, GossipSubD, func(p peer.ID) bool {
-		_, ok := exclude[p]
-		score := gs.score.Score(p)
-		return !ok && score >= gs.gossipThreshold
-	})
+	// Send gossip to GossipFactor peers above threshold, with a minimum of D_lazy.
+	// First we collect the peers above gossipThreshold that are not in the exclude set
+	// and then randomly select from that set.
+	peers := make([]peer.ID, 0, len(gs.p.topics[topic]))
+	for p := range gs.p.topics[topic] {
+		_, inExclude := exclude[p]
+		if !inExclude && (gs.peers[p] == GossipSubID_v10 || gs.peers[p] == GossipSubID_v11) && gs.score.Score(p) >= gs.gossipThreshold {
+			peers = append(peers, p)
+		}
+	}
+
+	target := GossipSubDlazy
+	factor := int(GossipSubGossipFactor * float64(len(peers)))
+	if factor > target {
+		target = factor
+	}
+
+	if target > len(peers) {
+		target = len(peers)
+	} else {
+		shufflePeers(peers)
+	}
+	peers = peers[:target]
 
 	// Emit the IHAVE gossip to the selected peers.
-	for _, p := range gpeers {
+	for _, p := range peers {
 		gs.enqueueGossip(p, &pb.ControlIHave{TopicID: &topic, MessageIDs: mids})
 	}
 }
