@@ -37,6 +37,8 @@ var (
 	GossipSubDlazy        = 6
 	GossipSubGossipFactor = 0.25
 
+	GossipSubGossipRetransmission = 3
+
 	// heartbeat interval
 	GossipSubHeartbeatInitialDelay = 100 * time.Millisecond
 	GossipSubHeartbeatInterval     = 1 * time.Second
@@ -302,15 +304,20 @@ func (gs *GossipSubRouter) handleIWant(p peer.ID, ctl *pb.ControlMessage) []*pb.
 		return nil
 	}
 
-	// TODO: [spam hardening] only send back the same message to the same peer a limited number of times
-
 	ihave := make(map[string]*pb.Message)
 	for _, iwant := range ctl.GetIwant() {
 		for _, mid := range iwant.GetMessageIDs() {
-			msg, ok := gs.mcache.Get(mid)
-			if ok {
-				ihave[mid] = msg
+			msg, count, ok := gs.mcache.GetForPeer(mid, p)
+			if !ok {
+				continue
 			}
+
+			if count > GossipSubGossipRetransmission {
+				log.Debugf("IWANT: Peer %s has asked for message %s too many times; ignoring request", p, mid)
+				continue
+			}
+
+			ihave[mid] = msg
 		}
 	}
 
