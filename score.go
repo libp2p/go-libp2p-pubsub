@@ -125,7 +125,7 @@ type peerScore struct {
 	peerStats map[peer.ID]*peerStats
 
 	// IP colocation tracking
-	peerIPs map[string]peer.ID
+	peerIPs map[string]map[peer.ID]struct{}
 }
 
 func newPeerScore(params *PeerScoreParams) *peerScore {
