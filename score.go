@@ -79,11 +79,15 @@ type TopicScoreParams struct {
 type peerScore struct {
 }
 
-func newPeerScore(gs *GossipSubRouter, params *PeerScoreParams) *peerScore {
+func newPeerScore(params *PeerScoreParams) *peerScore {
 	return nil
 }
 
 // router interface
+func (ps *peerScore) Start(gs *GossipSubRouter) {
+
+}
+
 func (ps *peerScore) Score(p peer.ID) float64 {
 	return 0
 }
