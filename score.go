@@ -204,6 +204,55 @@ func (ps *peerScore) Score(p peer.ID) float64 {
 	return score
 }
 
+// periodic maintenance
+func (ps *peerScore) refreshScores() {
+	ps.Lock()
+	defer ps.Unlock()
+
+	now := time.Now()
+	for p, pstats := range ps.peerStats {
+		if !pstats.connected {
+			// has the retention period expired?
+			if now.After(pstats.expire) {
+				// yes, throw it away
+				delete(ps.peerStats, p)
+			}
+
+			// we don't decay retained scores, as the peer is not active.
+			// this way the peer cannot reset a negative score by simply disconnecting and reconnecting,
+			// unless the retention period has ellapsed.
+			// similarly, a well behaved peer does not lose its score by getting disconnected.
+			continue
+		}
+
+		for topic, tstats := range pstats.topics {
+			// the topic parameters
+			topicParams, ok := ps.params.Topics[topic]
+			if !ok {
+				// we are not scoring this topic
+				continue
+			}
+
+			// decay counters
+			tstats.firstMessageDeliveries *= topicParams.FirstMessageDeliveriesDecay
+			tstats.meshMessageDeliveries *= topicParams.MeshMessageDeliveriesDecay
+			tstats.invalidMessageDeliveries *= topicParams.InvalidMessageDeliveriesDecay
+
+			// update mesh time and activate mesh message delivery parameter if need be
+			if tstats.inMesh {
+				tstats.meshTime = now.Sub(tstats.graftTime)
+				if tstats.meshTime > topicParams.MeshMessageDeliveriesActivation {
+					tstats.meshMessageDeliveriesActive = true
+				}
+			}
+		}
+	}
+}
+
+func (ps *peerScore) resfreshIPs() {
+	// peer IPs may change, so we periodically refresh them
+}
+
 // tracer interface
 func (ps *peerScore) AddPeer(p peer.ID, proto protocol.ID) {
 
