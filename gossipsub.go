@@ -97,7 +97,7 @@ func WithPeerScore(params *PeerScoreParams, gossipThreshold, publishThreshold, g
 			return fmt.Errorf("pubsub router is not gossipsub")
 		}
 
-		gs.score = newPeerScore(gs, params)
+		gs.score = newPeerScore(params)
 		gs.gossipThreshold = gossipThreshold
 		gs.publishThreshold = publishThreshold
 		gs.graylistThreshold = graylistThreshold
@@ -178,9 +178,19 @@ func (gs *GossipSubRouter) Protocols() []protocol.ID {
 func (gs *GossipSubRouter) Attach(p *PubSub) {
 	gs.p = p
 	gs.tracer = p.tracer
+
+	// start the scoring, if any
+	if gs.score != nil {
+		gs.score.Start(gs)
+	}
+
 	// start using the same msg ID function as PubSub for caching messages.
 	gs.mcache.SetMsgIdFn(p.msgID)
+
+	// start the heartbeat
 	go gs.heartbeatTimer()
+
+	// start the PX connectors
 	for i := 0; i < GossipSubConnectors; i++ {
 		go gs.connector()
 	}
