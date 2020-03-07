@@ -138,6 +138,10 @@ func (ps *peerScore) Start(gs *GossipSubRouter) {
 }
 
 func (ps *peerScore) Score(p peer.ID) float64 {
+	if ps == nil {
+		return 0
+	}
+
 	ps.Lock()
 	defer ps.Unlock()
 
