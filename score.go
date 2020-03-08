@@ -59,9 +59,10 @@ type TopicScoreParams struct {
 
 	// P3: mesh message deliveries
 	// This is the number of message deliveries in the mesh, within the MeshMessageDeliveriesWindow of
-	// the first message delivery.
-	// This window accounts for time in the validation pipeline and the minimum time before a hostile
-	// mesh peer trying to game the score can replay back a valid message we just sent them.
+	// message validation; deliveries during validation also count and are retroactively applied
+	// when validation succeeds.
+	// This window accounts for the minimum time before a hostile mesh peer trying to game the score
+	// could replay back a valid message we just sent them.
 	// It effectively tracks near-first deliveries, ie a message seen from a mesh peer before we
 	// have forwarded it to them.
 	// The parameter has an associated counter, decaying with MessageMessageDeliveriesDecay.
@@ -142,8 +143,8 @@ type messageDeliveries struct {
 }
 
 type deliveryRecord struct {
-	firstSeen time.Time
 	status    int
+	validated time.Time
 	peers     map[peer.ID]struct{}
 }
 
@@ -386,6 +387,7 @@ func (ps *peerScore) DeliverMessage(msg *Message) {
 
 	// mark the message as valid and reward mesh peers that have already forwarded it to us
 	drec.status = delivery_valid
+	drec.validated = time.Now()
 	for p := range drec.peers {
 		ps.markDuplicateMessageDelivery(p, msg, time.Time{})
 	}
@@ -453,7 +455,7 @@ func (ps *peerScore) DuplicateMessage(msg *Message) {
 	case delivery_valid:
 		// mark the peer delivery time to only count a duplicate delivery once.
 		drec.peers[msg.ReceivedFrom] = struct{}{}
-		ps.markDuplicateMessageDelivery(msg.ReceivedFrom, msg, drec.firstSeen)
+		ps.markDuplicateMessageDelivery(msg.ReceivedFrom, msg, drec.validated)
 
 	case delivery_invalid:
 		// we no longer track delivery time
@@ -534,7 +536,7 @@ func (ps *peerScore) markFirstMessageDelivery(p peer.ID, msg *Message) {
 	}
 }
 
-func (ps *peerScore) markDuplicateMessageDelivery(p peer.ID, msg *Message, firstSeen time.Time) {
+func (ps *peerScore) markDuplicateMessageDelivery(p peer.ID, msg *Message, validated time.Time) {
 	var now time.Time
 
 	pstats, ok := ps.peerStats[p]
@@ -542,7 +544,7 @@ func (ps *peerScore) markDuplicateMessageDelivery(p peer.ID, msg *Message, first
 		return
 	}
 
-	if !firstSeen.IsZero() {
+	if !validated.IsZero() {
 		now = time.Now()
 	}
 
@@ -556,10 +558,10 @@ func (ps *peerScore) markDuplicateMessageDelivery(p peer.ID, msg *Message, first
 			continue
 		}
 
-		// check against the mesh delivery window -- if the firstSeen time is passed as 0, then now
-		// will also be zero and the message was received before we finished validation and thus falls
-		// within the mesh delivery window.
-		if !now.IsZero() && now.After(firstSeen.Add(ps.params.Topics[topic].MeshMessageDeliveriesWindow)) {
+		// check against the mesh delivery window -- if the validated time is passed as 0, then
+		// the message was received before we finished validation and thus falls within the mesh
+		// delivery window.
+		if !validated.IsZero() && now.After(validated.Add(ps.params.Topics[topic].MeshMessageDeliveriesWindow)) {
 			continue
 		}
 
