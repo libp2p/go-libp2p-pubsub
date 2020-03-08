@@ -378,13 +378,32 @@ func (ps *peerScore) DeliverMessage(msg *Message) {
 	}
 }
 
+func (ps *peerScore) ValidateMessage(msg *Message) {
+	ps.Lock()
+	defer ps.Unlock()
+
+	// the pubsub subsystem is beginning validation; create a record to track time in
+	// the validation pipeline with an accurate firstSeen time.
+	_ = ps.deliveries.getRecord(ps.msgID(msg.Message))
+}
+
 func (ps *peerScore) RejectMessage(msg *Message, reason string) {
 	ps.Lock()
 	defer ps.Unlock()
 
-	if reason == "invalid signature" {
+	// TODO: the reasons should become named strings; good enough for now.
+	switch reason {
+	// we don't track those messages, but we penalize the peer as they are clearly invalid
+	case "missing signature":
+		fallthrough
+	case "invalid signature":
 		ps.markInvalidMessageDelivery(msg.ReceivedFrom, msg)
-		// if we reject with "invalid signature" we don't track this message delivery.
+		return
+
+		// we ignore those messages, so do nothing.
+	case "blacklisted peer":
+		fallthrough
+	case "blacklisted source":
 		return
 	}
 

@@ -206,6 +206,8 @@ func (v *validation) validate(vals []*topicVal, src peer.ID, msg *Message) {
 	if !v.p.markSeen(id) {
 		v.tracer.DuplicateMessage(msg)
 		return
+	} else {
+		v.tracer.ValidateMessage(msg)
 	}
 
 	var inline, async []*topicVal
