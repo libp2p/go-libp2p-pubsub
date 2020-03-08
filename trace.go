@@ -22,6 +22,7 @@ type scoreTracer interface {
 	Leave(topic string)
 	Graft(p peer.ID, topic string)
 	Prune(p peer.ID, topic string)
+	ValidateMessage(msg *Message)
 	DeliverMessage(msg *Message)
 	RejectMessage(msg *Message, reason string)
 	DuplicateMessage(msg *Message)
@@ -56,6 +57,16 @@ func (t *pubsubTracer) PublishMessage(msg *Message) {
 	}
 
 	t.tracer.Trace(evt)
+}
+
+func (t *pubsubTracer) ValidateMessage(msg *Message) {
+	if t == nil {
+		return
+	}
+
+	if t.score != nil && msg.ReceivedFrom != t.pid {
+		t.score.ValidateMessage(msg)
+	}
 }
 
 func (t *pubsubTracer) RejectMessage(msg *Message, reason string) {
