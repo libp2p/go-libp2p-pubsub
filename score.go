@@ -445,18 +445,20 @@ func (ps *peerScore) markFirstMessageDelivery(p peer.ID, msg *Message) {
 			continue
 		}
 
+		cap := ps.params.Topics[topic].FirstMessageDeliveriesCap
 		tstats.firstMessageDeliveries += 1
-		if tstats.firstMessageDeliveries > ps.params.Topics[topic].FirstMessageDeliveriesCap {
-			tstats.firstMessageDeliveries = ps.params.Topics[topic].FirstMessageDeliveriesCap
+		if tstats.firstMessageDeliveries > cap {
+			tstats.firstMessageDeliveries = cap
 		}
 
 		if !tstats.inMesh {
 			continue
 		}
 
+		cap = ps.params.Topics[topic].MeshMessageDeliveriesCap
 		tstats.meshMessageDeliveries += 1
-		if tstats.meshMessageDeliveries > ps.params.Topics[topic].MeshMessageDeliveriesCap {
-			tstats.meshMessageDeliveries = ps.params.Topics[topic].MeshMessageDeliveriesCap
+		if tstats.meshMessageDeliveries > cap {
+			tstats.meshMessageDeliveries = cap
 		}
 	}
 }
@@ -482,9 +484,10 @@ func (ps *peerScore) markDuplicateMessageDelivery(p peer.ID, msg *Message, first
 			continue
 		}
 
+		cap := ps.params.Topics[topic].MeshMessageDeliveriesCap
 		tstats.meshMessageDeliveries += 1
-		if tstats.meshMessageDeliveries > ps.params.Topics[topic].MeshMessageDeliveriesCap {
-			tstats.meshMessageDeliveries = ps.params.Topics[topic].MeshMessageDeliveriesCap
+		if tstats.meshMessageDeliveries > cap {
+			tstats.meshMessageDeliveries = cap
 		}
 	}
 }
