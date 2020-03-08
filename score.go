@@ -75,6 +75,12 @@ type TopicScoreParams struct {
 	MeshMessageDeliveriesCap, MeshMessageDeliveriesThreshold     float64
 	MeshMessageDeliveriesWindow, MeshMessageDeliveriesActivation time.Duration
 
+	// P3b: sticky mesh propagation failures
+	// This is a sticky penalty that applies when a peer gets pruned from the mesh with an active
+	// mesh message delivery penalty.
+	// The weight of the parameter MUST be negative (or zero if you want to disable it)
+	MeshFailurePenaltyWeight, MeshFailurePenaltyDecay float64
+
 	// P4: invalid messages
 	// This is the number of invalid messages in the topic.
 	// The value of the parameter is a counter, decaying with InvalidMessageDeliveriesDecay.
@@ -115,6 +121,9 @@ type topicStats struct {
 
 	// true if the peer has been enough time in the mesh to activate mess message deliveries
 	meshMessageDeliveriesActive bool
+
+	// sticky mesh rate failure penalty counter
+	meshFailurePenalty float64
 
 	// invalid message counter
 	invalidMessageDeliveries float64
@@ -215,6 +224,10 @@ func (ps *peerScore) Score(p peer.ID) float64 {
 			}
 		}
 
+		// P3b:
+		p3b := tstats.meshFailurePenalty
+		topicScore += p3b * topicParams.MeshFailurePenaltyWeight
+
 		// P4: invalid messages
 		p4 := tstats.invalidMessageDeliveries
 		topicScore += p4 * topicParams.InvalidMessageDeliveriesWeight
@@ -278,6 +291,10 @@ func (ps *peerScore) refreshScores() {
 			tstats.meshMessageDeliveries *= topicParams.MeshMessageDeliveriesDecay
 			if tstats.meshMessageDeliveries < ps.params.DecayToZero {
 				tstats.meshMessageDeliveries = 0
+			}
+			tstats.meshFailurePenalty *= topicParams.MeshFailurePenaltyDecay
+			if tstats.meshFailurePenalty < ps.params.DecayToZero {
+				tstats.meshFailurePenalty = 0
 			}
 			tstats.invalidMessageDeliveries *= topicParams.InvalidMessageDeliveriesDecay
 			if tstats.invalidMessageDeliveries < ps.params.DecayToZero {
@@ -349,6 +366,7 @@ func (ps *peerScore) Graft(p peer.ID, topic string) {
 	tstats.inMesh = true
 	tstats.graftTime = time.Now()
 	tstats.meshTime = 0
+	tstats.meshMessageDeliveriesActive = false
 }
 
 func (ps *peerScore) Prune(p peer.ID, topic string) {
@@ -363,6 +381,10 @@ func (ps *peerScore) Prune(p peer.ID, topic string) {
 	tstats, ok := pstats.getTopicStats(topic, ps.params)
 	if !ok {
 		return
+	}
+
+	if tstats.meshMessageDeliveriesActive && tstats.meshMessageDeliveries < ps.params.Topics[topic].MeshMessageDeliveriesThreshold {
+		tstats.meshFailurePenalty += 1
 	}
 
 	tstats.inMesh = false
