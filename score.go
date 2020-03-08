@@ -167,6 +167,9 @@ func (ps *peerScore) Score(p peer.ID) float64 {
 		// P1: time in Mesh
 		if tstats.inMesh {
 			p1 := float64(tstats.meshTime / topicParams.TimeInMeshQuantum)
+			if p1 > topicParams.TimeInMeshCap {
+				p1 = topicParams.TimeInMeshCap
+			}
 			topicScore += p1 * topicParams.TimeInMeshWeight
 		}
 
