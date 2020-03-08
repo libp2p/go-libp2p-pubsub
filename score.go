@@ -60,12 +60,16 @@ type TopicScoreParams struct {
 	// P3: mesh message deliveries
 	// This is the number of message deliveries in the mesh, within the MeshMessageDeliveriesWindow of
 	// the first message delivery.
+	// This window accounts for time in the validation pipeline and the minimum time before a hostile
+	// mesh peer trying to game the score can replay back a valid message we just sent them.
+	// It effectively tracks near-first deliveries, ie a message seen from a mesh peer before we
+	// have forwarded it to them.
 	// The parameter has an associated counter, decaying with MessageMessageDeliveriesDecay.
 	// If the counter exceeds the threshold, its value is 0.
 	// If the counter is below the MeshMessageDeliveriesThreshold, the value is the square of
 	// the deficit, ie (MessageDeliveriesThreshold - counter)^2
 	// The penalty is only activated after MeshMessageDeliveriesActivation time in the mesh.
-	// The weight of the parameter MUST be negative.
+	// The weight of the parameter MUST be negative (or zero if you want to disable it).
 	MeshMessageDeliveriesWeight, MeshMessageDeliveriesDecay      float64
 	MeshMessageDeliveriesCap, MeshMessageDeliveriesThreshold     float64
 	MeshMessageDeliveriesWindow, MeshMessageDeliveriesActivation time.Duration
@@ -145,10 +149,10 @@ type deliveryRecord struct {
 
 // delivery record status
 const (
-	delivery_unknown = iota // we don't know (yet) if the message is valid
-	delivery_valid
-	delivery_invalid
-	delivery_throttled
+	delivery_unknown   = iota // we don't know (yet) if the message is valid
+	delivery_valid            // we know the message is valid
+	delivery_invalid          // we know the message is invalid
+	delivery_throttled        // we can't tell if it is valid because validation throttled
 )
 
 func newPeerScore(params *PeerScoreParams) *peerScore {
