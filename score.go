@@ -239,9 +239,17 @@ func (ps *peerScore) refreshScores() {
 
 			// decay counters
 			tstats.firstMessageDeliveries *= topicParams.FirstMessageDeliveriesDecay
+			if tstats.firstMessageDeliveries < ps.params.DecayToZero {
+				tstats.firstMessageDeliveries = 0
+			}
 			tstats.meshMessageDeliveries *= topicParams.MeshMessageDeliveriesDecay
+			if tstats.meshMessageDeliveries < ps.params.DecayToZero {
+				tstats.meshMessageDeliveries = 0
+			}
 			tstats.invalidMessageDeliveries *= topicParams.InvalidMessageDeliveriesDecay
-
+			if tstats.invalidMessageDeliveries < ps.params.DecayToZero {
+				tstats.invalidMessageDeliveries = 0
+			}
 			// update mesh time and activate mesh message delivery parameter if need be
 			if tstats.inMesh {
 				tstats.meshTime = now.Sub(tstats.graftTime)
