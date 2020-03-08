@@ -367,6 +367,15 @@ func (ps *peerScore) Prune(p peer.ID, topic string) {
 	tstats.inMesh = false
 }
 
+func (ps *peerScore) ValidateMessage(msg *Message) {
+	ps.Lock()
+	defer ps.Unlock()
+
+	// the pubsub subsystem is beginning validation; create a record to track time in
+	// the validation pipeline with an accurate firstSeen time.
+	_ = ps.deliveries.getRecord(ps.msgID(msg.Message))
+}
+
 func (ps *peerScore) DeliverMessage(msg *Message) {
 	ps.Lock()
 	defer ps.Unlock()
@@ -380,15 +389,6 @@ func (ps *peerScore) DeliverMessage(msg *Message) {
 	for p := range drec.peers {
 		ps.markDuplicateMessageDelivery(p, msg, time.Time{})
 	}
-}
-
-func (ps *peerScore) ValidateMessage(msg *Message) {
-	ps.Lock()
-	defer ps.Unlock()
-
-	// the pubsub subsystem is beginning validation; create a record to track time in
-	// the validation pipeline with an accurate firstSeen time.
-	_ = ps.deliveries.getRecord(ps.msgID(msg.Message))
 }
 
 func (ps *peerScore) RejectMessage(msg *Message, reason string) {
