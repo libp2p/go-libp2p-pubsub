@@ -306,11 +306,39 @@ func (ps *peerScore) Join(topic string)  {}
 func (ps *peerScore) Leave(topic string) {}
 
 func (ps *peerScore) Graft(p peer.ID, topic string) {
-	// TODO
+	ps.Lock()
+	defer ps.Unlock()
+
+	pstats, ok := ps.peerStats[p]
+	if !ok {
+		return
+	}
+
+	tstats, ok := pstats.getTopicStats(topic, ps.params)
+	if !ok {
+		return
+	}
+
+	tstats.inMesh = true
+	tstats.graftTime = time.Now()
+	tstats.meshTime = 0
 }
 
 func (ps *peerScore) Prune(p peer.ID, topic string) {
-	// TODO
+	ps.Lock()
+	defer ps.Unlock()
+
+	pstats, ok := ps.peerStats[p]
+	if !ok {
+		return
+	}
+
+	tstats, ok := pstats.getTopicStats(topic, ps.params)
+	if !ok {
+		return
+	}
+
+	tstats.inMesh = false
 }
 
 func (ps *peerScore) DeliverMessage(msg *Message) {
