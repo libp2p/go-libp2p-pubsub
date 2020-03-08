@@ -383,8 +383,11 @@ func (ps *peerScore) Prune(p peer.ID, topic string) {
 		return
 	}
 
-	if tstats.meshMessageDeliveriesActive && tstats.meshMessageDeliveries < ps.params.Topics[topic].MeshMessageDeliveriesThreshold {
-		tstats.meshFailurePenalty += 1
+	// sticky mesh delivery rate failure penalty
+	threshold := ps.params.Topics[topic].MeshMessageDeliveriesThreshold
+	if tstats.meshMessageDeliveriesActive && tstats.meshMessageDeliveries < threshold {
+		deficit := threshold - tstats.meshMessageDeliveries
+		tstats.meshFailurePenalty += deficit * deficit
 	}
 
 	tstats.inMesh = false
