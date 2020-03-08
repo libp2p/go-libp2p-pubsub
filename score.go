@@ -245,7 +245,8 @@ func (ps *peerScore) refreshScores() {
 		if !pstats.connected {
 			// has the retention period expired?
 			if now.After(pstats.expire) {
-				// yes, throw it away
+				// yes, throw it away (but clean up the IP tracking first)
+				ps.removeIPs(p, pstats.ips)
 				delete(ps.peerStats, p)
 			}
 
@@ -295,11 +296,32 @@ func (ps *peerScore) resfreshIPs() {
 
 // tracer interface
 func (ps *peerScore) AddPeer(p peer.ID, proto protocol.ID) {
-	// TODO
+	ps.Lock()
+	defer ps.Unlock()
+
+	pstats, ok := ps.peerStats[p]
+	if !ok {
+		pstats = &peerStats{topics: make(map[string]*topicStats)}
+		ps.peerStats[p] = pstats
+	}
+
+	pstats.connected = true
+	ips := ps.getIPs(p)
+	ps.addIPs(p, ips, pstats.ips)
+	pstats.ips = ips
 }
 
 func (ps *peerScore) RemovePeer(p peer.ID) {
-	// TODO
+	ps.Lock()
+	defer ps.Unlock()
+
+	pstats, ok := ps.peerStats[p]
+	if !ok {
+		return
+	}
+
+	pstats.connected = false
+	pstats.expire = time.Now().Add(ps.params.RetainScore)
 }
 
 func (ps *peerScore) Join(topic string)  {}
@@ -516,6 +538,69 @@ func (ps *peerScore) markDuplicateMessageDelivery(p peer.ID, msg *Message, first
 		tstats.meshMessageDeliveries += 1
 		if tstats.meshMessageDeliveries > cap {
 			tstats.meshMessageDeliveries = cap
+		}
+	}
+}
+
+// gets the current IPs for a peer
+func (ps *peerScore) getIPs(p peer.ID) []string {
+	// TODO
+	return nil
+}
+
+// merges two IP lists, adds tracking for the new IPs in the list, and removes tracking
+// from the obsolete ips.
+func (ps *peerScore) addIPs(p peer.ID, newips, oldips []string) {
+addNewIPs:
+	// add the new IPs to the tracking
+	for _, ip := range newips {
+		// check if it is in the old ips list
+		for _, xip := range oldips {
+			if ip == xip {
+				continue addNewIPs
+			}
+		}
+		// no, it's a new one -- add it to the tracker
+		peers, ok := ps.peerIPs[ip]
+		if !ok {
+			peers = make(map[peer.ID]struct{})
+			ps.peerIPs[ip] = peers
+		}
+		peers[p] = struct{}{}
+	}
+
+removeOldIPs:
+	// remove the obsolete old IPs from the tracking
+	for _, ip := range oldips {
+		// check if it is in the new ips list
+		for _, xip := range newips {
+			if ip == xip {
+				continue removeOldIPs
+			}
+			// no, it's obsolete -- remove it from the tracker
+			peers, ok := ps.peerIPs[ip]
+			if !ok {
+				continue
+			}
+			delete(peers, p)
+			if len(peers) == 0 {
+				delete(ps.peerIPs, ip)
+			}
+		}
+	}
+}
+
+// removes an IP list from the tracking list
+func (ps *peerScore) removeIPs(p peer.ID, ips []string) {
+	for _, ip := range ips {
+		peers, ok := ps.peerIPs[ip]
+		if !ok {
+			continue
+		}
+
+		delete(peers, p)
+		if len(peers) == 0 {
+			delete(ps.peerIPs, ip)
 		}
 	}
 }
