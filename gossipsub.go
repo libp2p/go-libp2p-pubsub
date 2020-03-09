@@ -97,6 +97,11 @@ func WithPeerScore(params *PeerScoreParams, gossipThreshold, publishThreshold, g
 			return fmt.Errorf("pubsub router is not gossipsub")
 		}
 
+		err := params.validate()
+		if err != nil {
+			return err
+		}
+
 		gs.score = newPeerScore(params)
 		gs.gossipThreshold = gossipThreshold
 		gs.publishThreshold = publishThreshold
