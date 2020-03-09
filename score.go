@@ -4,8 +4,11 @@ import (
 	"sync"
 	"time"
 
+	"github.com/libp2p/go-libp2p-core/host"
 	"github.com/libp2p/go-libp2p-core/peer"
 	"github.com/libp2p/go-libp2p-core/protocol"
+
+	ma "github.com/multiformats/go-multiaddr"
 )
 
 type PeerScoreParams struct {
@@ -145,6 +148,7 @@ type peerScore struct {
 	deliveries *messageDeliveries
 
 	msgID MsgIdFunction
+	host  host.Host
 }
 
 type messageDeliveries struct {
@@ -323,7 +327,13 @@ func (ps *peerScore) refreshScores() {
 
 func (ps *peerScore) resfreshIPs() {
 	// peer IPs may change, so we periodically refresh them
-	// TODO
+	for p, pstats := range ps.peerStats {
+		if pstats.connected {
+			ips := ps.getIPs(p)
+			ps.setIPs(p, ips, pstats.ips)
+			pstats.ips = ips
+		}
+	}
 }
 
 // tracer interface
@@ -339,7 +349,7 @@ func (ps *peerScore) AddPeer(p peer.ID, proto protocol.ID) {
 
 	pstats.connected = true
 	ips := ps.getIPs(p)
-	ps.addIPs(p, ips, pstats.ips)
+	ps.setIPs(p, ips, pstats.ips)
 	pstats.ips = ips
 }
 
@@ -646,13 +656,33 @@ func (ps *peerScore) markDuplicateMessageDelivery(p peer.ID, msg *Message, valid
 
 // gets the current IPs for a peer
 func (ps *peerScore) getIPs(p peer.ID) []string {
-	// TODO
-	return nil
+	// in unit tests this can be nil
+	if ps.host == nil {
+		return nil
+	}
+
+	conns := ps.host.Network().ConnsToPeer(p)
+	res := make([]string, 0, len(conns))
+	for _, c := range conns {
+		remote := c.RemoteMultiaddr()
+
+		ip4, err := remote.ValueForProtocol(ma.P_IP4)
+		if err == nil {
+			res = append(res, ip4)
+			continue
+		}
+
+		ip6, err := remote.ValueForProtocol(ma.P_IP6)
+		if err == nil {
+			res = append(res, ip6)
+		}
+	}
+
+	return res
 }
 
-// merges two IP lists, adds tracking for the new IPs in the list, and removes tracking
-// from the obsolete ips.
-func (ps *peerScore) addIPs(p peer.ID, newips, oldips []string) {
+//  adds tracking for the new IPs in the list, and removes tracking from the obsolete ips.
+func (ps *peerScore) setIPs(p peer.ID, newips, oldips []string) {
 addNewIPs:
 	// add the new IPs to the tracking
 	for _, ip := range newips {
