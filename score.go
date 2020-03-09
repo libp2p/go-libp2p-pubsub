@@ -2,6 +2,7 @@ package pubsub
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"time"
 
@@ -188,6 +189,107 @@ func newPeerScore(params *PeerScoreParams) *peerScore {
 		deliveries: &messageDeliveries{records: make(map[string]*deliveryRecord)},
 		msgID:      DefaultMsgIdFn,
 	}
+}
+
+// peer score parameter validation
+func (p *PeerScoreParams) validate() error {
+	for _, params := range p.Topics {
+		err := params.validate()
+		if err != nil {
+			return err
+		}
+	}
+
+	// check that we have an app specific score; the weight can be anything (but expected positive)
+	if p.AppSpecificScore == nil {
+		return fmt.Errorf("missing application specific score function")
+	}
+
+	// check the IP colocation factor
+	if p.IPColocationFactorWeight > 0 {
+		return fmt.Errorf("invalid IPColocationFactorWeight; must be negative (or 0 to disable)")
+	}
+	if p.IPColocationFactorWeight < 0 && p.IPColocationFactorThreshold < 1 {
+		return fmt.Errorf("invalid IPColocationFactorThreshold; must be at least 1")
+	}
+
+	// check the decay parameters
+	if p.DecayInterval < time.Second {
+		return fmt.Errorf("invalid DecayInterval; must be at least 1s")
+	}
+	if p.DecayToZero <= 0 || p.DecayToZero >= 1 {
+		return fmt.Errorf("invalid DecayToZero; must be between 0 and 1")
+	}
+
+	// no need to check the score retention; a value of 0 means that we don't retain scores
+	return nil
+}
+
+func (p *TopicScoreParams) validate() error {
+	// make sure we have a sane topic weight
+	if p.TopicWeight < 0 {
+		return fmt.Errorf("invalid topic weight; must be >= 0")
+	}
+
+	// check P1
+	if p.TimeInMeshWeight < 0 {
+		return fmt.Errorf("invalid TimeInMeshWeight; must be positive (or 0 to disable)")
+	}
+	if p.TimeInMeshWeight != 0 && p.TimeInMeshQuantum <= 0 {
+		return fmt.Errorf("invalid TimeInMeshQuantum; must be positive")
+	}
+	if p.TimeInMeshWeight != 0 && p.TimeInMeshCap <= 0 {
+		return fmt.Errorf("invalid TimeInMeshCap; must be positive")
+	}
+
+	// check P2
+	if p.FirstMessageDeliveriesWeight < 0 {
+		return fmt.Errorf("invallid FirstMessageDeliveriesWeight; must be positive (or 0 to disable)")
+	}
+	if p.FirstMessageDeliveriesWeight != 0 && (p.FirstMessageDeliveriesDecay <= 0 || p.FirstMessageDeliveriesDecay >= 1) {
+		return fmt.Errorf("invalid FirstMessageDeliveriesDecay; must be between 0 and 1")
+	}
+	if p.FirstMessageDeliveriesWeight != 0 && p.FirstMessageDeliveriesCap <= 0 {
+		return fmt.Errorf("invalid FirstMessageDeliveriesCap; must be positive")
+	}
+
+	// check P3
+	if p.MeshMessageDeliveriesWeight > 0 {
+		return fmt.Errorf("invalid MeshMessageDeliveriesWeight; must be negative (or 0 to disable)")
+	}
+	if p.MeshMessageDeliveriesWeight != 0 && (p.MeshMessageDeliveriesDecay <= 0 || p.MeshMessageDeliveriesDecay >= 1) {
+		return fmt.Errorf("invalid MeshMessageDeliveriesDecay; must be between 0 and 1")
+	}
+	if p.MeshMessageDeliveriesWeight != 0 && p.MeshMessageDeliveriesCap <= 0 {
+		return fmt.Errorf("invalid MeshMessageDeliveriesCap; must be positive")
+	}
+	if p.MeshMessageDeliveriesWeight != 0 && p.MeshMessageDeliveriesThreshold <= 0 {
+		return fmt.Errorf("invalid MeshMessageDeliveriesThreshold; must be positive")
+	}
+	if p.MeshMessageDeliveriesWindow < 0 {
+		return fmt.Errorf("invalid MeshMessageDeliveriesWindow; must be non-negative")
+	}
+	if p.MeshMessageDeliveriesWeight != 0 && p.MeshMessageDeliveriesActivation < time.Second {
+		return fmt.Errorf("invalid MeshMessageDeliveriesActivation; must be at least 1s")
+	}
+
+	// check P3b
+	if p.MeshFailurePenaltyWeight > 0 {
+		return fmt.Errorf("invalid MeshFailurePenaltyWeight; must be negative (or 0 to disable)")
+	}
+	if p.MeshFailurePenaltyWeight != 0 && (p.MeshFailurePenaltyDecay <= 0 || p.MeshFailurePenaltyDecay >= 1) {
+		return fmt.Errorf("invalid MeshFailurePenaltyDecay; must be between 0 and 1")
+	}
+
+	// check P4
+	if p.InvalidMessageDeliveriesWeight >= 0 {
+		return fmt.Errorf("invalid InvalidMessageDeliveriesWeight; must be negative")
+	}
+	if p.InvalidMessageDeliveriesDecay <= 0 || p.InvalidMessageDeliveriesDecay >= 1 {
+		return fmt.Errorf("invalid InvalidMessageDeliveriesDecay; must be between 0 and 1")
+	}
+
+	return nil
 }
 
 // router interface
