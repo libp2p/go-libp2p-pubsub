@@ -63,9 +63,9 @@ type TopicScoreParams struct {
 	// when validation succeeds.
 	// This window accounts for the minimum time before a hostile mesh peer trying to game the score
 	// could replay back a valid message we just sent them.
-	// It effectively tracks near-first deliveries, ie a message seen from a mesh peer before we
-	// have forwarded it to them.
-	// The parameter has an associated counter, decaying with MessageMessageDeliveriesDecay.
+	// It effectively tracks first and near-first deliveries, ie a message seen from a mesh peer
+	// before we have forwarded it to them.
+	// The parameter has an associated counter, decaying with MeshMessageDeliveriesDecay.
 	// If the counter exceeds the threshold, its value is 0.
 	// If the counter is below the MeshMessageDeliveriesThreshold, the value is the square of
 	// the deficit, ie (MessageDeliveriesThreshold - counter)^2
@@ -414,7 +414,11 @@ func (ps *peerScore) DeliverMessage(msg *Message) {
 	drec.status = delivery_valid
 	drec.validated = time.Now()
 	for p := range drec.peers {
-		ps.markDuplicateMessageDelivery(p, msg, time.Time{})
+		// this check is to make sure a peer can't send us a message twice and get a double count
+		// if it is a first delivery.
+		if p != msg.ReceivedFrom {
+			ps.markDuplicateMessageDelivery(p, msg, time.Time{})
+		}
 	}
 }
 
@@ -487,7 +491,7 @@ func (ps *peerScore) DuplicateMessage(msg *Message) {
 		ps.markInvalidMessageDelivery(msg.ReceivedFrom, msg)
 
 	case delivery_throttled:
-		// the message ws throttled; do nothing (we don't know if it was valid)
+		// the message was throttled; do nothing (we don't know if it was valid)
 	}
 }
 
