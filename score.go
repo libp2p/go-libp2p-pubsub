@@ -148,13 +148,23 @@ type peerScore struct {
 }
 
 type messageDeliveries struct {
-	// TODO
+	records map[string]*deliveryRecord
+
+	// queue for cleaning up old delivery records
+	head *deliveryEntry
+	tail *deliveryEntry
 }
 
 type deliveryRecord struct {
 	status    int
 	validated time.Time
 	peers     map[peer.ID]struct{}
+}
+
+type deliveryEntry struct {
+	id     string
+	expire time.Time
+	next   *deliveryEntry
 }
 
 // delivery record status
@@ -497,8 +507,40 @@ func (ps *peerScore) DuplicateMessage(msg *Message) {
 
 // message delivery records
 func (d *messageDeliveries) getRecord(id string) *deliveryRecord {
-	// TODO
-	return nil
+	rec, ok := d.records[id]
+	if ok {
+		return rec
+	}
+
+	rec = &deliveryRecord{peers: make(map[peer.ID]struct{})}
+	d.records[id] = rec
+
+	entry := &deliveryEntry{id: id, expire: time.Now().Add(TimeCacheDuration)}
+	if d.tail != nil {
+		d.tail.next = entry
+		d.tail = entry
+	} else {
+		d.head = entry
+		d.tail = entry
+	}
+
+	return rec
+}
+
+func (d *messageDeliveries) gc() {
+	if d.head == nil {
+		return
+	}
+
+	now := time.Now()
+	for d.head != nil && now.After(d.head.expire) {
+		delete(d.records, d.head.id)
+		d.head = d.head.next
+	}
+
+	if d.head == nil {
+		d.tail = nil
+	}
 }
 
 // utilities
