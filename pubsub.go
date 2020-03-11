@@ -361,7 +361,7 @@ func WithDiscovery(d discovery.Discovery, opts ...DiscoverOpt) Option {
 // WithEventTracer provides a tracer for the pubsub system
 func WithEventTracer(tracer EventTracer) Option {
 	return func(p *PubSub) error {
-		if tracer != nil {
+		if p.tracer != nil {
 			p.tracer.tracer = tracer
 		} else {
 			p.tracer = &pubsubTracer{tracer: tracer, pid: p.host.ID(), msgID: p.msgID}
