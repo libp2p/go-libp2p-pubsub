@@ -184,10 +184,8 @@ func (gs *GossipSubRouter) Attach(p *PubSub) {
 	gs.p = p
 	gs.tracer = p.tracer
 
-	// start the scoring, if any
-	if gs.score != nil {
-		gs.score.Start(gs)
-	}
+	// start the scoring
+	gs.score.Start(gs)
 
 	// start using the same msg ID function as PubSub for caching messages.
 	gs.mcache.SetMsgIdFn(p.msgID)
