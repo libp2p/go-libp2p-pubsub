@@ -165,7 +165,7 @@ func (t *pubsubTracer) SendRPC(rpc *RPC, p peer.ID) {
 		PeerID:    []byte(t.pid),
 		Timestamp: &now,
 		SendRPC: &pb.TraceEvent_SendRPC{
-			SendTo: []byte(rpc.from),
+			SendTo: []byte(p),
 			Meta:   t.traceRPCMeta(rpc),
 		},
 	}
@@ -184,7 +184,7 @@ func (t *pubsubTracer) DropRPC(rpc *RPC, p peer.ID) {
 		PeerID:    []byte(t.pid),
 		Timestamp: &now,
 		DropRPC: &pb.TraceEvent_DropRPC{
-			SendTo: []byte(rpc.from),
+			SendTo: []byte(p),
 			Meta:   t.traceRPCMeta(rpc),
 		},
 	}
