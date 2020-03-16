@@ -151,8 +151,8 @@ func (v *validation) Push(src peer.ID, msg *Message) bool {
 		select {
 		case v.validateQ <- &validateReq{vals, src, msg}:
 		default:
-			log.Warningf("message validation throttled; dropping message from %s", src)
-			v.tracer.RejectMessage(msg, "validation throttled")
+			log.Warningf("message validation throttled: queue full; dropping message from %s", src)
+			v.tracer.RejectMessage(msg, "validation queue full")
 		}
 		return false
 	}

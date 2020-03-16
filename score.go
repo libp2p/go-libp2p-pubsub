@@ -607,6 +607,12 @@ func (ps *peerScore) RejectMessage(msg *Message, reason string) {
 		fallthrough
 	case "blacklisted source":
 		return
+
+	case "validation queue full":
+		// the message was rejected before it entered the validation pipeline;
+		// we don't know if this message has a valid signature, and thus we also don't know if
+		// it has a valid message ID; all we can do is ignore it.
+		return
 	}
 
 	drec := ps.deliveries.getRecord(ps.msgID(msg.Message))
