@@ -611,8 +611,7 @@ func (gs *GossipSubRouter) Join(topic string) {
 			more := gs.getPeers(topic, GossipSubD-len(gmap), func(p peer.ID) bool {
 				// filter our current peers and peers with negative scores
 				_, ok := gmap[p]
-				score := gs.score.Score(p)
-				return !ok && score >= 0
+				return !ok && gs.score.Score(p) >= 0
 			})
 			for _, p := range more {
 				gmap[p] = struct{}{}
@@ -624,8 +623,7 @@ func (gs *GossipSubRouter) Join(topic string) {
 	} else {
 		peers := gs.getPeers(topic, GossipSubD, func(p peer.ID) bool {
 			// filter peers with negative score
-			score := gs.score.Score(p)
-			return score >= 0
+			return gs.score.Score(p) >= 0
 		})
 		gmap = peerListToMap(peers)
 		gs.mesh[topic] = gmap
@@ -786,8 +784,7 @@ func (gs *GossipSubRouter) heartbeat() {
 				// filter our current peers, peers we are backing off, and peers with negative score
 				_, inMesh := peers[p]
 				_, doBackoff := backoff[p]
-				score := gs.score.Score(p)
-				return !inMesh && !doBackoff && score >= 0
+				return !inMesh && !doBackoff && gs.score.Score(p) >= 0
 			})
 
 			for _, p := range plst {
@@ -837,8 +834,7 @@ func (gs *GossipSubRouter) heartbeat() {
 		// check whether our peers are still in the topic and have a score above the publish threshold
 		for p := range peers {
 			_, ok := gs.p.topics[topic][p]
-			score := gs.score.Score(p)
-			if !ok || score < gs.publishThreshold {
+			if !ok || gs.score.Score(p) < gs.publishThreshold {
 				delete(peers, p)
 			}
 		}
@@ -849,8 +845,7 @@ func (gs *GossipSubRouter) heartbeat() {
 			plst := gs.getPeers(topic, ineed, func(p peer.ID) bool {
 				// filter our current peers and peers with score above the publish threshold
 				_, ok := peers[p]
-				score := gs.score.Score(p)
-				return !ok && score >= gs.publishThreshold
+				return !ok && gs.score.Score(p) >= gs.publishThreshold
 			})
 
 			for _, p := range plst {
