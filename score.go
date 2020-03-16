@@ -294,6 +294,10 @@ func (p *TopicScoreParams) validate() error {
 
 // router interface
 func (ps *peerScore) Start(gs *GossipSubRouter) {
+	if ps == nil {
+		return
+	}
+
 	ps.msgID = gs.p.msgID
 	ps.host = gs.p.host
 	go ps.background(gs.p.ctx)
