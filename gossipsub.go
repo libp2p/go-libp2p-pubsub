@@ -97,9 +97,21 @@ func WithPeerScore(params *PeerScoreParams, gossipThreshold, publishThreshold, g
 			return fmt.Errorf("pubsub router is not gossipsub")
 		}
 
+		// sanity check: validate the score parameters
 		err := params.validate()
 		if err != nil {
 			return err
+		}
+
+		// sanity check: validate the threshold values
+		if gossipThreshold > 0 {
+			return fmt.Errorf("invalid gossip threshold; it must be <= 0")
+		}
+		if publishThreshold > 0 || publishThreshold > gossipThreshold {
+			return fmt.Errorf("invalid publish threshold; it must be <= 0 and <= gossip threshold")
+		}
+		if graylistThreshold > 0 || graylistThreshold > publishThreshold {
+			return fmt.Errorf("invalid graylist threshold; it must be <= 0 and <= publish threshold")
 		}
 
 		gs.score = newPeerScore(params)
