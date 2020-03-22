@@ -318,6 +318,9 @@ func (gs *GossipSubRouter) handleIHave(p peer.ID, ctl *pb.ControlMessage) []*pb.
 		iwantlst = append(iwantlst, mid)
 	}
 
+	// ask in random order
+	shuffleStrings(iwantlst)
+
 	return []*pb.ControlIWant{&pb.ControlIWant{MessageIDs: iwantlst}}
 }
 
@@ -1149,5 +1152,12 @@ func shufflePeerInfo(peers []*pb.PeerInfo) {
 	for i := range peers {
 		j := rand.Intn(i + 1)
 		peers[i], peers[j] = peers[j], peers[i]
+	}
+}
+
+func shuffleStrings(lst []string) {
+	for i := range lst {
+		j := rand.Intn(i + 1)
+		lst[i], lst[j] = lst[j], lst[i]
 	}
 }
