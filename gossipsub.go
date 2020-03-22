@@ -394,6 +394,7 @@ func (gs *GossipSubRouter) handleGraft(p peer.ID, ctl *pb.ControlMessage) []*pb.
 		_, backoff := gs.backoff[topic][p]
 		if backoff {
 			log.Debugf("GRAFT: ignoring backed off peer %s", p)
+			gs.addBackoff(p, topic)
 			prune = append(prune, topic)
 			continue
 		}
