@@ -181,6 +181,10 @@ type GossipSubRouter struct {
 
 	// whether to use flood publishing
 	floodPublish bool
+
+	// number of heartbeats since the beginning of time; this allows us to amortize some resource
+	// clean up -- eg backoff clean up.
+	heartbeatTicks uint64
 }
 
 type connectInfo struct {
@@ -757,6 +761,8 @@ func (gs *GossipSubRouter) heartbeatTimer() {
 func (gs *GossipSubRouter) heartbeat() {
 	defer log.EventBegin(gs.p.ctx, "heartbeat").Done()
 
+	gs.heartbeatTicks++
+
 	// flush pending control message from retries and gossip
 	// that hasn't been piggybacked since the last heartbeat
 	gs.flush()
@@ -884,6 +890,11 @@ func (gs *GossipSubRouter) heartbeat() {
 }
 
 func (gs *GossipSubRouter) clearBackoff() {
+	// we only clear once every 15 ticks to avoid iterating over the map(s) too much
+	if gs.heartbeatTicks%15 != 0 {
+		return
+	}
+
 	now := time.Now()
 	for topic, backoff := range gs.backoff {
 		for p, expire := range backoff {
