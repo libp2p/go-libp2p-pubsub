@@ -368,6 +368,7 @@ func (gs *GossipSubRouter) handleGraft(p peer.ID, ctl *pb.ControlMessage) []*pb.
 
 	doPX := true
 	score := gs.score.Score(p)
+	now := time.Now()
 
 	for _, graft := range ctl.GetGraft() {
 		topic := graft.GetTopicID()
@@ -393,8 +394,8 @@ func (gs *GossipSubRouter) handleGraft(p peer.ID, ctl *pb.ControlMessage) []*pb.
 		}
 
 		// make sure we are not backing off that peer
-		_, backoff := gs.backoff[topic][p]
-		if backoff {
+		expire, backoff := gs.backoff[topic][p]
+		if backoff && now.Before(expire) {
 			log.Debugf("GRAFT: ignoring backed off peer %s", p)
 			// refresh the backoff
 			gs.addBackoff(p, topic)
