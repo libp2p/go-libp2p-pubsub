@@ -387,6 +387,8 @@ func (gs *GossipSubRouter) handleGraft(p peer.ID, ctl *pb.ControlMessage) []*pb.
 			prune = append(prune, topic)
 			// but we won't PX to them
 			doPX = false
+			// add/refresh backoff so that we don't reGRAFT too early even if the score decays back up
+			gs.addBackoff(p, topic)
 			continue
 		}
 
@@ -394,6 +396,7 @@ func (gs *GossipSubRouter) handleGraft(p peer.ID, ctl *pb.ControlMessage) []*pb.
 		_, backoff := gs.backoff[topic][p]
 		if backoff {
 			log.Debugf("GRAFT: ignoring backed off peer %s", p)
+			// refresh the backoff
 			gs.addBackoff(p, topic)
 			prune = append(prune, topic)
 			continue
