@@ -3,7 +3,6 @@ package pubsub
 import (
 	"context"
 	"fmt"
-	"github.com/libp2p/go-libp2p-core/record"
 	"math/rand"
 	"sort"
 	"time"
