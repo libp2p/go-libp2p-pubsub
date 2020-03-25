@@ -79,14 +79,7 @@ See [libp2p/specs/pubsub#Implementations](https://github.com/libp2p/specs/tree/m
 ├── go.mod
 ├── go.sum
 ├── doc.go
-# Floodsub specific
-├── floodsub.go
-# Randomsub specific
-├── randomsub.go
-# Gossipsub specific
-├── gossipsub.go
-├── mcache.go
-# Used by all
+# PubSub base
 ├── pubsub.go
 ├── blacklist.go
 ├── notify.go
@@ -97,7 +90,14 @@ See [libp2p/specs/pubsub#Implementations](https://github.com/libp2p/specs/tree/m
 ├── topic.go
 ├── trace.go
 ├── tracer.go
-└── validation.go
+├── validation.go
+# Floodsub router
+├── floodsub.go
+# Randomsub router 
+├── randomsub.go
+# Gossipsub router 
+├── gossipsub.go
+└── mcache.go
 ```
 
 ### Tracing
