@@ -81,27 +81,20 @@ See [libp2p/specs/pubsub#Implementations](https://github.com/libp2p/specs/tree/m
 ├── doc.go
 # Floodsub specific
 ├── floodsub.go
-├── floodsub_test.go
 # Randomsub specific
 ├── randomsub.go
 # Gossipsub specific
-├── blacklist.go
-├── blacklist_test.go
-├── comm.go
-├── discovery.go
-├── discovery_test.go
 ├── gossipsub.go
-├── gossipsub_test.go
 ├── mcache.go
-├── mcache_test.go
-├── notify.go
 # Used by all
 ├── pubsub.go
+├── blacklist.go
+├── notify.go
+├── comm.go
+├── discovery.go
 ├── sign.go
-├── sign_test.go
 ├── subscription.go
 ├── topic.go
-├── topic_test.go
 ├── trace.go
 ├── tracer.go
 └── validation.go
@@ -109,11 +102,9 @@ See [libp2p/specs/pubsub#Implementations](https://github.com/libp2p/specs/tree/m
 
 ### Tracing
 
-The pubsub system supports _tracing_, which collects all events pertaining to the internals of the system.
-This allows you to recreate the complete message flow and state of the system for analysis purposes.
+The pubsub system supports _tracing_, which collects all events pertaining to the internals of the system. This allows you to recreate the complete message flow and state of the system for analysis purposes.
 
-To enable tracing, instantiate the pubsub system using the `WithEventTracer` option; the option
-accepts a tracer with three available implementations in-package (trace to json, pb, or a remote peer).
+To enable tracing, instantiate the pubsub system using the `WithEventTracer` option; the option accepts a tracer with three available implementations in-package (trace to json, pb, or a remote peer).
 If you want to trace using a remote peer, you can do so using the `traced` daemon from [go-libp2p-pubsub-tracer](https://github.com/libp2p/go-libp2p-pubsub-tracer). The package also includes a utility program, `tracestat`, for analyzing the traces collected by the daemon.
 
 For instance, to capture the trace as a json file, you can use the following option:
