@@ -216,6 +216,11 @@ func (ps *peerScore) score(p peer.ID) float64 {
 		score += topicScore * topicParams.TopicWeight
 	}
 
+	// apply the topic score cap, if any
+	if ps.params.TopicScoreCap > 0 && score > ps.params.TopicScoreCap {
+		score = ps.params.TopicScoreCap
+	}
+
 	// P5: application-specific score
 	p5 := ps.params.AppSpecificScore(p)
 	score += p5 * ps.params.AppSpecificWeight

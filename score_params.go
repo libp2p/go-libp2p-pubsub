@@ -45,6 +45,10 @@ type PeerScoreParams struct {
 	// Score parameters per topic.
 	Topics map[string]*TopicScoreParams
 
+	// Aggregate topic score cap; this limits the total contribution of topics towards a positive
+	// score. It must be positive (or 0 for no cap).
+	TopicScoreCap float64
+
 	// P5: Application-specific peer scoring
 	AppSpecificScore  func(p peer.ID) float64
 	AppSpecificWeight float64
@@ -128,6 +132,11 @@ func (p *PeerScoreParams) validate() error {
 		if err != nil {
 			return fmt.Errorf("invalid score parameters for topic %s: %w", topic, err)
 		}
+	}
+
+	// check that the topic score is 0 or something positive
+	if p.TopicScoreCap < 0 {
+		return fmt.Errorf("invalid topic score cap; must be positive (or 0 for no cap)")
 	}
 
 	// check that we have an app specific score; the weight can be anything (but expected positive)
