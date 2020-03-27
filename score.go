@@ -3,6 +3,7 @@ package pubsub
 import (
 	"context"
 	"fmt"
+	"net"
 	"sync"
 	"time"
 
@@ -10,7 +11,7 @@ import (
 	"github.com/libp2p/go-libp2p-core/peer"
 	"github.com/libp2p/go-libp2p-core/protocol"
 
-	ma "github.com/multiformats/go-multiaddr"
+	manet "github.com/multiformats/go-multiaddr-net"
 )
 
 type peerStats struct {
@@ -724,16 +725,25 @@ func (ps *peerScore) getIPs(p peer.ID) []string {
 	res := make([]string, 0, len(conns))
 	for _, c := range conns {
 		remote := c.RemoteMultiaddr()
+		ip, err := manet.ToIP(remote)
+		if err != nil {
+			continue
+		}
 
-		ip4, err := remote.ValueForProtocol(ma.P_IP4)
-		if err == nil {
+		if len(ip) == 4 {
+			// IPv4 address
+			ip4 := ip.String()
 			res = append(res, ip4)
 			continue
 		}
 
-		ip6, err := remote.ValueForProtocol(ma.P_IP6)
-		if err == nil {
+		if len(ip) == 16 {
+			// IPv6 address -- we add both the actual address and the /64 subnet
+			ip6 := ip.String()
 			res = append(res, ip6)
+
+			ip6mask := ip.Mask(net.CIDRMask(64, 128)).String()
+			res = append(res, ip6mask)
 		}
 	}
 
