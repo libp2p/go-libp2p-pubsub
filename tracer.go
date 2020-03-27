@@ -24,6 +24,17 @@ import (
 var TraceBufferSize = 1 << 16 // 64K ought to be enough for everyone; famous last words.
 var MinTraceBatchSize = 16
 
+// rejection reasons
+const (
+	rejectBlacklstedPeer      = "blacklisted peer"
+	rejectBlacklistedSource   = "blacklisted source"
+	rejectMissingSignature    = "missing signature"
+	rejectInvalidSignature    = "invalid signature"
+	rejectValidationQueueFull = "validation queue full"
+	rejectValidationThrottled = "validation throttled"
+	rejectValidationFailed    = "validation failed"
+)
+
 type basicTracer struct {
 	ch     chan struct{}
 	mx     sync.Mutex
