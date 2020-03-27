@@ -78,22 +78,7 @@ func NewGossipSub(ctx context.Context, h host.Host, opts ...Option) (*PubSub, er
 }
 
 // WithPeerScore is a gossipsub router option that enables peer scoring.
-//
-// gossipThreshold is the score threshold below which gossip propagation is supressed.
-//
-// publishThreshold is the score threshold below which we shouldn't publish when using flood
-//  publishing (also applies to fanout and floodsub peers).
-//
-// graylistThreshold is the score threshold below which message processing is supressed altogether,
-//  implementing an effective graylist according to peer score.
-//
-// These thresholds should generally be negative, allowing some information to disseminate from low
-//  scoring peers.
-//
-// acceptPXThreshold is the score threshold below which PX will be ignored; this should be positive
-//  and limited to scores attainable by bootstrappers and other trusted nodes.
-//
-func WithPeerScore(params *PeerScoreParams, gossipThreshold, publishThreshold, graylistThreshold, acceptPXThreshold float64) Option {
+func WithPeerScore(params *PeerScoreParams, thresholds *PeerScoreThresholds) Option {
 	return func(ps *PubSub) error {
 		gs, ok := ps.rt.(*GossipSubRouter)
 		if !ok {
@@ -107,20 +92,16 @@ func WithPeerScore(params *PeerScoreParams, gossipThreshold, publishThreshold, g
 		}
 
 		// sanity check: validate the threshold values
-		if gossipThreshold > 0 {
-			return fmt.Errorf("invalid gossip threshold; it must be <= 0")
-		}
-		if publishThreshold > 0 || publishThreshold > gossipThreshold {
-			return fmt.Errorf("invalid publish threshold; it must be <= 0 and <= gossip threshold")
-		}
-		if graylistThreshold > 0 || graylistThreshold > publishThreshold {
-			return fmt.Errorf("invalid graylist threshold; it must be <= 0 and <= publish threshold")
+		err = thresholds.validate()
+		if err != nil {
+			return err
 		}
 
 		gs.score = newPeerScore(params)
-		gs.gossipThreshold = gossipThreshold
-		gs.publishThreshold = publishThreshold
-		gs.graylistThreshold = graylistThreshold
+		gs.gossipThreshold = thresholds.GossipThreshold
+		gs.publishThreshold = thresholds.PublishThreshold
+		gs.graylistThreshold = thresholds.GraylistThreshold
+		gs.acceptPXThreshold = thresholds.AcceptPXThreshold
 
 		// hook the tracer
 		if ps.tracer != nil {
