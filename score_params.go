@@ -77,7 +77,7 @@ type TopicScoreParams struct {
 	// P1: time in the mesh
 	// This is the time the peer has ben grafted in the mesh.
 	// The value of of the parameter is the time/TimeInMeshQuantum, capped by TimeInMeshCap
-	// The weight of the parameter MUST be positive.
+	// The weight of the parameter MUST be positive (or zero to disable).
 	TimeInMeshWeight  float64
 	TimeInMeshQuantum time.Duration
 	TimeInMeshCap     float64
@@ -86,7 +86,7 @@ type TopicScoreParams struct {
 	// This is the number of message deliveries in the topic.
 	// The value of the parameter is a counter, decaying with FirstMessageDeliveriesDecay, and capped
 	// by FirstMessageDeliveriesCap.
-	// The weight of the parameter MUST be positive.
+	// The weight of the parameter MUST be positive (or zero to disable).
 	FirstMessageDeliveriesWeight, FirstMessageDeliveriesDecay float64
 	FirstMessageDeliveriesCap                                 float64
 
@@ -103,7 +103,7 @@ type TopicScoreParams struct {
 	// If the counter is below the MeshMessageDeliveriesThreshold, the value is the square of
 	// the deficit, ie (MessageDeliveriesThreshold - counter)^2
 	// The penalty is only activated after MeshMessageDeliveriesActivation time in the mesh.
-	// The weight of the parameter MUST be negative (or zero if you want to disable it).
+	// The weight of the parameter MUST be negative (or zero to disable).
 	MeshMessageDeliveriesWeight, MeshMessageDeliveriesDecay      float64
 	MeshMessageDeliveriesCap, MeshMessageDeliveriesThreshold     float64
 	MeshMessageDeliveriesWindow, MeshMessageDeliveriesActivation time.Duration
@@ -111,13 +111,13 @@ type TopicScoreParams struct {
 	// P3b: sticky mesh propagation failures
 	// This is a sticky penalty that applies when a peer gets pruned from the mesh with an active
 	// mesh message delivery penalty.
-	// The weight of the parameter MUST be negative (or zero if you want to disable it)
+	// The weight of the parameter MUST be negative (or zero to disable)
 	MeshFailurePenaltyWeight, MeshFailurePenaltyDecay float64
 
 	// P4: invalid messages
 	// This is the number of invalid messages in the topic.
 	// The value of the parameter is a counter, decaying with InvalidMessageDeliveriesDecay.
-	// The weight of the parameter MUST be negative.
+	// The weight of the parameter MUST be negative (or zero to disable).
 	InvalidMessageDeliveriesWeight, InvalidMessageDeliveriesDecay float64
 }
 
@@ -212,8 +212,8 @@ func (p *TopicScoreParams) validate() error {
 	}
 
 	// check P4
-	if p.InvalidMessageDeliveriesWeight >= 0 {
-		return fmt.Errorf("invalid InvalidMessageDeliveriesWeight; must be negative")
+	if p.InvalidMessageDeliveriesWeight > 0 {
+		return fmt.Errorf("invalid InvalidMessageDeliveriesWeight; must be negative (or 0 to disable)")
 	}
 	if p.InvalidMessageDeliveriesDecay <= 0 || p.InvalidMessageDeliveriesDecay >= 1 {
 		return fmt.Errorf("invalid InvalidMessageDeliveriesDecay; must be between 0 and 1")
