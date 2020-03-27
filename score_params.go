@@ -7,6 +7,40 @@ import (
 	"github.com/libp2p/go-libp2p-core/peer"
 )
 
+type PeerScoreThresholds struct {
+	// GossipThreshold is the score threshold below which gossip propagation is supressed;
+	// should be negative.
+	GossipThreshold float64
+
+	// PublishThreshold is the score threshold below which we shouldn't publish when using flood
+	// publishing (also applies to fanout and floodsub peers); should be negative and <= GossipThreshold.
+	PublishThreshold float64
+
+	// GraylistThreshold is the score threshold below which message processing is supressed altogether,
+	// implementing an effective graylist according to peer score; should be negative and <= PublisThreshold.
+	GraylistThreshold float64
+
+	// acceptPXThreshold is the score threshold below which PX will be ignored; this should be positive
+	//  and limited to scores attainable by bootstrappers and other trusted nodes.
+	AcceptPXThreshold float64
+}
+
+func (p *PeerScoreThresholds) validate() error {
+	if p.GossipThreshold > 0 {
+		return fmt.Errorf("invalid gossip threshold; it must be <= 0")
+	}
+	if p.PublishThreshold > 0 || p.PublishThreshold > p.GossipThreshold {
+		return fmt.Errorf("invalid publish threshold; it must be <= 0 and <= gossip threshold")
+	}
+	if p.GraylistThreshold > 0 || p.GraylistThreshold > p.PublishThreshold {
+		return fmt.Errorf("invalid graylist threshold; it must be <= 0 and <= publish threshold")
+	}
+	if p.AcceptPXThreshold < 0 {
+		return fmt.Errorf("invalid accept PX threshold; it must be >= 0")
+	}
+	return nil
+}
+
 type PeerScoreParams struct {
 	// Score parameters per topic.
 	Topics map[string]*TopicScoreParams
