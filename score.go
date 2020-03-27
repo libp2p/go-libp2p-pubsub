@@ -100,10 +100,10 @@ type deliveryEntry struct {
 
 // delivery record status
 const (
-	delivery_unknown   = iota // we don't know (yet) if the message is valid
-	delivery_valid            // we know the message is valid
-	delivery_invalid          // we know the message is invalid
-	delivery_throttled        // we can't tell if it is valid because validation throttled
+	deliveryUnknown   = iota // we don't know (yet) if the message is valid
+	deliveryValid            // we know the message is valid
+	deliveryInvalid          // we know the message is invalid
+	deliveryThrottled        // we can't tell if it is valid because validation throttled
 )
 
 type PeerScoreInspectFn func(map[peer.ID]float64)
@@ -490,7 +490,7 @@ func (ps *peerScore) DeliverMessage(msg *Message) {
 	drec := ps.deliveries.getRecord(ps.msgID(msg.Message))
 
 	// mark the message as valid and reward mesh peers that have already forwarded it to us
-	drec.status = delivery_valid
+	drec.status = deliveryValid
 	drec.validated = time.Now()
 	for p := range drec.peers {
 		// this check is to make sure a peer can't send us a message twice and get a double count
@@ -531,14 +531,14 @@ func (ps *peerScore) RejectMessage(msg *Message, reason string) {
 	if reason == rejectValidationThrottled {
 		// if we reject with "validation throttled" we don't penalize the peer(s) that forward it
 		// because we don't know if it was valid.
-		drec.status = delivery_throttled
+		drec.status = deliveryThrottled
 		// release the delivery time tracking map to free some memory early
 		drec.peers = nil
 		return
 	}
 
 	// mark the message as invalid and penalize peers that have already forwarded it.
-	drec.status = delivery_invalid
+	drec.status = deliveryInvalid
 	for p := range drec.peers {
 		ps.markInvalidMessageDelivery(p, msg)
 	}
@@ -560,21 +560,21 @@ func (ps *peerScore) DuplicateMessage(msg *Message) {
 	}
 
 	switch drec.status {
-	case delivery_unknown:
+	case deliveryUnknown:
 		// the message is being validated; track the peer delivery and wait for
 		// the Deliver/Reject notification.
 		drec.peers[msg.ReceivedFrom] = struct{}{}
 
-	case delivery_valid:
+	case deliveryValid:
 		// mark the peer delivery time to only count a duplicate delivery once.
 		drec.peers[msg.ReceivedFrom] = struct{}{}
 		ps.markDuplicateMessageDelivery(msg.ReceivedFrom, msg, drec.validated)
 
-	case delivery_invalid:
+	case deliveryInvalid:
 		// we no longer track delivery time
 		ps.markInvalidMessageDelivery(msg.ReceivedFrom, msg)
 
-	case delivery_throttled:
+	case deliveryThrottled:
 		// the message was throttled; do nothing (we don't know if it was valid)
 	}
 }
