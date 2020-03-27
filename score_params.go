@@ -63,6 +63,7 @@ type PeerScoreParams struct {
 	//       thus disabling the IP colocation penalty.
 	IPColocationFactorWeight    float64
 	IPColocationFactorThreshold int
+	IPColocationFactorWhitelist map[string]struct{}
 
 	// the decay interval for parameter counters.
 	DecayInterval time.Duration

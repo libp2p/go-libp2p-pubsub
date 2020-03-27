@@ -228,6 +228,11 @@ func (ps *peerScore) score(p peer.ID) float64 {
 
 	// P6: IP collocation factor
 	for _, ip := range pstats.ips {
+		_, whitelisted := ps.params.IPColocationFactorWhitelist[ip]
+		if whitelisted {
+			continue
+		}
+
 		peersInIP := len(ps.peerIPs[ip])
 		if peersInIP > ps.params.IPColocationFactorThreshold {
 			surpluss := float64(peersInIP - ps.params.IPColocationFactorThreshold)
