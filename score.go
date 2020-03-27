@@ -107,11 +107,11 @@ const (
 
 type PeerScoreInspectFn func(map[peer.ID]float64)
 
-// WithPeerScoreDebug is a gossipsub router option that enables peer score debugging.
+// WithPeerScoreInspect is a gossipsub router option that enables peer score debugging.
 // When this option is enabled, the supplied function will be invoked periodically to allow
 // the application to inspec or dump the scores for connected peers.
 // This option must be passed _after_ the WithPeerScore option.
-func WithPeerScoreDebug(inspect PeerScoreInspectFn, period time.Duration) Option {
+func WithPeerScoreInspect(inspect PeerScoreInspectFn, period time.Duration) Option {
 	return func(ps *PubSub) error {
 		gs, ok := ps.rt.(*GossipSubRouter)
 		if !ok {
@@ -248,10 +248,9 @@ func (ps *peerScore) background(ctx context.Context) {
 	if ps.inspect != nil {
 		ticker := time.NewTicker(ps.inspectPeriod)
 		defer ticker.Stop()
+		// also dump at exit for one final sample
+		defer ps.inspectScores()
 		inspectScores = ticker.C
-	} else {
-		// never fires
-		inspectScores = make(chan time.Time)
 	}
 
 	for {
