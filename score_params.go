@@ -123,10 +123,10 @@ type TopicScoreParams struct {
 
 // peer score parameter validation
 func (p *PeerScoreParams) validate() error {
-	for _, params := range p.Topics {
+	for topic, params := range p.Topics {
 		err := params.validate()
 		if err != nil {
-			return err
+			return fmt.Errorf("invalid score parameters for topic %s: %w", topic, err)
 		}
 	}
 
