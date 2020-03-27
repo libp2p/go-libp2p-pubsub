@@ -89,7 +89,11 @@ func NewGossipSub(ctx context.Context, h host.Host, opts ...Option) (*PubSub, er
 //
 // These thresholds should generally be negative, allowing some information to disseminate from low
 //  scoring peers.
-func WithPeerScore(params *PeerScoreParams, gossipThreshold, publishThreshold, graylistThreshold float64) Option {
+//
+// acceptPXThreshold is the score threshold below which PX will be ignored; this should be positive
+//  and limited to scores attainable by bootstrappers and other trusted nodes.
+//
+func WithPeerScore(params *PeerScoreParams, gossipThreshold, publishThreshold, graylistThreshold, acceptPXThreshold float64) Option {
 	return func(ps *PubSub) error {
 		gs, ok := ps.rt.(*GossipSubRouter)
 		if !ok {
@@ -145,6 +149,22 @@ func WithFloodPublish(floodPublish bool) Option {
 	}
 }
 
+// WithPeerExchange is a gossipsub router option that enables Peer eXchange on PRUNE.
+// This should generally be enabled in bootstrappers and well connected/trusted nodes
+// used for bootstrapping.
+func WithPeerExchange(doPX bool) Option {
+	return func(ps *PubSub) error {
+		gs, ok := ps.rt.(*GossipSubRouter)
+		if !ok {
+			return fmt.Errorf("pubsub router is not gossipsub")
+		}
+
+		gs.doPX = doPX
+
+		return nil
+	}
+}
+
 // GossipSubRouter is a router that implements the gossipsub protocol.
 // For each topic we have joined, we maintain an overlay through which
 // messages flow; this is the mesh map.
@@ -165,6 +185,14 @@ type GossipSubRouter struct {
 	mcache  *MessageCache
 	tracer  *pubsubTracer
 	score   *peerScore
+
+	// whether PX is enabled; this should be enabled in bootstrappers and other well connected/trusted
+	// nodes.
+	doPX bool
+
+	// threshold for accepting PX from a peer; this should be positive and limited to scores
+	// attainable by bootstrappers and trusted nodes
+	acceptPXThreshold float64
 
 	// threshold for peer score to emit/accept gossip
 	// If the peer score is below this threshold, we won't emit or accept gossip from the peer.
@@ -369,7 +397,7 @@ func (gs *GossipSubRouter) handleIWant(p peer.ID, ctl *pb.ControlMessage) []*pb.
 func (gs *GossipSubRouter) handleGraft(p peer.ID, ctl *pb.ControlMessage) []*pb.ControlPrune {
 	var prune []string
 
-	doPX := true
+	doPX := gs.doPX
 	score := gs.score.Score(p)
 	now := time.Now()
 
@@ -443,9 +471,9 @@ func (gs *GossipSubRouter) handlePrune(p peer.ID, ctl *pb.ControlMessage) {
 
 		px := prune.GetPeers()
 		if len(px) > 0 {
-			// we ignore PX from peers with negative score
-			if score < 0 {
-				log.Debugf("PRUNE: ignoring PX from peer %s with negative score [score = %f, topic = %s]", p, score, topic)
+			// we ignore PX from peers with insufficient score
+			if score < gs.acceptPXThreshold {
+				log.Debugf("PRUNE: ignoring PX from peer %s with insufficient score [score = %f, topic = %s]", p, score, topic)
 				continue
 			}
 
@@ -920,7 +948,7 @@ func (gs *GossipSubRouter) sendGraftPrune(tograft, toprune map[peer.ID][]string,
 			delete(toprune, p)
 			prune = make([]*pb.ControlPrune, 0, len(pruning))
 			for _, topic := range pruning {
-				prune = append(prune, gs.makePrune(p, topic, !noPX[p]))
+				prune = append(prune, gs.makePrune(p, topic, gs.doPX && !noPX[p]))
 			}
 		}
 
@@ -931,7 +959,7 @@ func (gs *GossipSubRouter) sendGraftPrune(tograft, toprune map[peer.ID][]string,
 	for p, topics := range toprune {
 		prune := make([]*pb.ControlPrune, 0, len(topics))
 		for _, topic := range topics {
-			prune = append(prune, gs.makePrune(p, topic, !noPX[p]))
+			prune = append(prune, gs.makePrune(p, topic, gs.doPX && !noPX[p]))
 		}
 
 		out := rpcWithControl(nil, nil, nil, nil, prune)

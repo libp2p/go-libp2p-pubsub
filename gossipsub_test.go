@@ -932,7 +932,7 @@ func TestGossipsubStarTopology(t *testing.T) {
 	defer cancel()
 
 	hosts := getNetHosts(t, ctx, 20)
-	psubs := getGossipsubs(ctx, hosts)
+	psubs := getGossipsubs(ctx, hosts, WithPeerExchange(true))
 
 	// add all peer addresses to the peerstores
 	// this is necessary because we can't have signed address records witout identify
