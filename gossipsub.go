@@ -1137,7 +1137,7 @@ func (gs *GossipSubRouter) getPeers(topic string, count int, filter func(peer.ID
 
 func (gs *GossipSubRouter) tagPeer(p peer.ID, topic string) {
 	tag := topicTag(topic)
-	gs.p.host.ConnManager().TagPeer(p, tag, 2)
+	gs.p.host.ConnManager().TagPeer(p, tag, 20)
 }
 
 func (gs *GossipSubRouter) untagPeer(p peer.ID, topic string) {
