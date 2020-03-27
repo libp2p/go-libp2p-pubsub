@@ -46,7 +46,7 @@ var (
 	GossipSubFanoutTTL = 60 * time.Second
 
 	// number of peers to include in prune Peer eXchange
-	GossipSubPrunePeers = 6
+	GossipSubPrunePeers = 16
 
 	// backoff time for pruned peers
 	GossipSubPruneBackoff = time.Minute
