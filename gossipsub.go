@@ -556,12 +556,6 @@ func (gs *GossipSubRouter) connector() {
 }
 
 func (gs *GossipSubRouter) Publish(msg *Message) {
-	self := gs.p.host.ID()
-	if peer.ID(msg.GetFrom()) == self && msg.ReceivedFrom != self {
-		// we don't forward messages claiming to be from us but not published by ourselves
-		return
-	}
-
 	gs.mcache.Put(msg.Message)
 	from := msg.ReceivedFrom
 
@@ -573,7 +567,7 @@ func (gs *GossipSubRouter) Publish(msg *Message) {
 			continue
 		}
 
-		if gs.floodPublish && from == self {
+		if gs.floodPublish && from == gs.p.host.ID() {
 			for p := range tmap {
 				if gs.score.Score(p) >= gs.publishThreshold {
 					tosend[p] = struct{}{}

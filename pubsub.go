@@ -849,6 +849,12 @@ func (p *PubSub) pushMsg(msg *Message) {
 }
 
 func (p *PubSub) publishMessage(msg *Message) {
+	self := p.host.ID()
+	if peer.ID(msg.GetFrom()) == self && msg.ReceivedFrom != self {
+		// we don't publish messages claiming to be from us but not published by ourselves
+		return
+	}
+
 	p.tracer.DeliverMessage(msg)
 	p.notifySubs(msg)
 	p.rt.Publish(msg)
