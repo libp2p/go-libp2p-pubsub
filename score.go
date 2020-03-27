@@ -393,6 +393,28 @@ func (ps *peerScore) RemovePeer(p peer.ID) {
 		return
 	}
 
+	// decide whether to retain the score; this currently only retains non-positive scores
+	// to dissuade attacks on the score function.
+	if ps.score(p) > 0 {
+		ps.removeIPs(p, pstats.ips)
+		delete(ps.peerStats, p)
+		return
+	}
+
+	// furthermore, when we decide to retain the score, the firstMessageDelivery counters are
+	// reset to 0 and mesh delivery penalties applied.
+	for topic, tstats := range pstats.topics {
+		tstats.firstMessageDeliveries = 0
+
+		threshold := ps.params.Topics[topic].MeshMessageDeliveriesThreshold
+		if tstats.inMesh && tstats.meshMessageDeliveriesActive && tstats.meshMessageDeliveries < threshold {
+			deficit := threshold - tstats.meshMessageDeliveries
+			tstats.meshFailurePenalty += deficit * deficit
+		}
+
+		tstats.inMesh = false
+	}
+
 	pstats.connected = false
 	pstats.expire = time.Now().Add(ps.params.RetainScore)
 }
