@@ -152,7 +152,7 @@ func (v *validation) Push(src peer.ID, msg *Message) bool {
 		case v.validateQ <- &validateReq{vals, src, msg}:
 		default:
 			log.Warningf("message validation throttled: queue full; dropping message from %s", src)
-			v.tracer.RejectMessage(msg, "validation queue full")
+			v.tracer.RejectMessage(msg, rejectValidationQueueFull)
 		}
 		return false
 	}
@@ -195,7 +195,7 @@ func (v *validation) validate(vals []*topicVal, src peer.ID, msg *Message) {
 	if msg.Signature != nil {
 		if !v.validateSignature(msg) {
 			log.Warningf("message signature validation failed; dropping message from %s", src)
-			v.tracer.RejectMessage(msg, "invalid signature")
+			v.tracer.RejectMessage(msg, rejectInvalidSignature)
 			return
 		}
 	}
@@ -223,7 +223,7 @@ func (v *validation) validate(vals []*topicVal, src peer.ID, msg *Message) {
 	for _, val := range inline {
 		if !val.validateMsg(v.p.ctx, src, msg) {
 			log.Debugf("message validation failed; dropping message from %s", src)
-			v.tracer.RejectMessage(msg, "validation failed")
+			v.tracer.RejectMessage(msg, rejectValidationFailed)
 			return
 		}
 	}
@@ -238,7 +238,7 @@ func (v *validation) validate(vals []*topicVal, src peer.ID, msg *Message) {
 			}()
 		default:
 			log.Warningf("message validation throttled; dropping message from %s", src)
-			v.tracer.RejectMessage(msg, "validation throttled")
+			v.tracer.RejectMessage(msg, rejectValidationThrottled)
 		}
 		return
 	}
@@ -260,7 +260,7 @@ func (v *validation) validateSignature(msg *Message) bool {
 func (v *validation) doValidateTopic(vals []*topicVal, src peer.ID, msg *Message) {
 	if !v.validateTopic(vals, src, msg) {
 		log.Warningf("message validation failed; dropping message from %s", src)
-		v.tracer.RejectMessage(msg, "validation failed")
+		v.tracer.RejectMessage(msg, rejectValidationFailed)
 		return
 	}
 
@@ -298,7 +298,7 @@ loop:
 	}
 
 	if throttle {
-		v.tracer.RejectMessage(msg, "validation throttled")
+		v.tracer.RejectMessage(msg, rejectValidationThrottled)
 		return false
 	}
 
@@ -323,7 +323,7 @@ func (v *validation) validateSingleTopic(val *topicVal, src peer.ID, msg *Messag
 
 	default:
 		log.Debugf("validation throttled for topic %s", val.topic)
-		v.tracer.RejectMessage(msg, "validation throttled")
+		v.tracer.RejectMessage(msg, rejectValidationThrottled)
 		return false
 	}
 }
