@@ -505,22 +505,21 @@ func (ps *peerScore) RejectMessage(msg *Message, reason string) {
 	ps.Lock()
 	defer ps.Unlock()
 
-	// TODO: the reasons should become named strings; good enough for now.
 	switch reason {
 	// we don't track those messages, but we penalize the peer as they are clearly invalid
-	case "missing signature":
+	case rejectMissingSignature:
 		fallthrough
-	case "invalid signature":
+	case rejectInvalidSignature:
 		ps.markInvalidMessageDelivery(msg.ReceivedFrom, msg)
 		return
 
 		// we ignore those messages, so do nothing.
-	case "blacklisted peer":
+	case rejectBlacklstedPeer:
 		fallthrough
-	case "blacklisted source":
+	case rejectBlacklistedSource:
 		return
 
-	case "validation queue full":
+	case rejectValidationQueueFull:
 		// the message was rejected before it entered the validation pipeline;
 		// we don't know if this message has a valid signature, and thus we also don't know if
 		// it has a valid message ID; all we can do is ignore it.
@@ -529,7 +528,7 @@ func (ps *peerScore) RejectMessage(msg *Message, reason string) {
 
 	drec := ps.deliveries.getRecord(ps.msgID(msg.Message))
 
-	if reason == "validation throttled" {
+	if reason == rejectValidationThrottled {
 		// if we reject with "validation throttled" we don't penalize the peer(s) that forward it
 		// because we don't know if it was valid.
 		drec.status = delivery_throttled

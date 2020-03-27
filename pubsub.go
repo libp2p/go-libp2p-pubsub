@@ -814,21 +814,21 @@ func (p *PubSub) pushMsg(msg *Message) {
 	// reject messages from blacklisted peers
 	if p.blacklist.Contains(src) {
 		log.Warningf("dropping message from blacklisted peer %s", src)
-		p.tracer.RejectMessage(msg, "blacklisted peer")
+		p.tracer.RejectMessage(msg, rejectBlacklstedPeer)
 		return
 	}
 
 	// even if they are forwarded by good peers
 	if p.blacklist.Contains(msg.GetFrom()) {
 		log.Warningf("dropping message from blacklisted source %s", src)
-		p.tracer.RejectMessage(msg, "blacklisted source")
+		p.tracer.RejectMessage(msg, rejectBlacklistedSource)
 		return
 	}
 
 	// reject unsigned messages when strict before we even process the id
 	if p.signStrict && msg.Signature == nil {
 		log.Debugf("dropping unsigned message from %s", src)
-		p.tracer.RejectMessage(msg, "missing signature")
+		p.tracer.RejectMessage(msg, rejectMissingSignature)
 		return
 	}
 
