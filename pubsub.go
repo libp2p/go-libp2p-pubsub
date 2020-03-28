@@ -832,6 +832,14 @@ func (p *PubSub) pushMsg(msg *Message) {
 		return
 	}
 
+	// reject messages claiming to be from ourselves but not locally published
+	self := p.host.ID()
+	if peer.ID(msg.GetFrom()) == self && src != self {
+		log.Debugf("dropping message claiming to be from self but forwarded from %s", src)
+		p.tracer.RejectMessage(msg, rejectSelfOrigin)
+		return
+	}
+
 	// have we already seen and validated this message?
 	id := p.msgID(msg.Message)
 	if p.seenMessage(id) {
@@ -849,12 +857,6 @@ func (p *PubSub) pushMsg(msg *Message) {
 }
 
 func (p *PubSub) publishMessage(msg *Message) {
-	self := p.host.ID()
-	if peer.ID(msg.GetFrom()) == self && msg.ReceivedFrom != self {
-		// we don't publish messages claiming to be from us but not published by ourselves
-		return
-	}
-
 	p.tracer.DeliverMessage(msg)
 	p.notifySubs(msg)
 	p.rt.Publish(msg)

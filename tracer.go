@@ -33,6 +33,7 @@ const (
 	rejectValidationQueueFull = "validation queue full"
 	rejectValidationThrottled = "validation throttled"
 	rejectValidationFailed    = "validation failed"
+	rejectSelfOrigin          = "self originated message"
 )
 
 type basicTracer struct {
