@@ -30,7 +30,7 @@ We currently provide three implementations:
 
 [@vyzo](https://github.com/vyzo/)
 
-> This repo follows the [Repo Lead Maintainer Protocol](https://github.com/ipfs/team-mgmt/blob/master/LEAD_MAINTAINER_PROTOCOL.md)  
+> This repo follows the [Repo Lead Maintainer Protocol](https://github.com/ipfs/team-mgmt/blob/master/LEAD_MAINTAINER_PROTOCOL.md)
 
 ## Table of Contents
 
@@ -93,10 +93,12 @@ See [libp2p/specs/pubsub#Implementations](https://github.com/libp2p/specs/tree/m
 ├── validation.go
 # Floodsub router
 ├── floodsub.go
-# Randomsub router 
+# Randomsub router
 ├── randomsub.go
-# Gossipsub router 
+# Gossipsub router
 ├── gossipsub.go
+├── score.go
+├── score_params.go
 └── mcache.go
 ```
 
