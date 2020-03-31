@@ -1,9 +1,20 @@
 # go-libp2p-pubsub
 
-[![](https://img.shields.io/badge/made%20by-Protocol%20Labs-blue.svg?style=flat-square)](http://protocol.ai)
-[![](https://img.shields.io/badge/project-libp2p-yellow.svg?style=flat-square)](http://github.com/libp2p/libp2p)
-[![](https://img.shields.io/badge/freenode-%23libp2p-yellow.svg?style=flat-square)](http://webchat.freenode.net/?channels=%23libp2p)
-[![Discourse posts](https://img.shields.io/discourse/https/discuss.libp2p.io/posts.svg)](https://discuss.libp2p.io)
+<p align="left">
+  <a href="http://protocol.ai"><img src="https://img.shields.io/badge/made%20by-Protocol%20Labs-blue.svg?style=flat-square" /></a>
+  <a href="http://libp2p.io/"><img src="https://img.shields.io/badge/project-libp2p-yellow.svg?style=flat-square" /></a>
+  <a href="http://webchat.freenode.net/?channels=%23libp2p"><img src="https://img.shields.io/badge/freenode-%23libp2p-yellow.svg?style=flat-square" /></a>
+  <a href="https://discuss.libp2p.io"><img src="https://img.shields.io/discourse/https/discuss.libp2p.io/posts.svg?style=flat-square"/></a>
+</p>
+
+<p align="left">
+  <a href="https://travis-ci.com/libp2p/go-libp2p-pubsub"><img src="https://img.shields.io/travis/com/libp2p/go-libp2p-pubsub/master?style=flat-square"></a>
+  <a href="https://codecov.io/gh/libp2p/go-libp2p-pubsub"><img src="https://img.shields.io/codecov/c/github/libp2p/go-libp2p-pubsub?style=flat-square"></a>
+  <a href="https://github.com/RichardLitt/standard-readme"><img src="https://img.shields.io/badge/readme%20style-standard-brightgreen.svg?style=flat-square" /></a>
+  <a href="https://godoc.org/github.com/libp2p/go-libp2p-pubsub"><img src="http://img.shields.io/badge/godoc-reference-5272B4.svg?style=flat-square" /></a>
+  <a href=""><img src="https://img.shields.io/badge/golang-%3E%3D1.14.0-orange.svg?style=flat-square" /></a>
+  <br>
+</p>
 
 > A pubsub system with flooding and gossiping variants.
 
@@ -15,14 +26,26 @@ We currently provide three implementations:
   See [spec](https://github.com/libp2p/specs/tree/master/pubsub/gossipsub) and  [implementation](https://github.com/libp2p/go-libp2p-pubsub/blob/master/gossipsub.go) for more details.
 - randomsub, which is a simple probabilistic router that propagates to random subsets of peers.
 
+## Repo Lead Maintainer
+
+[@vyzo](https://github.com/vyzo/)
+
+> This repo follows the [Repo Lead Maintainer Protocol](https://github.com/ipfs/team-mgmt/blob/master/LEAD_MAINTAINER_PROTOCOL.md)  
+
 ## Table of Contents
+
+<!-- START doctoc generated TOC please keep comment here to allow auto update -->
+<!-- DON'T EDIT THIS SECTION, INSTEAD RE-RUN doctoc TO UPDATE -->
 
 - [Install](#install)
 - [Usage](#usage)
+- [Implementations](#implementations)
 - [Documentation](#documentation)
 - [Tracing](#tracing)
 - [Contribute](#contribute)
 - [License](#license)
+
+<!-- END doctoc generated TOC please keep comment here to allow auto update -->
 
 ## Install
 
@@ -34,23 +57,54 @@ go get github.com/libp2p/go-libp2p-pubsub
 
 To be used for messaging in p2p instrastructure (as part of libp2p) such as IPFS, Ethereum, other blockchains, etc.
 
-## Implementations
+### Examples
 
-See [libp2p/specs/pubsub#Implementations](https://github.com/libp2p/specs/tree/master/pubsub#Implementations).
+`To be written`
 
 ## Documentation
 
-See the [libp2p specs](https://github.com/libp2p/specs/tree/master/pubsub) for high level documentation
-and [godoc](https://godoc.org/github.com/libp2p/go-libp2p-pubsub) for API documentation.
+See the [libp2p specs](https://github.com/libp2p/specs/tree/master/pubsub) for high level documentation and [godoc](https://godoc.org/github.com/libp2p/go-libp2p-pubsub) for API documentation.
 
+### In this repo, you will find
 
-## Tracing
+See [libp2p/specs/pubsub#Implementations](https://github.com/libp2p/specs/tree/master/pubsub#Implementations).
 
-The pubsub system supports _tracing_, which collects all events pertaining to the internals of the system.
-This allows you to recreate the complete message flow and state of the system for analysis purposes.
+```
+.
+├── LICENSE
+├── README.md
+# Regular Golang repo set up
+├── codecov.yml
+├── pb
+├── go.mod
+├── go.sum
+├── doc.go
+# PubSub base
+├── pubsub.go
+├── blacklist.go
+├── notify.go
+├── comm.go
+├── discovery.go
+├── sign.go
+├── subscription.go
+├── topic.go
+├── trace.go
+├── tracer.go
+├── validation.go
+# Floodsub router
+├── floodsub.go
+# Randomsub router 
+├── randomsub.go
+# Gossipsub router 
+├── gossipsub.go
+└── mcache.go
+```
 
-To enable tracing, instantiate the pubsub system using the `WithEventTracer` option; the option
-accepts a tracer with three available implementations in-package (trace to json, pb, or a remote peer).
+### Tracing
+
+The pubsub system supports _tracing_, which collects all events pertaining to the internals of the system. This allows you to recreate the complete message flow and state of the system for analysis purposes.
+
+To enable tracing, instantiate the pubsub system using the `WithEventTracer` option; the option accepts a tracer with three available implementations in-package (trace to json, pb, or a remote peer).
 If you want to trace using a remote peer, you can do so using the `traced` daemon from [go-libp2p-pubsub-tracer](https://github.com/libp2p/go-libp2p-pubsub-tracer). The package also includes a utility program, `tracestat`, for analyzing the traces collected by the daemon.
 
 For instance, to capture the trace as a json file, you can use the following option:
@@ -89,8 +143,7 @@ Small note: If editing the README, please conform to the [standard-readme](https
 
 ## License
 
-[MIT](LICENSE) © Jeromy Johnson
+The go-libp2p-pubsub project is dual-licensed under Apache 2.0 and MIT terms:
 
----
-
-The last gx published version of this module was: 0.11.16: QmfB4oDUTiaGEqT13P1JqCEhqW7cB1wpKtq3PP4BN8PhQd
+- Apache License, Version 2.0, ([LICENSE-APACHE](./LICENSE-APACHE) or http://www.apache.org/licenses/LICENSE-2.0)
+- MIT license ([LICENSE-MIT](./LICENSE-MIT) or http://opensource.org/licenses/MIT)
