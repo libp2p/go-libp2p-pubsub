@@ -381,7 +381,7 @@ func (gs *GossipSubRouter) handleIWant(p peer.ID, ctl *pb.ControlMessage) []*pb.
 	// we don't respond to IWANT requests from any peer whose score is below the gossip threshold
 	score := gs.score.Score(p)
 	if score < gs.gossipThreshold {
-		log.Debugf("IWANT: ignorin peer %s with score below threshold [score = %f]", p, score)
+		log.Debugf("IWANT: ignoring peer %s with score below threshold [score = %f]", p, score)
 		return nil
 	}
 
@@ -429,7 +429,7 @@ func (gs *GossipSubRouter) handleGraft(p peer.ID, ctl *pb.ControlMessage) []*pb.
 		if !ok {
 			// don't do PX when there is an unknown topic to avoid leaking our peers
 			doPX = false
-			// spam harndening: ignore GRAFTs for unknown topics
+			// spam hardening: ignore GRAFTs for unknown topics
 			continue
 		}
 
@@ -467,11 +467,10 @@ func (gs *GossipSubRouter) handleGraft(p peer.ID, ctl *pb.ControlMessage) []*pb.
 			continue
 		}
 
-		log.Debugf("GRAFT: Add mesh link from %s in %s", p, topic)
+		log.Debugf("GRAFT: add mesh link from %s in %s", p, topic)
 		gs.tracer.Graft(p, topic)
 		peers[p] = struct{}{}
 		gs.tagPeer(p, topic)
-
 	}
 
 	if len(prune) == 0 {
@@ -875,9 +874,9 @@ func (gs *GossipSubRouter) heartbeat() {
 		}
 
 		// do we have enough peers?
-		if len(peers) < GossipSubDlo {
+		if l := len(peers); l < GossipSubDlo {
 			backoff := gs.backoff[topic]
-			ineed := GossipSubD - len(peers)
+			ineed := GossipSubD - l
 			plst := gs.getPeers(topic, ineed, func(p peer.ID) bool {
 				// filter our current and direct peers, peers we are backing off, and peers with negative score
 				_, inMesh := peers[p]
