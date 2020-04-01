@@ -21,7 +21,7 @@ type PeerScoreThresholds struct {
 	GraylistThreshold float64
 
 	// acceptPXThreshold is the score threshold below which PX will be ignored; this should be positive
-	//  and limited to scores attainable by bootstrappers and other trusted nodes.
+	// and limited to scores attainable by bootstrappers and other trusted nodes.
 	AcceptPXThreshold float64
 }
 
