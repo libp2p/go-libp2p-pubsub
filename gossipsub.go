@@ -833,10 +833,6 @@ func (gs *GossipSubRouter) heartbeat() {
 
 	gs.heartbeatTicks++
 
-	// flush pending control message from retries and gossip
-	// that hasn't been piggybacked since the last heartbeat
-	gs.flush()
-
 	tograft := make(map[peer.ID][]string)
 	toprune := make(map[peer.ID][]string)
 	noPX := make(map[peer.ID]bool)
@@ -960,6 +956,9 @@ func (gs *GossipSubRouter) heartbeat() {
 	// send coalesced GRAFT/PRUNE messages (will piggyback gossip)
 	gs.sendGraftPrune(tograft, toprune, noPX)
 
+	// flush all pending gossip that wasn't piggybacked above
+	gs.flush()
+
 	// advance the message history window
 	gs.mcache.Shift()
 }
@@ -1081,14 +1080,14 @@ func (gs *GossipSubRouter) emitGossip(topic string, exclude map[peer.ID]struct{}
 }
 
 func (gs *GossipSubRouter) flush() {
-	// send gossip first, which will also piggyback control
+	// send gossip first, which will also piggyback pending control
 	for p, ihave := range gs.gossip {
 		delete(gs.gossip, p)
 		out := rpcWithControl(nil, ihave, nil, nil, nil)
 		gs.sendRPC(p, out)
 	}
 
-	// send the remaining control messages
+	// send the remaining control messages that wasn't merged with gossip
 	for p, ctl := range gs.control {
 		delete(gs.control, p)
 		out := rpcWithControl(nil, nil, nil, ctl.Graft, ctl.Prune)
