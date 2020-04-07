@@ -21,6 +21,9 @@ var (
 	DiscoveryPollInterval = 1 * time.Second
 )
 
+// interval at which to retry advertisements when they fail.
+const discoveryAdvertiseRetryInterval = 2 * time.Minute
+
 type DiscoverOpt func(*discoverOptions) error
 
 type discoverOptions struct {
@@ -187,19 +190,26 @@ func (d *discover) Advertise(topic string) {
 		next, err := d.discovery.Advertise(advertisingCtx, topic)
 		if err != nil {
 			log.Warningf("bootstrap: error providing rendezvous for %s: %s", topic, err.Error())
+			if next == 0 {
+				next = discoveryAdvertiseRetryInterval
+			}
 		}
 
 		t := time.NewTimer(next)
-		for {
+		defer t.Stop()
+
+		for advertisingCtx.Err() == nil {
 			select {
 			case <-t.C:
 				next, err = d.discovery.Advertise(advertisingCtx, topic)
 				if err != nil {
 					log.Warningf("bootstrap: error providing rendezvous for %s: %s", topic, err.Error())
+					if next == 0 {
+						next = discoveryAdvertiseRetryInterval
+					}
 				}
 				t.Reset(next)
 			case <-advertisingCtx.Done():
-				t.Stop()
 				return
 			}
 		}
@@ -237,6 +247,7 @@ func (d *discover) Bootstrap(ctx context.Context, topic string, ready RouterRead
 	if !t.Stop() {
 		<-t.C
 	}
+	defer t.Stop()
 
 	for {
 		// Check if ready for publishing
