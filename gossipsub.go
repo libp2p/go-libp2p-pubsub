@@ -951,7 +951,7 @@ func (gs *GossipSubRouter) heartbeat() {
 			medianIndex := len(peers) / 2
 			medianScore := scores[plst[medianIndex]]
 
-			// if the media score is below the threshold, select a better peer (if any) and GRAFT
+			// if the median score is below the threshold, select a better peer (if any) and GRAFT
 			if medianScore < gs.opportunisticGraftThreshold {
 				backoff := gs.backoff[topic]
 				plst = gs.getPeers(topic, 1, func(p peer.ID) bool {
