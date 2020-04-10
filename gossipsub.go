@@ -67,6 +67,9 @@ var (
 	// Number of heartbeat ticks for attempting to improve the mesh with opportunistic
 	// grafting
 	GossipSubOpportunisticGraftTicks uint64 = 60
+
+	// Number of peers to opportunistically graft
+	GossipSubOpportunisticGraftPeers = 2
 )
 
 // NewGossipSub returns a new PubSub object using GossipSubRouter as the router.
@@ -928,7 +931,7 @@ func (gs *GossipSubRouter) heartbeat() {
 		// should we try to improve the mesh with opportunistic grafting?
 		if gs.heartbeatTicks%GossipSubOpportunisticGraftTicks == 0 && len(peers) > 1 {
 			// Opportunistic grafting works as follows: we check the median score of peers in the
-			// mesh; if this score is below the opportunisticGraftThreshold, we select a peer at
+			// mesh; if this score is below the opportunisticGraftThreshold, we select a few peers at
 			// random with score over the median.
 			// The intention is to (slowly) improve an underperforming mesh by introducing good
 			// scoring peers that may have been gossiping at us. This allows us to get out of sticky
@@ -954,7 +957,7 @@ func (gs *GossipSubRouter) heartbeat() {
 			// if the median score is below the threshold, select a better peer (if any) and GRAFT
 			if medianScore < gs.opportunisticGraftThreshold {
 				backoff := gs.backoff[topic]
-				plst = gs.getPeers(topic, 1, func(p peer.ID) bool {
+				plst = gs.getPeers(topic, GossipSubOpportunisticGraftPeers, func(p peer.ID) bool {
 					_, inMesh := peers[p]
 					_, doBackoff := backoff[p]
 					_, direct := gs.direct[p]
@@ -962,9 +965,10 @@ func (gs *GossipSubRouter) heartbeat() {
 				})
 
 				if len(plst) != 0 {
-					p := plst[0]
-					log.Debugf("HEARTBEAT: Opportunistically graft peer %s on topic %s", p, topic)
-					graftPeer(p)
+					for _, p := range plst {
+						log.Debugf("HEARTBEAT: Opportunistically graft peer %s on topic %s", p, topic)
+						graftPeer(p)
+					}
 				}
 			}
 		}
