@@ -59,6 +59,10 @@ var (
 
 	// timeout for connection attempts
 	GossipSubConnectionTimeout = 30 * time.Second
+
+	// Number of heartbeat ticks for attempting to reconnect direct peers that are not
+	// currently connected
+	GossipSubDirectConnectTicks uint64 = 300
 )
 
 // NewGossipSub returns a new PubSub object using GossipSubRouter as the router.
@@ -983,9 +987,9 @@ func (gs *GossipSubRouter) clearBackoff() {
 }
 
 func (gs *GossipSubRouter) directConnect() {
-	// we donly do this every 150 ticks to allow pending connections to complete and account
+	// we donly do this every some ticks to allow pending connections to complete and account
 	// for restarts/downtime
-	if gs.heartbeatTicks%150 != 0 {
+	if gs.heartbeatTicks%GossipSubDirectConnectTicks != 0 {
 		return
 	}
 
