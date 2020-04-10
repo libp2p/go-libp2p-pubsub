@@ -221,7 +221,7 @@ type GossipSubRouter struct {
 	// threshold for peer score before we graylist the peer and silently ignore its RPCs
 	graylistThreshold float64
 
-	// threshold for media peer score before triggering opportunistic grafting
+	// threshold for median peer score before triggering opportunistic grafting
 	opportunisticGraftThreshold float64
 
 	// whether to use flood publishing
