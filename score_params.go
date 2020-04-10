@@ -20,9 +20,13 @@ type PeerScoreThresholds struct {
 	// implementing an effective graylist according to peer score; should be negative and <= PublisThreshold.
 	GraylistThreshold float64
 
-	// acceptPXThreshold is the score threshold below which PX will be ignored; this should be positive
+	// AcceptPXThreshold is the score threshold below which PX will be ignored; this should be positive
 	// and limited to scores attainable by bootstrappers and other trusted nodes.
 	AcceptPXThreshold float64
+
+	// OpportunisticGraftThreshold is the median mesh score threshold before triggering opportunistic
+	// grafting; this should have a small positive value.
+	OpportunisticGraftThreshold float64
 }
 
 func (p *PeerScoreThresholds) validate() error {
@@ -37,6 +41,9 @@ func (p *PeerScoreThresholds) validate() error {
 	}
 	if p.AcceptPXThreshold < 0 {
 		return fmt.Errorf("invalid accept PX threshold; it must be >= 0")
+	}
+	if p.OpportunisticGraftThreshold < 0 {
+		return fmt.Errorf("invalid opportunistic grafting threshold; it must be >= 0")
 	}
 	return nil
 }
