@@ -369,6 +369,7 @@ func TestGossipsubGossip(t *testing.T) {
 }
 
 func TestGossipsubGossipPiggyback(t *testing.T) {
+	t.Skip("test no longer relevant; gossip propagation has become eager")
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	hosts := getNetHosts(t, ctx, 20)
