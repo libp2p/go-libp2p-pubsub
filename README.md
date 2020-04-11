@@ -16,15 +16,12 @@
   <br>
 </p>
 
-> A pubsub system with flooding and gossiping variants.
+This repo contains the canonical pubsub implementation for libp2p. We currently provide three message router options:
+- Floodsub, which is the baseline flooding protocol.
+- Randomsub, which is a simple probabilistic router that propagates to random subsets of peers.
+- Gossipsub, which is a more advanced router with mesh formation and gossip propagation. See [spec](https://github.com/libp2p/specs/tree/master/pubsub/gossipsub) and  [implementation](https://github.com/libp2p/go-libp2p-pubsub/blob/master/gossipsub.go) for more details.
 
-This is the canonical pubsub implementation for libp2p.
-
-We currently provide three implementations:
-- floodsub, which is the baseline flooding protocol.
-- gossipsub, which is a more advanced router with mesh formation and gossip propagation.
-  See [spec](https://github.com/libp2p/specs/tree/master/pubsub/gossipsub) and  [implementation](https://github.com/libp2p/go-libp2p-pubsub/blob/master/gossipsub.go) for more details.
-- randomsub, which is a simple probabilistic router that propagates to random subsets of peers.
+**PSA: The Hardening Extensions for Gossipsub (Gossipsub V1.1) can be found under development at https://github.com/libp2p/go-libp2p-pubsub/pull/263**
 
 ## Repo Lead Maintainer
 
@@ -66,8 +63,6 @@ To be used for messaging in p2p instrastructure (as part of libp2p) such as IPFS
 See the [libp2p specs](https://github.com/libp2p/specs/tree/master/pubsub) for high level documentation and [godoc](https://godoc.org/github.com/libp2p/go-libp2p-pubsub) for API documentation.
 
 ### In this repo, you will find
-
-See [libp2p/specs/pubsub#Implementations](https://github.com/libp2p/specs/tree/master/pubsub#Implementations).
 
 ```
 .
