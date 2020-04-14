@@ -769,8 +769,8 @@ func (ps *peerScore) getIPs(p peer.ID) []string {
 			continue
 		}
 
-		// ignore those; loopback for unit testing and unspecific because gremlins in testground
-		// give us an unspecific IP6 conns everywhere!
+		// ignore those; loopback for unit testing and unspecified because gremlins
+		// seem give us an unspecified IPv6 conn everywhere in testground testing!
 		if ip.IsUnspecified() || ip.IsLoopback() {
 			continue
 		}
@@ -787,8 +787,12 @@ func (ps *peerScore) getIPs(p peer.ID) []string {
 			ip6 := ip.String()
 			res = append(res, ip6)
 
-			ip6mask := ip.Mask(net.CIDRMask(64, 128)).String()
-			res = append(res, ip6mask)
+			ip6mask := ip.Mask(net.CIDRMask(64, 128))
+			// this seems necessary to defeat the unspecfied address gremlins -- plus it is in the
+			// IANA reserved address space anyway, so it doesn't hurt.
+			if !ip6mask.IsUnspecified() {
+				res = append(res, ip6mask.String())
+			}
 		}
 	}
 
