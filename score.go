@@ -769,30 +769,22 @@ func (ps *peerScore) getIPs(p peer.ID) []string {
 			continue
 		}
 
-		// ignore those; loopback for unit testing and unspecified because gremlins
-		// seem give us an unspecified IPv6 conn everywhere in testground testing!
-		if ip.IsUnspecified() || ip.IsLoopback() {
+		// ignore those; loopback is used for unit testing
+		if ip.IsLoopback() {
 			continue
 		}
 
-		if len(ip) == 4 {
+		if len(ip.To4()) == 4 {
 			// IPv4 address
 			ip4 := ip.String()
 			res = append(res, ip4)
-			continue
-		}
-
-		if len(ip) == 16 {
+		} else {
 			// IPv6 address -- we add both the actual address and the /64 subnet
 			ip6 := ip.String()
 			res = append(res, ip6)
 
-			ip6mask := ip.Mask(net.CIDRMask(64, 128))
-			// this seems necessary to defeat the unspecfied address gremlins -- plus it is in the
-			// IANA reserved address space anyway, so it doesn't hurt.
-			if !ip6mask.IsUnspecified() {
-				res = append(res, ip6mask.String())
-			}
+			ip6mask := ip.Mask(net.CIDRMask(64, 128)).String()
+			res = append(res, ip6mask)
 		}
 	}
 
