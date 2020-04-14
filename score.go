@@ -818,15 +818,15 @@ removeOldIPs:
 			if ip == xip {
 				continue removeOldIPs
 			}
-			// no, it's obsolete -- remove it from the tracker
-			peers, ok := ps.peerIPs[ip]
-			if !ok {
-				continue
-			}
-			delete(peers, p)
-			if len(peers) == 0 {
-				delete(ps.peerIPs, ip)
-			}
+		}
+		// no, it's obsolete -- remove it from the tracker
+		peers, ok := ps.peerIPs[ip]
+		if !ok {
+			continue
+		}
+		delete(peers, p)
+		if len(peers) == 0 {
+			delete(ps.peerIPs, ip)
 		}
 	}
 }
