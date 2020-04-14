@@ -761,11 +761,17 @@ func (ps *peerScore) getIPs(p peer.ID) []string {
 	}
 
 	conns := ps.host.Network().ConnsToPeer(p)
-	res := make([]string, 0, len(conns))
+	res := make([]string, 0, 1)
 	for _, c := range conns {
 		remote := c.RemoteMultiaddr()
 		ip, err := manet.ToIP(remote)
 		if err != nil {
+			continue
+		}
+
+		// ignore those; loopback for unit testing and unspecific because gremlins in testground
+		// give us an unspecific IP6 conns everywhere!
+		if ip.IsUnspecified() || ip.IsLoopback() {
 			continue
 		}
 
