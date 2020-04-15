@@ -128,6 +128,102 @@ func TestGossipsubAttackSpamIWANT(t *testing.T) {
 	<-ctx.Done()
 }
 
+// Test that Gossipsub only responds to IHAVE with IWANT once per heartbeat
+func TestGossipsubAttackSpamIHAVE(t *testing.T) {
+	const ExpectedIWantPerHeartbeat = 10
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// Create legitimate and attacker hosts
+	hosts := getNetHosts(t, ctx, 2)
+	legit := hosts[0]
+	attacker := hosts[1]
+
+	// Set up gossipsub on the legit host
+	ps, err := NewGossipSub(ctx, legit)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Subscribe to mytopic on the legit host
+	mytopic := "mytopic"
+	_, err = ps.Subscribe(mytopic)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	iWantCount := 0
+	newMockGS(ctx, t, attacker, func(writeMsg func(*pb.RPC), irpc *pb.RPC) {
+		// When the legit host connects it will send us its subscriptions
+		for _, sub := range irpc.GetSubscriptions() {
+			if sub.GetSubscribe() {
+				// Reply by subcribing to the topic and grafting to the peer
+				writeMsg(&pb.RPC{
+					Subscriptions: []*pb.RPC_SubOpts{&pb.RPC_SubOpts{Subscribe: sub.Subscribe, Topicid: sub.Topicid}},
+					Control:       &pb.ControlMessage{Graft: []*pb.ControlGraft{&pb.ControlGraft{TopicID: sub.Topicid}}},
+				})
+
+				go func() {
+					defer cancel()
+
+					// Wait for a short interval to make sure the legit host
+					// received and processed the subscribe + graft
+					time.Sleep(20 * time.Millisecond)
+
+					// Send a bunch of IHAVEs
+					for i := 0; i < 100; i++ {
+						ihavelst := []string{"someid" + strconv.Itoa(i)}
+						ihave := []*pb.ControlIHave{&pb.ControlIHave{TopicID: sub.Topicid, MessageIDs: ihavelst}}
+						orpc := rpcWithControl(nil, ihave, nil, nil, nil)
+						writeMsg(&orpc.RPC)
+					}
+
+					time.Sleep(20 * time.Millisecond)
+
+					// Should have hit the maximum number of IWANTs per peer
+					// per heartbeat
+					if iWantCount > ExpectedIWantPerHeartbeat {
+						t.Fatalf("Expecting max %d IWANTs per heartbeat but received %d", ExpectedIWantPerHeartbeat, iWantCount)
+					}
+					firstBatchCount := iWantCount
+
+					// Wait for a hearbeat
+					time.Sleep(GossipSubHeartbeatInitialDelay)
+
+					// Send a bunch of IHAVEs
+					for i := 0; i < 100; i++ {
+						ihavelst := []string{"someid" + strconv.Itoa(i+100)}
+						ihave := []*pb.ControlIHave{&pb.ControlIHave{TopicID: sub.Topicid, MessageIDs: ihavelst}}
+						orpc := rpcWithControl(nil, ihave, nil, nil, nil)
+						writeMsg(&orpc.RPC)
+					}
+
+					time.Sleep(20 * time.Millisecond)
+
+					// Should have sent more IWANTs after the heartbeat
+					if iWantCount <= ExpectedIWantPerHeartbeat {
+						t.Fatal("Expecting to receive more IWANTs after heartbeat but did not")
+					}
+					// Should not be more than the maximum per heartbeat
+					if iWantCount-firstBatchCount > ExpectedIWantPerHeartbeat {
+						t.Fatalf("Expecting max %d IWANTs per heartbeat but received %d", ExpectedIWantPerHeartbeat, iWantCount)
+					}
+				}()
+			}
+		}
+
+		// Record the count of received IWANT messages
+		if ctl := irpc.GetControl(); ctl != nil {
+			iWantCount += len(ctl.GetIwant())
+		}
+	})
+
+	connect(t, hosts[0], hosts[1])
+
+	<-ctx.Done()
+}
+
 // Test that when Gossipsub receives GRAFT for an unknown topic, it ignores
 // the request
 func TestGossipsubAttackGRAFTNonExistentTopic(t *testing.T) {
@@ -386,15 +482,6 @@ func TestGossipsubAttackInvalidMessageSpam(t *testing.T) {
 
 	attackerScore := func() float64 {
 		return ps.rt.(*GossipSubRouter).score.Score(attacker.ID())
-	}
-
-	// Register a validator for the topic
-	err = ps.RegisterTopicValidator(mytopic,
-		func(ctx context.Context, from peer.ID, msg *Message) bool {
-			return true
-		})
-	if err != nil {
-		t.Fatal(err)
 	}
 
 	// Subscribe to mytopic on the legit host
