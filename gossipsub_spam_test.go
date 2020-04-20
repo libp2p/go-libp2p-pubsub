@@ -215,13 +215,11 @@ func TestGossipsubAttackSpamIHAVE(t *testing.T) {
 
 					// Should have sent more IWANTs after the heartbeat
 					iwc = getIWantCount()
-					if iwc <= GossipSubMaxIHaveLength {
+					if iwc == firstBatchCount {
 						t.Fatal("Expecting to receive more IWANTs after heartbeat but did not")
 					}
 					// Should not be more than the maximum per heartbeat
-					// note that we multiply by 2 because things may come in the middle of the heartbeat which
-					// results in a reset of the heartbeat counter (has been observed in travis)
-					if iwc-firstBatchCount > 2*GossipSubMaxIHaveLength {
+					if iwc-firstBatchCount > GossipSubMaxIHaveLength {
 						t.Fatalf("Expecting max %d IWANTs per heartbeat but received %d", GossipSubMaxIHaveLength, iwc-firstBatchCount)
 					}
 				}()
