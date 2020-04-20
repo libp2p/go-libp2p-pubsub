@@ -4,6 +4,7 @@ import (
 	"context"
 	"math/rand"
 	"strconv"
+	"sync"
 	"testing"
 	"time"
 
@@ -152,6 +153,18 @@ func TestGossipsubAttackSpamIHAVE(t *testing.T) {
 	}
 
 	iWantCount := 0
+	iWantCountMx := sync.Mutex{}
+	getIWantCount := func() int {
+		iWantCountMx.Lock()
+		defer iWantCountMx.Unlock()
+		return iWantCount
+	}
+	addIWantCount := func(i int) {
+		iWantCountMx.Lock()
+		defer iWantCountMx.Unlock()
+		iWantCount += i
+	}
+
 	newMockGS(ctx, t, attacker, func(writeMsg func(*pb.RPC), irpc *pb.RPC) {
 		// When the legit host connects it will send us its subscriptions
 		for _, sub := range irpc.GetSubscriptions() {
@@ -170,42 +183,46 @@ func TestGossipsubAttackSpamIHAVE(t *testing.T) {
 					time.Sleep(20 * time.Millisecond)
 
 					// Send a bunch of IHAVEs
-					for i := 0; i < 2*GossipSubMaxIHaveLength; i++ {
+					for i := 0; i < 3*GossipSubMaxIHaveLength; i++ {
 						ihavelst := []string{"someid" + strconv.Itoa(i)}
 						ihave := []*pb.ControlIHave{&pb.ControlIHave{TopicID: sub.Topicid, MessageIDs: ihavelst}}
 						orpc := rpcWithControl(nil, ihave, nil, nil, nil)
 						writeMsg(&orpc.RPC)
 					}
 
-					time.Sleep(300 * time.Millisecond)
+					time.Sleep(GossipSubHeartbeatInterval)
 
 					// Should have hit the maximum number of IWANTs per peer
 					// per heartbeat
-					if iWantCount > GossipSubMaxIHaveLength {
-						t.Fatalf("Expecting max %d IWANTs per heartbeat but received %d", GossipSubMaxIHaveLength, iWantCount)
+					iwc := getIWantCount()
+					if iwc > GossipSubMaxIHaveLength {
+						t.Fatalf("Expecting max %d IWANTs per heartbeat but received %d", GossipSubMaxIHaveLength, iwc)
 					}
-					firstBatchCount := iWantCount
+					firstBatchCount := iwc
 
 					// Wait for a hearbeat
 					time.Sleep(GossipSubHeartbeatInterval)
 
 					// Send a bunch of IHAVEs
-					for i := 0; i < 2*GossipSubMaxIHaveLength; i++ {
+					for i := 0; i < 3*GossipSubMaxIHaveLength; i++ {
 						ihavelst := []string{"someid" + strconv.Itoa(i+100)}
 						ihave := []*pb.ControlIHave{&pb.ControlIHave{TopicID: sub.Topicid, MessageIDs: ihavelst}}
 						orpc := rpcWithControl(nil, ihave, nil, nil, nil)
 						writeMsg(&orpc.RPC)
 					}
 
-					time.Sleep(300 * time.Millisecond)
+					time.Sleep(GossipSubHeartbeatInterval)
 
 					// Should have sent more IWANTs after the heartbeat
-					if iWantCount <= GossipSubMaxIHaveLength {
+					iwc = getIWantCount()
+					if iwc <= GossipSubMaxIHaveLength {
 						t.Fatal("Expecting to receive more IWANTs after heartbeat but did not")
 					}
 					// Should not be more than the maximum per heartbeat
-					if iWantCount-firstBatchCount > GossipSubMaxIHaveLength {
-						t.Fatalf("Expecting max %d IWANTs per heartbeat but received %d", GossipSubMaxIHaveLength, iWantCount)
+					// note that we multiply by 2 because things may come in the middle of the heartbeat which
+					// results in a reset of the heartbeat counter (has been observed in travis)
+					if iwc-firstBatchCount > 2*GossipSubMaxIHaveLength {
+						t.Fatalf("Expecting max %d IWANTs per heartbeat but received %d", GossipSubMaxIHaveLength, iwc-firstBatchCount)
 					}
 				}()
 			}
@@ -213,7 +230,7 @@ func TestGossipsubAttackSpamIHAVE(t *testing.T) {
 
 		// Record the count of received IWANT messages
 		if ctl := irpc.GetControl(); ctl != nil {
-			iWantCount += len(ctl.GetIwant())
+			addIWantCount(len(ctl.GetIwant()))
 		}
 	})
 
@@ -330,6 +347,17 @@ func TestGossipsubAttackGRAFTDuringBackoff(t *testing.T) {
 	}
 
 	pruneCount := 0
+	pruneCountMx := sync.Mutex{}
+	getPruneCount := func() int {
+		pruneCountMx.Lock()
+		defer pruneCountMx.Unlock()
+		return pruneCount
+	}
+	addPruneCount := func(i int) {
+		pruneCountMx.Lock()
+		defer pruneCountMx.Unlock()
+		pruneCount += i
+	}
 
 	newMockGS(ctx, t, attacker, func(writeMsg func(*pb.RPC), irpc *pb.RPC) {
 		// When the legit host connects it will send us its subscriptions
@@ -350,8 +378,9 @@ func TestGossipsubAttackGRAFTDuringBackoff(t *testing.T) {
 					time.Sleep(20 * time.Millisecond)
 
 					// No PRUNE should have been sent at this stage
-					if pruneCount != 0 {
-						t.Fatalf("Expected %d PRUNE messages but got %d", 0, pruneCount)
+					pc := getPruneCount()
+					if pc != 0 {
+						t.Fatalf("Expected %d PRUNE messages but got %d", 0, pc)
 					}
 
 					// Send a PRUNE to remove the attacker node from the legit
@@ -365,8 +394,9 @@ func TestGossipsubAttackGRAFTDuringBackoff(t *testing.T) {
 					time.Sleep(20 * time.Millisecond)
 
 					// No PRUNE should have been sent at this stage
-					if pruneCount != 0 {
-						t.Fatalf("Expected %d PRUNE messages but got %d", 0, pruneCount)
+					pc = getPruneCount()
+					if pc != 0 {
+						t.Fatalf("Expected %d PRUNE messages but got %d", 0, pc)
 					}
 
 					// wait for the GossipSubGraftFloodThreshold to pass before attempting another graft
@@ -381,8 +411,9 @@ func TestGossipsubAttackGRAFTDuringBackoff(t *testing.T) {
 
 					// It's been less than the flood threshold time since the last
 					// PRUNE, so we shouldn't get any prunes back
-					if pruneCount != 1 {
-						t.Fatalf("Expected %d PRUNE messages but got %d", 1, pruneCount)
+					pc = getPruneCount()
+					if pc != 1 {
+						t.Fatalf("Expected %d PRUNE messages but got %d", 1, pc)
 					}
 
 					// Wait until after the prune backoff period
@@ -397,15 +428,16 @@ func TestGossipsubAttackGRAFTDuringBackoff(t *testing.T) {
 
 					// The prune backoff period has passed so the GRAFT should
 					// be accepted and this node should not receive a PRUNE
-					if pruneCount != 1 {
-						t.Fatalf("Expected %d PRUNE messages but got %d", 1, pruneCount)
+					pc = getPruneCount()
+					if pc != 1 {
+						t.Fatalf("Expected %d PRUNE messages but got %d", 1, pc)
 					}
 				}()
 			}
 		}
 
 		if ctl := irpc.GetControl(); ctl != nil {
-			pruneCount += len(ctl.GetPrune())
+			addPruneCount(len(ctl.GetPrune()))
 		}
 	})
 
@@ -495,6 +527,18 @@ func TestGossipsubAttackInvalidMessageSpam(t *testing.T) {
 	}
 
 	pruneCount := 0
+	pruneCountMx := sync.Mutex{}
+	getPruneCount := func() int {
+		pruneCountMx.Lock()
+		defer pruneCountMx.Unlock()
+		return pruneCount
+	}
+	addPruneCount := func(i int) {
+		pruneCountMx.Lock()
+		defer pruneCountMx.Unlock()
+		pruneCount += i
+	}
+
 	newMockGS(ctx, t, attacker, func(writeMsg func(*pb.RPC), irpc *pb.RPC) {
 		// When the legit host connects it will send us its subscriptions
 		for _, sub := range irpc.GetSubscriptions() {
@@ -539,7 +583,8 @@ func TestGossipsubAttackInvalidMessageSpam(t *testing.T) {
 						t.Fatal("Expected message rejection but got none")
 					}
 					// The legit node should have sent a PRUNE message
-					if pruneCount == 0 {
+					pc := getPruneCount()
+					if pc == 0 {
 						t.Fatal("Expected attacker node to be PRUNED when score drops low enough")
 					}
 				}()
@@ -547,7 +592,7 @@ func TestGossipsubAttackInvalidMessageSpam(t *testing.T) {
 		}
 
 		if ctl := irpc.GetControl(); ctl != nil {
-			pruneCount += len(ctl.GetPrune())
+			addPruneCount(len(ctl.GetPrune()))
 		}
 	})
 
