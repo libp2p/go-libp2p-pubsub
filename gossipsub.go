@@ -82,6 +82,9 @@ var (
 	// system is pushing more than 5000 messages in GossipSubHistoryGossip heartbeats; with the
 	// defaults this is 1666 messages/s.
 	GossipSubMaxIHaveLength = 5000
+
+	// Maximum number of IHAVE messages to accept from a peer within a heartbeat.
+	GossipSubMaxIHaveMessages = 10
 )
 
 // NewGossipSub returns a new PubSub object using GossipSubRouter as the router.
@@ -376,7 +379,7 @@ func (gs *GossipSubRouter) handleIHave(p peer.ID, ctl *pb.ControlMessage) []*pb.
 	}
 
 	// IHAVE flood protection
-	if gs.peerhave[p] > 2 {
+	if gs.peerhave[p] > GossipSubMaxIHaveMessages {
 		log.Debugf("IHAVE: peer %s has advertised too many times within this heartbeat interval; ignoring", p)
 		return nil
 	}
