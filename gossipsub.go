@@ -76,6 +76,9 @@ var (
 	// less than GossipSubPruneBackoff.
 	GossipSubGraftFloodThreshold = 10 * time.Second
 
+	// backoff penalty for GRAFT floods
+	GossipSubPruneBackoffPenalty = time.Hour
+
 	// Maximum number of messages to include in an IHAVE message. Also controls the maximum
 	// number of IHAVE ids we will accept and request with IWANT from a peer within a heartbeat,
 	// to protect from IHAVE floods. You should adjust this value from the default if your
@@ -503,15 +506,17 @@ func (gs *GossipSubRouter) handleGraft(p peer.ID, ctl *pb.ControlMessage) []*pb.
 		expire, backoff := gs.backoff[topic][p]
 		if backoff && now.Before(expire) {
 			log.Debugf("GRAFT: ignoring backed off peer %s", p)
-			// refresh the backoff
-			gs.addBackoff(p, topic)
 			// check the flood cutoff -- is the GRAFT coming too fast?
 			floodCutoff := expire.Add(GossipSubGraftFloodThreshold - GossipSubPruneBackoff)
 			if now.Before(floodCutoff) {
 				// no prune, and no PX either
 				doPX = false
+				// and a penalty so that we don't GRAFT on this peer ourselves for a while
+				gs.addBackoffPenalty(p, topic)
 			} else {
 				prune = append(prune, topic)
+				// refresh the backoff
+				gs.addBackoff(p, topic)
 			}
 			continue
 		}
@@ -577,12 +582,23 @@ func (gs *GossipSubRouter) handlePrune(p peer.ID, ctl *pb.ControlMessage) {
 }
 
 func (gs *GossipSubRouter) addBackoff(p peer.ID, topic string) {
+	gs.doAddBackoff(p, topic, GossipSubPruneBackoff)
+}
+
+func (gs *GossipSubRouter) addBackoffPenalty(p peer.ID, topic string) {
+	gs.doAddBackoff(p, topic, GossipSubPruneBackoffPenalty)
+}
+
+func (gs *GossipSubRouter) doAddBackoff(p peer.ID, topic string, interval time.Duration) {
 	backoff, ok := gs.backoff[topic]
 	if !ok {
 		backoff = make(map[peer.ID]time.Time)
 		gs.backoff[topic] = backoff
 	}
-	backoff[p] = time.Now().Add(GossipSubPruneBackoff)
+	expire := time.Now().Add(interval)
+	if backoff[p].Before(expire) {
+		backoff[p] = expire
+	}
 }
 
 func (gs *GossipSubRouter) pxConnect(peers []*pb.PeerInfo) {
