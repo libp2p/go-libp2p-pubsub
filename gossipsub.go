@@ -70,6 +70,11 @@ var (
 
 	// Number of peers to opportunistically graft
 	GossipSubOpportunisticGraftPeers = 2
+
+	// If a GRAFT comes before GossipSubGraftFloodThreshold has ellapsed since the last PRUNE,
+	// then there is no PRUNE response emitted. This protects against GRAFT floods and should be
+	// less than GossipSubPruneBackoff.
+	GossipSubGraftFloodThreshold = 10 * time.Second
 )
 
 // NewGossipSub returns a new PubSub object using GossipSubRouter as the router.
@@ -459,6 +464,23 @@ func (gs *GossipSubRouter) handleGraft(p peer.ID, ctl *pb.ControlMessage) []*pb.
 			continue
 		}
 
+		// make sure we are not backing off that peer
+		expire, backoff := gs.backoff[topic][p]
+		if backoff && now.Before(expire) {
+			log.Debugf("GRAFT: ignoring backed off peer %s", p)
+			// refresh the backoff
+			gs.addBackoff(p, topic)
+			// check the flood cutoff -- is the GRAFT coming too fast?
+			floodCutoff := expire.Add(GossipSubGraftFloodThreshold - GossipSubPruneBackoff)
+			if now.Before(floodCutoff) {
+				// no prune, and no PX either
+				doPX = false
+			} else {
+				prune = append(prune, topic)
+			}
+			continue
+		}
+
 		// check the score
 		if score < 0 {
 			// we don't GRAFT peers with negative score
@@ -469,16 +491,6 @@ func (gs *GossipSubRouter) handleGraft(p peer.ID, ctl *pb.ControlMessage) []*pb.
 			doPX = false
 			// add/refresh backoff so that we don't reGRAFT too early even if the score decays back up
 			gs.addBackoff(p, topic)
-			continue
-		}
-
-		// make sure we are not backing off that peer
-		expire, backoff := gs.backoff[topic][p]
-		if backoff && now.Before(expire) {
-			log.Debugf("GRAFT: ignoring backed off peer %s", p)
-			// refresh the backoff
-			gs.addBackoff(p, topic)
-			prune = append(prune, topic)
 			continue
 		}
 
