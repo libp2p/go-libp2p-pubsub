@@ -130,8 +130,6 @@ func TestGossipsubAttackSpamIWANT(t *testing.T) {
 
 // Test that Gossipsub only responds to IHAVE with IWANT once per heartbeat
 func TestGossipsubAttackSpamIHAVE(t *testing.T) {
-	const ExpectedIWantPerHeartbeat = 10
-
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -172,42 +170,42 @@ func TestGossipsubAttackSpamIHAVE(t *testing.T) {
 					time.Sleep(20 * time.Millisecond)
 
 					// Send a bunch of IHAVEs
-					for i := 0; i < 100; i++ {
+					for i := 0; i < 2*GossipSubMaxIHaveLength; i++ {
 						ihavelst := []string{"someid" + strconv.Itoa(i)}
 						ihave := []*pb.ControlIHave{&pb.ControlIHave{TopicID: sub.Topicid, MessageIDs: ihavelst}}
 						orpc := rpcWithControl(nil, ihave, nil, nil, nil)
 						writeMsg(&orpc.RPC)
 					}
 
-					time.Sleep(20 * time.Millisecond)
+					time.Sleep(300 * time.Millisecond)
 
 					// Should have hit the maximum number of IWANTs per peer
 					// per heartbeat
-					if iWantCount > ExpectedIWantPerHeartbeat {
-						t.Fatalf("Expecting max %d IWANTs per heartbeat but received %d", ExpectedIWantPerHeartbeat, iWantCount)
+					if iWantCount > GossipSubMaxIHaveLength {
+						t.Fatalf("Expecting max %d IWANTs per heartbeat but received %d", GossipSubMaxIHaveLength, iWantCount)
 					}
 					firstBatchCount := iWantCount
 
 					// Wait for a hearbeat
-					time.Sleep(GossipSubHeartbeatInitialDelay)
+					time.Sleep(GossipSubHeartbeatInterval)
 
 					// Send a bunch of IHAVEs
-					for i := 0; i < 100; i++ {
+					for i := 0; i < 2*GossipSubMaxIHaveLength; i++ {
 						ihavelst := []string{"someid" + strconv.Itoa(i+100)}
 						ihave := []*pb.ControlIHave{&pb.ControlIHave{TopicID: sub.Topicid, MessageIDs: ihavelst}}
 						orpc := rpcWithControl(nil, ihave, nil, nil, nil)
 						writeMsg(&orpc.RPC)
 					}
 
-					time.Sleep(20 * time.Millisecond)
+					time.Sleep(300 * time.Millisecond)
 
 					// Should have sent more IWANTs after the heartbeat
-					if iWantCount <= ExpectedIWantPerHeartbeat {
+					if iWantCount <= GossipSubMaxIHaveLength {
 						t.Fatal("Expecting to receive more IWANTs after heartbeat but did not")
 					}
 					// Should not be more than the maximum per heartbeat
-					if iWantCount-firstBatchCount > ExpectedIWantPerHeartbeat {
-						t.Fatalf("Expecting max %d IWANTs per heartbeat but received %d", ExpectedIWantPerHeartbeat, iWantCount)
+					if iWantCount-firstBatchCount > GossipSubMaxIHaveLength {
+						t.Fatalf("Expecting max %d IWANTs per heartbeat but received %d", GossipSubMaxIHaveLength, iWantCount)
 					}
 				}()
 			}
