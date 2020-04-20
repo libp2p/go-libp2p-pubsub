@@ -1194,8 +1194,8 @@ func (gs *GossipSubRouter) emitGossip(topic string, exclude map[peer.ID]struct{}
 
 	// if we are emitting more than GossipSubMaxIHaveLength mids, truncate the list
 	if len(mids) > GossipSubMaxIHaveLength {
-		log.Debugf("too many messages for gossip; truncating IHAVE list (%d messages)", len(mids))
-		mids = mids[:GossipSubMaxIHaveLength]
+		// we do the truncation (with shuffling) per peer below
+		log.Debugf("too many messages for gossip; will truncate IHAVE list (%d messages)", len(mids))
 	}
 
 	// Send gossip to GossipFactor peers above threshold, with a minimum of D_lazy.
@@ -1226,7 +1226,16 @@ func (gs *GossipSubRouter) emitGossip(topic string, exclude map[peer.ID]struct{}
 
 	// Emit the IHAVE gossip to the selected peers.
 	for _, p := range peers {
-		gs.enqueueGossip(p, &pb.ControlIHave{TopicID: &topic, MessageIDs: mids})
+		peerMids := mids
+		if len(mids) > GossipSubMaxIHaveLength {
+			// we do this per peer so that we emit a different set for each peer.
+			// we have enough redundancy in the system that this will significantly increase the message
+			// coverage when we do truncate.
+			peerMids = make([]string, GossipSubMaxIHaveLength)
+			shuffleStrings(mids)
+			copy(peerMids, mids)
+		}
+		gs.enqueueGossip(p, &pb.ControlIHave{TopicID: &topic, MessageIDs: peerMids})
 	}
 }
 
