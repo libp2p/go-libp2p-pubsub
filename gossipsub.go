@@ -70,20 +70,40 @@ var (
 
 	// Number of peers to opportunistically graft
 	GossipSubOpportunisticGraftPeers = 2
+
+	// If a GRAFT comes before GossipSubGraftFloodThreshold has ellapsed since the last PRUNE,
+	// then there is no PRUNE response emitted. This protects against GRAFT floods and should be
+	// less than GossipSubPruneBackoff.
+	GossipSubGraftFloodThreshold = 10 * time.Second
+
+	// backoff penalty for GRAFT floods
+	GossipSubPruneBackoffPenalty = time.Hour
+
+	// Maximum number of messages to include in an IHAVE message. Also controls the maximum
+	// number of IHAVE ids we will accept and request with IWANT from a peer within a heartbeat,
+	// to protect from IHAVE floods. You should adjust this value from the default if your
+	// system is pushing more than 5000 messages in GossipSubHistoryGossip heartbeats; with the
+	// defaults this is 1666 messages/s.
+	GossipSubMaxIHaveLength = 5000
+
+	// Maximum number of IHAVE messages to accept from a peer within a heartbeat.
+	GossipSubMaxIHaveMessages = 10
 )
 
 // NewGossipSub returns a new PubSub object using GossipSubRouter as the router.
 func NewGossipSub(ctx context.Context, h host.Host, opts ...Option) (*PubSub, error) {
 	rt := &GossipSubRouter{
-		peers:   make(map[peer.ID]protocol.ID),
-		mesh:    make(map[string]map[peer.ID]struct{}),
-		fanout:  make(map[string]map[peer.ID]struct{}),
-		lastpub: make(map[string]int64),
-		gossip:  make(map[peer.ID][]*pb.ControlIHave),
-		control: make(map[peer.ID]*pb.ControlMessage),
-		backoff: make(map[string]map[peer.ID]time.Time),
-		connect: make(chan connectInfo, GossipSubMaxPendingConnections),
-		mcache:  NewMessageCache(GossipSubHistoryGossip, GossipSubHistoryLength),
+		peers:    make(map[peer.ID]protocol.ID),
+		mesh:     make(map[string]map[peer.ID]struct{}),
+		fanout:   make(map[string]map[peer.ID]struct{}),
+		lastpub:  make(map[string]int64),
+		gossip:   make(map[peer.ID][]*pb.ControlIHave),
+		control:  make(map[peer.ID]*pb.ControlMessage),
+		backoff:  make(map[string]map[peer.ID]time.Time),
+		peerhave: make(map[peer.ID]int),
+		iasked:   make(map[peer.ID]int),
+		connect:  make(chan connectInfo, GossipSubMaxPendingConnections),
+		mcache:   NewMessageCache(GossipSubHistoryGossip, GossipSubHistoryLength),
 	}
 	return NewPubSub(ctx, h, rt, opts...)
 }
@@ -190,19 +210,21 @@ func WithDirectPeers(pis []peer.AddrInfo) Option {
 // is the fanout map. Fanout peer lists are expired if we don't publish any
 // messages to their topic for GossipSubFanoutTTL.
 type GossipSubRouter struct {
-	p       *PubSub
-	peers   map[peer.ID]protocol.ID          // peer protocols
-	direct  map[peer.ID]struct{}             // direct peers
-	mesh    map[string]map[peer.ID]struct{}  // topic meshes
-	fanout  map[string]map[peer.ID]struct{}  // topic fanout
-	lastpub map[string]int64                 // last publish time for fanout topics
-	gossip  map[peer.ID][]*pb.ControlIHave   // pending gossip
-	control map[peer.ID]*pb.ControlMessage   // pending control messages
-	backoff map[string]map[peer.ID]time.Time // prune backoff
-	connect chan connectInfo                 // px connection requests
-	mcache  *MessageCache
-	tracer  *pubsubTracer
-	score   *peerScore
+	p        *PubSub
+	peers    map[peer.ID]protocol.ID          // peer protocols
+	direct   map[peer.ID]struct{}             // direct peers
+	mesh     map[string]map[peer.ID]struct{}  // topic meshes
+	fanout   map[string]map[peer.ID]struct{}  // topic fanout
+	lastpub  map[string]int64                 // last publish time for fanout topics
+	gossip   map[peer.ID][]*pb.ControlIHave   // pending gossip
+	control  map[peer.ID]*pb.ControlMessage   // pending control messages
+	peerhave map[peer.ID]int                  // number of IHAVEs received from peer in the last heartbeat
+	iasked   map[peer.ID]int                  // number of messages we have asked from peer in the last heartbeat
+	backoff  map[string]map[peer.ID]time.Time // prune backoff
+	connect  chan connectInfo                 // px connection requests
+	mcache   *MessageCache
+	tracer   *pubsubTracer
+	score    *peerScore
 
 	// whether PX is enabled; this should be enabled in bootstrappers and other well connected/trusted
 	// nodes.
@@ -359,6 +381,18 @@ func (gs *GossipSubRouter) handleIHave(p peer.ID, ctl *pb.ControlMessage) []*pb.
 		return nil
 	}
 
+	// IHAVE flood protection
+	gs.peerhave[p]++
+	if gs.peerhave[p] > GossipSubMaxIHaveMessages {
+		log.Debugf("IHAVE: peer %s has advertised too many times (%d) within this heartbeat interval; ignoring", p, gs.peerhave[p])
+		return nil
+	}
+
+	if gs.iasked[p] >= GossipSubMaxIHaveLength {
+		log.Debugf("IHAVE: peer %s has already advertised too many messages (%d); ignoring", p, gs.iasked[p])
+		return nil
+	}
+
 	iwant := make(map[string]struct{})
 	for _, ihave := range ctl.GetIhave() {
 		topic := ihave.GetTopicID()
@@ -379,7 +413,12 @@ func (gs *GossipSubRouter) handleIHave(p peer.ID, ctl *pb.ControlMessage) []*pb.
 		return nil
 	}
 
-	log.Debugf("IHAVE: Asking for %d messages from %s", len(iwant), p)
+	iask := len(iwant)
+	if iask+gs.iasked[p] > GossipSubMaxIHaveLength {
+		iask = GossipSubMaxIHaveLength - gs.iasked[p]
+	}
+
+	log.Debugf("IHAVE: Asking for %d out of %d messages from %s", iask, len(iwant), p)
 
 	iwantlst := make([]string, 0, len(iwant))
 	for mid := range iwant {
@@ -388,6 +427,10 @@ func (gs *GossipSubRouter) handleIHave(p peer.ID, ctl *pb.ControlMessage) []*pb.
 
 	// ask in random order
 	shuffleStrings(iwantlst)
+
+	// truncate to the messages we are actually asking for and update the iasked counter
+	iwantlst = iwantlst[:iask]
+	gs.iasked[p] += iask
 
 	return []*pb.ControlIWant{&pb.ControlIWant{MessageIDs: iwantlst}}
 }
@@ -459,6 +502,25 @@ func (gs *GossipSubRouter) handleGraft(p peer.ID, ctl *pb.ControlMessage) []*pb.
 			continue
 		}
 
+		// make sure we are not backing off that peer
+		expire, backoff := gs.backoff[topic][p]
+		if backoff && now.Before(expire) {
+			log.Debugf("GRAFT: ignoring backed off peer %s", p)
+			// check the flood cutoff -- is the GRAFT coming too fast?
+			floodCutoff := expire.Add(GossipSubGraftFloodThreshold - GossipSubPruneBackoff)
+			if now.Before(floodCutoff) {
+				// no prune, and no PX either
+				doPX = false
+				// and a penalty so that we don't GRAFT on this peer ourselves for a while
+				gs.addBackoffPenalty(p, topic)
+			} else {
+				prune = append(prune, topic)
+				// refresh the backoff
+				gs.addBackoff(p, topic)
+			}
+			continue
+		}
+
 		// check the score
 		if score < 0 {
 			// we don't GRAFT peers with negative score
@@ -469,16 +531,6 @@ func (gs *GossipSubRouter) handleGraft(p peer.ID, ctl *pb.ControlMessage) []*pb.
 			doPX = false
 			// add/refresh backoff so that we don't reGRAFT too early even if the score decays back up
 			gs.addBackoff(p, topic)
-			continue
-		}
-
-		// make sure we are not backing off that peer
-		expire, backoff := gs.backoff[topic][p]
-		if backoff && now.Before(expire) {
-			log.Debugf("GRAFT: ignoring backed off peer %s", p)
-			// refresh the backoff
-			gs.addBackoff(p, topic)
-			prune = append(prune, topic)
 			continue
 		}
 
@@ -530,12 +582,23 @@ func (gs *GossipSubRouter) handlePrune(p peer.ID, ctl *pb.ControlMessage) {
 }
 
 func (gs *GossipSubRouter) addBackoff(p peer.ID, topic string) {
+	gs.doAddBackoff(p, topic, GossipSubPruneBackoff)
+}
+
+func (gs *GossipSubRouter) addBackoffPenalty(p peer.ID, topic string) {
+	gs.doAddBackoff(p, topic, GossipSubPruneBackoffPenalty)
+}
+
+func (gs *GossipSubRouter) doAddBackoff(p peer.ID, topic string, interval time.Duration) {
 	backoff, ok := gs.backoff[topic]
 	if !ok {
 		backoff = make(map[peer.ID]time.Time)
 		gs.backoff[topic] = backoff
 	}
-	backoff[p] = time.Now().Add(GossipSubPruneBackoff)
+	expire := time.Now().Add(interval)
+	if backoff[p].Before(expire) {
+		backoff[p] = expire
+	}
 }
 
 func (gs *GossipSubRouter) pxConnect(peers []*pb.PeerInfo) {
@@ -855,6 +918,9 @@ func (gs *GossipSubRouter) heartbeat() {
 	// clean up expired backoffs
 	gs.clearBackoff()
 
+	// clean up iasked counters
+	gs.clearIHaveCounters()
+
 	// ensure direct peers are connected
 	gs.directConnect()
 
@@ -1027,6 +1093,18 @@ func (gs *GossipSubRouter) heartbeat() {
 	gs.mcache.Shift()
 }
 
+func (gs *GossipSubRouter) clearIHaveCounters() {
+	if len(gs.peerhave) > 0 {
+		// throw away the old map and make a new one
+		gs.peerhave = make(map[peer.ID]int)
+	}
+
+	if len(gs.iasked) > 0 {
+		// throw away the old map and make a new one
+		gs.iasked = make(map[peer.ID]int)
+	}
+}
+
 func (gs *GossipSubRouter) clearBackoff() {
 	// we only clear once every 15 ticks to avoid iterating over the map(s) too much
 	if gs.heartbeatTicks%15 != 0 {
@@ -1111,6 +1189,15 @@ func (gs *GossipSubRouter) emitGossip(topic string, exclude map[peer.ID]struct{}
 		return
 	}
 
+	// shuffle to emit in random order
+	shuffleStrings(mids)
+
+	// if we are emitting more than GossipSubMaxIHaveLength mids, truncate the list
+	if len(mids) > GossipSubMaxIHaveLength {
+		// we do the truncation (with shuffling) per peer below
+		log.Debugf("too many messages for gossip; will truncate IHAVE list (%d messages)", len(mids))
+	}
+
 	// Send gossip to GossipFactor peers above threshold, with a minimum of D_lazy.
 	// First we collect the peers above gossipThreshold that are not in the exclude set
 	// and then randomly select from that set.
@@ -1139,7 +1226,16 @@ func (gs *GossipSubRouter) emitGossip(topic string, exclude map[peer.ID]struct{}
 
 	// Emit the IHAVE gossip to the selected peers.
 	for _, p := range peers {
-		gs.enqueueGossip(p, &pb.ControlIHave{TopicID: &topic, MessageIDs: mids})
+		peerMids := mids
+		if len(mids) > GossipSubMaxIHaveLength {
+			// we do this per peer so that we emit a different set for each peer.
+			// we have enough redundancy in the system that this will significantly increase the message
+			// coverage when we do truncate.
+			peerMids = make([]string, GossipSubMaxIHaveLength)
+			shuffleStrings(mids)
+			copy(peerMids, mids)
+		}
+		gs.enqueueGossip(p, &pb.ControlIHave{TopicID: &topic, MessageIDs: peerMids})
 	}
 }
 
