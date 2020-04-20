@@ -318,8 +318,11 @@ func TestGossipsubAttackGRAFTDuringBackoff(t *testing.T) {
 	GossipSubPruneBackoff = 200 * time.Millisecond
 	originalGossipSubGraftFloodThreshold := GossipSubGraftFloodThreshold
 	GossipSubGraftFloodThreshold = 100 * time.Millisecond
+	originalGossipSubPruneBackoffPenalty := GossipSubPruneBackoffPenalty
+	GossipSubPruneBackoffPenalty = 500 * time.Millisecond
 	defer func() {
 		GossipSubPruneBackoff = originalGossipSubPruneBackoff
+		GossipSubPruneBackoffPenalty = originalGossipSubPruneBackoffPenalty
 		GossipSubGraftFloodThreshold = originalGossipSubGraftFloodThreshold
 	}()
 
@@ -414,8 +417,8 @@ func TestGossipsubAttackGRAFTDuringBackoff(t *testing.T) {
 						t.Fatalf("Expected %d PRUNE messages but got %d", 1, pc)
 					}
 
-					// Wait until after the prune backoff period
-					time.Sleep(GossipSubPruneBackoff * 2)
+					// Wait until after the prune backoff penalty period
+					time.Sleep(GossipSubPruneBackoffPenalty + time.Second)
 
 					// Send a GRAFT again to attempt to rejoin the mesh
 					writeMsg(&pb.RPC{
@@ -429,6 +432,19 @@ func TestGossipsubAttackGRAFTDuringBackoff(t *testing.T) {
 					pc = getPruneCount()
 					if pc != 1 {
 						t.Fatalf("Expected %d PRUNE messages but got %d", 1, pc)
+					}
+
+					// make sure we are in the mesh of the legit host now
+					res := make(chan bool)
+					ps.eval <- func() {
+						mesh := ps.rt.(*GossipSubRouter).mesh[mytopic]
+						_, inMesh := mesh[attacker.ID()]
+						res <- inMesh
+					}
+
+					inMesh := <-res
+					if !inMesh {
+						t.Fatal("Expected to be in the mesh of the legitimate host")
 					}
 				}()
 			}
