@@ -382,14 +382,14 @@ func (gs *GossipSubRouter) handleIHave(p peer.ID, ctl *pb.ControlMessage) []*pb.
 	}
 
 	// IHAVE flood protection
+	gs.peerhave[p]++
 	if gs.peerhave[p] > GossipSubMaxIHaveMessages {
-		log.Debugf("IHAVE: peer %s has advertised too many times within this heartbeat interval; ignoring", p)
+		log.Debugf("IHAVE: peer %s has advertised too many times (%d) within this heartbeat interval; ignoring", p, gs.peerhave[p])
 		return nil
 	}
-	gs.peerhave[p]++
 
 	if gs.iasked[p] >= GossipSubMaxIHaveLength {
-		log.Debugf("IHAVE: peer %s has already advertised too many messages; ignoring", p)
+		log.Debugf("IHAVE: peer %s has already advertised too many messages (%d); ignoring", p, gs.iasked[p])
 		return nil
 	}
 
@@ -418,7 +418,7 @@ func (gs *GossipSubRouter) handleIHave(p peer.ID, ctl *pb.ControlMessage) []*pb.
 		iask = GossipSubMaxIHaveLength - gs.iasked[p]
 	}
 
-	log.Debugf("IHAVE: Asking for %d messages from %s", iask, p)
+	log.Debugf("IHAVE: Asking for %d out of %d messages from %s", iask, len(iwant), p)
 
 	iwantlst := make([]string, 0, len(iwant))
 	for mid := range iwant {
