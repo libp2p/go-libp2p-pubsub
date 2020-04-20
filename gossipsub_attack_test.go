@@ -297,12 +297,15 @@ func TestGossipsubAttackGRAFTNonExistentTopic(t *testing.T) {
 }
 
 // Test that when Gossipsub receives GRAFT for a peer that has been PRUNED,
-// it ignores the request until the backoff period has expired
+// it ignores the request if the GRAFTs are coming too fast
 func TestGossipsubAttackGRAFTDuringBackoff(t *testing.T) {
 	originalGossipSubPruneBackoff := GossipSubPruneBackoff
-	GossipSubPruneBackoff = 50 * time.Millisecond
+	GossipSubPruneBackoff = 200 * time.Millisecond
+	originalGossipSubGraftFloodThreshold := GossipSubGraftFloodThreshold
+	GossipSubGraftFloodThreshold = 100 * time.Millisecond
 	defer func() {
 		GossipSubPruneBackoff = originalGossipSubPruneBackoff
+		GossipSubGraftFloodThreshold = originalGossipSubGraftFloodThreshold
 	}()
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -327,12 +330,6 @@ func TestGossipsubAttackGRAFTDuringBackoff(t *testing.T) {
 	}
 
 	pruneCount := 0
-	checkPruneCount := func(exp int) {
-		if pruneCount != exp {
-			go cancel()
-			t.Fatalf("Expected %d PRUNE messages but got %d", exp, pruneCount)
-		}
-	}
 
 	newMockGS(ctx, t, attacker, func(writeMsg func(*pb.RPC), irpc *pb.RPC) {
 		// When the legit host connects it will send us its subscriptions
@@ -346,13 +343,16 @@ func TestGossipsubAttackGRAFTDuringBackoff(t *testing.T) {
 				})
 
 				go func() {
+					defer cancel()
+
 					// Wait for a short interval to make sure the legit host
 					// received and processed the subscribe + graft
 					time.Sleep(20 * time.Millisecond)
 
 					// No PRUNE should have been sent at this stage
-					expectedPruneCount := 0
-					checkPruneCount(expectedPruneCount)
+					if pruneCount != 0 {
+						t.Fatalf("Expected %d PRUNE messages but got %d", 0, pruneCount)
+					}
 
 					// Send a PRUNE to remove the attacker node from the legit
 					// host's mesh
@@ -365,7 +365,12 @@ func TestGossipsubAttackGRAFTDuringBackoff(t *testing.T) {
 					time.Sleep(20 * time.Millisecond)
 
 					// No PRUNE should have been sent at this stage
-					checkPruneCount(expectedPruneCount)
+					if pruneCount != 0 {
+						t.Fatalf("Expected %d PRUNE messages but got %d", 0, pruneCount)
+					}
+
+					// wait for the GossipSubGraftFloodThreshold to pass before attempting another graft
+					time.Sleep(GossipSubGraftFloodThreshold)
 
 					// Send a GRAFT to attempt to rejoin the mesh
 					writeMsg(&pb.RPC{
@@ -374,10 +379,11 @@ func TestGossipsubAttackGRAFTDuringBackoff(t *testing.T) {
 
 					time.Sleep(20 * time.Millisecond)
 
-					// It's been less than the backoff time since the last
-					// PRUNE, so expect to get a PRUNE in response to the GRAFT
-					expectedPruneCount++
-					checkPruneCount(expectedPruneCount)
+					// It's been less than the flood threshold time since the last
+					// PRUNE, so we shouldn't get any prunes back
+					if pruneCount != 1 {
+						t.Fatalf("Expected %d PRUNE messages but got %d", 1, pruneCount)
+					}
 
 					// Wait until after the prune backoff period
 					time.Sleep(GossipSubPruneBackoff * 2)
@@ -391,9 +397,9 @@ func TestGossipsubAttackGRAFTDuringBackoff(t *testing.T) {
 
 					// The prune backoff period has passed so the GRAFT should
 					// be accepted and this node should not receive a PRUNE
-					checkPruneCount(expectedPruneCount)
-
-					cancel()
+					if pruneCount != 1 {
+						t.Fatalf("Expected %d PRUNE messages but got %d", 1, pruneCount)
+					}
 				}()
 			}
 		}
