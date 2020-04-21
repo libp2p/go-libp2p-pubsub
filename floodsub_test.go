@@ -519,7 +519,7 @@ func TestValidateOverload(t *testing.T) {
 						t.Log(msg)
 						t.Error("expected message validation to drop the message because all validator goroutines are taken")
 					}
-				case <-time.After(333 * time.Millisecond):
+				case <-time.After(time.Second):
 					if tmsg.validates {
 						t.Error("expected message validation to accept the message")
 					}
@@ -528,20 +528,17 @@ func TestValidateOverload(t *testing.T) {
 			wg.Done()
 		}()
 
-		for i, tmsg := range tc.msgs {
+		for _, tmsg := range tc.msgs {
 			err := p.Publish(topic, tmsg.msg)
 			if err != nil {
 				t.Fatal(err)
 			}
-
-			// wait a bit to let pubsub's internal state machine start validating the message
-			time.Sleep(10 * time.Millisecond)
-
-			// unblock validator goroutines after we sent one too many
-			if i == len(tc.msgs)-1 {
-				close(block)
-			}
 		}
+
+		// wait a bit before unblocking the validator goroutines
+		time.Sleep(500 * time.Millisecond)
+		close(block)
+
 		wg.Wait()
 	}
 }
