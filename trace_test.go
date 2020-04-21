@@ -314,8 +314,8 @@ func TestRemoteTracer(t *testing.T) {
 	}
 
 	testWithTracer(t, tracer)
-
 	time.Sleep(time.Second)
+	tracer.Close()
 
 	mrt.check(t)
 }
