@@ -46,8 +46,9 @@ type basicTracer struct {
 
 func (t *basicTracer) Trace(evt *pb.TraceEvent) {
 	t.mx.Lock()
+	defer t.mx.Unlock()
+
 	if t.closed {
-		t.mx.Unlock()
 		return
 	}
 
@@ -56,7 +57,6 @@ func (t *basicTracer) Trace(evt *pb.TraceEvent) {
 	} else {
 		t.buf = append(t.buf, evt)
 	}
-	t.mx.Unlock()
 
 	select {
 	case t.ch <- struct{}{}:
