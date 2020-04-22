@@ -94,12 +94,6 @@ func TestScoreFirstMessageDeliveries(t *testing.T) {
 		FirstMessageDeliveriesDecay: 1.0, // test without decay for now
 		FirstMessageDeliveriesCap: 2000,
 		TimeInMeshQuantum: time.Second, // bug? not setting this causes a div by zero
-
-		// set all other weights to zero
-		MeshMessageDeliveriesWeight: 0,
-		TimeInMeshWeight: 0,
-		MeshFailurePenaltyWeight: 0,
-		InvalidMessageDeliveriesWeight: 0,
 	}
 
 	params.Topics[mytopic] = topicScoreParams
@@ -108,8 +102,7 @@ func TestScoreFirstMessageDeliveries(t *testing.T) {
 	ps := newPeerScore(params)
 	ps.AddPeer(peerA, "myproto")
 	ps.Graft(peerA, mytopic)
-
-
+	
 	// deliver a bunch of messages from peer A
 	nMessages := 100
 	for i := 0; i < nMessages; i++ {
