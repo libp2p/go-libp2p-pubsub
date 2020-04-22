@@ -9,7 +9,6 @@ go:
 env:
   matrix:
     - GOTFLAGS="-race"
-    - GOTFLAGS="-race -tags=openssl"
 
 cache:
   directories:
