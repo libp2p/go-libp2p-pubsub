@@ -64,6 +64,9 @@ var (
 	// currently connected
 	GossipSubDirectConnectTicks uint64 = 300
 
+	// Initial delay before opening connections to direct peers
+	GossipSubDirectConnectInitialDelay = time.Second
+
 	// Number of heartbeat ticks for attempting to improve the mesh with opportunistic
 	// grafting
 	GossipSubOpportunisticGraftTicks uint64 = 60
@@ -287,8 +290,9 @@ func (gs *GossipSubRouter) Attach(p *PubSub) {
 	// connect to direct peers
 	if len(gs.direct) > 0 {
 		go func() {
-			// add a small delay to make this unit-testable
-			time.Sleep(time.Second)
+			if GossipSubDirectConnectInitialDelay > 0 {
+				time.Sleep(GossipSubDirectConnectInitialDelay)
+			}
 			for p := range gs.direct {
 				gs.connect <- connectInfo{p: p}
 			}
