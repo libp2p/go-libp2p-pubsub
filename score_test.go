@@ -1,6 +1,7 @@
 package pubsub
 
 import (
+	"sync"
 	"testing"
 	"time"
 
@@ -215,6 +216,104 @@ func TestScoreFirstMessageDeliveriesDecay(t *testing.T) {
 	}
 }
 
+func TestScoreMeshMessageDeliveries(t *testing.T) {
+	// Create parameters with reasonable default values
+	mytopic := "mytopic"
+	params := &PeerScoreParams{
+		AppSpecificScore: func(peer.ID) float64 { return 0 },
+		Topics:           make(map[string]*TopicScoreParams),
+	}
+	topicScoreParams := &TopicScoreParams{
+		TopicWeight:       1,
+		MeshMessageDeliveriesWeight: -1,
+		MeshMessageDeliveriesActivation: 500 * time.Millisecond,
+		MeshMessageDeliveriesWindow: 10 * time.Millisecond,
+		MeshMessageDeliveriesThreshold: 20,
+		MeshMessageDeliveriesCap: 100,
+		MeshMessageDeliveriesDecay: 1.0, // no decay for this test
+
+		FirstMessageDeliveriesWeight: 0,
+		TimeInMeshQuantum: time.Second, // bug? not setting this causes a div by zero
+	}
+
+	params.Topics[mytopic] = topicScoreParams
+
+	// peer A always delivers the message first.
+	// peer B delivers next (within the delivery window).
+	// peer C delivers outside the delivery window.
+	// we expect peers A and B to have a score of zero, since all other parameter weights are zero.
+	// Peer C should have a negative score.
+	peerA := peer.ID("A")
+	peerB := peer.ID("B")
+	peerC := peer.ID("C")
+	peers := []peer.ID{peerA, peerB, peerC}
+
+	ps := newPeerScore(params)
+	for _, p := range peers {
+		ps.AddPeer(p, "myproto")
+		ps.Graft(p, mytopic)
+	}
+
+	// wait for half the activation time, and assert that nobody has been penalized yet for not delivering messages
+	time.Sleep(topicScoreParams.MeshMessageDeliveriesActivation / time.Duration(2))
+	ps.refreshScores()
+	for _, p := range peers {
+		score := ps.Score(p)
+		if score < 0 {
+			t.Fatalf("expected no mesh delivery penalty before activation time, got score %f", score)
+		}
+	}
+	// wait the remainder of the activation time
+	time.Sleep(topicScoreParams.MeshMessageDeliveriesActivation / time.Duration(2))
+
+	// deliver a bunch of messages from peer A, with duplicates within the window from peer B,
+	// and duplicates outside the window from peer C.
+	nMessages := 100
+	wg := sync.WaitGroup{}
+	for i := 0; i < nMessages; i++ {
+		pbMsg := makeTestMessage(i)
+		pbMsg.TopicIDs = []string{mytopic}
+		msg := Message{ReceivedFrom: peerA, Message: pbMsg}
+		ps.ValidateMessage(&msg)
+		ps.DeliverMessage(&msg)
+
+		msg.ReceivedFrom = peerB
+		ps.DuplicateMessage(&msg)
+
+		// deliver duplicate from peerC after the window
+		wg.Add(1)
+		time.AfterFunc(topicScoreParams.MeshMessageDeliveriesWindow + (20 * time.Millisecond), func () {
+			msg.ReceivedFrom = peerC
+			ps.DuplicateMessage(&msg)
+			wg.Done()
+		})
+	}
+	wg.Wait()
+
+	ps.refreshScores()
+	aScore := ps.Score(peerA)
+	bScore := ps.Score(peerB)
+	cScore := ps.Score(peerC)
+	if aScore < 0 {
+		t.Fatalf("Expected non-negative score for peer A, got %f", aScore)
+	}
+	if bScore < 0 {
+		t.Fatalf("Expected non-negative score for peer B, got %f", aScore)
+	}
+
+	// the penalty is the difference between the threshold and the actual mesh deliveries, squared.
+	// since we didn't deliver anything, this is just the value of the threshold
+	penalty := topicScoreParams.MeshMessageDeliveriesThreshold * topicScoreParams.MeshMessageDeliveriesThreshold
+	expected := topicScoreParams.TopicWeight * topicScoreParams.MeshMessageDeliveriesWeight * penalty
+	variance := 0.1
+	if !withinVariance(cScore, expected, variance) {
+		t.Fatalf("Score: %f. Expected %f ± %f", cScore, expected, variance*expected)
+	}
+}
+
 func withinVariance(score float64, expected float64, variance float64) bool {
-	return score > expected*(1-variance) && score < expected*(1+variance)
+	if expected >= 0 {
+		return score > expected*(1-variance) && score < expected*(1+variance)
+	}
+	return score > expected*(1+variance) && score < expected*(1-variance)
 }
