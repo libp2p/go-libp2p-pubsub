@@ -203,7 +203,7 @@ func TestScoreFirstMessageDeliveriesDecay(t *testing.T) {
 		t.Fatalf("Score: %f. Expected %f ± %f", aScore, expected, variance*expected)
 	}
 
-	// refreshing the scores applies the decay param, so applying twice should
+	// refreshing the scores applies the decay param
 	decayIntervals := 10
 	for i := 0; i < decayIntervals; i++ {
 		ps.refreshScores()
