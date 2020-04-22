@@ -1032,11 +1032,9 @@ func (gs *GossipSubRouter) heartbeat() {
 					return !inMesh && !doBackoff && !direct && gs.score.Score(p) > medianScore
 				})
 
-				if len(plst) != 0 {
-					for _, p := range plst {
-						log.Debugf("HEARTBEAT: Opportunistically graft peer %s on topic %s", p, topic)
-						graftPeer(p)
-					}
+				for _, p := range plst {
+					log.Debugf("HEARTBEAT: Opportunistically graft peer %s on topic %s", p, topic)
+					graftPeer(p)
 				}
 			}
 		}
