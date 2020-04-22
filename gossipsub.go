@@ -107,6 +107,9 @@ func NewGossipSub(ctx context.Context, h host.Host, opts ...Option) (*PubSub, er
 		iasked:   make(map[peer.ID]int),
 		connect:  make(chan connectInfo, GossipSubMaxPendingConnections),
 		mcache:   NewMessageCache(GossipSubHistoryGossip, GossipSubHistoryLength),
+		// these must be pulled in to resolve races in tests... sigh.
+		directConnectTicks:      GossipSubDirectConnectTicks,
+		opportunisticGraftTicks: GossipSubOpportunisticGraftTicks,
 	}
 	return NewPubSub(ctx, h, rt, opts...)
 }
@@ -258,6 +261,10 @@ type GossipSubRouter struct {
 	// number of heartbeats since the beginning of time; this allows us to amortize some resource
 	// clean up -- eg backoff clean up.
 	heartbeatTicks uint64
+
+	// tick "constants" for triggering direct connect and opportunistic grafting
+	// these are pulled from their global value or else the race detector is angry on travis
+	directConnectTicks, opportunisticGraftTicks uint64
 }
 
 type connectInfo struct {
@@ -1001,7 +1008,7 @@ func (gs *GossipSubRouter) heartbeat() {
 		}
 
 		// should we try to improve the mesh with opportunistic grafting?
-		if gs.heartbeatTicks%GossipSubOpportunisticGraftTicks == 0 && len(peers) > 1 {
+		if gs.heartbeatTicks%gs.opportunisticGraftTicks == 0 && len(peers) > 1 {
 			// Opportunistic grafting works as follows: we check the median score of peers in the
 			// mesh; if this score is below the opportunisticGraftThreshold, we select a few peers at
 			// random with score over the median.
@@ -1131,7 +1138,7 @@ func (gs *GossipSubRouter) clearBackoff() {
 func (gs *GossipSubRouter) directConnect() {
 	// we donly do this every some ticks to allow pending connections to complete and account
 	// for restarts/downtime
-	if gs.heartbeatTicks%GossipSubDirectConnectTicks != 0 {
+	if gs.heartbeatTicks%gs.directConnectTicks != 0 {
 		return
 	}
 

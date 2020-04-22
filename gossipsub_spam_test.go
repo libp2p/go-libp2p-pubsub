@@ -321,7 +321,6 @@ func TestGossipsubAttackGRAFTDuringBackoff(t *testing.T) {
 	originalGossipSubPruneBackoffPenalty := GossipSubPruneBackoffPenalty
 	GossipSubPruneBackoffPenalty = 500 * time.Millisecond
 	defer func() {
-		time.Sleep(time.Second + 100*time.Millisecond)
 		GossipSubPruneBackoff = originalGossipSubPruneBackoff
 		GossipSubPruneBackoffPenalty = originalGossipSubPruneBackoffPenalty
 		GossipSubGraftFloodThreshold = originalGossipSubGraftFloodThreshold
