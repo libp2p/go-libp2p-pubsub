@@ -1275,9 +1275,15 @@ func TestGossipsubPiggybackControl(t *testing.T) {
 }
 
 func TestGossipsubOpportunisticGrafting(t *testing.T) {
+	originalGossipSubPruneBackoff := GossipSubPruneBackoff
+	GossipSubPruneBackoff = 500 * time.Millisecond
+	originalGossipSubGraftFloodThreshold := GossipSubGraftFloodThreshold
+	GossipSubGraftFloodThreshold = 100 * time.Millisecond
 	originalGossipSubOpportunisticGraftTicks := GossipSubOpportunisticGraftTicks
 	GossipSubOpportunisticGraftTicks = 2
 	defer func() {
+		GossipSubPruneBackoff = originalGossipSubPruneBackoff
+		GossipSubGraftFloodThreshold = originalGossipSubGraftFloodThreshold
 		GossipSubOpportunisticGraftTicks = originalGossipSubOpportunisticGraftTicks
 	}()
 
