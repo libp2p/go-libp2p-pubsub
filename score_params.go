@@ -179,6 +179,9 @@ func (p *TopicScoreParams) validate() error {
 	}
 
 	// check P1
+	if p.TimeInMeshQuantum == 0 {
+		return fmt.Errorf("invalid TimeInMeshQuantum; must be non zero")
+	}
 	if p.TimeInMeshWeight < 0 {
 		return fmt.Errorf("invalid TimeInMeshWeight; must be positive (or 0 to disable)")
 	}
