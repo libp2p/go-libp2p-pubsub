@@ -984,7 +984,7 @@ func TestGossipsubStarTopology(t *testing.T) {
 	}
 }
 
-func TestGossipSubDirectPeers(t *testing.T) {
+func TestGossipsubDirectPeers(t *testing.T) {
 	originalGossipSubDirectConnectTicks := GossipSubDirectConnectTicks
 	GossipSubDirectConnectTicks = 2
 	defer func() {
@@ -1054,7 +1054,7 @@ func TestGossipSubDirectPeers(t *testing.T) {
 	}
 }
 
-func TestGossipSubFloodPublish(t *testing.T) {
+func TestGossipsubFloodPublish(t *testing.T) {
 	// uses a star topology without PX and publishes from the star to verify that all
 	// messages get received
 	ctx, cancel := context.WithCancel(context.Background())
@@ -1091,7 +1091,7 @@ func TestGossipSubFloodPublish(t *testing.T) {
 	}
 }
 
-func TestGossipSubEnoughPeers(t *testing.T) {
+func TestGossipsubEnoughPeers(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -1131,7 +1131,7 @@ func TestGossipSubEnoughPeers(t *testing.T) {
 	}
 }
 
-func TestGossipSubNegativeScore(t *testing.T) {
+func TestGossipsubNegativeScore(t *testing.T) {
 	// in this test we score sinkhole a peer to exercise code paths relative to negative scores
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
