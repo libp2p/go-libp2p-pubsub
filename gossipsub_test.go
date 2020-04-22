@@ -1090,3 +1090,43 @@ func TestGossipSubFloodPublish(t *testing.T) {
 		}
 	}
 }
+
+func TestGossipSubEnoughPeers(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	hosts := getNetHosts(t, ctx, 20)
+	psubs := getGossipsubs(ctx, hosts)
+
+	var subs []*Subscription
+	for _, ps := range psubs {
+		sub, err := ps.Subscribe("test")
+		if err != nil {
+			t.Fatal(err)
+		}
+		subs = append(subs, sub)
+	}
+
+	// at this point we have no connections and no mesh, so EnoughPeers should return false
+	res := make(chan bool, 1)
+	psubs[0].eval <- func() {
+		res <- psubs[0].rt.EnoughPeers("test", 0)
+	}
+	enough := <-res
+	if enough {
+		t.Fatal("should not have enough peers")
+	}
+
+	// connect them densly to build up the mesh
+	denseConnect(t, hosts)
+
+	time.Sleep(3 * time.Second)
+
+	psubs[0].eval <- func() {
+		res <- psubs[0].rt.EnoughPeers("test", 0)
+	}
+	enough = <-res
+	if !enough {
+		t.Fatal("should have enough peers")
+	}
+}
