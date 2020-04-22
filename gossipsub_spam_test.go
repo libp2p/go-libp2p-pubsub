@@ -51,9 +51,9 @@ func TestGossipsubAttackSpamIWANT(t *testing.T) {
 		}
 	}
 
-	// Wait for 200ms after the last message before checking we got the
+	// Wait a bit after the last message before checking we got the
 	// right number of messages
-	msgWaitMax := 200 * time.Millisecond
+	msgWaitMax := time.Second
 	msgCount := 0
 	msgTimer := time.NewTimer(msgWaitMax)
 
