@@ -40,7 +40,7 @@ func TestTopicScoreParamsValidation(t *testing.T) {
 		t.Fatal("expected validation error")
 	}
 
-	if (&TopicScoreParams{TimeInMeshWeight: -1}).validate() == nil {
+	if (&TopicScoreParams{TimeInMeshWeight: -1, TimeInMeshQuantum: time.Second}).validate() == nil {
 		t.Fatal("expected validation error")
 	}
 	if (&TopicScoreParams{TimeInMeshWeight: 1, TimeInMeshQuantum: -1}).validate() == nil {
@@ -50,58 +50,58 @@ func TestTopicScoreParamsValidation(t *testing.T) {
 		t.Fatal("expected validation error")
 	}
 
-	if (&TopicScoreParams{FirstMessageDeliveriesWeight: -1}).validate() == nil {
+	if (&TopicScoreParams{TimeInMeshQuantum: time.Second, FirstMessageDeliveriesWeight: -1}).validate() == nil {
 		t.Fatal("expected validation error")
 	}
-	if (&TopicScoreParams{FirstMessageDeliveriesWeight: 1, FirstMessageDeliveriesDecay: -1}).validate() == nil {
+	if (&TopicScoreParams{TimeInMeshQuantum: time.Second, FirstMessageDeliveriesWeight: 1, FirstMessageDeliveriesDecay: -1}).validate() == nil {
 		t.Fatal("expected validation error")
 	}
-	if (&TopicScoreParams{FirstMessageDeliveriesWeight: 1, FirstMessageDeliveriesDecay: 2}).validate() == nil {
+	if (&TopicScoreParams{TimeInMeshQuantum: time.Second, FirstMessageDeliveriesWeight: 1, FirstMessageDeliveriesDecay: 2}).validate() == nil {
 		t.Fatal("expected validation error")
 	}
-	if (&TopicScoreParams{FirstMessageDeliveriesWeight: 1, FirstMessageDeliveriesDecay: .5, FirstMessageDeliveriesCap: -1}).validate() == nil {
-		t.Fatal("expected validation error")
-	}
-
-	if (&TopicScoreParams{MeshMessageDeliveriesWeight: 1}).validate() == nil {
-		t.Fatal("expected validation error")
-	}
-	if (&TopicScoreParams{MeshMessageDeliveriesWeight: -1, MeshMessageDeliveriesDecay: -1}).validate() == nil {
-		t.Fatal("expected validation error")
-	}
-	if (&TopicScoreParams{MeshMessageDeliveriesWeight: -1, MeshMessageDeliveriesDecay: 2}).validate() == nil {
-		t.Fatal("expected validation error")
-	}
-	if (&TopicScoreParams{MeshMessageDeliveriesWeight: -1, MeshMessageDeliveriesDecay: .5, MeshMessageDeliveriesCap: -1}).validate() == nil {
-		t.Fatal("expected validation error")
-	}
-	if (&TopicScoreParams{MeshMessageDeliveriesWeight: -1, MeshMessageDeliveriesDecay: .5, MeshMessageDeliveriesCap: 5, MeshMessageDeliveriesThreshold: -3}).validate() == nil {
-		t.Fatal("expected validation error")
-	}
-	if (&TopicScoreParams{MeshMessageDeliveriesWeight: -1, MeshMessageDeliveriesDecay: .5, MeshMessageDeliveriesCap: 5, MeshMessageDeliveriesThreshold: 3, MeshMessageDeliveriesWindow: -1}).validate() == nil {
-		t.Fatal("expected validation error")
-	}
-	if (&TopicScoreParams{MeshMessageDeliveriesWeight: -1, MeshMessageDeliveriesDecay: .5, MeshMessageDeliveriesCap: 5, MeshMessageDeliveriesThreshold: 3, MeshMessageDeliveriesWindow: time.Millisecond, MeshMessageDeliveriesActivation: time.Millisecond}).validate() == nil {
+	if (&TopicScoreParams{TimeInMeshQuantum: time.Second, FirstMessageDeliveriesWeight: 1, FirstMessageDeliveriesDecay: .5, FirstMessageDeliveriesCap: -1}).validate() == nil {
 		t.Fatal("expected validation error")
 	}
 
-	if (&TopicScoreParams{MeshFailurePenaltyWeight: 1}).validate() == nil {
+	if (&TopicScoreParams{TimeInMeshQuantum: time.Second, MeshMessageDeliveriesWeight: 1}).validate() == nil {
 		t.Fatal("expected validation error")
 	}
-	if (&TopicScoreParams{MeshFailurePenaltyWeight: -1, MeshFailurePenaltyDecay: -1}).validate() == nil {
+	if (&TopicScoreParams{TimeInMeshQuantum: time.Second, MeshMessageDeliveriesWeight: -1, MeshMessageDeliveriesDecay: -1}).validate() == nil {
 		t.Fatal("expected validation error")
 	}
-	if (&TopicScoreParams{MeshFailurePenaltyWeight: -1, MeshFailurePenaltyDecay: 2}).validate() == nil {
+	if (&TopicScoreParams{TimeInMeshQuantum: time.Second, MeshMessageDeliveriesWeight: -1, MeshMessageDeliveriesDecay: 2}).validate() == nil {
+		t.Fatal("expected validation error")
+	}
+	if (&TopicScoreParams{TimeInMeshQuantum: time.Second, MeshMessageDeliveriesWeight: -1, MeshMessageDeliveriesDecay: .5, MeshMessageDeliveriesCap: -1}).validate() == nil {
+		t.Fatal("expected validation error")
+	}
+	if (&TopicScoreParams{TimeInMeshQuantum: time.Second, MeshMessageDeliveriesWeight: -1, MeshMessageDeliveriesDecay: .5, MeshMessageDeliveriesCap: 5, MeshMessageDeliveriesThreshold: -3}).validate() == nil {
+		t.Fatal("expected validation error")
+	}
+	if (&TopicScoreParams{TimeInMeshQuantum: time.Second, MeshMessageDeliveriesWeight: -1, MeshMessageDeliveriesDecay: .5, MeshMessageDeliveriesCap: 5, MeshMessageDeliveriesThreshold: 3, MeshMessageDeliveriesWindow: -1}).validate() == nil {
+		t.Fatal("expected validation error")
+	}
+	if (&TopicScoreParams{TimeInMeshQuantum: time.Second, MeshMessageDeliveriesWeight: -1, MeshMessageDeliveriesDecay: .5, MeshMessageDeliveriesCap: 5, MeshMessageDeliveriesThreshold: 3, MeshMessageDeliveriesWindow: time.Millisecond, MeshMessageDeliveriesActivation: time.Millisecond}).validate() == nil {
 		t.Fatal("expected validation error")
 	}
 
-	if (&TopicScoreParams{InvalidMessageDeliveriesWeight: 1}).validate() == nil {
+	if (&TopicScoreParams{TimeInMeshQuantum: time.Second, MeshFailurePenaltyWeight: 1}).validate() == nil {
 		t.Fatal("expected validation error")
 	}
-	if (&TopicScoreParams{InvalidMessageDeliveriesWeight: -1, InvalidMessageDeliveriesDecay: -1}).validate() == nil {
+	if (&TopicScoreParams{TimeInMeshQuantum: time.Second, MeshFailurePenaltyWeight: -1, MeshFailurePenaltyDecay: -1}).validate() == nil {
 		t.Fatal("expected validation error")
 	}
-	if (&TopicScoreParams{InvalidMessageDeliveriesWeight: -1, InvalidMessageDeliveriesDecay: 2}).validate() == nil {
+	if (&TopicScoreParams{TimeInMeshQuantum: time.Second, MeshFailurePenaltyWeight: -1, MeshFailurePenaltyDecay: 2}).validate() == nil {
+		t.Fatal("expected validation error")
+	}
+
+	if (&TopicScoreParams{TimeInMeshQuantum: time.Second, InvalidMessageDeliveriesWeight: 1}).validate() == nil {
+		t.Fatal("expected validation error")
+	}
+	if (&TopicScoreParams{TimeInMeshQuantum: time.Second, InvalidMessageDeliveriesWeight: -1, InvalidMessageDeliveriesDecay: -1}).validate() == nil {
+		t.Fatal("expected validation error")
+	}
+	if (&TopicScoreParams{TimeInMeshQuantum: time.Second, InvalidMessageDeliveriesWeight: -1, InvalidMessageDeliveriesDecay: 2}).validate() == nil {
 		t.Fatal("expected validation error")
 	}
 
