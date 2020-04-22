@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/libp2p/go-libp2p-core/host"
+	"github.com/libp2p/go-libp2p-core/peer"
 	"github.com/libp2p/go-libp2p-core/peerstore"
 )
 
@@ -974,6 +975,76 @@ func TestGossipsubStarTopology(t *testing.T) {
 
 	// send a message from each peer and assert it was propagated
 	for i := 0; i < 20; i++ {
+		msg := []byte(fmt.Sprintf("message %d", i))
+		psubs[i].Publish("test", msg)
+
+		for _, sub := range subs {
+			assertReceive(t, sub, msg)
+		}
+	}
+}
+
+func TestGossipSubDirectPeers(t *testing.T) {
+	originalGossipSubDirectConnectTicks := GossipSubDirectConnectTicks
+	GossipSubDirectConnectTicks = 2
+	defer func() {
+		GossipSubDirectConnectTicks = originalGossipSubDirectConnectTicks
+	}()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	h := getNetHosts(t, ctx, 3)
+	psubs := []*PubSub{
+		getGossipsub(ctx, h[0]),
+		getGossipsub(ctx, h[1], WithDirectPeers([]peer.AddrInfo{peer.AddrInfo{h[2].ID(), h[2].Addrs()}})),
+		getGossipsub(ctx, h[2], WithDirectPeers([]peer.AddrInfo{peer.AddrInfo{h[1].ID(), h[1].Addrs()}})),
+	}
+
+	connect(t, h[0], h[1])
+	connect(t, h[0], h[2])
+
+	// verify that the direct peers connected
+	time.Sleep(2 * time.Second)
+	if len(h[1].Network().ConnsToPeer(h[2].ID())) == 0 {
+		t.Fatal("expected a connection between direct peers")
+	}
+
+	// build the mesh
+	var subs []*Subscription
+	for _, ps := range psubs {
+		sub, err := ps.Subscribe("test")
+		if err != nil {
+			t.Fatal(err)
+		}
+		subs = append(subs, sub)
+	}
+
+	time.Sleep(time.Second)
+
+	// publish some messages
+	for i := 0; i < 3; i++ {
+		msg := []byte(fmt.Sprintf("message %d", i))
+		psubs[i].Publish("test", msg)
+
+		for _, sub := range subs {
+			assertReceive(t, sub, msg)
+		}
+	}
+
+	// disconnect the direct peers to test reconnection
+	for _, c := range h[1].Network().ConnsToPeer(h[2].ID()) {
+		c.Close()
+	}
+
+	time.Sleep(3 * time.Second)
+
+	if len(h[1].Network().ConnsToPeer(h[2].ID())) == 0 {
+		t.Fatal("expected a connection between direct peers")
+	}
+
+	// publish some messages
+	for i := 0; i < 3; i++ {
 		msg := []byte(fmt.Sprintf("message %d", i))
 		psubs[i].Publish("test", msg)
 

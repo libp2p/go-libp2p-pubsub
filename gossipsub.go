@@ -287,6 +287,8 @@ func (gs *GossipSubRouter) Attach(p *PubSub) {
 	// connect to direct peers
 	if len(gs.direct) > 0 {
 		go func() {
+			// add a small delay to make this unit-testable
+			time.Sleep(time.Second)
 			for p := range gs.direct {
 				gs.connect <- connectInfo{p: p}
 			}
