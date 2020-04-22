@@ -1053,3 +1053,40 @@ func TestGossipSubDirectPeers(t *testing.T) {
 		}
 	}
 }
+
+func TestGossipSubFloodPublish(t *testing.T) {
+	// uses a star topology without PX and publishes from the star to verify that all
+	// messages get received
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	hosts := getNetHosts(t, ctx, 20)
+	psubs := getGossipsubs(ctx, hosts, WithFloodPublish(true))
+
+	// build the star
+	for i := 1; i < 20; i++ {
+		connect(t, hosts[0], hosts[i])
+	}
+
+	// build the (partial, unstable) mesh
+	var subs []*Subscription
+	for _, ps := range psubs {
+		sub, err := ps.Subscribe("test")
+		if err != nil {
+			t.Fatal(err)
+		}
+		subs = append(subs, sub)
+	}
+
+	time.Sleep(time.Second)
+
+	// send a message from the star and assert it was received
+	for i := 0; i < 20; i++ {
+		msg := []byte(fmt.Sprintf("message %d", i))
+		psubs[0].Publish("test", msg)
+
+		for _, sub := range subs {
+			assertReceive(t, sub, msg)
+		}
+	}
+}
