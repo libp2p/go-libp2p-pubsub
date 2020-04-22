@@ -8,9 +8,14 @@ import (
 	"testing"
 	"time"
 
+	pb "github.com/libp2p/go-libp2p-pubsub/pb"
+
 	"github.com/libp2p/go-libp2p-core/host"
 	"github.com/libp2p/go-libp2p-core/peer"
 	"github.com/libp2p/go-libp2p-core/peerstore"
+
+	bhost "github.com/libp2p/go-libp2p-blankhost"
+	swarmt "github.com/libp2p/go-libp2p-swarm/testing"
 )
 
 func getGossipsub(ctx context.Context, h host.Host, opts ...Option) *PubSub {
@@ -1212,5 +1217,55 @@ func TestGossipsubNegativeScore(t *testing.T) {
 				t.Fatal("received message from sinkholed peer")
 			}
 		}
+	}
+}
+
+func TestGossipsubPiggybackControl(t *testing.T) {
+	// this is a direct test of the piggybackControl function as we can't reliably
+	// trigger it on travis
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	h := bhost.NewBlankHost(swarmt.GenSwarm(t, ctx))
+	ps := getGossipsub(ctx, h)
+
+	blah := peer.ID("bogotr0n")
+
+	res := make(chan *RPC, 1)
+	ps.eval <- func() {
+		gs := ps.rt.(*GossipSubRouter)
+		test1 := "test1"
+		test2 := "test2"
+		test3 := "test3"
+		gs.mesh[test1] = make(map[peer.ID]struct{})
+		gs.mesh[test2] = make(map[peer.ID]struct{})
+		gs.mesh[test1][blah] = struct{}{}
+
+		rpc := &RPC{RPC: pb.RPC{}}
+		gs.piggybackControl(blah, rpc, &pb.ControlMessage{
+			Graft: []*pb.ControlGraft{&pb.ControlGraft{TopicID: &test1}, &pb.ControlGraft{TopicID: &test2}, &pb.ControlGraft{TopicID: &test3}},
+			Prune: []*pb.ControlPrune{&pb.ControlPrune{TopicID: &test1}, &pb.ControlPrune{TopicID: &test2}, &pb.ControlPrune{TopicID: &test3}},
+		})
+		res <- rpc
+	}
+
+	rpc := <-res
+	if rpc.Control == nil {
+		t.Fatal("expected non-nil control message")
+	}
+	if len(rpc.Control.Graft) != 1 {
+		t.Fatal("expected 1 GRAFT")
+	}
+	if rpc.Control.Graft[0].GetTopicID() != "test1" {
+		t.Fatal("expected test1 as graft topic ID")
+	}
+	if len(rpc.Control.Prune) != 2 {
+		t.Fatal("expected 2 PRUNEs")
+	}
+	if rpc.Control.Prune[0].GetTopicID() != "test2" {
+		t.Fatal("expected test2 as prune topic ID")
+	}
+	if rpc.Control.Prune[1].GetTopicID() != "test3" {
+		t.Fatal("expected test3 as prune topic ID")
 	}
 }
