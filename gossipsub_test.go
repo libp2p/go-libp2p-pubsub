@@ -1130,3 +1130,87 @@ func TestGossipSubEnoughPeers(t *testing.T) {
 		t.Fatal("should have enough peers")
 	}
 }
+
+func TestGossipSubNegativeScore(t *testing.T) {
+	// in this test we score sinkhole a peer to exercise code paths relative to negative scores
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	hosts := getNetHosts(t, ctx, 20)
+	psubs := getGossipsubs(ctx, hosts,
+		WithPeerScore(
+			&PeerScoreParams{
+				AppSpecificScore: func(p peer.ID) float64 {
+					if p == hosts[0].ID() {
+						return -1000
+					} else {
+						return 0
+					}
+				},
+				AppSpecificWeight: 1,
+				DecayInterval:     time.Second,
+				DecayToZero:       0.01,
+			},
+			&PeerScoreThresholds{
+				GossipThreshold:   -10,
+				PublishThreshold:  -100,
+				GraylistThreshold: -10000,
+			}))
+
+	denseConnect(t, hosts)
+
+	var subs []*Subscription
+	for _, ps := range psubs {
+		sub, err := ps.Subscribe("test")
+		if err != nil {
+			t.Fatal(err)
+		}
+		subs = append(subs, sub)
+	}
+
+	time.Sleep(3 * time.Second)
+
+	for i := 0; i < 20; i++ {
+		msg := []byte(fmt.Sprintf("message %d", i))
+		psubs[i%20].Publish("test", msg)
+		time.Sleep(20 * time.Millisecond)
+	}
+
+	// let the sinkholed peer try to emit gossip as well
+	time.Sleep(2 * time.Second)
+
+	// checks:
+	// 1. peer 0 should only receive its own message
+	// 2. peers 1-20 should not receive a message from peer 0, because it's not part of the mesh
+	//    and its gossip is rejected
+	collectAll := func(sub *Subscription) []*Message {
+		var res []*Message
+		ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+		defer cancel()
+
+		for {
+			msg, err := sub.Next(ctx)
+			if err != nil {
+				break
+			}
+
+			res = append(res, msg)
+		}
+
+		return res
+	}
+
+	count := len(collectAll(subs[0]))
+	if count != 1 {
+		t.Fatalf("expected 1 message but got %d instead", count)
+	}
+
+	for _, sub := range subs[1:] {
+		all := collectAll(sub)
+		for _, m := range all {
+			if m.ReceivedFrom == hosts[0].ID() {
+				t.Fatal("received message from sinkholed peer")
+			}
+		}
+	}
+}
