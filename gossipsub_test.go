@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"github.com/libp2p/go-libp2p-core/record"
 	"io"
 	"math/rand"
 	"testing"
@@ -956,6 +957,83 @@ func TestGossipsubStarTopology(t *testing.T) {
 				continue
 			}
 			hosts[i].Peerstore().AddAddrs(hosts[j].ID(), hosts[j].Addrs(), peerstore.PermanentAddrTTL)
+		}
+	}
+
+	// build the star
+	for i := 1; i < 20; i++ {
+		connect(t, hosts[0], hosts[i])
+	}
+
+	// build the mesh
+	var subs []*Subscription
+	for _, ps := range psubs {
+		sub, err := ps.Subscribe("test")
+		if err != nil {
+			t.Fatal(err)
+		}
+		subs = append(subs, sub)
+	}
+
+	// wait a bit for the mesh to build
+	time.Sleep(10 * time.Second)
+
+	// check that all peers have > 1 connection
+	for _, h := range hosts {
+		if len(h.Network().Conns()) == 1 {
+			t.Error("peer has ony a single connection")
+		}
+	}
+
+	// send a message from each peer and assert it was propagated
+	for i := 0; i < 20; i++ {
+		msg := []byte(fmt.Sprintf("message %d", i))
+		psubs[i].Publish("test", msg)
+
+		for _, sub := range subs {
+			assertReceive(t, sub, msg)
+		}
+	}
+}
+
+// this tests overlay bootstrapping through px in Gossipsub v1.1, with addresses
+// exchanged in signed peer records.
+// we start with a star topology and rely on px through prune to build the mesh
+func TestGossipsubStarTopologyWithSignedPeerRecords(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	hosts := getNetHosts(t, ctx, 20)
+	psubs := getGossipsubs(ctx, hosts, WithPeerExchange(true))
+
+	// manually create signed peer records for each host and add them to the
+	// peerstores of the other hosts.
+	// this is necessary until the identify service is updated to exchange
+	// signed records
+	for i := range hosts {
+		privKey := hosts[i].Peerstore().PrivKey(hosts[i].ID())
+		if privKey == nil {
+			t.Fatalf("unable to get private key for host %s", hosts[i].ID().Pretty())
+		}
+		ai := host.InfoFromHost(hosts[i])
+		rec := peer.PeerRecordFromAddrInfo(*ai)
+		signedRec, err := record.Seal(rec, privKey)
+		if err != nil {
+			t.Fatalf("error creating signed peer record: %s", err)
+		}
+
+		for j := range hosts {
+			if i == j {
+				continue
+			}
+			cab, ok := peerstore.GetCertifiedAddrBook(hosts[j].Peerstore())
+			if !ok {
+				t.Fatal("peerstore does not implement CertifiedAddrBook")
+			}
+			_, err := cab.ConsumePeerRecord(signedRec, peerstore.PermanentAddrTTL)
+			if err != nil {
+				t.Fatalf("error adding signed peer record: %s", err)
+			}
 		}
 	}
 
