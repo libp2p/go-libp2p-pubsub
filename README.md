@@ -10,6 +10,7 @@
 <p align="left">
   <a href="https://travis-ci.com/libp2p/go-libp2p-pubsub"><img src="https://travis-ci.com/libp2p/go-libp2p-pubsub.svg?branch=master"></a>
   <a href="https://codecov.io/gh/libp2p/go-libp2p-pubsub"><img src="https://codecov.io/gh/libp2p/go-libp2p-pubsub/branch/master/graph/badge.svg"></a>
+  <a href="https://goreportcard.com/report/github.com/libp2p/go-libp2p-pubsub"><img src="https://goreportcard.com/badge/github.com/libp2p/go-libp2p-pubsub" /></a>  
   <a href="https://github.com/RichardLitt/standard-readme"><img src="https://img.shields.io/badge/readme%20style-standard-brightgreen.svg?style=flat-square" /></a>
   <a href="https://godoc.org/github.com/libp2p/go-libp2p-pubsub"><img src="http://img.shields.io/badge/godoc-reference-5272B4.svg?style=flat-square" /></a>
   <a href=""><img src="https://img.shields.io/badge/golang-%3E%3D1.14.0-orange.svg?style=flat-square" /></a>
