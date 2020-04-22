@@ -271,7 +271,10 @@ func TestGossipsubFanoutMaintenance(t *testing.T) {
 
 func TestGossipsubFanoutExpiry(t *testing.T) {
 	GossipSubFanoutTTL = 1 * time.Second
-	defer func() { GossipSubFanoutTTL = 60 * time.Second }()
+	defer func() {
+		time.Sleep(time.Second)
+		GossipSubFanoutTTL = 60 * time.Second
+	}()
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -997,6 +1000,7 @@ func TestGossipsubDirectPeers(t *testing.T) {
 	originalGossipSubDirectConnectTicks := GossipSubDirectConnectTicks
 	GossipSubDirectConnectTicks = 2
 	defer func() {
+		time.Sleep(time.Second)
 		GossipSubDirectConnectTicks = originalGossipSubDirectConnectTicks
 	}()
 
@@ -1282,6 +1286,7 @@ func TestGossipsubOpportunisticGrafting(t *testing.T) {
 	originalGossipSubOpportunisticGraftTicks := GossipSubOpportunisticGraftTicks
 	GossipSubOpportunisticGraftTicks = 2
 	defer func() {
+		time.Sleep(time.Second)
 		GossipSubPruneBackoff = originalGossipSubPruneBackoff
 		GossipSubGraftFloodThreshold = originalGossipSubGraftFloodThreshold
 		GossipSubOpportunisticGraftTicks = originalGossipSubOpportunisticGraftTicks
