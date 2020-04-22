@@ -32,6 +32,10 @@ func TestPeerScoreThresholdsValidation(t *testing.T) {
 }
 
 func TestTopicScoreParamsValidation(t *testing.T) {
+	if (&TopicScoreParams{}).validate() == nil {
+		t.Fatal("expected validation error")
+	}
+
 	if (&TopicScoreParams{TopicWeight: -1}).validate() == nil {
 		t.Fatal("expected validation error")
 	}
