@@ -1057,7 +1057,7 @@ func TestPubsubWithAssortedOptions(t *testing.T) {
 	hosts := getNetHosts(t, ctx, 2)
 	psubs := getPubsubs(ctx, hosts,
 		WithMessageIdFn(hashMsgID),
-		WithPeerOutboundQueueSize(1),
+		WithPeerOutboundQueueSize(10),
 		WithMessageAuthor(""),
 		WithBlacklist(NewMapBlacklist()))
 
@@ -1072,7 +1072,7 @@ func TestPubsubWithAssortedOptions(t *testing.T) {
 		subs = append(subs, sub)
 	}
 
-	time.Sleep(100 * time.Millisecond)
+	time.Sleep(time.Second)
 
 	for i := 0; i < 2; i++ {
 		msg := []byte(fmt.Sprintf("message %d", i))

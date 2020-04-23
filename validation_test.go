@@ -214,9 +214,9 @@ func TestValidateAssortedOptions(t *testing.T) {
 
 	hosts := getNetHosts(t, ctx, 10)
 	psubs := getPubsubs(ctx, hosts,
-		WithValidateQueueSize(1),
-		WithValidateThrottle(1),
-		WithValidateWorkers(1))
+		WithValidateQueueSize(10),
+		WithValidateThrottle(10),
+		WithValidateWorkers(10))
 
 	sparseConnect(t, hosts)
 
@@ -255,7 +255,7 @@ func TestValidateAssortedOptions(t *testing.T) {
 		subs2 = append(subs2, sub)
 	}
 
-	time.Sleep(100 * time.Millisecond)
+	time.Sleep(time.Second)
 
 	for i := 0; i < 10; i++ {
 		msg := []byte(fmt.Sprintf("message %d", i))
@@ -328,7 +328,7 @@ func TestValidateMultitopic(t *testing.T) {
 		subs3 = append(subs2, sub)
 	}
 
-	time.Sleep(100 * time.Millisecond)
+	time.Sleep(time.Second)
 
 	msg1 := "i am a walrus"
 
