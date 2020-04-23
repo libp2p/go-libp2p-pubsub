@@ -3,6 +3,7 @@ package pubsub
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"fmt"
 	"io"
 	"math/rand"
@@ -1041,4 +1042,44 @@ func (aw *announceWatcher) countSubs() int {
 	aw.mx.Lock()
 	defer aw.mx.Unlock()
 	return aw.subs
+}
+
+func TestPubsubWithAssortedOptions(t *testing.T) {
+	// this test uses assorted options that are not covered in other tests
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	hashMsgID := func(m *pb.Message) string {
+		hash := sha256.Sum256(m.Data)
+		return string(hash[:])
+	}
+
+	hosts := getNetHosts(t, ctx, 2)
+	psubs := getPubsubs(ctx, hosts,
+		WithMessageIdFn(hashMsgID),
+		WithPeerOutboundQueueSize(1),
+		WithMessageAuthor(""),
+		WithBlacklist(NewMapBlacklist()))
+
+	connect(t, hosts[0], hosts[1])
+
+	var subs []*Subscription
+	for _, ps := range psubs {
+		sub, err := ps.Subscribe("test")
+		if err != nil {
+			t.Fatal(err)
+		}
+		subs = append(subs, sub)
+	}
+
+	time.Sleep(100 * time.Millisecond)
+
+	for i := 0; i < 2; i++ {
+		msg := []byte(fmt.Sprintf("message %d", i))
+		psubs[i].Publish("test", msg)
+
+		for _, sub := range subs {
+			assertReceive(t, sub, msg)
+		}
+	}
 }
