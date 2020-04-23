@@ -117,9 +117,8 @@ func TestScoreFirstMessageDeliveries(t *testing.T) {
 	ps.refreshScores()
 	aScore := ps.Score(peerA)
 	expected := topicScoreParams.TopicWeight * topicScoreParams.FirstMessageDeliveriesWeight * float64(nMessages)
-	variance := 0.5
-	if !withinVariance(aScore, expected, variance) {
-		t.Fatalf("Score: %f. Expected %f ± %f", aScore, expected, variance*expected)
+	if aScore != expected {
+		t.Fatalf("Score: %f. Expected %f", aScore, expected)
 	}
 }
 
@@ -158,9 +157,8 @@ func TestScoreFirstMessageDeliveriesCap(t *testing.T) {
 	ps.refreshScores()
 	aScore := ps.Score(peerA)
 	expected := topicScoreParams.TopicWeight * topicScoreParams.FirstMessageDeliveriesWeight * topicScoreParams.FirstMessageDeliveriesCap
-	variance := 0.5
-	if !withinVariance(aScore, expected, variance) {
-		t.Fatalf("Score: %f. Expected %f ± %f", aScore, expected, variance*expected)
+	if aScore != expected {
+		t.Fatalf("Score: %f. Expected %f", aScore, expected)
 	}
 }
 
@@ -199,9 +197,8 @@ func TestScoreFirstMessageDeliveriesDecay(t *testing.T) {
 	ps.refreshScores()
 	aScore := ps.Score(peerA)
 	expected := topicScoreParams.TopicWeight * topicScoreParams.FirstMessageDeliveriesWeight * topicScoreParams.FirstMessageDeliveriesDecay * float64(nMessages)
-	variance := 0.1
-	if !withinVariance(aScore, expected, variance) {
-		t.Fatalf("Score: %f. Expected %f ± %f", aScore, expected, variance*expected)
+	if aScore != expected {
+		t.Fatalf("Score: %f. Expected %f", aScore, expected)
 	}
 
 	// refreshing the scores applies the decay param
@@ -211,8 +208,8 @@ func TestScoreFirstMessageDeliveriesDecay(t *testing.T) {
 		expected *= topicScoreParams.FirstMessageDeliveriesDecay
 	}
 	aScore = ps.Score(peerA)
-	if !withinVariance(aScore, expected, variance) {
-		t.Fatalf("Score: %f. Expected %f ± %f", aScore, expected, variance*expected)
+	if aScore != expected {
+		t.Fatalf("Score: %f. Expected %f", aScore, expected)
 	}
 }
 
@@ -305,9 +302,8 @@ func TestScoreMeshMessageDeliveries(t *testing.T) {
 	// since we didn't deliver anything, this is just the value of the threshold
 	penalty := topicScoreParams.MeshMessageDeliveriesThreshold * topicScoreParams.MeshMessageDeliveriesThreshold
 	expected := topicScoreParams.TopicWeight * topicScoreParams.MeshMessageDeliveriesWeight * penalty
-	variance := 0.1
-	if !withinVariance(cScore, expected, variance) {
-		t.Fatalf("Score: %f. Expected %f ± %f", cScore, expected, variance*expected)
+	if cScore != expected {
+		t.Fatalf("Score: %f. Expected %f", cScore, expected)
 	}
 }
 
@@ -357,7 +353,7 @@ func TestScoreMeshMessageDeliveriesDecay(t *testing.T) {
 	}
 
 	// we need to refresh enough times for the decay to bring us below the threshold
-	decayedDeliveryCount := float64(nMessages)
+	decayedDeliveryCount := float64(nMessages) * topicScoreParams.MeshMessageDeliveriesDecay
 	for i := 0; i < 20; i++ {
 		ps.refreshScores()
 		decayedDeliveryCount *= topicScoreParams.MeshMessageDeliveriesDecay
@@ -367,9 +363,8 @@ func TestScoreMeshMessageDeliveriesDecay(t *testing.T) {
 	deficit := topicScoreParams.MeshMessageDeliveriesThreshold - decayedDeliveryCount
 	penalty := deficit * deficit
 	expected := topicScoreParams.TopicWeight * topicScoreParams.MeshMessageDeliveriesWeight * penalty
-	variance := 0.1
-	if !withinVariance(aScore, expected, variance) {
-		t.Fatalf("Score: %f. Expected %f ± %f", aScore, expected, variance*expected)
+	if aScore != expected {
+		t.Fatalf("Score: %f. Expected %f", aScore, expected)
 	}
 }
 
@@ -449,9 +444,8 @@ func TestScoreMeshFailurePenalty(t *testing.T) {
 	// instead of MeshMessageDeliveriesWeight
 	penalty := topicScoreParams.MeshMessageDeliveriesThreshold * topicScoreParams.MeshMessageDeliveriesThreshold
 	expected := topicScoreParams.TopicWeight * topicScoreParams.MeshFailurePenaltyWeight * penalty
-	variance := 0.1
-	if !withinVariance(bScore, expected, variance) {
-		t.Fatalf("Score: %f. Expected %f ± %f", bScore, expected, variance*expected)
+	if bScore != expected {
+		t.Fatalf("Score: %f. Expected %f", bScore, expected)
 	}
 }
 
@@ -487,9 +481,8 @@ func TestScoreInvalidMessageDeliveries(t *testing.T) {
 	ps.refreshScores()
 	aScore := ps.Score(peerA)
 	expected := topicScoreParams.TopicWeight * topicScoreParams.InvalidMessageDeliveriesWeight * float64(nMessages)
-	variance := 0.1
-	if !withinVariance(aScore, expected, variance) {
-		t.Fatalf("Score: %f. Expected %f ± %f", aScore, expected, variance*expected)
+	if aScore != expected {
+		t.Fatalf("Score: %f. Expected %f", aScore, expected)
 	}
 }
 
@@ -525,9 +518,8 @@ func TestScoreInvalidMessageDeliveriesDecay(t *testing.T) {
 	ps.refreshScores()
 	aScore := ps.Score(peerA)
 	expected := topicScoreParams.TopicWeight * topicScoreParams.InvalidMessageDeliveriesWeight * topicScoreParams.InvalidMessageDeliveriesDecay * float64(nMessages)
-	variance := 0.1
-	if !withinVariance(aScore, expected, variance) {
-		t.Fatalf("Score: %f. Expected %f ± %f", aScore, expected, variance*expected)
+	if aScore != expected {
+		t.Fatalf("Score: %f. Expected %f", aScore, expected)
 	}
 
 	// refresh scores a few times to apply decay
@@ -536,8 +528,8 @@ func TestScoreInvalidMessageDeliveriesDecay(t *testing.T) {
 		expected *= topicScoreParams.InvalidMessageDeliveriesDecay
 	}
 	aScore = ps.Score(peerA)
-	if !withinVariance(aScore, expected, variance) {
-		t.Fatalf("Score: %f. Expected %f ± %f", aScore, expected, variance*expected)
+	if aScore != expected {
+		t.Fatalf("Score: %f. Expected %f", aScore, expected)
 	}
 }
 
@@ -612,11 +604,54 @@ func TestScoreIPColocation(t *testing.T) {
 	ipSurplus := nShared - params.IPColocationFactorThreshold
 	penalty := ipSurplus * ipSurplus
 	expected := params.IPColocationFactorWeight * float64(penalty)
-	variance := 0.1
 	for _, score := range []float64{bScore, cScore, dScore} {
-		if !withinVariance(score, expected, variance) {
-			t.Fatalf("Score: %f. Expected %f ± %f", score, expected, variance*expected)
+		if score != expected {
+			t.Fatalf("Score: %f. Expected %f", score, expected)
 		}
+	}
+}
+
+func TestScoreRetention(t *testing.T) {
+	// Create parameters with reasonable default values
+	mytopic := "mytopic"
+
+	params := &PeerScoreParams{
+		AppSpecificScore:  func(peer.ID) float64 { return -1000 },
+		AppSpecificWeight: 1.0,
+		Topics:            make(map[string]*TopicScoreParams),
+		RetainScore:       time.Second,
+	}
+
+	peerA := peer.ID("A")
+
+	ps := newPeerScore(params)
+	ps.AddPeer(peerA, "myproto")
+	ps.Graft(peerA, mytopic)
+
+	// score should equal -1000 (app specific score)
+	expected := float64(-1000)
+	ps.refreshScores()
+	aScore := ps.Score(peerA)
+	if aScore != expected {
+		t.Fatalf("Score: %f. Expected %f", aScore, expected)
+	}
+
+	// disconnect & wait half of RetainScore time. should still have negative score
+	ps.RemovePeer(peerA)
+	delay := params.RetainScore / time.Duration(2)
+	time.Sleep(delay)
+	ps.refreshScores()
+	aScore = ps.Score(peerA)
+	if aScore != expected {
+		t.Fatalf("Score: %f. Expected %f", aScore, expected)
+	}
+
+	// wait remaining time (plus a little slop) and the score should reset to zero
+	time.Sleep(delay + (50 * time.Millisecond))
+	ps.refreshScores()
+	aScore = ps.Score(peerA)
+	if aScore != 0 {
+		t.Fatalf("Score: %f. Expected 0.0", aScore)
 	}
 }
 
