@@ -36,7 +36,7 @@ func TestScoreTimeInMesh(t *testing.T) {
 
 	// The time in mesh depends on how long the peer has been grafted
 	ps.Graft(peerA, mytopic)
-	elapsed := topicScoreParams.TimeInMeshQuantum * 40
+	elapsed := topicScoreParams.TimeInMeshQuantum * 200
 	time.Sleep(elapsed)
 
 	ps.refreshScores()
