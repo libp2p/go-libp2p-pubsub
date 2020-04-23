@@ -507,9 +507,71 @@ func TestScoreApplicationScore(t *testing.T) {
 	}
 }
 
+func TestScoreIPColocation(t *testing.T) {
+	// Create parameters with reasonable default values
+	mytopic := "mytopic"
+
+	params := &PeerScoreParams{
+		AppSpecificScore: func(peer.ID) float64 { return 0 },
+		IPColocationFactorThreshold: 1,
+		IPColocationFactorWeight: -1,
+		Topics:           make(map[string]*TopicScoreParams),
+	}
+
+	peerA := peer.ID("A")
+	peerB := peer.ID("B")
+	peerC := peer.ID("C")
+	peerD := peer.ID("D")
+	peers := []peer.ID{peerA, peerB, peerC, peerD}
+
+	ps := newPeerScore(params)
+	for _, p := range peers {
+		ps.AddPeer(p, "myproto")
+		ps.Graft(p, mytopic)
+	}
+
+	// peerA should have no penalty, but B, C, and D should be penalized for sharing an IP
+	setIPsForPeer(t, ps, peerA, "1.2.3.4")
+	setIPsForPeer(t, ps, peerB, "2.3.4.5")
+	setIPsForPeer(t, ps, peerC, "2.3.4.5", "3.4.5.6")
+	setIPsForPeer(t, ps, peerD, "2.3.4.5")
+
+	ps.refreshScores()
+	aScore := ps.Score(peerA)
+	bScore := ps.Score(peerB)
+	cScore := ps.Score(peerC)
+	dScore := ps.Score(peerD)
+
+	if aScore != 0 {
+		t.Errorf("expected peer A to have score 0.0, got %f", aScore)
+	}
+
+	nShared := 3
+	ipSurplus := nShared - params.IPColocationFactorThreshold
+	penalty := ipSurplus * ipSurplus
+	expected := params.IPColocationFactorWeight * float64(penalty)
+	variance := 0.1
+	for _, score := range []float64{bScore, cScore, dScore} {
+		if !withinVariance(score, expected, variance) {
+			t.Fatalf("Score: %f. Expected %f ± %f", score, expected, variance*expected)
+		}
+	}
+}
+
 func withinVariance(score float64, expected float64, variance float64) bool {
 	if expected >= 0 {
 		return score > expected*(1-variance) && score < expected*(1+variance)
 	}
 	return score > expected*(1+variance) && score < expected*(1-variance)
+}
+
+// hack to set IPs for a peer without having to spin up real hosts with shared IPs
+func setIPsForPeer(t *testing.T, ps *peerScore, p peer.ID, ips ...string) {
+	t.Helper()
+	ps.setIPs(p, ips, []string{})
+	pstats, ok := ps.peerStats[p]
+	if !ok {
+		t.Fatal("unable to get peerStats")
+	}
+	pstats.ips = ips
 }
