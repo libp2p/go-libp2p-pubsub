@@ -15,6 +15,7 @@ import (
 	"github.com/libp2p/go-libp2p-core/network"
 	"github.com/libp2p/go-libp2p-core/peer"
 	"github.com/libp2p/go-libp2p-core/peerstore"
+	"github.com/libp2p/go-libp2p-core/record"
 
 	bhost "github.com/libp2p/go-libp2p-blankhost"
 	swarmt "github.com/libp2p/go-libp2p-swarm/testing"
@@ -941,11 +942,35 @@ func TestGossipsubTreeTopology(t *testing.T) {
 // this tests overlay bootstrapping through px in Gossipsub v1.1
 // we start with a star topology and rely on px through prune to build the mesh
 func TestGossipsubStarTopology(t *testing.T) {
+	originalGossipSubD := GossipSubD
+	GossipSubD = 4
+	originalGossipSubDhi := GossipSubDhi
+	GossipSubDhi = GossipSubD + 1
+	originalGossipSubDlo := GossipSubDlo
+	GossipSubDlo = GossipSubD - 1
+	originalGossipSubDscore := GossipSubDscore
+	GossipSubDscore = GossipSubDlo
+	defer func() {
+		GossipSubD = originalGossipSubD
+		GossipSubDhi = originalGossipSubDhi
+		GossipSubDlo = originalGossipSubDlo
+		GossipSubDscore = originalGossipSubDscore
+	}()
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
 	hosts := getNetHosts(t, ctx, 20)
-	psubs := getGossipsubs(ctx, hosts, WithPeerExchange(true))
+	psubs := getGossipsubs(ctx, hosts, WithPeerExchange(true), WithFloodPublish(true))
+
+	// configure the center of the star with a very low D
+	psubs[0].eval <- func() {
+		gs := psubs[0].rt.(*GossipSubRouter)
+		gs.D = 0
+		gs.Dlo = 0
+		gs.Dhi = 0
+		gs.Dscore = 0
+	}
 
 	// add all peer addresses to the peerstores
 	// this is necessary because we can't have signed address records witout identify
@@ -964,6 +989,8 @@ func TestGossipsubStarTopology(t *testing.T) {
 		connect(t, hosts[0], hosts[i])
 	}
 
+	time.Sleep(time.Second)
+
 	// build the mesh
 	var subs []*Subscription
 	for _, ps := range psubs {
@@ -978,9 +1005,105 @@ func TestGossipsubStarTopology(t *testing.T) {
 	time.Sleep(10 * time.Second)
 
 	// check that all peers have > 1 connection
-	for _, h := range hosts {
+	for i, h := range hosts {
 		if len(h.Network().Conns()) == 1 {
-			t.Error("peer has ony a single connection")
+			t.Errorf("peer %d has ony a single connection", i)
+		}
+	}
+
+	// send a message from each peer and assert it was propagated
+	for i := 0; i < 20; i++ {
+		msg := []byte(fmt.Sprintf("message %d", i))
+		psubs[i].Publish("test", msg)
+
+		for _, sub := range subs {
+			assertReceive(t, sub, msg)
+		}
+	}
+}
+
+// this tests overlay bootstrapping through px in Gossipsub v1.1, with addresses
+// exchanged in signed peer records.
+// we start with a star topology and rely on px through prune to build the mesh
+func TestGossipsubStarTopologyWithSignedPeerRecords(t *testing.T) {
+	originalGossipSubD := GossipSubD
+	GossipSubD = 4
+	originalGossipSubDhi := GossipSubDhi
+	GossipSubDhi = GossipSubD + 1
+	originalGossipSubDlo := GossipSubDlo
+	GossipSubDlo = GossipSubD - 1
+	originalGossipSubDscore := GossipSubDscore
+	GossipSubDscore = GossipSubDlo
+	defer func() {
+		GossipSubD = originalGossipSubD
+		GossipSubDhi = originalGossipSubDhi
+		GossipSubDlo = originalGossipSubDlo
+		GossipSubDscore = originalGossipSubDscore
+	}()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	hosts := getNetHosts(t, ctx, 20)
+	psubs := getGossipsubs(ctx, hosts, WithPeerExchange(true), WithFloodPublish(true))
+
+	// configure the center of the star with a very low D
+	psubs[0].eval <- func() {
+		gs := psubs[0].rt.(*GossipSubRouter)
+		gs.D = 0
+		gs.Dlo = 0
+		gs.Dhi = 0
+		gs.Dscore = 0
+	}
+
+	// manually create signed peer records for each host and add them to the
+	// peerstore of the center of the star, which is doing the bootstrapping
+	for i := range hosts[1:] {
+		privKey := hosts[i].Peerstore().PrivKey(hosts[i].ID())
+		if privKey == nil {
+			t.Fatalf("unable to get private key for host %s", hosts[i].ID().Pretty())
+		}
+		ai := host.InfoFromHost(hosts[i])
+		rec := peer.PeerRecordFromAddrInfo(*ai)
+		signedRec, err := record.Seal(rec, privKey)
+		if err != nil {
+			t.Fatalf("error creating signed peer record: %s", err)
+		}
+
+		cab, ok := peerstore.GetCertifiedAddrBook(hosts[0].Peerstore())
+		if !ok {
+			t.Fatal("peerstore does not implement CertifiedAddrBook")
+		}
+		_, err = cab.ConsumePeerRecord(signedRec, peerstore.PermanentAddrTTL)
+		if err != nil {
+			t.Fatalf("error adding signed peer record: %s", err)
+		}
+	}
+
+	// build the star
+	for i := 1; i < 20; i++ {
+		connect(t, hosts[0], hosts[i])
+	}
+
+	time.Sleep(time.Second)
+
+	// build the mesh
+	var subs []*Subscription
+	for _, ps := range psubs {
+		sub, err := ps.Subscribe("test")
+		if err != nil {
+			t.Fatal(err)
+		}
+		subs = append(subs, sub)
+	}
+
+	// wait a bit for the mesh to build
+	time.Sleep(10 * time.Second)
+
+	// check that all peers have > 1 connection
+	for i, h := range hosts {
+		if len(h.Network().Conns()) == 1 {
+			t.Errorf("peer %d has ony a single connection", i)
 		}
 	}
 
