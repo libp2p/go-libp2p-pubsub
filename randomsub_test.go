@@ -9,18 +9,18 @@ import (
 	"github.com/libp2p/go-libp2p-core/host"
 )
 
-func getRandomsub(ctx context.Context, h host.Host, opts ...Option) *PubSub {
-	ps, err := NewRandomSub(ctx, h, opts...)
+func getRandomsub(ctx context.Context, h host.Host, size int, opts ...Option) *PubSub {
+	ps, err := NewRandomSub(ctx, h, size, opts...)
 	if err != nil {
 		panic(err)
 	}
 	return ps
 }
 
-func getRandomsubs(ctx context.Context, hs []host.Host, opts ...Option) []*PubSub {
+func getRandomsubs(ctx context.Context, hs []host.Host, size int, opts ...Option) []*PubSub {
 	var psubs []*PubSub
 	for _, h := range hs {
-		psubs = append(psubs, getRandomsub(ctx, h, opts...))
+		psubs = append(psubs, getRandomsub(ctx, h, size, opts...))
 	}
 	return psubs
 }
@@ -30,7 +30,7 @@ func TestRandomsubSmall(t *testing.T) {
 	defer cancel()
 
 	hosts := getNetHosts(t, ctx, 10)
-	psubs := getRandomsubs(ctx, hosts)
+	psubs := getRandomsubs(ctx, hosts, 10)
 
 	connectAll(t, hosts)
 
@@ -60,7 +60,7 @@ func TestRandomsubBig(t *testing.T) {
 	defer cancel()
 
 	hosts := getNetHosts(t, ctx, 50)
-	psubs := getRandomsubs(ctx, hosts)
+	psubs := getRandomsubs(ctx, hosts, 50)
 
 	connectSome(t, hosts, 12)
 
@@ -91,7 +91,7 @@ func TestRandomsubMixed(t *testing.T) {
 
 	hosts := getNetHosts(t, ctx, 40)
 	fsubs := getPubsubs(ctx, hosts[:10])
-	rsubs := getRandomsubs(ctx, hosts[10:])
+	rsubs := getRandomsubs(ctx, hosts[10:], 30)
 	psubs := append(fsubs, rsubs...)
 
 	connectSome(t, hosts, 12)
@@ -123,7 +123,7 @@ func TestRandomsubEnoughPeers(t *testing.T) {
 
 	hosts := getNetHosts(t, ctx, 40)
 	fsubs := getPubsubs(ctx, hosts[:10])
-	rsubs := getRandomsubs(ctx, hosts[10:])
+	rsubs := getRandomsubs(ctx, hosts[10:], 30)
 	psubs := append(fsubs, rsubs...)
 
 	connectSome(t, hosts, 12)
