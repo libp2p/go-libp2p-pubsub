@@ -948,17 +948,29 @@ func TestGossipsubStarTopology(t *testing.T) {
 	GossipSubDhi = GossipSubD + 1
 	originalGossipSubDlo := GossipSubDlo
 	GossipSubDlo = GossipSubD - 1
+	originalGossipSubDscore := GossipSubDscore
+	GossipSubDscore = GossipSubDlo
 	defer func() {
 		GossipSubD = originalGossipSubD
 		GossipSubDhi = originalGossipSubDhi
 		GossipSubDlo = originalGossipSubDlo
+		GossipSubDscore = originalGossipSubDscore
 	}()
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
 	hosts := getNetHosts(t, ctx, 20)
-	psubs := getGossipsubs(ctx, hosts, WithPeerExchange(true))
+	psubs := getGossipsubs(ctx, hosts, WithPeerExchange(true), WithFloodPublish(true))
+
+	// configure the center of the star with a very low D
+	psubs[0].eval <- func() {
+		gs := psubs[0].rt.(*GossipSubRouter)
+		gs.D = 0
+		gs.Dlo = 0
+		gs.Dhi = 0
+		gs.Dscore = 0
+	}
 
 	// add all peer addresses to the peerstores
 	// this is necessary because we can't have signed address records witout identify
@@ -1020,17 +1032,29 @@ func TestGossipsubStarTopologyWithSignedPeerRecords(t *testing.T) {
 	GossipSubDhi = GossipSubD + 1
 	originalGossipSubDlo := GossipSubDlo
 	GossipSubDlo = GossipSubD - 1
+	originalGossipSubDscore := GossipSubDscore
+	GossipSubDscore = GossipSubDlo
 	defer func() {
 		GossipSubD = originalGossipSubD
 		GossipSubDhi = originalGossipSubDhi
 		GossipSubDlo = originalGossipSubDlo
+		GossipSubDscore = originalGossipSubDscore
 	}()
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
 	hosts := getNetHosts(t, ctx, 20)
-	psubs := getGossipsubs(ctx, hosts, WithPeerExchange(true))
+	psubs := getGossipsubs(ctx, hosts, WithPeerExchange(true), WithFloodPublish(true))
+
+	// configure the center of the star with a very low D
+	psubs[0].eval <- func() {
+		gs := psubs[0].rt.(*GossipSubRouter)
+		gs.D = 0
+		gs.Dlo = 0
+		gs.Dhi = 0
+		gs.Dscore = 0
+	}
 
 	// manually create signed peer records for each host and add them to the
 	// peerstore of the center of the star, which is doing the bootstrapping
