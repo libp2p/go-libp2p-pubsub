@@ -688,7 +688,7 @@ func TestPeerDisconnect(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	time.Sleep(time.Millisecond * 10)
+	time.Sleep(time.Millisecond * 300)
 
 	peers := psubs[0].ListPeers("foo")
 	assertPeerList(t, peers, hosts[1].ID())
@@ -696,7 +696,7 @@ func TestPeerDisconnect(t *testing.T) {
 		c.Close()
 	}
 
-	time.Sleep(time.Millisecond * 100)
+	time.Sleep(time.Millisecond * 300)
 
 	peers = psubs[0].ListPeers("foo")
 	assertPeerList(t, peers)
