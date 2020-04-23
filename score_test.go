@@ -311,6 +311,88 @@ func TestScoreMeshMessageDeliveries(t *testing.T) {
 	}
 }
 
+func TestScoreMeshFailurePenalty(t *testing.T) {
+	// Create parameters with reasonable default values
+	mytopic := "mytopic"
+	params := &PeerScoreParams{
+		AppSpecificScore: func(peer.ID) float64 { return 0 },
+		Topics:           make(map[string]*TopicScoreParams),
+	}
+
+	// the mesh failure penalty is applied when a peer is pruned while their
+	// mesh deliveries are under the threshold.
+	// for this test, we set the mesh delivery threshold, but set
+	// MeshMessageDeliveriesWeight to zero, so the only affect on the score
+	// is from the mesh failure penalty
+	topicScoreParams := &TopicScoreParams{
+		TopicWeight:       1,
+		MeshFailurePenaltyWeight: -1,
+		MeshFailurePenaltyDecay: 1.0,
+
+		MeshMessageDeliveriesActivation: 0,
+		MeshMessageDeliveriesWindow: 10 * time.Millisecond,
+		MeshMessageDeliveriesThreshold: 20,
+		MeshMessageDeliveriesCap: 100,
+		MeshMessageDeliveriesDecay: 1.0,
+
+		MeshMessageDeliveriesWeight: 0,
+		FirstMessageDeliveriesWeight: 0,
+		TimeInMeshQuantum: time.Second,
+	}
+
+	params.Topics[mytopic] = topicScoreParams
+
+	peerA := peer.ID("A")
+	peerB := peer.ID("B")
+	peers := []peer.ID{peerA, peerB}
+
+	ps := newPeerScore(params)
+	for _, p := range peers {
+		ps.AddPeer(p, "myproto")
+		ps.Graft(p, mytopic)
+	}
+
+	// deliver messages from peer A. peer B does nothing
+	nMessages := 100
+	for i := 0; i < nMessages; i++ {
+		pbMsg := makeTestMessage(i)
+		pbMsg.TopicIDs = []string{mytopic}
+		msg := Message{ReceivedFrom: peerA, Message: pbMsg}
+		ps.ValidateMessage(&msg)
+		ps.DeliverMessage(&msg)
+	}
+
+	// peers A and B should both have zero scores, since the failure penalty hasn't been applied yet
+	ps.refreshScores()
+	aScore := ps.Score(peerA)
+	bScore := ps.Score(peerB)
+	if aScore != 0 {
+		t.Errorf("expected peer A to have score 0.0, got %f", aScore)
+	}
+	if bScore != 0 {
+		t.Errorf("expected peer B to have score 0.0, got %f", bScore)
+	}
+
+	// prune peer B to apply the penalty
+	ps.Prune(peerB, mytopic)
+	ps.refreshScores()
+	aScore = ps.Score(peerA)
+	bScore = ps.Score(peerB)
+
+	if aScore != 0 {
+		t.Errorf("expected peer A to have score 0.0, got %f", aScore)
+	}
+
+	// penalty calculation is the same as for MeshMessageDeliveries, but multiplied by MeshFailurePenaltyWeight
+	// instead of MeshMessageDeliveriesWeight
+	penalty := topicScoreParams.MeshMessageDeliveriesThreshold * topicScoreParams.MeshMessageDeliveriesThreshold
+	expected := topicScoreParams.TopicWeight * topicScoreParams.MeshFailurePenaltyWeight * penalty
+	variance := 0.1
+	if !withinVariance(bScore, expected, variance) {
+		t.Fatalf("Score: %f. Expected %f ± %f", bScore, expected, variance*expected)
+	}
+}
+
 func withinVariance(score float64, expected float64, variance float64) bool {
 	if expected >= 0 {
 		return score > expected*(1-variance) && score < expected*(1+variance)
