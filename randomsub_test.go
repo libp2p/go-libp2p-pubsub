@@ -25,6 +25,17 @@ func getRandomsubs(ctx context.Context, hs []host.Host, size int, opts ...Option
 	return psubs
 }
 
+func tryReceive(sub *Subscription) *Message {
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+	m, err := sub.Next(ctx)
+	if err != nil {
+		return nil
+	} else {
+		return m
+	}
+}
+
 func TestRandomsubSmall(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -45,13 +56,20 @@ func TestRandomsubSmall(t *testing.T) {
 
 	time.Sleep(time.Second)
 
+	count := 0
 	for i := 0; i < 10; i++ {
 		msg := []byte(fmt.Sprintf("message %d", i))
 		psubs[i].Publish("test", msg)
 
 		for _, sub := range subs {
-			assertReceive(t, sub, msg)
+			if tryReceive(sub) != nil {
+				count++
+			}
 		}
+	}
+
+	if count < 9*len(hosts) {
+		t.Fatalf("received too few messages; expected at least %d but got %d", 9*len(hosts), count)
 	}
 }
 
@@ -75,13 +93,20 @@ func TestRandomsubBig(t *testing.T) {
 
 	time.Sleep(time.Second)
 
+	count := 0
 	for i := 0; i < 10; i++ {
 		msg := []byte(fmt.Sprintf("message %d", i))
 		psubs[i].Publish("test", msg)
 
 		for _, sub := range subs {
-			assertReceive(t, sub, msg)
+			if tryReceive(sub) != nil {
+				count++
+			}
 		}
+	}
+
+	if count < 9*len(hosts) {
+		t.Fatalf("received too few messages; expected at least %d but got %d", 9*len(hosts), count)
 	}
 }
 
@@ -107,13 +132,20 @@ func TestRandomsubMixed(t *testing.T) {
 
 	time.Sleep(time.Second)
 
+	count := 0
 	for i := 0; i < 10; i++ {
 		msg := []byte(fmt.Sprintf("message %d", i))
 		psubs[i].Publish("test", msg)
 
 		for _, sub := range subs {
-			assertReceive(t, sub, msg)
+			if tryReceive(sub) != nil {
+				count++
+			}
 		}
+	}
+
+	if count < 9*len(hosts) {
+		t.Fatalf("received too few messages; expected at least %d but got %d", 9*len(hosts), count)
 	}
 }
 
