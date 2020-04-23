@@ -2,6 +2,7 @@ package pubsub
 
 import (
 	"context"
+	"math"
 
 	"github.com/libp2p/go-libp2p-core/host"
 	"github.com/libp2p/go-libp2p-core/peer"
@@ -25,7 +26,8 @@ func NewRandomSub(ctx context.Context, h host.Host, opts ...Option) (*PubSub, er
 }
 
 // RandomSubRouter is a router that implements a random propagation strategy.
-// For each message, it selects RandomSubD peers and forwards the message to them.
+// For each message, it selects the square root of peers, with a min of RandomSubD,
+// and forwards the message to them.
 type RandomSubRouter struct {
 	p      *PubSub
 	peers  map[peer.ID]protocol.ID
@@ -119,6 +121,11 @@ func (rs *RandomSubRouter) Publish(msg *Message) {
 	}
 
 	if len(rspeers) > RandomSubD {
+		target := RandomSubD
+		sqrt := int(math.Ceil(math.Sqrt(float64(len(rspeers)))))
+		if sqrt > target {
+			target = sqrt
+		}
 		xpeers := peerMapToList(rspeers)
 		shufflePeers(xpeers)
 		xpeers = xpeers[:RandomSubD]
