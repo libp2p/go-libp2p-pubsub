@@ -308,13 +308,14 @@ func WithMessageSigning(enabled bool) Option {
 // must be available in the host's peerstore.
 func WithMessageAuthor(author peer.ID) Option {
 	return func(p *PubSub) error {
+		author := author
 		if author == "" {
 			author = p.host.ID()
 		}
 		if p.signKey != nil {
 			newSignKey := p.host.Peerstore().PrivKey(author)
 			if newSignKey == nil {
-				return fmt.Errorf("can't sign for peer %s: no private key", p.signID)
+				return fmt.Errorf("can't sign for peer %s: no private key", author)
 			}
 			p.signKey = newSignKey
 		}
