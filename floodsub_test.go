@@ -1083,3 +1083,15 @@ func TestPubsubWithAssortedOptions(t *testing.T) {
 		}
 	}
 }
+
+func TestWithInvalidMessageAuthor(t *testing.T) {
+	// this test exercises the failure path in the WithMessageAuthor option
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	h := bhost.NewBlankHost(swarmt.GenSwarm(t, ctx))
+	_, err := NewFloodSub(ctx, h, WithMessageAuthor("bogotr0n"))
+	if err == nil {
+		t.Fatal("expected error")
+	}
+}
