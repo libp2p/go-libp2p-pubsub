@@ -479,6 +479,34 @@ func TestScoreInvalidMessageDeliveriesDecay(t *testing.T) {
 	}
 }
 
+func TestScoreApplicationScore(t *testing.T) {
+	// Create parameters with reasonable default values
+	mytopic := "mytopic"
+
+	var appScoreValue float64
+	params := &PeerScoreParams{
+		AppSpecificScore: func(peer.ID) float64 { return appScoreValue },
+		AppSpecificWeight: 0.5,
+		Topics:           make(map[string]*TopicScoreParams),
+	}
+
+	peerA := peer.ID("A")
+
+	ps := newPeerScore(params)
+	ps.AddPeer(peerA, "myproto")
+	ps.Graft(peerA, mytopic)
+
+	for i := -100; i < 100; i++ {
+		appScoreValue = float64(i)
+		ps.refreshScores()
+		aScore := ps.Score(peerA)
+		expected := float64(i) * params.AppSpecificWeight
+		if aScore !=  expected {
+			t.Errorf("expected peer score to equal app-specific score %f, got %f", expected, aScore)
+		}
+	}
+}
+
 func withinVariance(score float64, expected float64, variance float64) bool {
 	if expected >= 0 {
 		return score > expected*(1-variance) && score < expected*(1+variance)
