@@ -42,9 +42,8 @@ func TestScoreTimeInMesh(t *testing.T) {
 	ps.refreshScores()
 	aScore = ps.Score(peerA)
 	expected := topicScoreParams.TopicWeight * topicScoreParams.TimeInMeshWeight * float64(elapsed/topicScoreParams.TimeInMeshQuantum)
-	variance := 0.5
-	if !withinVariance(aScore, expected, variance) {
-		t.Fatalf("Score: %f. Expected %f ± %f", aScore, expected, variance*expected)
+	if aScore < expected {
+		t.Fatalf("Score: %f. Expected >= %f", aScore, expected)
 	}
 }
 
@@ -251,8 +250,7 @@ func TestScoreMeshMessageDeliveries(t *testing.T) {
 		ps.Graft(p, mytopic)
 	}
 
-	// wait for half the activation time, and assert that nobody has been penalized yet for not delivering messages
-	time.Sleep(topicScoreParams.MeshMessageDeliveriesActivation / time.Duration(2))
+	// assert that nobody has been penalized yet for not delivering messages before activation time
 	ps.refreshScores()
 	for _, p := range peers {
 		score := ps.Score(p)
@@ -260,8 +258,8 @@ func TestScoreMeshMessageDeliveries(t *testing.T) {
 			t.Fatalf("expected no mesh delivery penalty before activation time, got score %f", score)
 		}
 	}
-	// wait the remainder of the activation time
-	time.Sleep(topicScoreParams.MeshMessageDeliveriesActivation / time.Duration(2))
+	// wait for the activation time to kick in
+	time.Sleep(topicScoreParams.MeshMessageDeliveriesActivation)
 
 	// deliver a bunch of messages from peer A, with duplicates within the window from peer B,
 	// and duplicates outside the window from peer C.
