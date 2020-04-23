@@ -90,11 +90,11 @@ func TestScoreFirstMessageDeliveries(t *testing.T) {
 		Topics:           make(map[string]*TopicScoreParams),
 	}
 	topicScoreParams := &TopicScoreParams{
-		TopicWeight:       1,
-		FirstMessageDeliveriesWeight:  1,
-		FirstMessageDeliveriesDecay: 1.0, // test without decay for now
-		FirstMessageDeliveriesCap: 2000,
-		TimeInMeshQuantum: time.Second,
+		TopicWeight:                  1,
+		FirstMessageDeliveriesWeight: 1,
+		FirstMessageDeliveriesDecay:  1.0, // test without decay for now
+		FirstMessageDeliveriesCap:    2000,
+		TimeInMeshQuantum:            time.Second,
 	}
 
 	params.Topics[mytopic] = topicScoreParams
@@ -103,7 +103,7 @@ func TestScoreFirstMessageDeliveries(t *testing.T) {
 	ps := newPeerScore(params)
 	ps.AddPeer(peerA, "myproto")
 	ps.Graft(peerA, mytopic)
-	
+
 	// deliver a bunch of messages from peer A
 	nMessages := 100
 	for i := 0; i < nMessages; i++ {
@@ -131,11 +131,11 @@ func TestScoreFirstMessageDeliveriesCap(t *testing.T) {
 		Topics:           make(map[string]*TopicScoreParams),
 	}
 	topicScoreParams := &TopicScoreParams{
-		TopicWeight:       1,
-		FirstMessageDeliveriesWeight:  1,
-		FirstMessageDeliveriesDecay: 1.0, // test without decay for now
-		FirstMessageDeliveriesCap: 50,
-		TimeInMeshQuantum: time.Second,
+		TopicWeight:                  1,
+		FirstMessageDeliveriesWeight: 1,
+		FirstMessageDeliveriesDecay:  1.0, // test without decay for now
+		FirstMessageDeliveriesCap:    50,
+		TimeInMeshQuantum:            time.Second,
 	}
 
 	params.Topics[mytopic] = topicScoreParams
@@ -224,16 +224,16 @@ func TestScoreMeshMessageDeliveries(t *testing.T) {
 		Topics:           make(map[string]*TopicScoreParams),
 	}
 	topicScoreParams := &TopicScoreParams{
-		TopicWeight:       1,
-		MeshMessageDeliveriesWeight: -1,
+		TopicWeight:                     1,
+		MeshMessageDeliveriesWeight:     -1,
 		MeshMessageDeliveriesActivation: 500 * time.Millisecond,
-		MeshMessageDeliveriesWindow: 10 * time.Millisecond,
-		MeshMessageDeliveriesThreshold: 20,
-		MeshMessageDeliveriesCap: 100,
-		MeshMessageDeliveriesDecay: 1.0, // no decay for this test
+		MeshMessageDeliveriesWindow:     10 * time.Millisecond,
+		MeshMessageDeliveriesThreshold:  20,
+		MeshMessageDeliveriesCap:        100,
+		MeshMessageDeliveriesDecay:      1.0, // no decay for this test
 
 		FirstMessageDeliveriesWeight: 0,
-		TimeInMeshQuantum: time.Second,
+		TimeInMeshQuantum:            time.Second,
 	}
 
 	params.Topics[mytopic] = topicScoreParams
@@ -282,7 +282,7 @@ func TestScoreMeshMessageDeliveries(t *testing.T) {
 
 		// deliver duplicate from peerC after the window
 		wg.Add(1)
-		time.AfterFunc(topicScoreParams.MeshMessageDeliveriesWindow + (20 * time.Millisecond), func () {
+		time.AfterFunc(topicScoreParams.MeshMessageDeliveriesWindow+(20*time.Millisecond), func() {
 			msg.ReceivedFrom = peerC
 			ps.DuplicateMessage(&msg)
 			wg.Done()
@@ -311,6 +311,68 @@ func TestScoreMeshMessageDeliveries(t *testing.T) {
 	}
 }
 
+func TestScoreMeshMessageDeliveriesDecay(t *testing.T) {
+	// Create parameters with reasonable default values
+	mytopic := "mytopic"
+	params := &PeerScoreParams{
+		AppSpecificScore: func(peer.ID) float64 { return 0 },
+		Topics:           make(map[string]*TopicScoreParams),
+	}
+	topicScoreParams := &TopicScoreParams{
+		TopicWeight:                     1,
+		MeshMessageDeliveriesWeight:     -1,
+		MeshMessageDeliveriesActivation: 0,
+		MeshMessageDeliveriesWindow:     10 * time.Millisecond,
+		MeshMessageDeliveriesThreshold:  20,
+		MeshMessageDeliveriesCap:        100,
+		MeshMessageDeliveriesDecay:      0.9,
+
+		FirstMessageDeliveriesWeight: 0,
+		TimeInMeshQuantum:            time.Second,
+	}
+
+	params.Topics[mytopic] = topicScoreParams
+
+	peerA := peer.ID("A")
+
+	ps := newPeerScore(params)
+	ps.AddPeer(peerA, "myproto")
+	ps.Graft(peerA, mytopic)
+
+	// deliver messages from peer A
+	nMessages := 40
+	for i := 0; i < nMessages; i++ {
+		pbMsg := makeTestMessage(i)
+		pbMsg.TopicIDs = []string{mytopic}
+		msg := Message{ReceivedFrom: peerA, Message: pbMsg}
+		ps.ValidateMessage(&msg)
+		ps.DeliverMessage(&msg)
+	}
+
+	// we should have a positive score, since we delivered more messages than the threshold
+	ps.refreshScores()
+	aScore := ps.Score(peerA)
+	if aScore < 0 {
+		t.Fatalf("Expected non-negative score for peer A, got %f", aScore)
+	}
+
+	// we need to refresh enough times for the decay to bring us below the threshold
+	decayedDeliveryCount := float64(nMessages)
+	for i := 0; i < 20; i++ {
+		ps.refreshScores()
+		decayedDeliveryCount *= topicScoreParams.MeshMessageDeliveriesDecay
+	}
+	aScore = ps.Score(peerA)
+	// the penalty is the difference between the threshold and the (decayed) mesh deliveries, squared.
+	deficit := topicScoreParams.MeshMessageDeliveriesThreshold - decayedDeliveryCount
+	penalty := deficit * deficit
+	expected := topicScoreParams.TopicWeight * topicScoreParams.MeshMessageDeliveriesWeight * penalty
+	variance := 0.1
+	if !withinVariance(aScore, expected, variance) {
+		t.Fatalf("Score: %f. Expected %f ± %f", aScore, expected, variance*expected)
+	}
+}
+
 func TestScoreMeshFailurePenalty(t *testing.T) {
 	// Create parameters with reasonable default values
 	mytopic := "mytopic"
@@ -325,19 +387,19 @@ func TestScoreMeshFailurePenalty(t *testing.T) {
 	// MeshMessageDeliveriesWeight to zero, so the only affect on the score
 	// is from the mesh failure penalty
 	topicScoreParams := &TopicScoreParams{
-		TopicWeight:       1,
+		TopicWeight:              1,
 		MeshFailurePenaltyWeight: -1,
-		MeshFailurePenaltyDecay: 1.0,
+		MeshFailurePenaltyDecay:  1.0,
 
 		MeshMessageDeliveriesActivation: 0,
-		MeshMessageDeliveriesWindow: 10 * time.Millisecond,
-		MeshMessageDeliveriesThreshold: 20,
-		MeshMessageDeliveriesCap: 100,
-		MeshMessageDeliveriesDecay: 1.0,
+		MeshMessageDeliveriesWindow:     10 * time.Millisecond,
+		MeshMessageDeliveriesThreshold:  20,
+		MeshMessageDeliveriesCap:        100,
+		MeshMessageDeliveriesDecay:      1.0,
 
-		MeshMessageDeliveriesWeight: 0,
+		MeshMessageDeliveriesWeight:  0,
 		FirstMessageDeliveriesWeight: 0,
-		TimeInMeshQuantum: time.Second,
+		TimeInMeshQuantum:            time.Second,
 	}
 
 	params.Topics[mytopic] = topicScoreParams
@@ -401,10 +463,10 @@ func TestScoreInvalidMessageDeliveries(t *testing.T) {
 		Topics:           make(map[string]*TopicScoreParams),
 	}
 	topicScoreParams := &TopicScoreParams{
-		TopicWeight:       1,
-		TimeInMeshQuantum: time.Second,
+		TopicWeight:                    1,
+		TimeInMeshQuantum:              time.Second,
 		InvalidMessageDeliveriesWeight: 1,
-		InvalidMessageDeliveriesDecay: 1.0,
+		InvalidMessageDeliveriesDecay:  1.0,
 	}
 	params.Topics[mytopic] = topicScoreParams
 
@@ -439,10 +501,10 @@ func TestScoreInvalidMessageDeliveriesDecay(t *testing.T) {
 		Topics:           make(map[string]*TopicScoreParams),
 	}
 	topicScoreParams := &TopicScoreParams{
-		TopicWeight:       1,
-		TimeInMeshQuantum: time.Second,
+		TopicWeight:                    1,
+		TimeInMeshQuantum:              time.Second,
 		InvalidMessageDeliveriesWeight: 1,
-		InvalidMessageDeliveriesDecay: 0.9,
+		InvalidMessageDeliveriesDecay:  0.9,
 	}
 	params.Topics[mytopic] = topicScoreParams
 
@@ -485,9 +547,9 @@ func TestScoreApplicationScore(t *testing.T) {
 
 	var appScoreValue float64
 	params := &PeerScoreParams{
-		AppSpecificScore: func(peer.ID) float64 { return appScoreValue },
+		AppSpecificScore:  func(peer.ID) float64 { return appScoreValue },
 		AppSpecificWeight: 0.5,
-		Topics:           make(map[string]*TopicScoreParams),
+		Topics:            make(map[string]*TopicScoreParams),
 	}
 
 	peerA := peer.ID("A")
@@ -501,7 +563,7 @@ func TestScoreApplicationScore(t *testing.T) {
 		ps.refreshScores()
 		aScore := ps.Score(peerA)
 		expected := float64(i) * params.AppSpecificWeight
-		if aScore !=  expected {
+		if aScore != expected {
 			t.Errorf("expected peer score to equal app-specific score %f, got %f", expected, aScore)
 		}
 	}
@@ -512,10 +574,10 @@ func TestScoreIPColocation(t *testing.T) {
 	mytopic := "mytopic"
 
 	params := &PeerScoreParams{
-		AppSpecificScore: func(peer.ID) float64 { return 0 },
+		AppSpecificScore:            func(peer.ID) float64 { return 0 },
 		IPColocationFactorThreshold: 1,
-		IPColocationFactorWeight: -1,
-		Topics:           make(map[string]*TopicScoreParams),
+		IPColocationFactorWeight:    -1,
+		Topics:                      make(map[string]*TopicScoreParams),
 	}
 
 	peerA := peer.ID("A")
