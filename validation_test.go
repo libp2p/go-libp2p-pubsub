@@ -3,6 +3,7 @@ package pubsub
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"sync"
 	"testing"
 	"time"
@@ -196,5 +197,70 @@ func TestValidateOverload(t *testing.T) {
 		close(block)
 
 		wg.Wait()
+	}
+}
+
+func TestValidateAssortedOptions(t *testing.T) {
+	// this test adds coverage for various options that are not covered in other tests
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	hosts := getNetHosts(t, ctx, 10)
+	psubs := getPubsubs(ctx, hosts,
+		WithValidateQueueSize(1),
+		WithValidateThrottle(1),
+		WithValidateWorkers(1))
+
+	sparseConnect(t, hosts)
+
+	for _, psub := range psubs {
+		err := psub.RegisterTopicValidator("test1",
+			func(context.Context, peer.ID, *Message) bool {
+				return true
+			},
+			WithValidatorTimeout(100*time.Millisecond))
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		err = psub.RegisterTopicValidator("test2",
+			func(context.Context, peer.ID, *Message) bool {
+				return true
+			},
+			WithValidatorInline(true))
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	var subs1, subs2 []*Subscription
+	for _, ps := range psubs {
+		sub, err := ps.Subscribe("test1")
+		if err != nil {
+			t.Fatal(err)
+		}
+		subs1 = append(subs1, sub)
+
+		sub, err = ps.Subscribe("test2")
+		if err != nil {
+			t.Fatal(err)
+		}
+		subs2 = append(subs2, sub)
+	}
+
+	time.Sleep(100 * time.Millisecond)
+
+	for i := 0; i < 10; i++ {
+		msg := []byte(fmt.Sprintf("message %d", i))
+
+		psubs[i].Publish("test1", msg)
+		for _, sub := range subs1 {
+			assertReceive(t, sub, msg)
+		}
+
+		psubs[i].Publish("test2", msg)
+		for _, sub := range subs2 {
+			assertReceive(t, sub, msg)
+		}
 	}
 }
