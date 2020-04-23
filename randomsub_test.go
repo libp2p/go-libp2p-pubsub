@@ -68,7 +68,7 @@ func TestRandomsubSmall(t *testing.T) {
 		}
 	}
 
-	if count < 9*len(hosts) {
+	if count < 7*len(hosts) {
 		t.Fatalf("received too few messages; expected at least %d but got %d", 9*len(hosts), count)
 	}
 }
@@ -105,7 +105,7 @@ func TestRandomsubBig(t *testing.T) {
 		}
 	}
 
-	if count < 9*len(hosts) {
+	if count < 7*len(hosts) {
 		t.Fatalf("received too few messages; expected at least %d but got %d", 9*len(hosts), count)
 	}
 }
@@ -144,7 +144,7 @@ func TestRandomsubMixed(t *testing.T) {
 		}
 	}
 
-	if count < 9*len(hosts) {
+	if count < 7*len(hosts) {
 		t.Fatalf("received too few messages; expected at least %d but got %d", 9*len(hosts), count)
 	}
 }
