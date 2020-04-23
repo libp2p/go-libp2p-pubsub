@@ -1007,10 +1007,8 @@ func TestGossipsubStarTopologyWithSignedPeerRecords(t *testing.T) {
 	psubs := getGossipsubs(ctx, hosts, WithPeerExchange(true))
 
 	// manually create signed peer records for each host and add them to the
-	// peerstores of the other hosts.
-	// this is necessary until the identify service is updated to exchange
-	// signed records
-	for i := range hosts {
+	// peerstore of the center of the star, which is doing the bootstrapping
+	for i := range hosts[1:] {
 		privKey := hosts[i].Peerstore().PrivKey(hosts[i].ID())
 		if privKey == nil {
 			t.Fatalf("unable to get private key for host %s", hosts[i].ID().Pretty())
@@ -1022,18 +1020,13 @@ func TestGossipsubStarTopologyWithSignedPeerRecords(t *testing.T) {
 			t.Fatalf("error creating signed peer record: %s", err)
 		}
 
-		for j := range hosts {
-			if i == j {
-				continue
-			}
-			cab, ok := peerstore.GetCertifiedAddrBook(hosts[j].Peerstore())
-			if !ok {
-				t.Fatal("peerstore does not implement CertifiedAddrBook")
-			}
-			_, err := cab.ConsumePeerRecord(signedRec, peerstore.PermanentAddrTTL)
-			if err != nil {
-				t.Fatalf("error adding signed peer record: %s", err)
-			}
+		cab, ok := peerstore.GetCertifiedAddrBook(hosts[0].Peerstore())
+		if !ok {
+			t.Fatal("peerstore does not implement CertifiedAddrBook")
+		}
+		_, err = cab.ConsumePeerRecord(signedRec, peerstore.PermanentAddrTTL)
+		if err != nil {
+			t.Fatalf("error adding signed peer record: %s", err)
 		}
 	}
 
