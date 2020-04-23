@@ -32,13 +32,13 @@ type discoverOptions struct {
 }
 
 func defaultDiscoverOptions() *discoverOptions {
-	rng := rand.New(rand.NewSource(rand.Int63()))
+	rngSrc := rand.NewSource(rand.Int63())
 	minBackoff, maxBackoff := time.Second*10, time.Hour
 	cacheSize := 100
 	dialTimeout := time.Minute * 2
 	discoverOpts := &discoverOptions{
 		connFactory: func(host host.Host) (*discimpl.BackoffConnector, error) {
-			backoff := discimpl.NewExponentialBackoff(minBackoff, maxBackoff, discimpl.FullJitter, time.Second, 5.0, 0, rng)
+			backoff := discimpl.NewExponentialBackoff(minBackoff, maxBackoff, discimpl.FullJitter, time.Second, 5.0, 0, rngSrc)
 			return discimpl.NewBackoffConnector(host, cacheSize, dialTimeout, backoff)
 		},
 	}
