@@ -108,15 +108,18 @@ func NewGossipSub(ctx context.Context, h host.Host, opts ...Option) (*PubSub, er
 		connect:  make(chan connectInfo, GossipSubMaxPendingConnections),
 		mcache:   NewMessageCache(GossipSubHistoryGossip, GossipSubHistoryLength),
 
-		// these must be pulled in to resolve races in tests... sigh.
+		// these are configured per router to allow variation in tests
 		D:      GossipSubD,
 		Dlo:    GossipSubDlo,
 		Dhi:    GossipSubDhi,
 		Dscore: GossipSubDscore,
 		Dlazy:  GossipSubDlazy,
 
+		// these must be pulled in to resolve races in tests... sigh.
 		directConnectTicks:      GossipSubDirectConnectTicks,
 		opportunisticGraftTicks: GossipSubOpportunisticGraftTicks,
+
+		fanoutTTL: GossipSubFanoutTTL,
 	}
 	return NewPubSub(ctx, h, rt, opts...)
 }
@@ -277,6 +280,10 @@ type GossipSubRouter struct {
 	// tick "constants" for triggering direct connect and opportunistic grafting
 	// these are pulled from their global value or else the race detector is angry on travis
 	directConnectTicks, opportunisticGraftTicks uint64
+
+	// fanout expiry ttl "constant"
+	// this is pulled from its global value or else the race detector is angry on travis
+	fanoutTTL time.Duration
 }
 
 type connectInfo struct {
@@ -1070,7 +1077,7 @@ func (gs *GossipSubRouter) heartbeat() {
 	// expire fanout for topics we haven't published to in a while
 	now := time.Now().UnixNano()
 	for topic, lastpub := range gs.lastpub {
-		if lastpub+int64(GossipSubFanoutTTL) < now {
+		if lastpub+int64(gs.fanoutTTL) < now {
 			delete(gs.fanout, topic)
 			delete(gs.lastpub, topic)
 		}
