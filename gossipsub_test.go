@@ -942,6 +942,18 @@ func TestGossipsubTreeTopology(t *testing.T) {
 // this tests overlay bootstrapping through px in Gossipsub v1.1
 // we start with a star topology and rely on px through prune to build the mesh
 func TestGossipsubStarTopology(t *testing.T) {
+	originalGossipSubD := GossipSubD
+	GossipSubD = 4
+	originalGossipSubDhi := GossipSubDhi
+	GossipSubDhi = GossipSubD + 1
+	originalGossipSubDlo := GossipSubDlo
+	GossipSubDlo = GossipSubD - 1
+	defer func() {
+		GossipSubD = originalGossipSubD
+		GossipSubDhi = originalGossipSubDhi
+		GossipSubDlo = originalGossipSubDlo
+	}()
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -965,6 +977,8 @@ func TestGossipsubStarTopology(t *testing.T) {
 		connect(t, hosts[0], hosts[i])
 	}
 
+	time.Sleep(time.Second)
+
 	// build the mesh
 	var subs []*Subscription
 	for _, ps := range psubs {
@@ -979,9 +993,9 @@ func TestGossipsubStarTopology(t *testing.T) {
 	time.Sleep(10 * time.Second)
 
 	// check that all peers have > 1 connection
-	for _, h := range hosts {
+	for i, h := range hosts {
 		if len(h.Network().Conns()) == 1 {
-			t.Error("peer has ony a single connection")
+			t.Errorf("peer %d has ony a single connection", i)
 		}
 	}
 
@@ -1000,6 +1014,18 @@ func TestGossipsubStarTopology(t *testing.T) {
 // exchanged in signed peer records.
 // we start with a star topology and rely on px through prune to build the mesh
 func TestGossipsubStarTopologyWithSignedPeerRecords(t *testing.T) {
+	originalGossipSubD := GossipSubD
+	GossipSubD = 4
+	originalGossipSubDhi := GossipSubDhi
+	GossipSubDhi = GossipSubD + 1
+	originalGossipSubDlo := GossipSubDlo
+	GossipSubDlo = GossipSubD - 1
+	defer func() {
+		GossipSubD = originalGossipSubD
+		GossipSubDhi = originalGossipSubDhi
+		GossipSubDlo = originalGossipSubDlo
+	}()
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -1035,6 +1061,8 @@ func TestGossipsubStarTopologyWithSignedPeerRecords(t *testing.T) {
 		connect(t, hosts[0], hosts[i])
 	}
 
+	time.Sleep(time.Second)
+
 	// build the mesh
 	var subs []*Subscription
 	for _, ps := range psubs {
@@ -1049,9 +1077,9 @@ func TestGossipsubStarTopologyWithSignedPeerRecords(t *testing.T) {
 	time.Sleep(10 * time.Second)
 
 	// check that all peers have > 1 connection
-	for _, h := range hosts {
+	for i, h := range hosts {
 		if len(h.Network().Conns()) == 1 {
-			t.Error("peer has ony a single connection")
+			t.Errorf("peer %d has ony a single connection", i)
 		}
 	}
 
