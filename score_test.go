@@ -393,6 +393,92 @@ func TestScoreMeshFailurePenalty(t *testing.T) {
 	}
 }
 
+func TestScoreInvalidMessageDeliveries(t *testing.T) {
+	// Create parameters with reasonable default values
+	mytopic := "mytopic"
+	params := &PeerScoreParams{
+		AppSpecificScore: func(peer.ID) float64 { return 0 },
+		Topics:           make(map[string]*TopicScoreParams),
+	}
+	topicScoreParams := &TopicScoreParams{
+		TopicWeight:       1,
+		TimeInMeshQuantum: time.Second,
+		InvalidMessageDeliveriesWeight: 1,
+		InvalidMessageDeliveriesDecay: 1.0,
+	}
+	params.Topics[mytopic] = topicScoreParams
+
+	peerA := peer.ID("A")
+
+	ps := newPeerScore(params)
+	ps.AddPeer(peerA, "myproto")
+	ps.Graft(peerA, mytopic)
+
+	nMessages := 100
+	for i := 0; i < nMessages; i++ {
+		pbMsg := makeTestMessage(i)
+		pbMsg.TopicIDs = []string{mytopic}
+		msg := Message{ReceivedFrom: peerA, Message: pbMsg}
+		ps.RejectMessage(&msg, rejectInvalidSignature)
+	}
+
+	ps.refreshScores()
+	aScore := ps.Score(peerA)
+	expected := topicScoreParams.TopicWeight * topicScoreParams.InvalidMessageDeliveriesWeight * float64(nMessages)
+	variance := 0.1
+	if !withinVariance(aScore, expected, variance) {
+		t.Fatalf("Score: %f. Expected %f ± %f", aScore, expected, variance*expected)
+	}
+}
+
+func TestScoreInvalidMessageDeliveriesDecay(t *testing.T) {
+	// Create parameters with reasonable default values
+	mytopic := "mytopic"
+	params := &PeerScoreParams{
+		AppSpecificScore: func(peer.ID) float64 { return 0 },
+		Topics:           make(map[string]*TopicScoreParams),
+	}
+	topicScoreParams := &TopicScoreParams{
+		TopicWeight:       1,
+		TimeInMeshQuantum: time.Second,
+		InvalidMessageDeliveriesWeight: 1,
+		InvalidMessageDeliveriesDecay: 0.9,
+	}
+	params.Topics[mytopic] = topicScoreParams
+
+	peerA := peer.ID("A")
+
+	ps := newPeerScore(params)
+	ps.AddPeer(peerA, "myproto")
+	ps.Graft(peerA, mytopic)
+
+	nMessages := 100
+	for i := 0; i < nMessages; i++ {
+		pbMsg := makeTestMessage(i)
+		pbMsg.TopicIDs = []string{mytopic}
+		msg := Message{ReceivedFrom: peerA, Message: pbMsg}
+		ps.RejectMessage(&msg, rejectInvalidSignature)
+	}
+
+	ps.refreshScores()
+	aScore := ps.Score(peerA)
+	expected := topicScoreParams.TopicWeight * topicScoreParams.InvalidMessageDeliveriesWeight * topicScoreParams.InvalidMessageDeliveriesDecay * float64(nMessages)
+	variance := 0.1
+	if !withinVariance(aScore, expected, variance) {
+		t.Fatalf("Score: %f. Expected %f ± %f", aScore, expected, variance*expected)
+	}
+
+	// refresh scores a few times to apply decay
+	for i := 0; i < 10; i++ {
+		ps.refreshScores()
+		expected *= topicScoreParams.InvalidMessageDeliveriesDecay
+	}
+	aScore = ps.Score(peerA)
+	if !withinVariance(aScore, expected, variance) {
+		t.Fatalf("Score: %f. Expected %f ± %f", aScore, expected, variance*expected)
+	}
+}
+
 func withinVariance(score float64, expected float64, variance float64) bool {
 	if expected >= 0 {
 		return score > expected*(1-variance) && score < expected*(1+variance)
