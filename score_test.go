@@ -94,7 +94,7 @@ func TestScoreFirstMessageDeliveries(t *testing.T) {
 		FirstMessageDeliveriesWeight:  1,
 		FirstMessageDeliveriesDecay: 1.0, // test without decay for now
 		FirstMessageDeliveriesCap: 2000,
-		TimeInMeshQuantum: time.Second, // bug? not setting this causes a div by zero
+		TimeInMeshQuantum: time.Second,
 	}
 
 	params.Topics[mytopic] = topicScoreParams
@@ -135,7 +135,7 @@ func TestScoreFirstMessageDeliveriesCap(t *testing.T) {
 		FirstMessageDeliveriesWeight:  1,
 		FirstMessageDeliveriesDecay: 1.0, // test without decay for now
 		FirstMessageDeliveriesCap: 50,
-		TimeInMeshQuantum: time.Second, // bug? not setting this causes a div by zero
+		TimeInMeshQuantum: time.Second,
 	}
 
 	params.Topics[mytopic] = topicScoreParams
@@ -176,7 +176,7 @@ func TestScoreFirstMessageDeliveriesDecay(t *testing.T) {
 		FirstMessageDeliveriesWeight: 1,
 		FirstMessageDeliveriesDecay:  0.9, // decay 10% per decay interval
 		FirstMessageDeliveriesCap:    2000,
-		TimeInMeshQuantum:            time.Second, // bug? not setting this causes a div by zero
+		TimeInMeshQuantum:            time.Second,
 	}
 
 	params.Topics[mytopic] = topicScoreParams
@@ -233,7 +233,7 @@ func TestScoreMeshMessageDeliveries(t *testing.T) {
 		MeshMessageDeliveriesDecay: 1.0, // no decay for this test
 
 		FirstMessageDeliveriesWeight: 0,
-		TimeInMeshQuantum: time.Second, // bug? not setting this causes a div by zero
+		TimeInMeshQuantum: time.Second,
 	}
 
 	params.Topics[mytopic] = topicScoreParams
