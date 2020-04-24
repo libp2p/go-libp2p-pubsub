@@ -95,7 +95,17 @@ var (
 
 // NewGossipSub returns a new PubSub object using GossipSubRouter as the router.
 func NewGossipSub(ctx context.Context, h host.Host, opts ...Option) (*PubSub, error) {
+	return NewGossipSubWithProtocols(ctx, h, []protocol.ID{GossipSubID_v11, GossipSubID_v10, FloodSubID}, opts...)
+}
+
+// NewGossipSubWithProtocols returns a new PubSub object using GossipSubRouter as the router and the specified protocols.
+// The list of protocols must be a subset (or the full set) of floodsub and gossipsub protocol IDs,
+// order by priority with the latest version of gossipsub ordered first.
+// For example, if you want to disable floodsub compatibility in your network, you can
+// pass []protocol.ID{GossipSubID_v11, GossipSubID_v10} as the list of protocols.
+func NewGossipSubWithProtocols(ctx context.Context, h host.Host, protos []protocol.ID, opts ...Option) (*PubSub, error) {
 	rt := &GossipSubRouter{
+		protos:   protos,
 		peers:    make(map[peer.ID]protocol.ID),
 		mesh:     make(map[string]map[peer.ID]struct{}),
 		fanout:   make(map[string]map[peer.ID]struct{}),
@@ -227,6 +237,7 @@ func WithDirectPeers(pis []peer.AddrInfo) Option {
 // messages to their topic for GossipSubFanoutTTL.
 type GossipSubRouter struct {
 	p        *PubSub
+	protos   []protocol.ID
 	peers    map[peer.ID]protocol.ID          // peer protocols
 	direct   map[peer.ID]struct{}             // direct peers
 	mesh     map[string]map[peer.ID]struct{}  // topic meshes
@@ -292,7 +303,7 @@ type connectInfo struct {
 }
 
 func (gs *GossipSubRouter) Protocols() []protocol.ID {
-	return []protocol.ID{GossipSubID_v11, GossipSubID_v10, FloodSubID}
+	return gs.protos
 }
 
 func (gs *GossipSubRouter) Attach(p *PubSub) {
