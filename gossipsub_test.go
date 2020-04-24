@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"math/rand"
+	"sync"
 	"testing"
 	"time"
 
@@ -1549,4 +1550,83 @@ func (sq *sybilSquatter) handleStream(s network.Stream) {
 			return
 		}
 	}
+}
+
+func TestGossipsubPeerScoreInspect(t *testing.T) {
+	// this test exercises the code path sof peer score inspection
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	hosts := getNetHosts(t, ctx, 2)
+
+	inspector := &mockPeerScoreInspector{}
+	psub1 := getGossipsub(ctx, hosts[0],
+		WithPeerScore(
+			&PeerScoreParams{
+				Topics: map[string]*TopicScoreParams{
+					"test": &TopicScoreParams{
+						TopicWeight:                    1,
+						TimeInMeshQuantum:              time.Second,
+						FirstMessageDeliveriesWeight:   1,
+						FirstMessageDeliveriesDecay:    0.999,
+						FirstMessageDeliveriesCap:      100,
+						InvalidMessageDeliveriesWeight: -1,
+						InvalidMessageDeliveriesDecay:  0.9999,
+					},
+				},
+				AppSpecificScore: func(peer.ID) float64 { return 0 },
+				DecayInterval:    time.Second,
+				DecayToZero:      0.01,
+			},
+			&PeerScoreThresholds{
+				GossipThreshold:   -1,
+				PublishThreshold:  -10,
+				GraylistThreshold: -1000,
+			}),
+		WithPeerScoreInspect(inspector.inspect, time.Second))
+	psub2 := getGossipsub(ctx, hosts[1])
+	psubs := []*PubSub{psub1, psub2}
+
+	connect(t, hosts[0], hosts[1])
+
+	var subs []*Subscription
+	for _, ps := range psubs {
+		sub, err := ps.Subscribe("test")
+		if err != nil {
+			t.Fatal(err)
+		}
+		subs = append(subs, sub)
+	}
+
+	time.Sleep(time.Second)
+
+	for i := 0; i < 20; i++ {
+		msg := []byte(fmt.Sprintf("message %d", i))
+		psubs[i%2].Publish("test", msg)
+		time.Sleep(20 * time.Millisecond)
+	}
+
+	time.Sleep(time.Second + 200*time.Millisecond)
+
+	score2 := inspector.score(hosts[1].ID())
+	if score2 < 9 {
+		t.Fatalf("expected score to be at least 5, instead got %f", score2)
+	}
+}
+
+type mockPeerScoreInspector struct {
+	mx     sync.Mutex
+	scores map[peer.ID]float64
+}
+
+func (ps *mockPeerScoreInspector) inspect(scores map[peer.ID]float64) {
+	ps.mx.Lock()
+	defer ps.mx.Unlock()
+	ps.scores = scores
+}
+
+func (ps *mockPeerScoreInspector) score(p peer.ID) float64 {
+	ps.mx.Lock()
+	defer ps.mx.Unlock()
+	return ps.scores[p]
 }
