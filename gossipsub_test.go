@@ -1610,7 +1610,7 @@ func TestGossipsubPeerScoreInspect(t *testing.T) {
 
 	score2 := inspector.score(hosts[1].ID())
 	if score2 < 9 {
-		t.Fatalf("expected score to be at least 5, instead got %f", score2)
+		t.Fatalf("expected score to be at least 9, instead got %f", score2)
 	}
 }
 
