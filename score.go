@@ -562,6 +562,8 @@ func (ps *peerScore) RejectMessage(msg *Message, reason string) {
 
 	// mark the message as invalid and penalize peers that have already forwarded it.
 	drec.status = deliveryInvalid
+
+	ps.markInvalidMessageDelivery(msg.ReceivedFrom, msg)
 	for p := range drec.peers {
 		ps.markInvalidMessageDelivery(p, msg)
 	}
