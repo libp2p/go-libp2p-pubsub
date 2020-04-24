@@ -531,6 +531,113 @@ func TestScoreInvalidMessageDeliveriesDecay(t *testing.T) {
 	}
 }
 
+func TestScoreRejectMessageDeliveries(t *testing.T) {
+	// this tests adds coverage for the dark corners of rejection tracing
+	mytopic := "mytopic"
+	params := &PeerScoreParams{
+		AppSpecificScore: func(peer.ID) float64 { return 0 },
+		Topics:           make(map[string]*TopicScoreParams),
+	}
+	topicScoreParams := &TopicScoreParams{
+		TopicWeight:                    1,
+		TimeInMeshQuantum:              time.Second,
+		InvalidMessageDeliveriesWeight: -1,
+		InvalidMessageDeliveriesDecay:  1.0,
+	}
+	params.Topics[mytopic] = topicScoreParams
+
+	peerA := peer.ID("A")
+	peerB := peer.ID("B")
+
+	ps := newPeerScore(params)
+	ps.AddPeer(peerA, "myproto")
+	ps.AddPeer(peerB, "myproto")
+
+	pbMsg := makeTestMessage(0)
+	pbMsg.TopicIDs = []string{mytopic}
+	msg := Message{ReceivedFrom: peerA, Message: pbMsg}
+	msg2 := Message{ReceivedFrom: peerB, Message: pbMsg}
+
+	// these should have no effect in the score
+	ps.RejectMessage(&msg, rejectBlacklstedPeer)
+	ps.RejectMessage(&msg, rejectBlacklistedSource)
+	ps.RejectMessage(&msg, rejectValidationQueueFull)
+
+	aScore := ps.Score(peerA)
+	expected := 0.0
+	if aScore != expected {
+		t.Fatalf("Score: %f. Expected %f", aScore, expected)
+	}
+
+	// insert a record in the message deliveries
+	ps.ValidateMessage(&msg)
+
+	// this should have no effect in the score, and subsequent duplicate messages should have no
+	// effect either
+	ps.RejectMessage(&msg, rejectValidationThrottled)
+	ps.DuplicateMessage(&msg2)
+
+	aScore = ps.Score(peerA)
+	expected = 0.0
+	if aScore != expected {
+		t.Fatalf("Score: %f. Expected %f", aScore, expected)
+	}
+
+	bScore := ps.Score(peerB)
+	expected = 0.0
+	if bScore != expected {
+		t.Fatalf("Score: %f. Expected %f", aScore, expected)
+	}
+
+	// now clear the delivery record
+	ps.deliveries.head.expire = time.Now()
+	time.Sleep(1 * time.Millisecond)
+	ps.deliveries.gc()
+
+	// insert a new record in the message deliveries
+	ps.ValidateMessage(&msg)
+
+	// and reject the message to make sure duplicates are also penalized
+	ps.RejectMessage(&msg, rejectValidationFailed)
+	ps.DuplicateMessage(&msg2)
+
+	aScore = ps.Score(peerA)
+	expected = -1.0
+	if aScore != expected {
+		t.Fatalf("Score: %f. Expected %f", aScore, expected)
+	}
+
+	bScore = ps.Score(peerB)
+	expected = -1.0
+	if bScore != expected {
+		t.Fatalf("Score: %f. Expected %f", bScore, expected)
+	}
+
+	// now clear the delivery record again
+	ps.deliveries.head.expire = time.Now()
+	time.Sleep(1 * time.Millisecond)
+	ps.deliveries.gc()
+
+	// insert a new record in the message deliveries
+	ps.ValidateMessage(&msg)
+
+	// and reject the message after a duplciate has arrived
+	ps.DuplicateMessage(&msg2)
+	ps.RejectMessage(&msg, rejectValidationFailed)
+
+	aScore = ps.Score(peerA)
+	expected = -2.0
+	if aScore != expected {
+		t.Fatalf("Score: %f. Expected %f", aScore, expected)
+	}
+
+	bScore = ps.Score(peerB)
+	expected = -2.0
+	if bScore != expected {
+		t.Fatalf("Score: %f. Expected %f", bScore, expected)
+	}
+}
+
 func TestScoreApplicationScore(t *testing.T) {
 	// Create parameters with reasonable default values
 	mytopic := "mytopic"
