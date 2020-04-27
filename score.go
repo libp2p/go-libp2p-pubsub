@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/libp2p/go-libp2p-core/host"
+	"github.com/libp2p/go-libp2p-core/network"
 	"github.com/libp2p/go-libp2p-core/peer"
 	"github.com/libp2p/go-libp2p-core/protocol"
 
@@ -765,6 +766,10 @@ func (ps *peerScore) getIPs(p peer.ID) []string {
 	conns := ps.host.Network().ConnsToPeer(p)
 	res := make([]string, 0, 1)
 	for _, c := range conns {
+		if !ps.hasPubsubStream(c) {
+			continue
+		}
+
 		remote := c.RemoteMultiaddr()
 		ip, err := manet.ToIP(remote)
 		if err != nil {
@@ -791,6 +796,21 @@ func (ps *peerScore) getIPs(p peer.ID) []string {
 	}
 
 	return res
+}
+
+func (ps *peerScore) hasPubsubStream(c network.Conn) bool {
+	for _, s := range c.GetStreams() {
+		switch s.Protocol() {
+		case FloodSubID:
+			fallthrough
+		case GossipSubID_v10:
+			fallthrough
+		case GossipSubID_v11:
+			return true
+		}
+	}
+
+	return false
 }
 
 // setIPs adds tracking for the new IPs in the list, and removes tracking from
