@@ -594,6 +594,31 @@ func TestScoreRejectMessageDeliveries(t *testing.T) {
 	time.Sleep(1 * time.Millisecond)
 	ps.deliveries.gc()
 
+	// insert a record in the message deliveries
+	ps.ValidateMessage(&msg)
+
+	// this should have no effect in the score, and subsequent duplicate messages should have no
+	// effect either
+	ps.RejectMessage(&msg, rejectValidationIgnored)
+	ps.DuplicateMessage(&msg2)
+
+	aScore = ps.Score(peerA)
+	expected = 0.0
+	if aScore != expected {
+		t.Fatalf("Score: %f. Expected %f", aScore, expected)
+	}
+
+	bScore = ps.Score(peerB)
+	expected = 0.0
+	if bScore != expected {
+		t.Fatalf("Score: %f. Expected %f", aScore, expected)
+	}
+
+	// now clear the delivery record
+	ps.deliveries.head.expire = time.Now()
+	time.Sleep(1 * time.Millisecond)
+	ps.deliveries.gc()
+
 	// insert a new record in the message deliveries
 	ps.ValidateMessage(&msg)
 
