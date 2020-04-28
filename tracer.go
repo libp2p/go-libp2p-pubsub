@@ -33,6 +33,7 @@ const (
 	rejectValidationQueueFull = "validation queue full"
 	rejectValidationThrottled = "validation throttled"
 	rejectValidationFailed    = "validation failed"
+	rejectValidationIgnored   = "validation ignored"
 	rejectSelfOrigin          = "self originated message"
 )
 

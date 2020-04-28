@@ -105,6 +105,7 @@ const (
 	deliveryUnknown   = iota // we don't know (yet) if the message is valid
 	deliveryValid            // we know the message is valid
 	deliveryInvalid          // we know the message is invalid
+	deliveryIgnored          // we were intructed by the validator to ignore the message
 	deliveryThrottled        // we can't tell if it is valid because validation throttled
 )
 
@@ -551,11 +552,18 @@ func (ps *peerScore) RejectMessage(msg *Message, reason string) {
 
 	drec := ps.deliveries.getRecord(ps.msgID(msg.Message))
 
-	if reason == rejectValidationThrottled {
+	switch reason {
+	case rejectValidationThrottled:
 		// if we reject with "validation throttled" we don't penalize the peer(s) that forward it
 		// because we don't know if it was valid.
 		drec.status = deliveryThrottled
 		// release the delivery time tracking map to free some memory early
+		drec.peers = nil
+		return
+	case rejectValidationIgnored:
+		// we were explicitly instructed by the validator to ignore the message but not penalize
+		// the peer
+		drec.status = deliveryIgnored
 		drec.peers = nil
 		return
 	}
@@ -601,6 +609,8 @@ func (ps *peerScore) DuplicateMessage(msg *Message) {
 
 	case deliveryThrottled:
 		// the message was throttled; do nothing (we don't know if it was valid)
+	case deliveryIgnored:
+		// the message was ignored; do nothing
 	}
 }
 
