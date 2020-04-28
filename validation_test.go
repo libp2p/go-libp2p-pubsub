@@ -43,6 +43,35 @@ func TestRegisterUnregisterValidator(t *testing.T) {
 	}
 }
 
+func TestRegisterValidatorEx(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	hosts := getNetHosts(t, ctx, 3)
+	psubs := getPubsubs(ctx, hosts)
+
+	err := psubs[0].RegisterTopicValidator("test",
+		Validator(func(context.Context, peer.ID, *Message) bool {
+			return true
+		}))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = psubs[1].RegisterTopicValidator("test",
+		ValidatorEx(func(context.Context, peer.ID, *Message) ValidationResult {
+			return ValidationAccept
+		}))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = psubs[2].RegisterTopicValidator("test", "bogus")
+	if err == nil {
+		t.Fatal("expected error")
+	}
+}
+
 func TestValidate(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -405,6 +434,167 @@ func TestValidateMultitopicEx(t *testing.T) {
 		err = ps.RegisterTopicValidator("test5", func(context.Context, peer.ID, *Message) ValidationResult {
 			return ValidationResult(1234)
 		})
+		if err != nil {
+			t.Fatal(err)
+		}
+
+	}
+
+	publisher := &multiTopicPublisher{ctx: ctx, h: hosts[0]}
+	hosts[0].SetStreamHandler(FloodSubID, publisher.handleStream)
+
+	connectAll(t, hosts)
+
+	var subs1, subs2, subs3, subs4, subs5 []*Subscription
+	for _, ps := range psubs {
+		sub, err := ps.Subscribe("test1")
+		if err != nil {
+			t.Fatal(err)
+		}
+		subs1 = append(subs1, sub)
+
+		sub, err = ps.Subscribe("test2")
+		if err != nil {
+			t.Fatal(err)
+		}
+		subs2 = append(subs2, sub)
+
+		sub, err = ps.Subscribe("test3")
+		if err != nil {
+			t.Fatal(err)
+		}
+		subs3 = append(subs3, sub)
+
+		sub, err = ps.Subscribe("test4")
+		if err != nil {
+			t.Fatal(err)
+		}
+		subs4 = append(subs4, sub)
+
+		sub, err = ps.Subscribe("test5")
+		if err != nil {
+			t.Fatal(err)
+		}
+		subs4 = append(subs5, sub)
+
+	}
+
+	time.Sleep(time.Second)
+
+	msg1 := "i am a walrus"
+
+	// this goes to test1 and test2, which is accepted and should be delivered
+	publisher.publish(msg1, "test1", "test2")
+	for _, sub := range subs1 {
+		assertReceive(t, sub, []byte(msg1))
+	}
+	for _, sub := range subs2 {
+		assertReceive(t, sub, []byte(msg1))
+	}
+
+	// this goes to test2 and test3, which is ignored by the test3 validator and should not be delivered
+	msg2 := "i am not a walrus"
+	publisher.publish(msg2, "test2", "test3")
+
+	expectNoMessage := func(sub *Subscription) {
+		ctx, cancel := context.WithTimeout(ctx, 100*time.Millisecond)
+		defer cancel()
+
+		m, err := sub.Next(ctx)
+		if err == nil {
+			t.Fatal("expected no message, but got ", string(m.Data))
+		}
+	}
+
+	for _, sub := range subs2 {
+		expectNoMessage(sub)
+	}
+
+	for _, sub := range subs3 {
+		expectNoMessage(sub)
+	}
+
+	// this goes to test2 and test4, which is rejected by the test4 validator and should not be delivered
+	publisher.publish(msg2, "test2", "test4")
+
+	for _, sub := range subs2 {
+		expectNoMessage(sub)
+	}
+
+	for _, sub := range subs4 {
+		expectNoMessage(sub)
+	}
+
+	// this goes to test3 and test4, which is rejected by the test4 validator and should not be delivered
+	publisher.publish(msg2, "test3", "test4")
+
+	for _, sub := range subs3 {
+		expectNoMessage(sub)
+	}
+
+	for _, sub := range subs4 {
+		expectNoMessage(sub)
+	}
+
+	// this goes to test1 and test5, which by virtue of its bogus validator should result on the message
+	// being ignored
+	publisher.publish(msg2, "test1", "test5")
+
+	for _, sub := range subs1 {
+		expectNoMessage(sub)
+	}
+
+	for _, sub := range subs5 {
+		expectNoMessage(sub)
+	}
+}
+
+func TestValidateMultitopicEx2(t *testing.T) {
+	// like the previous test, but with all validators inline
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	hosts := getNetHosts(t, ctx, 3)
+	psubs := getPubsubs(ctx, hosts[1:], WithMessageSigning(false))
+	for _, ps := range psubs {
+		err := ps.RegisterTopicValidator("test1", func(context.Context, peer.ID, *Message) ValidationResult {
+			return ValidationAccept
+		},
+			WithValidatorInline(true))
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		err = ps.RegisterTopicValidator("test2", func(context.Context, peer.ID, *Message) ValidationResult {
+			return ValidationAccept
+		},
+			WithValidatorInline(true))
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		err = ps.RegisterTopicValidator("test3", func(context.Context, peer.ID, *Message) ValidationResult {
+			return ValidationIgnore
+		},
+			WithValidatorInline(true))
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		err = ps.RegisterTopicValidator("test4", func(context.Context, peer.ID, *Message) ValidationResult {
+			return ValidationReject
+		},
+			WithValidatorInline(true))
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		// this is a bogus validator that returns an invalid validation result; the system should interpret
+		// this as ValidationIgnore and not crash or do anything other than ignore the message
+		err = ps.RegisterTopicValidator("test5", func(context.Context, peer.ID, *Message) ValidationResult {
+			return ValidationResult(1234)
+		},
+			WithValidatorInline(true))
 		if err != nil {
 			t.Fatal(err)
 		}
