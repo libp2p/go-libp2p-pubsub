@@ -384,6 +384,8 @@ func (v *validation) validateTopic(vals []*topicVal, src peer.ID, msg *Message) 
 			result = ValidationReject
 			break
 		case ValidationIgnore:
+			// throttled validation has the same effect, but takes precedence over Ignore as it is not
+			// known whether the throttled validator would have signaled rejection.
 			if result != validationThrottled {
 				result = ValidationIgnore
 			}
