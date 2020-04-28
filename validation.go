@@ -154,7 +154,7 @@ func (v *validation) AddValidator(req *addValReq) {
 		validator = v
 
 	default:
-		req.resp <- fmt.Errorf("Unknown validator type for topic %s; must be an instance of Validator or ValiatorEx", topic)
+		req.resp <- fmt.Errorf("Unknown validator type for topic %s; must be an instance of Validator or ValidatorEx", topic)
 		return
 	}
 
