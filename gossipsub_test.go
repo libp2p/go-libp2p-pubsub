@@ -1399,6 +1399,8 @@ func TestGossipsubScoreValidatorEx(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	time.Sleep(100 * time.Millisecond)
+
 	expectNoMessage := func(sub *Subscription) {
 		ctx, cancel := context.WithTimeout(ctx, 100*time.Millisecond)
 		defer cancel()
