@@ -1350,6 +1350,91 @@ func TestGossipsubNegativeScore(t *testing.T) {
 	}
 }
 
+func TestGossipsubScoreValidatorEx(t *testing.T) {
+	// this is a test that of the two message drop responses from a validator
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	hosts := getNetHosts(t, ctx, 3)
+	psubs := getGossipsubs(ctx, hosts,
+		WithPeerScore(
+			&PeerScoreParams{
+				AppSpecificScore: func(p peer.ID) float64 { return 0 },
+				DecayInterval:    time.Second,
+				DecayToZero:      0.01,
+				Topics: map[string]*TopicScoreParams{
+					"test": &TopicScoreParams{
+						TopicWeight:                    1,
+						TimeInMeshQuantum:              time.Second,
+						InvalidMessageDeliveriesWeight: -1,
+						InvalidMessageDeliveriesDecay:  0.9999,
+					},
+				},
+			},
+			&PeerScoreThresholds{
+				GossipThreshold:   -10,
+				PublishThreshold:  -100,
+				GraylistThreshold: -10000,
+			}))
+
+	connectAll(t, hosts)
+
+	err := psubs[0].RegisterTopicValidator("test", func(ctx context.Context, p peer.ID, msg *Message) ValidationResult {
+		// we ignore host1 and reject host2
+		if p == hosts[1].ID() {
+			return ValidationIgnore
+		}
+		if p == hosts[2].ID() {
+			return ValidationReject
+		}
+
+		return ValidationAccept
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	sub, err := psubs[0].Subscribe("test")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	expectNoMessage := func(sub *Subscription) {
+		ctx, cancel := context.WithTimeout(ctx, 100*time.Millisecond)
+		defer cancel()
+
+		m, err := sub.Next(ctx)
+		if err == nil {
+			t.Fatal("expected no message, but got ", string(m.Data))
+		}
+	}
+
+	psubs[1].Publish("test", []byte("i am not a walrus"))
+	psubs[2].Publish("test", []byte("i am not a walrus either"))
+
+	// assert no messages
+	expectNoMessage(sub)
+
+	// assert that peer1's score is still 0 (its message was ignored) while peer2 should have
+	// a negative score (its message got rejected)
+	res := make(chan float64, 1)
+	psubs[0].eval <- func() {
+		res <- psubs[0].rt.(*GossipSubRouter).score.Score(hosts[1].ID())
+	}
+	score := <-res
+	if score != 0 {
+		t.Fatalf("expected 0 score for peer1, but got %f", score)
+	}
+
+	psubs[0].eval <- func() {
+		res <- psubs[0].rt.(*GossipSubRouter).score.Score(hosts[2].ID())
+	}
+	score = <-res
+	if score >= 0 {
+		t.Fatalf("expected negative score for peer2, but got %f", score)
+	}
+}
+
 func TestGossipsubPiggybackControl(t *testing.T) {
 	// this is a direct test of the piggybackControl function as we can't reliably
 	// trigger it on travis
