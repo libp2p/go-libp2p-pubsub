@@ -233,3 +233,10 @@ func TestPeerScoreParamsValidation(t *testing.T) {
 	}
 
 }
+
+func TestScoreParameterDecay(t *testing.T) {
+	decay1hr := ScoreParameterDecay(time.Hour)
+	if decay1hr != .9987216039048303 {
+		t.Fatalf("expected .9987216039048303, got %f", decay1hr)
+	}
+}

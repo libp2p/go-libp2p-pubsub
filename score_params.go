@@ -2,6 +2,7 @@ package pubsub
 
 import (
 	"fmt"
+	"math"
 	"time"
 
 	"github.com/libp2p/go-libp2p-core/peer"
@@ -240,4 +241,18 @@ func (p *TopicScoreParams) validate() error {
 	}
 
 	return nil
+}
+
+// ScoreParameterDecay computes the decay factor for a parameter, assuming the DecayInterval is 1s
+// and that the value decays to zero if it drops below 0.01
+func ScoreParameterDecay(decay time.Duration) float64 {
+	return ScoreParameterDecayWithBase(decay, time.Second, 0.01)
+}
+
+// ScoreParameterDecay computes the decay factor for a parameter using base as the DecayInterval
+func ScoreParameterDecayWithBase(decay time.Duration, base time.Duration, decayToZero float64) float64 {
+	// the decay is linear, so after n ticks the value is factor^n
+	// so factor^n = decayToZero => factor = decayToZero^(1/n)
+	ticks := float64(decay / base)
+	return math.Pow(decayToZero, 1/ticks)
 }
