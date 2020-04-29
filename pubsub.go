@@ -67,6 +67,9 @@ type PubSub struct {
 	// addSub is a control channel for us to add and remove subscriptions
 	addSub chan *addSubReq
 
+	// addRelay is a control channel for us to add and remove relays
+	addRelay chan *addRelayReq
+
 	// get list of topics we are subscribed to
 	getTopics chan *topicReq
 
@@ -96,6 +99,9 @@ type PubSub struct {
 
 	// The set of topics we are subscribed to
 	mySubs map[string]map[*Subscription]struct{}
+
+	// The set of topics we are relaying for
+	myRelays map[string]int
 
 	// The set of topics we are interested in
 	myTopics map[string]*Topic
@@ -210,6 +216,7 @@ func NewPubSub(ctx context.Context, h host.Host, rt PubSubRouter, opts ...Option
 		cancelCh:              make(chan *Subscription),
 		getPeers:              make(chan *listPeerReq),
 		addSub:                make(chan *addSubReq),
+		addRelay:              make(chan *addRelayReq),
 		addTopic:              make(chan *addTopicReq),
 		rmTopic:               make(chan *rmTopicReq),
 		getTopics:             make(chan *topicReq),
@@ -219,6 +226,7 @@ func NewPubSub(ctx context.Context, h host.Host, rt PubSubRouter, opts ...Option
 		eval:                  make(chan func()),
 		myTopics:              make(map[string]*Topic),
 		mySubs:                make(map[string]map[*Subscription]struct{}),
+		myRelays:              make(map[string]int),
 		topics:                make(map[string]map[peer.ID]struct{}),
 		peers:                 make(map[peer.ID]chan *RPC),
 		blacklist:             NewMapBlacklist(),
@@ -493,6 +501,8 @@ func (p *PubSub) processLoop(ctx context.Context) {
 			p.handleRemoveSubscription(sub)
 		case sub := <-p.addSub:
 			p.handleAddSubscription(sub)
+		case relay := <-p.addRelay:
+			p.handleAddRelay(relay)
 		case preq := <-p.getPeers:
 			tmap, ok := p.topics[preq.topic]
 			if preq.topic != "" && !ok {
@@ -636,6 +646,25 @@ func (p *PubSub) handleAddSubscription(req *addSubReq) {
 	p.mySubs[sub.topic][sub] = struct{}{}
 
 	req.resp <- sub
+}
+
+// handleAddRelay adds a relay for a particular topic. If it is
+// the first relay for the topic, it will announce that this node
+// relays for the topic.
+// Only called from processLoop.
+func (p *PubSub) handleAddRelay(req *addRelayReq) {
+	relays := p.myRelays[req.topic]
+
+	// announce we want this topic
+	if relays == 0 {
+		p.disc.Advertise(req.topic)
+		p.announce(req.topic, true)
+		p.rt.Join(req.topic)
+	}
+
+	p.myRelays[req.topic]++
+
+	req.resp <- nil
 }
 
 // announce announces whether or not this node is interested in a given topic
@@ -1069,4 +1098,9 @@ func (p *PubSub) UnregisterTopicValidator(topic string) error {
 		return p.ctx.Err()
 	}
 	return <-rmVal.resp
+}
+
+type addRelayReq struct {
+	topic string
+	resp  chan error
 }

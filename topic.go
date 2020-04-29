@@ -121,6 +121,32 @@ func (t *Topic) Subscribe(opts ...SubOpt) (*Subscription, error) {
 	return <-out, nil
 }
 
+// Relay enables message relaying for the topic. Subsequent calls increase
+// the reference counter. To completely disable the relay, all references
+// must be revoked.
+func (t *Topic) Relay() error {
+	t.mux.RLock()
+	defer t.mux.RUnlock()
+	if t.closed {
+		return ErrTopicClosed
+	}
+
+	out := make(chan error, 1)
+
+	t.p.disc.Discover(t.topic)
+
+	select {
+	case t.p.addRelay <- &addRelayReq{
+		topic: t.topic,
+		resp:  out,
+	}:
+	case <-t.p.ctx.Done():
+		return t.p.ctx.Err()
+	}
+
+	return <-out
+}
+
 // RouterReady is a function that decides if a router is ready to publish
 type RouterReady func(rt PubSubRouter, topic string) (bool, error)
 
