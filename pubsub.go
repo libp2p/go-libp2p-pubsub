@@ -70,6 +70,9 @@ type PubSub struct {
 	// addRelay is a control channel for us to add and remove relays
 	addRelay chan *addRelayReq
 
+	// rmRelay is a relay cancellation channel
+	rmRelay chan string
+
 	// get list of topics we are subscribed to
 	getTopics chan *topicReq
 
@@ -217,6 +220,7 @@ func NewPubSub(ctx context.Context, h host.Host, rt PubSubRouter, opts ...Option
 		getPeers:              make(chan *listPeerReq),
 		addSub:                make(chan *addSubReq),
 		addRelay:              make(chan *addRelayReq),
+		rmRelay:               make(chan string),
 		addTopic:              make(chan *addTopicReq),
 		rmTopic:               make(chan *rmTopicReq),
 		getTopics:             make(chan *topicReq),
@@ -503,6 +507,8 @@ func (p *PubSub) processLoop(ctx context.Context) {
 			p.handleAddSubscription(sub)
 		case relay := <-p.addRelay:
 			p.handleAddRelay(relay)
+		case topic := <-p.rmRelay:
+			p.handleRemoveRelay(topic)
 		case preq := <-p.getPeers:
 			tmap, ok := p.topics[preq.topic]
 			if preq.topic != "" && !ok {
@@ -664,7 +670,31 @@ func (p *PubSub) handleAddRelay(req *addRelayReq) {
 
 	p.myRelays[req.topic]++
 
-	req.resp <- nil
+	req.resp <- func() {
+		select {
+		case p.rmRelay <- req.topic:
+		case <-p.ctx.Done():
+		}
+	}
+}
+
+// handleRemoveRelay removes one relay reference from bookkeeping.
+// If this was the last relay reference for a given topic, it will also
+// announce that this node is not relaying for this topic anymore.
+// Only called from processLoop.
+func (p *PubSub) handleRemoveRelay(topic string) {
+	if p.myRelays[topic] == 0 {
+		return
+	}
+
+	p.myRelays[topic]--
+
+	if p.myRelays[topic] == 0 {
+		delete(p.myRelays, topic)
+		p.disc.StopAdvertise(topic)
+		p.announce(topic, false)
+		p.rt.Leave(topic)
+	}
 }
 
 // announce announces whether or not this node is interested in a given topic
@@ -1100,7 +1130,9 @@ func (p *PubSub) UnregisterTopicValidator(topic string) error {
 	return <-rmVal.resp
 }
 
+type RelayCancelFunc func()
+
 type addRelayReq struct {
 	topic string
-	resp  chan error
+	resp  chan RelayCancelFunc
 }
