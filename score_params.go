@@ -243,10 +243,15 @@ func (p *TopicScoreParams) validate() error {
 	return nil
 }
 
+const (
+	DefaultDecayInterval = time.Second
+	DefaultDecayToZero   = 0.01
+)
+
 // ScoreParameterDecay computes the decay factor for a parameter, assuming the DecayInterval is 1s
 // and that the value decays to zero if it drops below 0.01
 func ScoreParameterDecay(decay time.Duration) float64 {
-	return ScoreParameterDecayWithBase(decay, time.Second, 0.01)
+	return ScoreParameterDecayWithBase(decay, DefaultDecayInterval, DefaultDecayToZero)
 }
 
 // ScoreParameterDecay computes the decay factor for a parameter using base as the DecayInterval
