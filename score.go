@@ -26,6 +26,9 @@ type peerStats struct {
 
 	// IP tracking; store as string for easy processing
 	ips []string
+
+	// behavioural pattern penalties (applied by the router)
+	behaviourPenalty float64
 }
 
 type topicStats struct {
@@ -251,7 +254,28 @@ func (ps *peerScore) score(p peer.ID) float64 {
 		}
 	}
 
+	// P7: behavioural pattern penalty
+	p7 := pstats.behaviourPenalty * pstats.behaviourPenalty
+	score += p7 * ps.params.BehaviourPenaltyWeight
+
 	return score
+}
+
+// behavioural pattern penalties
+func (ps *peerScore) AddPenalty(p peer.ID, count int) {
+	if ps == nil {
+		return
+	}
+
+	ps.Lock()
+	defer ps.Unlock()
+
+	pstats, ok := ps.peerStats[p]
+	if !ok {
+		return
+	}
+
+	pstats.behaviourPenalty += float64(count)
 }
 
 // periodic maintenance
@@ -365,6 +389,12 @@ func (ps *peerScore) refreshScores() {
 					tstats.meshMessageDeliveriesActive = true
 				}
 			}
+		}
+
+		// decay P7 counter
+		pstats.behaviourPenalty *= ps.params.BehaviourPenaltyDecay
+		if pstats.behaviourPenalty < ps.params.DecayToZero {
+			pstats.behaviourPenalty = 0
 		}
 	}
 }

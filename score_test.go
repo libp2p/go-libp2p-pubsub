@@ -741,6 +741,42 @@ func TestScoreIPColocation(t *testing.T) {
 	}
 }
 
+func TestScoreBehaviourPenalty(t *testing.T) {
+	params := &PeerScoreParams{
+		AppSpecificScore:       func(peer.ID) float64 { return 0 },
+		BehaviourPenaltyWeight: -1,
+		BehaviourPenaltyDecay:  0.99,
+	}
+
+	peerA := peer.ID("A")
+	ps := newPeerScore(params)
+	ps.AddPeer(peerA, "myproto")
+
+	aScore := ps.Score(peerA)
+	if aScore != 0 {
+		t.Errorf("expected peer score to be 0, got %f", aScore)
+	}
+
+	ps.AddPenalty(peerA, 1)
+	aScore = ps.Score(peerA)
+	if aScore != -1 {
+		t.Errorf("expected peer score to be -1, got %f", aScore)
+	}
+
+	ps.AddPenalty(peerA, 1)
+	aScore = ps.Score(peerA)
+	if aScore != -4 {
+		t.Errorf("expected peer score to be -4, got %f", aScore)
+	}
+
+	ps.refreshScores()
+
+	aScore = ps.Score(peerA)
+	if aScore != -3.9204 {
+		t.Errorf("expected peer score to be -3.9204, got %f", aScore)
+	}
+}
+
 func TestScoreRetention(t *testing.T) {
 	// Create parameters with reasonable default values
 	mytopic := "mytopic"

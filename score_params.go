@@ -76,7 +76,8 @@ type PeerScoreParams struct {
 	// P7: behavioural pattern penalties.
 	// This parameter has an associated counter which tracks misbehaviour as detected by the
 	// router.
-	// The value of the parameter is the counter, decaying with BehaviourPatternPenaltyDecay.
+	// The value of the parameter is the square of the counter, decaying with
+	// BehaviourPatternPenaltyDecay.
 	// The weight of the parameter MUST be negative (or zero to disable).
 	BehaviourPenaltyWeight, BehaviourPenaltyDecay float64
 
