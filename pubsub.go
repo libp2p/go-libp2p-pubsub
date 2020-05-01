@@ -676,12 +676,22 @@ func (p *PubSub) handleAddRelay(req *addRelayReq) {
 		p.rt.Join(topic)
 	}
 
-	req.resp <- func() {
+	// flag used to prevent calling cancel function multiple times
+	isCancelled := false
+
+	relayCancelFunc := func() {
+		if isCancelled {
+			return
+		}
+
 		select {
 		case p.rmRelay <- topic:
+			isCancelled = true
 		case <-p.ctx.Done():
 		}
 	}
+
+	req.resp <- relayCancelFunc
 }
 
 // handleRemoveRelay removes one relay reference from bookkeeping.

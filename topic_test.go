@@ -629,7 +629,20 @@ func TestTopicRelayReuse(t *testing.T) {
 		t.Fatal("incorrect number of relays")
 	}
 
+	// only the first invocation should take effect
 	relay1Cancel()
+	relay1Cancel()
+	relay1Cancel()
+
+	pubsubs[0].eval <- func() {
+		res <- pubsubs[0].myRelays[topic] == 2
+	}
+
+	isCorrectNumber = <-res
+	if !isCorrectNumber {
+		t.Fatal("incorrect number of relays")
+	}
+
 	relay2Cancel()
 	relay3Cancel()
 
