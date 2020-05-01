@@ -623,13 +623,13 @@ func (p *PubSub) handleRemoveSubscription(sub *Subscription) {
 
 	if len(subs) == 0 {
 		delete(p.mySubs, sub.topic)
-	}
 
-	// stop announcing only if there are no more subs and relays
-	if len(subs) == 0 && p.myRelays[sub.topic] == 0 {
-		p.disc.StopAdvertise(sub.topic)
-		p.announce(sub.topic, false)
-		p.rt.Leave(sub.topic)
+		// stop announcing only if there are no more subs and relays
+		if p.myRelays[sub.topic] == 0 {
+			p.disc.StopAdvertise(sub.topic)
+			p.announce(sub.topic, false)
+			p.rt.Leave(sub.topic)
+		}
 	}
 }
 
@@ -698,13 +698,13 @@ func (p *PubSub) handleRemoveRelay(topic string) {
 
 	if p.myRelays[topic] == 0 {
 		delete(p.myRelays, topic)
-	}
 
-	// stop announcing only if there are no more relays and subs
-	if p.myRelays[topic] == 0 && len(p.mySubs[topic]) == 0 {
-		p.disc.StopAdvertise(topic)
-		p.announce(topic, false)
-		p.rt.Leave(topic)
+		// stop announcing only if there are no more relays and subs
+		if len(p.mySubs[topic]) == 0 {
+			p.disc.StopAdvertise(topic)
+			p.announce(topic, false)
+			p.rt.Leave(topic)
+		}
 	}
 }
 
