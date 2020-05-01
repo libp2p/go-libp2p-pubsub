@@ -749,10 +749,30 @@ func TestScoreBehaviourPenalty(t *testing.T) {
 	}
 
 	peerA := peer.ID("A")
-	ps := newPeerScore(params)
+
+	var ps *peerScore
+
+	// first check AddPenalty on a nil peerScore
+	ps.AddPenalty(peerA, 1)
+	aScore := ps.Score(peerA)
+	if aScore != 0 {
+		t.Errorf("expected peer score to be 0, got %f", aScore)
+	}
+
+	// instantiate the peerScore
+	ps = newPeerScore(params)
+
+	// next AddPenalty on a non-existent peer
+	ps.AddPenalty(peerA, 1)
+	aScore = ps.Score(peerA)
+	if aScore != 0 {
+		t.Errorf("expected peer score to be 0, got %f", aScore)
+	}
+
+	// add the peer and test penalties
 	ps.AddPeer(peerA, "myproto")
 
-	aScore := ps.Score(peerA)
+	aScore = ps.Score(peerA)
 	if aScore != 0 {
 		t.Errorf("expected peer score to be 0, got %f", aScore)
 	}
