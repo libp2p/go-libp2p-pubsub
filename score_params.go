@@ -73,6 +73,13 @@ type PeerScoreParams struct {
 	IPColocationFactorThreshold int
 	IPColocationFactorWhitelist map[string]struct{}
 
+	// P7: behavioural pattern penalties.
+	// This parameter has an associated counter which tracks misbehaviour as detected by the
+	// router.
+	// The value of the parameter is the counter, decaying with BehaviourPatternPenaltyDecay.
+	// The weight of the parameter MUST be negative (or zero to disable).
+	BehaviourPenaltyWeight, BehaviourPenaltyDecay float64
+
 	// the decay interval for parameter counters.
 	DecayInterval time.Duration
 
@@ -159,6 +166,13 @@ func (p *PeerScoreParams) validate() error {
 	}
 	if p.IPColocationFactorWeight < 0 && p.IPColocationFactorThreshold < 1 {
 		return fmt.Errorf("invalid IPColocationFactorThreshold; must be at least 1")
+	}
+
+	if p.BehaviourPenaltyWeight > 0 {
+		return fmt.Errorf("invalid BehaviourPenaltyWeight; must be negative (or 0 to disable)")
+	}
+	if p.BehaviourPenaltyWeight != 0 && (p.BehaviourPenaltyDecay <= 0 || p.BehaviourPenaltyDecay >= 1) {
+		return fmt.Errorf("invalid BehaviourPenaltyDecay; must be between 0 and 1")
 	}
 
 	// check the decay parameters
