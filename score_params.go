@@ -164,10 +164,11 @@ func (p *PeerScoreParams) validate() error {
 	if p.IPColocationFactorWeight > 0 {
 		return fmt.Errorf("invalid IPColocationFactorWeight; must be negative (or 0 to disable)")
 	}
-	if p.IPColocationFactorWeight < 0 && p.IPColocationFactorThreshold < 1 {
+	if p.IPColocationFactorWeight != 0 && p.IPColocationFactorThreshold < 1 {
 		return fmt.Errorf("invalid IPColocationFactorThreshold; must be at least 1")
 	}
 
+	// check the behaviour penalty
 	if p.BehaviourPenaltyWeight > 0 {
 		return fmt.Errorf("invalid BehaviourPenaltyWeight; must be negative (or 0 to disable)")
 	}
