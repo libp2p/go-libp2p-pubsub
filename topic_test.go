@@ -619,7 +619,13 @@ func TestTopicRelayReuse(t *testing.T) {
 
 	time.Sleep(time.Millisecond * 100)
 
-	if pubsubs[0].myRelays[topic] != 3 {
+	res := make(chan bool, 1)
+	pubsubs[0].eval <- func() {
+		res <- pubsubs[0].myRelays[topic] == 3
+	}
+
+	isCorrectNumber := <-res
+	if !isCorrectNumber {
 		t.Fatal("incorrect number of relays")
 	}
 
@@ -629,7 +635,12 @@ func TestTopicRelayReuse(t *testing.T) {
 
 	time.Sleep(time.Millisecond * 100)
 
-	if pubsubs[0].myRelays[topic] != 0 {
+	pubsubs[0].eval <- func() {
+		res <- pubsubs[0].myRelays[topic] == 0
+	}
+
+	isCorrectNumber = <-res
+	if !isCorrectNumber {
 		t.Fatal("incorrect number of relays")
 	}
 }
