@@ -667,14 +667,14 @@ func (p *PubSub) handleAddSubscription(req *addSubReq) {
 func (p *PubSub) handleAddRelay(req *addRelayReq) {
 	topic := req.topic
 
+	p.myRelays[topic]++
+
 	// announce we want this topic if neither relays nor subs exist so far
-	if p.myRelays[topic] == 0 && len(p.mySubs[topic]) == 0 {
+	if p.myRelays[topic] == 1 && len(p.mySubs[topic]) == 0 {
 		p.disc.Advertise(topic)
 		p.announce(topic, true)
 		p.rt.Join(topic)
 	}
-
-	p.myRelays[topic]++
 
 	req.resp <- func() {
 		select {
