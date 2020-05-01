@@ -153,6 +153,15 @@ func TestPeerScoreParamsValidation(t *testing.T) {
 	if (&PeerScoreParams{TopicScoreCap: 1, AppSpecificScore: appScore, DecayInterval: time.Second, DecayToZero: 2, IPColocationFactorWeight: -1, IPColocationFactorThreshold: 1}).validate() == nil {
 		t.Fatal("expected validation error")
 	}
+	if (&PeerScoreParams{AppSpecificScore: appScore, DecayInterval: time.Second, DecayToZero: 0.01, BehaviourPenaltyWeight: 1}) == nil {
+		t.Fatal("expected validation error")
+	}
+	if (&PeerScoreParams{AppSpecificScore: appScore, DecayInterval: time.Second, DecayToZero: 0.01, BehaviourPenaltyWeight: -1}) == nil {
+		t.Fatal("expected validation error")
+	}
+	if (&PeerScoreParams{AppSpecificScore: appScore, DecayInterval: time.Second, DecayToZero: 0.01, BehaviourPenaltyWeight: -1, BehaviourPenaltyDecay: 2}) == nil {
+		t.Fatal("expected validation error")
+	}
 
 	// don't use these params in production!
 	if (&PeerScoreParams{
@@ -162,6 +171,8 @@ func TestPeerScoreParamsValidation(t *testing.T) {
 		DecayToZero:                 0.01,
 		IPColocationFactorWeight:    -1,
 		IPColocationFactorThreshold: 1,
+		BehaviourPenaltyWeight:      -1,
+		BehaviourPenaltyDecay:       0.999,
 	}).validate() != nil {
 		t.Fatal("expected validation success")
 	}
