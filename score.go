@@ -90,6 +90,7 @@ type messageDeliveries struct {
 
 type deliveryRecord struct {
 	status    int
+	firstSeen time.Time
 	validated time.Time
 	peers     map[peer.ID]struct{}
 }
@@ -511,6 +512,12 @@ func (ps *peerScore) DeliverMessage(msg *Message) {
 
 	drec := ps.deliveries.getRecord(ps.msgID(msg.Message))
 
+	// defensive check that this is the first delivery trace -- delivery status should be unknown
+	if drec.status != deliveryUnknown {
+		log.Warningf("unexpected delivery trace: message from %s was first seen %s ago and has delivery status %d", msg.ReceivedFrom, time.Now().Sub(drec.firstSeen), drec.status)
+		return
+	}
+
 	// mark the message as valid and reward mesh peers that have already forwarded it to us
 	drec.status = deliveryValid
 	drec.validated = time.Now()
@@ -551,6 +558,12 @@ func (ps *peerScore) RejectMessage(msg *Message, reason string) {
 	}
 
 	drec := ps.deliveries.getRecord(ps.msgID(msg.Message))
+
+	// defensive check that this is the first rejection trace -- delivery status should be unknown
+	if drec.status != deliveryUnknown {
+		log.Warningf("unexpected rejection trace: message from %s was first seen %s ago and has delivery status %d", msg.ReceivedFrom, time.Now().Sub(drec.firstSeen), drec.status)
+		return
+	}
 
 	switch reason {
 	case rejectValidationThrottled:
@@ -621,10 +634,12 @@ func (d *messageDeliveries) getRecord(id string) *deliveryRecord {
 		return rec
 	}
 
-	rec = &deliveryRecord{peers: make(map[peer.ID]struct{})}
+	now := time.Now()
+
+	rec = &deliveryRecord{peers: make(map[peer.ID]struct{}), firstSeen: now}
 	d.records[id] = rec
 
-	entry := &deliveryEntry{id: id, expire: time.Now().Add(TimeCacheDuration)}
+	entry := &deliveryEntry{id: id, expire: now.Add(TimeCacheDuration)}
 	if d.tail != nil {
 		d.tail.next = entry
 		d.tail = entry
