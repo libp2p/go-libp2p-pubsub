@@ -113,7 +113,7 @@ func (t *JSONTracer) doWrite() {
 		for i, evt := range buf {
 			err := enc.Encode(evt)
 			if err != nil {
-				log.Errorf("error writing event trace: %s", err.Error())
+				log.Warnf("error writing event trace: %s", err.Error())
 			}
 			buf[i] = nil
 		}
@@ -165,7 +165,7 @@ func (t *PBTracer) doWrite() {
 		for i, evt := range buf {
 			err := w.WriteMsg(evt)
 			if err != nil {
-				log.Errorf("error writing event trace: %s", err.Error())
+				log.Warnf("error writing event trace: %s", err.Error())
 			}
 			buf[i] = nil
 		}
@@ -202,7 +202,7 @@ func (t *RemoteTracer) doWrite() {
 
 	s, err := t.openStream()
 	if err != nil {
-		log.Errorf("error opening remote tracer stream: %s", err.Error())
+		log.Warnf("error opening remote tracer stream: %s", err.Error())
 		return
 	}
 
@@ -237,13 +237,13 @@ func (t *RemoteTracer) doWrite() {
 
 		err = w.WriteMsg(&batch)
 		if err != nil {
-			log.Errorf("error writing trace event batch: %s", err)
+			log.Warnf("error writing trace event batch: %s", err)
 			goto end
 		}
 
 		err = gzipW.Flush()
 		if err != nil {
-			log.Errorf("error flushin gzip stream: %s", err)
+			log.Warnf("error flushin gzip stream: %s", err)
 			goto end
 		}
 
@@ -267,7 +267,7 @@ func (t *RemoteTracer) doWrite() {
 			s.Reset()
 			s, err = t.openStream()
 			if err != nil {
-				log.Errorf("error opening remote tracer stream: %s", err.Error())
+				log.Warnf("error opening remote tracer stream: %s", err.Error())
 				return
 			}
 
