@@ -1752,6 +1752,8 @@ func TestGossipsubRPCFragmentation(t *testing.T) {
 
 	// wait a bit for them to be received via gossip by the fake peer
 	time.Sleep(5 * time.Second)
+	iwe.lk.Lock()
+	defer iwe.lk.Unlock()
 
 	// we should have received all the messages
 	if iwe.msgsReceived != nMessages {
@@ -1778,6 +1780,7 @@ func TestGossipsubRPCFragmentation(t *testing.T) {
 // test that large responses to IWANT requests are fragmented into multiple RPCs.
 type iwantEverything struct {
 	h                host.Host
+	lk               sync.Mutex
 	rpcsWithMessages int
 	msgsReceived     int
 	ihavesReceived   int
@@ -1816,6 +1819,7 @@ func (iwe *iwantEverything) handleStream(s network.Stream) {
 			return
 		}
 
+		iwe.lk.Lock()
 		if len(rpc.Publish) != 0 {
 			iwe.rpcsWithMessages++
 		}
@@ -1852,5 +1856,6 @@ func (iwe *iwantEverything) handleStream(s network.Stream) {
 				panic(err)
 			}
 		}
+		iwe.lk.Unlock()
 	}
 }
