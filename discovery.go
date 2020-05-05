@@ -189,7 +189,7 @@ func (d *discover) Advertise(topic string) {
 	go func() {
 		next, err := d.discovery.Advertise(advertisingCtx, topic)
 		if err != nil {
-			log.Warningf("bootstrap: error providing rendezvous for %s: %s", topic, err.Error())
+			log.Warnf("bootstrap: error providing rendezvous for %s: %s", topic, err.Error())
 			if next == 0 {
 				next = discoveryAdvertiseRetryInterval
 			}
@@ -203,7 +203,7 @@ func (d *discover) Advertise(topic string) {
 			case <-t.C:
 				next, err = d.discovery.Advertise(advertisingCtx, topic)
 				if err != nil {
-					log.Warningf("bootstrap: error providing rendezvous for %s: %s", topic, err.Error())
+					log.Warnf("bootstrap: error providing rendezvous for %s: %s", topic, err.Error())
 					if next == 0 {
 						next = discoveryAdvertiseRetryInterval
 					}
