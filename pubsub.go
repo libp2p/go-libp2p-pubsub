@@ -886,7 +886,7 @@ func (p *PubSub) handleIncomingRPC(rpc *RPC) {
 
 	// ask the router to vet the peer before commiting any processing resources
 	if !p.rt.AcceptFrom(rpc.from) {
-		log.Warnf("received message from router graylisted peer %s. Dropping RPC", rpc.from)
+		log.Infof("received message from router graylisted peer %s. Dropping RPC", rpc.from)
 		return
 	}
 
