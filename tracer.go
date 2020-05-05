@@ -54,7 +54,7 @@ func (t *basicTracer) Trace(evt *pb.TraceEvent) {
 	}
 
 	if t.lossy && len(t.buf) > TraceBufferSize {
-		log.Warningf("trace buffer overflow; dropping trace event")
+		log.Warnf("trace buffer overflow; dropping trace event")
 	} else {
 		t.buf = append(t.buf, evt)
 	}

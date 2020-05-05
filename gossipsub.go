@@ -526,7 +526,7 @@ func (gs *GossipSubRouter) handleGraft(p peer.ID, ctl *pb.ControlMessage) []*pb.
 		// we don't GRAFT to/from direct peers; complain loudly if this happens
 		_, direct := gs.direct[p]
 		if direct {
-			log.Warningf("GRAFT: ignoring request from direct peer %s", p)
+			log.Warnf("GRAFT: ignoring request from direct peer %s", p)
 			// this is possibly a bug from non-reciprocal configuration; send a PRUNE
 			prune = append(prune, topic)
 			// but don't PX
@@ -654,16 +654,16 @@ func (gs *GossipSubRouter) pxConnect(peers []*pb.PeerInfo) {
 			// the peer sent us a signed record; ensure that it is valid
 			envelope, r, err := record.ConsumeEnvelope(pi.SignedPeerRecord, peer.PeerRecordEnvelopeDomain)
 			if err != nil {
-				log.Warningf("error unmarshalling peer record obtained through px: %s", err)
+				log.Warnf("error unmarshalling peer record obtained through px: %s", err)
 				continue
 			}
 			rec, ok := r.(*peer.PeerRecord)
 			if !ok {
-				log.Warningf("bogus peer record obtained through px: envelope payload is not PeerRecord")
+				log.Warnf("bogus peer record obtained through px: envelope payload is not PeerRecord")
 				continue
 			}
 			if rec.PeerID != p {
-				log.Warningf("bogus peer record obtained through px: peer ID %s doesn't match expected peer %s", rec.PeerID, p)
+				log.Warnf("bogus peer record obtained through px: peer ID %s doesn't match expected peer %s", rec.PeerID, p)
 				continue
 			}
 			spr = envelope
@@ -1384,7 +1384,7 @@ func (gs *GossipSubRouter) makePrune(p peer.ID, topic string, doPX bool) *pb.Con
 				if spr != nil {
 					recordBytes, err = spr.Marshal()
 					if err != nil {
-						log.Warningf("error marshaling signed peer record for %s: %s", p, err)
+						log.Warnf("error marshaling signed peer record for %s: %s", p, err)
 					}
 				}
 			}

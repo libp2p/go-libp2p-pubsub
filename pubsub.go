@@ -426,12 +426,12 @@ func (p *PubSub) processLoop(ctx context.Context) {
 		select {
 		case pid := <-p.newPeers:
 			if _, ok := p.peers[pid]; ok {
-				log.Warning("already have connection to peer: ", pid)
+				log.Warn("already have connection to peer: ", pid)
 				continue
 			}
 
 			if p.blacklist.Contains(pid) {
-				log.Warning("ignoring connection from blacklisted peer: ", pid)
+				log.Warn("ignoring connection from blacklisted peer: ", pid)
 				continue
 			}
 
@@ -445,13 +445,13 @@ func (p *PubSub) processLoop(ctx context.Context) {
 
 			ch, ok := p.peers[pid]
 			if !ok {
-				log.Warning("new stream for unknown peer: ", pid)
+				log.Warn("new stream for unknown peer: ", pid)
 				s.Reset()
 				continue
 			}
 
 			if p.blacklist.Contains(pid) {
-				log.Warning("closing stream for blacklisted peer: ", pid)
+				log.Warn("closing stream for blacklisted peer: ", pid)
 				close(ch)
 				s.Reset()
 				continue
@@ -473,7 +473,7 @@ func (p *PubSub) processLoop(ctx context.Context) {
 			if p.host.Network().Connectedness(pid) == network.Connected {
 				// still connected, must be a duplicate connection being closed.
 				// we respawn the writer as we need to ensure there is a stream active
-				log.Warning("peer declared dead but still connected; respawning writer: ", pid)
+				log.Warn("peer declared dead but still connected; respawning writer: ", pid)
 				messages := make(chan *RPC, p.peerOutboundQueueSize)
 				messages <- p.getHelloPacket()
 				go p.handleNewPeer(ctx, pid, messages)
@@ -886,13 +886,13 @@ func (p *PubSub) handleIncomingRPC(rpc *RPC) {
 
 	// ask the router to vet the peer before commiting any processing resources
 	if !p.rt.AcceptFrom(rpc.from) {
-		log.Warningf("received message from router graylisted peer %s. Dropping RPC", rpc.from)
+		log.Warnf("received message from router graylisted peer %s. Dropping RPC", rpc.from)
 		return
 	}
 
 	for _, pmsg := range rpc.GetPublish() {
 		if !(p.subscribedToMsg(pmsg) || p.canRelayMsg(pmsg)) {
-			log.Warning("received message we didn't subscribe to. Dropping.")
+			log.Warn("received message we didn't subscribe to. Dropping.")
 			continue
 		}
 
@@ -913,14 +913,14 @@ func (p *PubSub) pushMsg(msg *Message) {
 	src := msg.ReceivedFrom
 	// reject messages from blacklisted peers
 	if p.blacklist.Contains(src) {
-		log.Warningf("dropping message from blacklisted peer %s", src)
+		log.Warnf("dropping message from blacklisted peer %s", src)
 		p.tracer.RejectMessage(msg, rejectBlacklstedPeer)
 		return
 	}
 
 	// even if they are forwarded by good peers
 	if p.blacklist.Contains(msg.GetFrom()) {
-		log.Warningf("dropping message from blacklisted source %s", src)
+		log.Warnf("dropping message from blacklisted source %s", src)
 		p.tracer.RejectMessage(msg, rejectBlacklistedSource)
 		return
 	}

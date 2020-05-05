@@ -200,7 +200,7 @@ func (v *validation) Push(src peer.ID, msg *Message) bool {
 		select {
 		case v.validateQ <- &validateReq{vals, src, msg}:
 		default:
-			log.Warningf("message validation throttled: queue full; dropping message from %s", src)
+			log.Warnf("message validation throttled: queue full; dropping message from %s", src)
 			v.tracer.RejectMessage(msg, rejectValidationQueueFull)
 		}
 		return false
@@ -243,7 +243,7 @@ func (v *validation) validateWorker() {
 func (v *validation) validate(vals []*topicVal, src peer.ID, msg *Message) {
 	if msg.Signature != nil {
 		if !v.validateSignature(msg) {
-			log.Warningf("message signature validation failed; dropping message from %s", src)
+			log.Warnf("message signature validation failed; dropping message from %s", src)
 			v.tracer.RejectMessage(msg, rejectInvalidSignature)
 			return
 		}
@@ -282,7 +282,7 @@ func (v *validation) validate(vals []*topicVal, src peer.ID, msg *Message) {
 	}
 
 	if result == ValidationReject {
-		log.Warningf("message validation failed; dropping message from %s", src)
+		log.Warnf("message validation failed; dropping message from %s", src)
 		v.tracer.RejectMessage(msg, rejectValidationFailed)
 		return
 	}
@@ -296,7 +296,7 @@ func (v *validation) validate(vals []*topicVal, src peer.ID, msg *Message) {
 				<-v.validateThrottle
 			}()
 		default:
-			log.Warningf("message validation throttled; dropping message from %s", src)
+			log.Warnf("message validation throttled; dropping message from %s", src)
 			v.tracer.RejectMessage(msg, rejectValidationThrottled)
 		}
 		return
@@ -340,7 +340,7 @@ func (v *validation) doValidateTopic(vals []*topicVal, src peer.ID, msg *Message
 		v.tracer.RejectMessage(msg, rejectValidationIgnored)
 		return
 	case validationThrottled:
-		log.Warningf("message validation throttled; ignoring message from %s", src)
+		log.Warnf("message validation throttled; ignoring message from %s", src)
 		v.tracer.RejectMessage(msg, rejectValidationThrottled)
 
 	default:
@@ -428,7 +428,7 @@ func (val *topicVal) validateMsg(ctx context.Context, src peer.ID, msg *Message)
 		return r
 
 	default:
-		log.Warningf("Unexpected result from validator: %d; ignoring message", r)
+		log.Warnf("Unexpected result from validator: %d; ignoring message", r)
 		return ValidationIgnore
 	}
 }

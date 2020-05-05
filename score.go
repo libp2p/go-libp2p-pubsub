@@ -514,7 +514,7 @@ func (ps *peerScore) DeliverMessage(msg *Message) {
 
 	// defensive check that this is the first delivery trace -- delivery status should be unknown
 	if drec.status != deliveryUnknown {
-		log.Warningf("unexpected delivery trace: message from %s was first seen %s ago and has delivery status %d", msg.ReceivedFrom, time.Now().Sub(drec.firstSeen), drec.status)
+		log.Warnf("unexpected delivery trace: message from %s was first seen %s ago and has delivery status %d", msg.ReceivedFrom, time.Now().Sub(drec.firstSeen), drec.status)
 		return
 	}
 
@@ -561,7 +561,7 @@ func (ps *peerScore) RejectMessage(msg *Message, reason string) {
 
 	// defensive check that this is the first rejection trace -- delivery status should be unknown
 	if drec.status != deliveryUnknown {
-		log.Warningf("unexpected rejection trace: message from %s was first seen %s ago and has delivery status %d", msg.ReceivedFrom, time.Now().Sub(drec.firstSeen), drec.status)
+		log.Warnf("unexpected rejection trace: message from %s was first seen %s ago and has delivery status %d", msg.ReceivedFrom, time.Now().Sub(drec.firstSeen), drec.status)
 		return
 	}
 
