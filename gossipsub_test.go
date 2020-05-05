@@ -1487,6 +1487,46 @@ func TestGossipsubPiggybackControl(t *testing.T) {
 	}
 }
 
+func TestGossipsubRPCFragmentation(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	h := bhost.NewBlankHost(swarmt.GenSwarm(t, ctx))
+	ps := getGossipsub(ctx, h)
+	ps.maxMessageSize = 500
+
+	blah := peer.ID("bogotr0n")
+	msgch := make(chan *RPC, 10)
+	ps.peers[blah] = msgch
+	ps.eval <- func() {
+		gs := ps.rt.(*GossipSubRouter)
+		topic := "test1"
+		gs.mesh[topic] = make(map[peer.ID]struct{})
+		gs.mesh[topic][blah] = struct{}{}
+
+		rpc := &RPC{RPC: pb.RPC{}, from: h.ID()}
+		msgs := make([]*pb.Message, 10)
+		for i := 0; i < 10; i++ {
+			msgs[i] = makeTestMessage(i)
+			msgs[i].Data = make([]byte, 100)
+			rand.Read(msgs[i].Data)
+		}
+		rpc.Publish = msgs
+
+		gs.sendRPC(blah, rpc)
+		close(msgch)
+		delete(ps.peers, blah)
+	}
+
+	rpcs := make([]*RPC, 0, 10)
+	for rpc := range msgch {
+		rpcs = append(rpcs, rpc)
+	}
+	if len(rpcs) < 2 {
+		t.Fatalf("expected large rpc message to be fragmented before sending on output channel, got %d rpcs", len(rpcs))
+	}
+}
+
 func TestGossipsubOpportunisticGrafting(t *testing.T) {
 	originalGossipSubPruneBackoff := GossipSubPruneBackoff
 	GossipSubPruneBackoff = 500 * time.Millisecond
