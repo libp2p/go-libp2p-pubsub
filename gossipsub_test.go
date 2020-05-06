@@ -1802,12 +1802,6 @@ func (iwe *iwantEverything) handleStream(s network.Stream) {
 	topic := "test"
 	err = w.WriteMsg(&pb.RPC{Subscriptions: []*pb.RPC_SubOpts{&pb.RPC_SubOpts{Subscribe: &truth, Topicid: &topic}}})
 
-	remotePidBytes, err := s.Conn().RemotePeer().MarshalBinary()
-	if err != nil {
-		panic(err)
-	}
-	toPrune := []*pb.PeerInfo{{PeerID: remotePidBytes}}
-
 	var rpc pb.RPC
 	for {
 		rpc.Reset()
@@ -1836,7 +1830,7 @@ func (iwe *iwantEverything) handleStream(s network.Stream) {
 			// send a PRUNE for all grafts, so we don't get direct message deliveries
 			var prunes []*pb.ControlPrune
 			for _, graft := range rpc.Control.Graft {
-				prunes = append(prunes, &pb.ControlPrune{TopicID: graft.TopicID, Peers: toPrune})
+				prunes = append(prunes, &pb.ControlPrune{TopicID: graft.TopicID})
 			}
 
 			var iwants []*pb.ControlIWant
