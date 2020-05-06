@@ -1787,6 +1787,8 @@ type iwantEverything struct {
 }
 
 func (iwe *iwantEverything) handleStream(s network.Stream) {
+	defer s.Close()
+
 	os, err := iwe.h.NewStream(context.Background(), s.Conn().RemotePeer(), GossipSubID_v10)
 	if err != nil {
 		panic(err)
