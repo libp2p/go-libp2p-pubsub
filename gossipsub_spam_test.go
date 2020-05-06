@@ -312,17 +312,15 @@ func TestGossipsubAttackGRAFTNonExistentTopic(t *testing.T) {
 }
 
 // Test that when Gossipsub receives GRAFT for a peer that has been PRUNED,
-// it ignores the request if the GRAFTs are coming too fast
+// it penalizes through P7 and eventually graylists and ignores the requests if the
+// GRAFTs are coming too fast
 func TestGossipsubAttackGRAFTDuringBackoff(t *testing.T) {
 	originalGossipSubPruneBackoff := GossipSubPruneBackoff
 	GossipSubPruneBackoff = 200 * time.Millisecond
 	originalGossipSubGraftFloodThreshold := GossipSubGraftFloodThreshold
 	GossipSubGraftFloodThreshold = 100 * time.Millisecond
-	originalGossipSubPruneBackoffPenalty := GossipSubPruneBackoffPenalty
-	GossipSubPruneBackoffPenalty = 500 * time.Millisecond
 	defer func() {
 		GossipSubPruneBackoff = originalGossipSubPruneBackoff
-		GossipSubPruneBackoffPenalty = originalGossipSubPruneBackoffPenalty
 		GossipSubGraftFloodThreshold = originalGossipSubGraftFloodThreshold
 	}()
 
@@ -335,7 +333,20 @@ func TestGossipsubAttackGRAFTDuringBackoff(t *testing.T) {
 	attacker := hosts[1]
 
 	// Set up gossipsub on the legit host
-	ps, err := NewGossipSub(ctx, legit)
+	ps, err := NewGossipSub(ctx, legit,
+		WithPeerScore(
+			&PeerScoreParams{
+				AppSpecificScore:       func(peer.ID) float64 { return 0 },
+				BehaviourPenaltyWeight: -100,
+				BehaviourPenaltyDecay:  ScoreParameterDecay(time.Minute),
+				DecayInterval:          DefaultDecayInterval,
+				DecayToZero:            DefaultDecayToZero,
+			},
+			&PeerScoreThresholds{
+				GossipThreshold:   -100,
+				PublishThreshold:  -500,
+				GraylistThreshold: -1000,
+			}))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -401,7 +412,7 @@ func TestGossipsubAttackGRAFTDuringBackoff(t *testing.T) {
 					}
 
 					// wait for the GossipSubGraftFloodThreshold to pass before attempting another graft
-					time.Sleep(GossipSubGraftFloodThreshold)
+					time.Sleep(GossipSubGraftFloodThreshold + time.Millisecond)
 
 					// Send a GRAFT to attempt to rejoin the mesh
 					writeMsg(&pb.RPC{
@@ -410,15 +421,18 @@ func TestGossipsubAttackGRAFTDuringBackoff(t *testing.T) {
 
 					time.Sleep(20 * time.Millisecond)
 
-					// It's been less than the flood threshold time since the last
-					// PRUNE, so we shouldn't get any prunes back
+					// We should have been peanalized by the peer for sending before the backoff has expired
+					// but should still receive a PRUNE because we haven't dropped below GraylistThreshold
+					// yet.
 					pc = getPruneCount()
 					if pc != 1 {
 						t.Fatalf("Expected %d PRUNE messages but got %d", 1, pc)
 					}
 
-					// Wait until after the prune backoff penalty period
-					time.Sleep(GossipSubPruneBackoffPenalty + time.Second)
+					score1 := ps.rt.(*GossipSubRouter).score.Score(attacker.ID())
+					if score1 >= 0 {
+						t.Fatalf("Expected negative score, but got %f", score1)
+					}
 
 					// Send a GRAFT again to attempt to rejoin the mesh
 					writeMsg(&pb.RPC{
@@ -427,14 +441,55 @@ func TestGossipsubAttackGRAFTDuringBackoff(t *testing.T) {
 
 					time.Sleep(20 * time.Millisecond)
 
-					// The prune backoff period has passed so the GRAFT should
-					// be accepted and this node should not receive a PRUNE
+					// we are before the flood threshold so we should be penalized twice, but still get
+					// a PRUNE because we are before the flood threshold
 					pc = getPruneCount()
-					if pc != 1 {
-						t.Fatalf("Expected %d PRUNE messages but got %d", 1, pc)
+					if pc != 2 {
+						t.Fatalf("Expected %d PRUNE messages but got %d", 2, pc)
 					}
 
-					// make sure we are in the mesh of the legit host now
+					score2 := ps.rt.(*GossipSubRouter).score.Score(attacker.ID())
+					if score2 >= score1 {
+						t.Fatalf("Expected score below %f, but got %f", score1, score2)
+					}
+
+					// Send another GRAFT; this should get us a PRUNE, but penalize us below the graylist threshold
+					writeMsg(&pb.RPC{
+						Control: &pb.ControlMessage{Graft: graft},
+					})
+
+					time.Sleep(20 * time.Millisecond)
+
+					pc = getPruneCount()
+					if pc != 3 {
+						t.Fatalf("Expected %d PRUNE messages but got %d", 3, pc)
+					}
+
+					score3 := ps.rt.(*GossipSubRouter).score.Score(attacker.ID())
+					if score3 >= score2 {
+						t.Fatalf("Expected score below %f, but got %f", score2, score3)
+					}
+					if score3 >= -1000 {
+						t.Fatalf("Expected score below %f, but got %f", -1000.0, score3)
+					}
+
+					// Wait for the PRUNE backoff to expire and try again; this time we should fail
+					// because we are below the graylist threshold, so our RPC should be ignored and
+					// we should get no PRUNE back
+					time.Sleep(GossipSubPruneBackoff + time.Millisecond)
+
+					writeMsg(&pb.RPC{
+						Control: &pb.ControlMessage{Graft: graft},
+					})
+
+					time.Sleep(20 * time.Millisecond)
+
+					pc = getPruneCount()
+					if pc != 3 {
+						t.Fatalf("Expected %d PRUNE messages but got %d", 3, pc)
+					}
+
+					// make sure we are _not_ in the mesh
 					res := make(chan bool)
 					ps.eval <- func() {
 						mesh := ps.rt.(*GossipSubRouter).mesh[mytopic]
@@ -443,8 +498,8 @@ func TestGossipsubAttackGRAFTDuringBackoff(t *testing.T) {
 					}
 
 					inMesh := <-res
-					if !inMesh {
-						t.Fatal("Expected to be in the mesh of the legitimate host")
+					if inMesh {
+						t.Fatal("Expected to not be in the mesh of the legitimate host")
 					}
 				}()
 			}
