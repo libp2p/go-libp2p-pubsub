@@ -222,7 +222,7 @@ func TestScoreMeshMessageDeliveries(t *testing.T) {
 	topicScoreParams := &TopicScoreParams{
 		TopicWeight:                     1,
 		MeshMessageDeliveriesWeight:     -1,
-		MeshMessageDeliveriesActivation: 500 * time.Millisecond,
+		MeshMessageDeliveriesActivation: time.Second,
 		MeshMessageDeliveriesWindow:     10 * time.Millisecond,
 		MeshMessageDeliveriesThreshold:  20,
 		MeshMessageDeliveriesCap:        100,
