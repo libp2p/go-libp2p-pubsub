@@ -939,10 +939,14 @@ func fragmentRPC(rpc *RPC, limit int) ([]*RPC, error) {
 
 	// outRPC returns the current RPC message if it will fit sizeToAdd more bytes
 	// otherwise, it will create a new RPC message and add it to the list.
-	// if withCtl is true, the new RPC message will have a non-nil empty Control message.
+	// if withCtl is true, the returned message will have a non-nil empty Control message.
 	outRPC := func(sizeToAdd int, withCtl bool) *RPC {
 		current := rpcs[len(rpcs)-1]
-		if current.Size()+sizeToAdd < limit {
+		// check if we can fit the new data, plus an extra byte for the protobuf field tag
+		if current.Size()+sizeToAdd+1 < limit {
+			if withCtl && current.Control == nil {
+				current.Control = &pb.ControlMessage{}
+			}
 			return current
 		}
 		var ctl *pb.ControlMessage
@@ -982,9 +986,6 @@ func fragmentRPC(rpc *RPC, limit int) ([]*RPC, error) {
 	}
 
 	// we need to split up the control messages into multiple RPCs
-	// add a blank rpc message to the end of the list, then use outRPC to get or create
-	// RPC messages to fit each control message
-	rpcs = append(rpcs, &RPC{RPC: pb.RPC{Control: &pb.ControlMessage{}}, from: rpc.from})
 	for _, graft := range ctl.Graft {
 		out := outRPC(graft.Size(), true)
 		out.Control.Graft = append(out.Control.Graft, graft)
@@ -993,15 +994,54 @@ func fragmentRPC(rpc *RPC, limit int) ([]*RPC, error) {
 		out := outRPC(prune.Size(), true)
 		out.Control.Prune = append(out.Control.Prune, prune)
 	}
+
+	// An individual IWANT or IHAVE message could be larger than the limit if we have
+	// a lot of message IDs. fragmentMessageIds will split them into buckets that
+	// fit within the limit, with some overhead for the control messages themselves
 	for _, iwant := range ctl.Iwant {
-		out := outRPC(iwant.Size(), true)
-		out.Control.Iwant = append(out.Control.Iwant, iwant)
+		const protobufOverhead = 6
+		idBuckets := fragmentMessageIds(iwant.MessageIDs, limit-protobufOverhead)
+		for _, ids := range idBuckets {
+			iwant := &pb.ControlIWant{MessageIDs: ids}
+			out := outRPC(iwant.Size(), true)
+			out.Control.Iwant = append(out.Control.Iwant, iwant)
+		}
 	}
 	for _, ihave := range ctl.Ihave {
-		out := outRPC(ihave.Size(), true)
-		out.Control.Ihave = append(out.Control.Ihave, ihave)
+		const protobufOverhead = 6
+		idBuckets := fragmentMessageIds(ihave.MessageIDs, limit-protobufOverhead)
+		for _, ids := range idBuckets {
+			ihave := &pb.ControlIHave{MessageIDs: ids}
+			out := outRPC(ihave.Size(), true)
+			out.Control.Ihave = append(out.Control.Ihave, ihave)
+		}
 	}
 	return rpcs, nil
+}
+
+func fragmentMessageIds(msgIds []string, limit int) [][]string {
+	// account for two bytes of protobuf overhead per array element
+	const protobufOverhead = 2
+
+	out := [][]string{{}}
+	var currentBucket int
+	var bucketLen int
+	for i := 0; i < len(msgIds); i++ {
+		size := len(msgIds[i]) + protobufOverhead
+		if size > limit {
+			// pathological case where a single message ID exceeds the limit.
+			log.Warnf("message ID length %d exceeds limit %d, removing from outgoing gossip", size, limit)
+			continue
+		}
+		bucketLen += size
+		if bucketLen > limit {
+			out = append(out, []string{})
+			currentBucket++
+			bucketLen = size
+		}
+		out[currentBucket] = append(out[currentBucket], msgIds[i])
+	}
+	return out
 }
 
 func (gs *GossipSubRouter) heartbeatTimer() {
