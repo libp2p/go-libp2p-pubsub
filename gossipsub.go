@@ -75,12 +75,8 @@ var (
 	GossipSubOpportunisticGraftPeers = 2
 
 	// If a GRAFT comes before GossipSubGraftFloodThreshold has ellapsed since the last PRUNE,
-	// then there is no PRUNE response emitted. This protects against GRAFT floods and should be
-	// less than GossipSubPruneBackoff.
+	// then there is an extra score penalty applied to the peer through P7.
 	GossipSubGraftFloodThreshold = 10 * time.Second
-
-	// backoff penalty for GRAFT floods
-	GossipSubPruneBackoffPenalty = time.Hour
 
 	// Maximum number of messages to include in an IHAVE message. Also controls the maximum
 	// number of IHAVE ids we will accept and request with IWANT from a peer within a heartbeat,
@@ -538,18 +534,19 @@ func (gs *GossipSubRouter) handleGraft(p peer.ID, ctl *pb.ControlMessage) []*pb.
 		expire, backoff := gs.backoff[topic][p]
 		if backoff && now.Before(expire) {
 			log.Debugf("GRAFT: ignoring backed off peer %s", p)
+			// add behavioural penalty
+			gs.score.AddPenalty(p, 1)
+			// no PX
+			doPX = false
 			// check the flood cutoff -- is the GRAFT coming too fast?
 			floodCutoff := expire.Add(GossipSubGraftFloodThreshold - GossipSubPruneBackoff)
 			if now.Before(floodCutoff) {
-				// no prune, and no PX either
-				doPX = false
-				// and a penalty so that we don't GRAFT on this peer ourselves for a while
-				gs.addBackoffPenalty(p, topic)
-			} else {
-				prune = append(prune, topic)
-				// refresh the backoff
-				gs.addBackoff(p, topic)
+				// extra penalty
+				gs.score.AddPenalty(p, 1)
 			}
+			// refresh the backoff
+			gs.addBackoff(p, topic)
+			prune = append(prune, topic)
 			continue
 		}
 
@@ -598,7 +595,13 @@ func (gs *GossipSubRouter) handlePrune(p peer.ID, ctl *pb.ControlMessage) {
 		gs.tracer.Prune(p, topic)
 		delete(peers, p)
 		gs.untagPeer(p, topic)
-		gs.addBackoff(p, topic)
+		// is there a backoff specified by the peer? if so obey it.
+		backoff := prune.GetBackoff()
+		if backoff > 0 {
+			gs.doAddBackoff(p, topic, time.Duration(backoff)*time.Second)
+		} else {
+			gs.addBackoff(p, topic)
+		}
 
 		px := prune.GetPeers()
 		if len(px) > 0 {
@@ -615,10 +618,6 @@ func (gs *GossipSubRouter) handlePrune(p peer.ID, ctl *pb.ControlMessage) {
 
 func (gs *GossipSubRouter) addBackoff(p peer.ID, topic string) {
 	gs.doAddBackoff(p, topic, GossipSubPruneBackoff)
-}
-
-func (gs *GossipSubRouter) addBackoffPenalty(p peer.ID, topic string) {
-	gs.doAddBackoff(p, topic, GossipSubPruneBackoffPenalty)
 }
 
 func (gs *GossipSubRouter) doAddBackoff(p peer.ID, topic string, interval time.Duration) {
@@ -1503,6 +1502,7 @@ func (gs *GossipSubRouter) makePrune(p peer.ID, topic string, doPX bool) *pb.Con
 		return &pb.ControlPrune{TopicID: &topic}
 	}
 
+	backoff := uint64(GossipSubPruneBackoff / time.Second)
 	var px []*pb.PeerInfo
 	if doPX {
 		// select peers for Peer eXchange
@@ -1531,7 +1531,7 @@ func (gs *GossipSubRouter) makePrune(p peer.ID, topic string, doPX bool) *pb.Con
 		}
 	}
 
-	return &pb.ControlPrune{TopicID: &topic, Peers: px}
+	return &pb.ControlPrune{TopicID: &topic, Peers: px, Backoff: &backoff}
 }
 
 func (gs *GossipSubRouter) getPeers(topic string, count int, filter func(peer.ID) bool) []peer.ID {
