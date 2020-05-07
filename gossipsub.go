@@ -147,11 +147,17 @@ func WithPeerScore(params *PeerScoreParams, thresholds *PeerScoreThresholds) Opt
 		gs.acceptPXThreshold = thresholds.AcceptPXThreshold
 		gs.opportunisticGraftThreshold = thresholds.OpportunisticGraftThreshold
 
+		gs.gossipTracer = newGossipTracer()
+
 		// hook the tracer
 		if ps.tracer != nil {
-			ps.tracer.internal = append(ps.tracer.internal, gs.score)
+			ps.tracer.internal = append(ps.tracer.internal, gs.score, gs.gossipTracer)
 		} else {
-			ps.tracer = &pubsubTracer{internal: []internalTracer{gs.score}, pid: ps.host.ID(), msgID: ps.msgID}
+			ps.tracer = &pubsubTracer{
+				internal: []internalTracer{gs.score, gs.gossipTracer},
+				pid:      ps.host.ID(),
+				msgID:    ps.msgID,
+			}
 		}
 
 		return nil
@@ -234,9 +240,11 @@ type GossipSubRouter struct {
 	iasked   map[peer.ID]int                  // number of messages we have asked from peer in the last heartbeat
 	backoff  map[string]map[peer.ID]time.Time // prune backoff
 	connect  chan connectInfo                 // px connection requests
-	mcache   *MessageCache
-	tracer   *pubsubTracer
-	score    *peerScore
+
+	mcache       *MessageCache
+	tracer       *pubsubTracer
+	score        *peerScore
+	gossipTracer *gossipTracer
 
 	// whether PX is enabled; this should be enabled in bootstrappers and other well connected/trusted
 	// nodes.
@@ -297,6 +305,9 @@ func (gs *GossipSubRouter) Attach(p *PubSub) {
 
 	// start the scoring
 	gs.score.Start(gs)
+
+	// and the gossip tracing
+	gs.gossipTracer.Start(gs)
 
 	// start using the same msg ID function as PubSub for caching messages.
 	gs.mcache.SetMsgIdFn(p.msgID)
@@ -459,6 +470,8 @@ func (gs *GossipSubRouter) handleIHave(p peer.ID, ctl *pb.ControlMessage) []*pb.
 	// truncate to the messages we are actually asking for and update the iasked counter
 	iwantlst = iwantlst[:iask]
 	gs.iasked[p] += iask
+
+	gs.gossipTracer.AddPromise(p, iwantlst)
 
 	return []*pb.ControlIWant{&pb.ControlIWant{MessageIDs: iwantlst}}
 }
@@ -1091,6 +1104,9 @@ func (gs *GossipSubRouter) heartbeat() {
 	// clean up iasked counters
 	gs.clearIHaveCounters()
 
+	// apply IWANT request penalties
+	gs.applyIwantPenalties()
+
 	// ensure direct peers are connected
 	gs.directConnect()
 
@@ -1270,6 +1286,12 @@ func (gs *GossipSubRouter) clearIHaveCounters() {
 	if len(gs.iasked) > 0 {
 		// throw away the old map and make a new one
 		gs.iasked = make(map[peer.ID]int)
+	}
+}
+
+func (gs *GossipSubRouter) applyIwantPenalties() {
+	for p, count := range gs.gossipTracer.GetBrokenPromises() {
+		gs.score.AddPenalty(p, count)
 	}
 }
 
