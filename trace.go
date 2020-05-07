@@ -15,7 +15,7 @@ type EventTracer interface {
 }
 
 // internal interface for score tracing
-type scoreTracer interface {
+type internalTracer interface {
 	AddPeer(p peer.ID, proto protocol.ID)
 	RemovePeer(p peer.ID)
 	Join(topic string)
@@ -30,10 +30,10 @@ type scoreTracer interface {
 
 // pubsub tracer details
 type pubsubTracer struct {
-	tracer EventTracer
-	score  scoreTracer
-	pid    peer.ID
-	msgID  MsgIdFunction
+	tracer   EventTracer
+	internal []internalTracer
+	pid      peer.ID
+	msgID    MsgIdFunction
 }
 
 func (t *pubsubTracer) PublishMessage(msg *Message) {
@@ -64,8 +64,10 @@ func (t *pubsubTracer) ValidateMessage(msg *Message) {
 		return
 	}
 
-	if t.score != nil && msg.ReceivedFrom != t.pid {
-		t.score.ValidateMessage(msg)
+	if msg.ReceivedFrom != t.pid {
+		for _, tr := range t.internal {
+			tr.ValidateMessage(msg)
+		}
 	}
 }
 
@@ -74,8 +76,10 @@ func (t *pubsubTracer) RejectMessage(msg *Message, reason string) {
 		return
 	}
 
-	if t.score != nil && msg.ReceivedFrom != t.pid {
-		t.score.RejectMessage(msg, reason)
+	if msg.ReceivedFrom != t.pid {
+		for _, tr := range t.internal {
+			tr.RejectMessage(msg, reason)
+		}
 	}
 
 	if t.tracer == nil {
@@ -102,8 +106,10 @@ func (t *pubsubTracer) DuplicateMessage(msg *Message) {
 		return
 	}
 
-	if t.score != nil && msg.ReceivedFrom != t.pid {
-		t.score.DuplicateMessage(msg)
+	if msg.ReceivedFrom != t.pid {
+		for _, tr := range t.internal {
+			tr.DuplicateMessage(msg)
+		}
 	}
 
 	if t.tracer == nil {
@@ -129,8 +135,10 @@ func (t *pubsubTracer) DeliverMessage(msg *Message) {
 		return
 	}
 
-	if t.score != nil && msg.ReceivedFrom != t.pid {
-		t.score.DeliverMessage(msg)
+	if msg.ReceivedFrom != t.pid {
+		for _, tr := range t.internal {
+			tr.DeliverMessage(msg)
+		}
 	}
 
 	if t.tracer == nil {
@@ -155,8 +163,8 @@ func (t *pubsubTracer) AddPeer(p peer.ID, proto protocol.ID) {
 		return
 	}
 
-	if t.score != nil {
-		t.score.AddPeer(p, proto)
+	for _, tr := range t.internal {
+		tr.AddPeer(p, proto)
 	}
 
 	if t.tracer == nil {
@@ -183,8 +191,8 @@ func (t *pubsubTracer) RemovePeer(p peer.ID) {
 		return
 	}
 
-	if t.score != nil {
-		t.score.RemovePeer(p)
+	for _, tr := range t.internal {
+		tr.RemovePeer(p)
 	}
 
 	if t.tracer == nil {
@@ -353,8 +361,8 @@ func (t *pubsubTracer) Join(topic string) {
 		return
 	}
 
-	if t.score != nil {
-		t.score.Join(topic)
+	for _, tr := range t.internal {
+		tr.Join(topic)
 	}
 
 	if t.tracer == nil {
@@ -379,8 +387,8 @@ func (t *pubsubTracer) Leave(topic string) {
 		return
 	}
 
-	if t.score != nil {
-		t.score.Leave(topic)
+	for _, tr := range t.internal {
+		tr.Leave(topic)
 	}
 
 	if t.tracer == nil {
@@ -405,8 +413,8 @@ func (t *pubsubTracer) Graft(p peer.ID, topic string) {
 		return
 	}
 
-	if t.score != nil {
-		t.score.Graft(p, topic)
+	for _, tr := range t.internal {
+		tr.Graft(p, topic)
 	}
 
 	if t.tracer == nil {
@@ -432,8 +440,8 @@ func (t *pubsubTracer) Prune(p peer.ID, topic string) {
 		return
 	}
 
-	if t.score != nil {
-		t.score.Prune(p, topic)
+	for _, tr := range t.internal {
+		tr.Prune(p, topic)
 	}
 
 	if t.tracer == nil {
