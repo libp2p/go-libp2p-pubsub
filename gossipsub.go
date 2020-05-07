@@ -87,6 +87,11 @@ var (
 
 	// Maximum number of IHAVE messages to accept from a peer within a heartbeat.
 	GossipSubMaxIHaveMessages = 10
+
+	// Time to wait for a message requested through IWANT following an IHAVE advertisement.
+	// If the message is not received within this window, a broken promise is declared and
+	// the router may apply bahavioural penalties.
+	GossipSubIWantFollowupTime = 3 * time.Second
 )
 
 // NewGossipSub returns a new PubSub object using GossipSubRouter as the router.
@@ -1291,6 +1296,7 @@ func (gs *GossipSubRouter) clearIHaveCounters() {
 
 func (gs *GossipSubRouter) applyIwantPenalties() {
 	for p, count := range gs.gossipTracer.GetBrokenPromises() {
+		log.Infof("peer %s didn't follow up in %d IWANT requests; adding penalty", p, count)
 		gs.score.AddPenalty(p, count)
 	}
 }
