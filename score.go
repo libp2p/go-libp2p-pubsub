@@ -81,7 +81,7 @@ type peerScore struct {
 	inspectPeriod time.Duration
 }
 
-var _ scoreTracer = (*peerScore)(nil)
+var _ internalTracer = (*peerScore)(nil)
 
 type messageDeliveries struct {
 	records map[string]*deliveryRecord

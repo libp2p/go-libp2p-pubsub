@@ -149,9 +149,9 @@ func WithPeerScore(params *PeerScoreParams, thresholds *PeerScoreThresholds) Opt
 
 		// hook the tracer
 		if ps.tracer != nil {
-			ps.tracer.score = gs.score
+			ps.tracer.internal = append(ps.tracer.internal, gs.score)
 		} else {
-			ps.tracer = &pubsubTracer{score: gs.score, pid: ps.host.ID(), msgID: ps.msgID}
+			ps.tracer = &pubsubTracer{internal: []internalTracer{gs.score}, pid: ps.host.ID(), msgID: ps.msgID}
 		}
 
 		return nil
