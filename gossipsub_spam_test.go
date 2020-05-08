@@ -131,6 +131,12 @@ func TestGossipsubAttackSpamIWANT(t *testing.T) {
 
 // Test that Gossipsub only responds to IHAVE with IWANT once per heartbeat
 func TestGossipsubAttackSpamIHAVE(t *testing.T) {
+	originalGossipSubIWantFollowupTime := GossipSubIWantFollowupTime
+	GossipSubIWantFollowupTime = 10 * time.Second
+	defer func() {
+		GossipSubIWantFollowupTime = originalGossipSubIWantFollowupTime
+	}()
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -219,9 +225,6 @@ func TestGossipsubAttackSpamIHAVE(t *testing.T) {
 						t.Fatalf("Expected 0 score, but got %f", score)
 					}
 
-					// Wait for a hearbeat
-					time.Sleep(GossipSubHeartbeatInterval)
-
 					// Send a bunch of IHAVEs
 					for i := 0; i < 3*GossipSubMaxIHaveLength; i++ {
 						ihavelst := []string{"someid" + strconv.Itoa(i+100)}
@@ -241,6 +244,8 @@ func TestGossipsubAttackSpamIHAVE(t *testing.T) {
 					if iwc-firstBatchCount > GossipSubMaxIHaveLength {
 						t.Fatalf("Expecting max %d IWANTs per heartbeat but received %d", GossipSubMaxIHaveLength, iwc-firstBatchCount)
 					}
+
+					time.Sleep(GossipSubIWantFollowupTime)
 
 					// The score should now be negative because of broken promises
 					score = ps.rt.(*GossipSubRouter).score.Score(attacker.ID())
