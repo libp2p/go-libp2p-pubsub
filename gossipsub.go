@@ -18,75 +18,135 @@ import (
 )
 
 const (
+	// GossipSubID_v10 is the protocol ID for version 1.0.0 of the GossipSub protocol.
+	// It is advertised along with GossipSubID_v11 for backwards compatibility.
 	GossipSubID_v10 = protocol.ID("/meshsub/1.0.0")
+
+	// GossipSubID_v11 is the protocol ID for version 1.1.0 of the GossipSub protocol.
+	// See the spec for details about how v1.1.0 compares to v1.0.0:
+	// https://github.com/libp2p/specs/blob/master/pubsub/gossipsub/gossipsub-v1.1.md
 	GossipSubID_v11 = protocol.ID("/meshsub/1.1.0")
 )
 
 var (
-	// overlay parameters
-	GossipSubD      = 6
-	GossipSubDlo    = 5
-	GossipSubDhi    = 12
+	// overlay parameters.
+
+	// GossipSubD sets the optimal degree for a gossip mesh. For example, if GossipSubD == 6,
+	// each peer will want to have about six peers in their mesh for each topic they're subscribed to.
+	// GossipSubD should be set somewhere between GossipSubDlo and GossipSubDhi.
+	GossipSubD = 6
+
+	// GossipSubDlo sets the lower bound on the number of peers we keep in a gossip mesh. If we have
+	// fewer than GossipSubDlo peers, we will attempt to graft some more into the mesh at the next
+	// heartbeat.
+	GossipSubDlo = 5
+
+	// GossipSubDhi sets the upper bound on the number of peers we keep in a gossip mesh. If we have
+	// more than GossipSubDhi peers, we will select some to prune from the mesh at the next heartbeat.
+	GossipSubDhi = 12
+
+	// GossipSubDscore affects how peers are selected when pruning the mesh due to over subscription.
+	// At least GossipSubDscore of the retained peers will be high-scoring, while the remainder are
+	// chosen randomly.
 	GossipSubDscore = 4
 	GossipSubDout   = 2
 
 	// gossip parameters
+
+	// GossipSubHistoryLength controls the size of the message cache used for gossip.
+	// The message cache will remember messages for GossipSubHistoryLength heartbeats.
 	GossipSubHistoryLength = 5
+
+	// GossipSubHistoryGossip controls how many cached message ids we will advertise in
+	// IHAVE gossip messages. When asked for our seen message IDs, we will return
+	// only those from the most recent GossipSubHistoryGossip heartbeats. The slack between
+	// GossipSubHistoryGossip and GossipSubHistoryLength allows us to avoid advertising messages
+	// that will be expired by the time they're requested.
+	//
+	// GossipSubHistoryGossip must be less than or equal to GossipSubHistoryLength to
+	// avoid a runtime panic.
 	GossipSubHistoryGossip = 3
 
-	GossipSubDlazy        = 6
+	// GossipSubDlazy affects how many peers we will emit gossip to at each heartbeat.
+	// We will send gossip to at least GossipSubDlazy peers outside our mesh. The actual
+	// number may be more, depending on GossipSubGossipFactor and how many peers we're
+	// connected to.
+	GossipSubDlazy = 6
+
+	// GossipSubGossipFactor affects how many peers we will emit gossip to at each heartbeat.
+	// We will send gossip to GossipSubGossipFactor * (total number of non-mesh peers), or
+	// GossipSubDlazy, whichever is greater.
 	GossipSubGossipFactor = 0.25
 
+	// GossipSubGossipRetransmission controls how many times we will allow a peer to request
+	// the same message id through IWANT gossip before we start ignoring them. This is designed
+	// to prevent peers from spamming us with requests and wasting our resources.
 	GossipSubGossipRetransmission = 3
 
 	// heartbeat interval
+
+	// GossipSubHeartbeatInitialDelay is the short delay before the heartbeat timer begins
+	// after the router is initialized.
 	GossipSubHeartbeatInitialDelay = 100 * time.Millisecond
+
+	// GossipSubHeartbeatInterval controls the time between heartbeats.
 	GossipSubHeartbeatInterval     = 1 * time.Second
 
-	// fanout ttl
+	// GossipSubFanoutTTL controls how long we keep track of the fanout state. If it's been
+	// GossipSubFanoutTTL since we've published to a topic that we're not subscribed to,
+	// we'll delete the fanout map for that topic.
 	GossipSubFanoutTTL = 60 * time.Second
 
-	// number of peers to include in prune Peer eXchange
+	// GossipSubPrunePeers controls the number of peers to include in prune Peer eXchange.
+	// When we prune a peer that's eligible for PX (has a good score, etc), we will try to
+	// send them signed peer records for up to GossipSubPrunePeers other peers that we
+	// know of.
 	GossipSubPrunePeers = 16
 
-	// backoff time for pruned peers
+	// GossipSubPruneBackoff controls the backoff time for pruned peers. This is how long
+	// a peer must wait before attempting to graft into our mesh again after being pruned.
+	// When pruning a peer, we send them our value of GossipSubPruneBackoff so they know
+	// the minimum time to wait. Peers running older versions may not send a backoff time,
+	// so if we receive a prune message without one, we will wait at least GossipSubPruneBackoff
+	// before attempting to re-graft.
 	GossipSubPruneBackoff = time.Minute
 
-	// number of active connection attempts for peers obtained through px
+	// GossipSubConnectors controls the number of active connection attempts for peers obtained through PX.
 	GossipSubConnectors = 8
 
-	// maximum number of pending connections for peers attempted through px
+	// GossipSubMaxPendingConnections sets the maximum number of pending connections for peers attempted through px.
 	GossipSubMaxPendingConnections = 128
 
-	// timeout for connection attempts
+	// GossipSubConnectionTimeout controls the timeout for connection attempts.
 	GossipSubConnectionTimeout = 30 * time.Second
 
-	// Number of heartbeat ticks for attempting to reconnect direct peers that are not
-	// currently connected
+	// GossipSubDirectConnectTicks is the number of heartbeat ticks for attempting to reconnect direct peers
+	// that are not currently connected.
 	GossipSubDirectConnectTicks uint64 = 300
 
-	// Initial delay before opening connections to direct peers
+	// GossipSubDirectConnectInitialDelay is the initial delay before opening connections to direct peers
 	GossipSubDirectConnectInitialDelay = time.Second
 
-	// Number of heartbeat ticks for attempting to improve the mesh with opportunistic
-	// grafting
+	// GossipSubOpportunisticGraftTicks is the number of heartbeat ticks for attempting to improve the mesh
+	// with opportunistic grafting. Every GossipSubOpportunisticGraftTicks we will attempt to select some
+	// high-scoring mesh peers to replace lower-scoring ones.
 	GossipSubOpportunisticGraftTicks uint64 = 60
 
-	// Number of peers to opportunistically graft
+	// GossipSubOpportunisticGraftPeers is the number of peers to opportunistically graft.
 	GossipSubOpportunisticGraftPeers = 2
 
-	// If a GRAFT comes before GossipSubGraftFloodThreshold has ellapsed since the last PRUNE,
+	// If a GRAFT comes before GossipSubGraftFloodThreshold has elapsed since the last PRUNE,
 	// then there is an extra score penalty applied to the peer through P7.
 	GossipSubGraftFloodThreshold = 10 * time.Second
 
-	// Maximum number of messages to include in an IHAVE message. Also controls the maximum
-	// number of IHAVE ids we will accept and request with IWANT from a peer within a heartbeat,
-	// to protect from IHAVE floods. You should adjust this value from the default if your
-	// system is pushing more than 5000 messages in GossipSubHistoryGossip heartbeats; with the
-	// defaults this is 1666 messages/s.
+	// GossipSubMaxIHaveLength is the maximum number of messages to include in an IHAVE message.
+	// Also controls the maximum number of IHAVE ids we will accept and request with IWANT from a
+	// peer within a heartbeat, to protect from IHAVE floods. You should adjust this value from the
+	// default if your system is pushing more than 5000 messages in GossipSubHistoryGossip heartbeats;
+	// with the defaults this is 1666 messages/s.
 	GossipSubMaxIHaveLength = 5000
 
-	// Maximum number of IHAVE messages to accept from a peer within a heartbeat.
+	// GossipSubMaxIHaveMessages is the maximum number of IHAVE messages to accept from a peer within a heartbeat.
 	GossipSubMaxIHaveMessages = 10
 
 	// Time to wait for a message requested through IWANT following an IHAVE advertisement.
