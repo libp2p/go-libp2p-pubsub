@@ -129,7 +129,8 @@ var (
 
 	// GossipSubOpportunisticGraftTicks is the number of heartbeat ticks for attempting to improve the mesh
 	// with opportunistic grafting. Every GossipSubOpportunisticGraftTicks we will attempt to select some
-	// high-scoring mesh peers to replace lower-scoring ones.
+	// high-scoring mesh peers to replace lower-scoring ones, if the median score of our mesh peers falls
+	// below a threshold (see https://godoc.org/github.com/libp2p/go-libp2p-pubsub#PeerScoreThresholds).
 	GossipSubOpportunisticGraftTicks uint64 = 60
 
 	// GossipSubOpportunisticGraftPeers is the number of peers to opportunistically graft.
