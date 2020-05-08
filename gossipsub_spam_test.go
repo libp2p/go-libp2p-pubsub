@@ -140,7 +140,20 @@ func TestGossipsubAttackSpamIHAVE(t *testing.T) {
 	attacker := hosts[1]
 
 	// Set up gossipsub on the legit host
-	ps, err := NewGossipSub(ctx, legit)
+	ps, err := NewGossipSub(ctx, legit,
+		WithPeerScore(
+			&PeerScoreParams{
+				AppSpecificScore:       func(peer.ID) float64 { return 0 },
+				BehaviourPenaltyWeight: -1,
+				BehaviourPenaltyDecay:  ScoreParameterDecay(time.Minute),
+				DecayInterval:          DefaultDecayInterval,
+				DecayToZero:            DefaultDecayToZero,
+			},
+			&PeerScoreThresholds{
+				GossipThreshold:   -100,
+				PublishThreshold:  -500,
+				GraylistThreshold: -1000,
+			}))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -200,6 +213,12 @@ func TestGossipsubAttackSpamIHAVE(t *testing.T) {
 					}
 					firstBatchCount := iwc
 
+					// the score should still be 0 because we haven't broken any promises yet
+					score := ps.rt.(*GossipSubRouter).score.Score(attacker.ID())
+					if score != 0 {
+						t.Fatalf("Expected 0 score, but got %f", score)
+					}
+
 					// Wait for a hearbeat
 					time.Sleep(GossipSubHeartbeatInterval)
 
@@ -221,6 +240,12 @@ func TestGossipsubAttackSpamIHAVE(t *testing.T) {
 					// Should not be more than the maximum per heartbeat
 					if iwc-firstBatchCount > GossipSubMaxIHaveLength {
 						t.Fatalf("Expecting max %d IWANTs per heartbeat but received %d", GossipSubMaxIHaveLength, iwc-firstBatchCount)
+					}
+
+					// The score should now be negative because of broken promises
+					score = ps.rt.(*GossipSubRouter).score.Score(attacker.ID())
+					if score >= 0 {
+						t.Fatalf("Expected negative score, but got %f", score)
 					}
 				}()
 			}
