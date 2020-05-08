@@ -162,8 +162,8 @@ type PubSubRouter interface {
 	EnoughPeers(topic string, suggested int) bool
 	// AcceptFrom is invoked on any incoming message before pushing it to the validation pipeline
 	// or processing control information.
-	// Allows routers with internal scoring to vet peers before commiting any processing resources
-	// to the message and implement an affective graylist.
+	// Allows routers with internal scoring to vet peers before committing any processing resources
+	// to the message and implement an effective graylist.
 	AcceptFrom(peer.ID) bool
 	// HandleRPC is invoked to process control messages in the RPC envelope.
 	// It is invoked after subscriptions and payload messages have been processed.
