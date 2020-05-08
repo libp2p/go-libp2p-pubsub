@@ -139,7 +139,8 @@ type TopicScoreParams struct {
 
 	// P4: invalid messages
 	// This is the number of invalid messages in the topic.
-	// The value of the parameter is a counter, decaying with InvalidMessageDeliveriesDecay.
+	// The value of the parameter is the square of the counter, decaying with
+	// InvalidMessageDeliveriesDecay.
 	// The weight of the parameter MUST be negative (or zero to disable).
 	InvalidMessageDeliveriesWeight, InvalidMessageDeliveriesDecay float64
 }
