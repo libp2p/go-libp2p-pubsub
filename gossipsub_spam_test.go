@@ -669,7 +669,7 @@ func TestGossipsubAttackInvalidMessageSpam(t *testing.T) {
 					time.Sleep(100*time.Millisecond + GossipSubHeartbeatInitialDelay)
 
 					// The attackers score should now have fallen below zero
-					if attackerScore() > 0 {
+					if attackerScore() >= 0 {
 						t.Fatalf("Expected attacker score to be less than zero but it's %f", attackerScore())
 					}
 					// There should be several rejected messages (because the signature was invalid)

@@ -1,6 +1,7 @@
 package pubsub
 
 import (
+	"math"
 	"sync"
 	"testing"
 	"time"
@@ -457,7 +458,7 @@ func TestScoreInvalidMessageDeliveries(t *testing.T) {
 	topicScoreParams := &TopicScoreParams{
 		TopicWeight:                    1,
 		TimeInMeshQuantum:              time.Second,
-		InvalidMessageDeliveriesWeight: 1,
+		InvalidMessageDeliveriesWeight: -1,
 		InvalidMessageDeliveriesDecay:  1.0,
 	}
 	params.Topics[mytopic] = topicScoreParams
@@ -478,7 +479,7 @@ func TestScoreInvalidMessageDeliveries(t *testing.T) {
 
 	ps.refreshScores()
 	aScore := ps.Score(peerA)
-	expected := topicScoreParams.TopicWeight * topicScoreParams.InvalidMessageDeliveriesWeight * float64(nMessages)
+	expected := topicScoreParams.TopicWeight * topicScoreParams.InvalidMessageDeliveriesWeight * float64(nMessages*nMessages)
 	if aScore != expected {
 		t.Fatalf("Score: %f. Expected %f", aScore, expected)
 	}
@@ -494,7 +495,7 @@ func TestScoreInvalidMessageDeliveriesDecay(t *testing.T) {
 	topicScoreParams := &TopicScoreParams{
 		TopicWeight:                    1,
 		TimeInMeshQuantum:              time.Second,
-		InvalidMessageDeliveriesWeight: 1,
+		InvalidMessageDeliveriesWeight: -1,
 		InvalidMessageDeliveriesDecay:  0.9,
 	}
 	params.Topics[mytopic] = topicScoreParams
@@ -515,7 +516,7 @@ func TestScoreInvalidMessageDeliveriesDecay(t *testing.T) {
 
 	ps.refreshScores()
 	aScore := ps.Score(peerA)
-	expected := topicScoreParams.TopicWeight * topicScoreParams.InvalidMessageDeliveriesWeight * topicScoreParams.InvalidMessageDeliveriesDecay * float64(nMessages)
+	expected := topicScoreParams.TopicWeight * topicScoreParams.InvalidMessageDeliveriesWeight * math.Pow(topicScoreParams.InvalidMessageDeliveriesDecay*float64(nMessages), 2)
 	if aScore != expected {
 		t.Fatalf("Score: %f. Expected %f", aScore, expected)
 	}
@@ -523,7 +524,7 @@ func TestScoreInvalidMessageDeliveriesDecay(t *testing.T) {
 	// refresh scores a few times to apply decay
 	for i := 0; i < 10; i++ {
 		ps.refreshScores()
-		expected *= topicScoreParams.InvalidMessageDeliveriesDecay
+		expected *= math.Pow(topicScoreParams.InvalidMessageDeliveriesDecay, 2)
 	}
 	aScore = ps.Score(peerA)
 	if aScore != expected {
@@ -651,13 +652,13 @@ func TestScoreRejectMessageDeliveries(t *testing.T) {
 	ps.RejectMessage(&msg, rejectValidationFailed)
 
 	aScore = ps.Score(peerA)
-	expected = -2.0
+	expected = -4.0
 	if aScore != expected {
 		t.Fatalf("Score: %f. Expected %f", aScore, expected)
 	}
 
 	bScore = ps.Score(peerB)
-	expected = -2.0
+	expected = -4.0
 	if bScore != expected {
 		t.Fatalf("Score: %f. Expected %f", bScore, expected)
 	}
