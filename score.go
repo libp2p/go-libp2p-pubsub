@@ -219,7 +219,7 @@ func (ps *peerScore) score(p peer.ID) float64 {
 
 		// P4: invalid messages
 		// NOTE: the weight of P4 is negative (validated in TopicScoreParams.validate), so this detracts.
-		p4 := tstats.invalidMessageDeliveries
+		p4 := (tstats.invalidMessageDeliveries * tstats.invalidMessageDeliveries)
 		topicScore += p4 * topicParams.InvalidMessageDeliveriesWeight
 
 		// update score, mixing with topic weight
