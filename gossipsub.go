@@ -31,21 +31,21 @@ const (
 var (
 	// overlay parameters.
 
-	// GossipSubD sets the optimal degree for a gossip mesh. For example, if GossipSubD == 6,
+	// GossipSubD sets the optimal degree for a GossipSub topic mesh. For example, if GossipSubD == 6,
 	// each peer will want to have about six peers in their mesh for each topic they're subscribed to.
 	// GossipSubD should be set somewhere between GossipSubDlo and GossipSubDhi.
 	GossipSubD = 6
 
-	// GossipSubDlo sets the lower bound on the number of peers we keep in a gossip mesh. If we have
-	// fewer than GossipSubDlo peers, we will attempt to graft some more into the mesh at the next
-	// heartbeat.
+	// GossipSubDlo sets the lower bound on the number of peers we keep in a GossipSub topic mesh.
+	// If we have fewer than GossipSubDlo peers, we will attempt to graft some more into the mesh at
+	// the next heartbeat.
 	GossipSubDlo = 5
 
-	// GossipSubDhi sets the upper bound on the number of peers we keep in a gossip mesh. If we have
-	// more than GossipSubDhi peers, we will select some to prune from the mesh at the next heartbeat.
+	// GossipSubDhi sets the upper bound on the number of peers we keep in a GossipSub topic mesh.
+	// If we have more than GossipSubDhi peers, we will select some to prune from the mesh at the next heartbeat.
 	GossipSubDhi = 12
 
-	// GossipSubDscore affects how peers are selected when pruning the mesh due to over subscription.
+	// GossipSubDscore affects how peers are selected when pruning a mesh due to over subscription.
 	// At least GossipSubDscore of the retained peers will be high-scoring, while the remainder are
 	// chosen randomly.
 	GossipSubDscore = 4
@@ -90,7 +90,7 @@ var (
 	GossipSubHeartbeatInitialDelay = 100 * time.Millisecond
 
 	// GossipSubHeartbeatInterval controls the time between heartbeats.
-	GossipSubHeartbeatInterval     = 1 * time.Second
+	GossipSubHeartbeatInterval = 1 * time.Second
 
 	// GossipSubFanoutTTL controls how long we keep track of the fanout state. If it's been
 	// GossipSubFanoutTTL since we've published to a topic that we're not subscribed to,
