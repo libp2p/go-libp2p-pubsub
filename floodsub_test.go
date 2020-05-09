@@ -41,16 +41,12 @@ func checkMessageRouting(t *testing.T, topic string, pubs []*PubSub, subs []*Sub
 	}
 }
 
-func getNetHosts(t *testing.T, ctx context.Context, n int, options ...func() bhost.Option) []host.Host {
+func getNetHosts(t *testing.T, ctx context.Context, n int) []host.Host {
 	var out []host.Host
 
 	for i := 0; i < n; i++ {
 		netw := swarmt.GenSwarm(t, ctx)
-		opts := make([]bhost.Option, len(options))
-		for i, optFn := range options {
-			opts[i] = optFn()
-		}
-		h := bhost.NewBlankHost(netw, opts...)
+		h := bhost.NewBlankHost(netw)
 		out = append(out, h)
 	}
 
