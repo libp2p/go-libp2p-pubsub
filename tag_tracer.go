@@ -52,7 +52,7 @@ var (
 //   The delivery tags have a maximum value, GossipSubConnTagMessageDeliveryCap, and they decay at
 //   a rate of GossipSubConnTagDecayAmount / GossipSubConnTagDecayInterval.
 type tagTracer struct {
-	sync.Mutex
+	sync.RWMutex
 
 	cmgr     connmgr.ConnManager
 	decayer  connmgr.Decayer
@@ -144,6 +144,9 @@ func (t *tagTracer) decayingDeliveryTag(topic string) (connmgr.DecayingTag, erro
 }
 
 func (t *tagTracer) bumpDeliveryTag(p peer.ID, topic string) error {
+	t.RLock()
+	defer t.RUnlock()
+
 	tag, ok := t.decaying[topic]
 	if !ok {
 		return fmt.Errorf("no decaying tag registered for topic %s", topic)
