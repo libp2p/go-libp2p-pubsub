@@ -328,6 +328,9 @@ func (gs *GossipSubRouter) Attach(p *PubSub) {
 	// and the gossip tracing
 	gs.gossipTracer.Start(gs)
 
+	// and the tracer for connmgr tags
+	gs.tagTracer.Start(gs)
+
 	// start using the same msg ID function as PubSub for caching messages.
 	gs.mcache.SetMsgIdFn(p.msgID)
 
