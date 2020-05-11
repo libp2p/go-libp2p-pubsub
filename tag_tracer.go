@@ -223,6 +223,8 @@ func (t *tagTracer) nearFirstPeers(msg *Message) []peer.ID {
 			nearFirstPeers = append(nearFirstPeers, p)
 		}
 	}
+	// we're done with the peers map and can reclaim the memory
+	drec.peers = nil
 	return nearFirstPeers
 }
 
