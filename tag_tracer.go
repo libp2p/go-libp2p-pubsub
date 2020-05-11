@@ -1,6 +1,7 @@
 package pubsub
 
 import (
+	"context"
 	"fmt"
 	"sync"
 	"time"
@@ -55,9 +56,14 @@ type tagTracer struct {
 	sync.RWMutex
 
 	cmgr     connmgr.ConnManager
+	msgID    MsgIdFunction
 	decayer  connmgr.Decayer
 	decaying map[string]connmgr.DecayingTag
 	direct   map[peer.ID]struct{}
+
+	// track message deliveries to reward "near first" deliveries
+	// (a delivery that occurs while we're still validating the message)
+	deliveries *messageDeliveries
 }
 
 func newTagTracer(cmgr connmgr.ConnManager) *tagTracer {
@@ -66,10 +72,42 @@ func newTagTracer(cmgr connmgr.ConnManager) *tagTracer {
 		log.Warnf("connection manager does not support decaying tags, delivery tags will not be applied")
 	}
 	return &tagTracer{
-		cmgr:     cmgr,
-		decayer:  decayer,
-		decaying: make(map[string]connmgr.DecayingTag),
+		cmgr:       cmgr,
+		msgID:      DefaultMsgIdFn,
+		decayer:    decayer,
+		decaying:   make(map[string]connmgr.DecayingTag),
+		deliveries: &messageDeliveries{records: make(map[string]*deliveryRecord)},
 	}
+}
+
+func (t *tagTracer) Start(gs *GossipSubRouter) {
+	if t == nil {
+		return
+	}
+
+	t.msgID = gs.p.msgID
+	t.direct = gs.direct
+	go t.background(gs.p.ctx)
+}
+
+func (t *tagTracer) background(ctx context.Context) {
+	gcDeliveryRecords := time.NewTicker(time.Minute)
+	defer gcDeliveryRecords.Stop()
+
+	for {
+		select {
+		case <-gcDeliveryRecords.C:
+			t.gcDeliveryRecords()
+		case <-ctx.Done():
+			return
+		}
+	}
+}
+
+func (t *tagTracer) gcDeliveryRecords() {
+	t.Lock()
+	defer t.Unlock()
+	t.deliveries.gc()
 }
 
 func (t *tagTracer) tagPeerIfDirect(p peer.ID) {
@@ -163,6 +201,31 @@ func (t *tagTracer) bumpTagsForMessage(p peer.ID, msg *Message) {
 	}
 }
 
+// nearFirstPeers returns the peers who delivered the message while it was still validating
+func (t *tagTracer) nearFirstPeers(msg *Message) []peer.ID {
+	t.Lock()
+	defer t.Unlock()
+	drec := t.deliveries.getRecord(t.msgID(msg.Message))
+	nearFirstPeers := make([]peer.ID, 0, len(drec.peers))
+	// defensive check that this is the first delivery trace -- delivery status should be unknown
+	if drec.status != deliveryUnknown {
+		log.Warnf("unexpected delivery trace: message from %s was first seen %s ago and has delivery status %d", msg.ReceivedFrom, time.Now().Sub(drec.firstSeen), drec.status)
+		return nearFirstPeers
+	}
+
+	drec.status = deliveryValid
+	drec.validated = time.Now()
+
+	for p := range drec.peers {
+		// this check is to make sure a peer can't send us a message twice and get a double count
+		// if it is a first delivery.
+		if p != msg.ReceivedFrom {
+			nearFirstPeers = append(nearFirstPeers, p)
+		}
+	}
+	return nearFirstPeers
+}
+
 // -- internalTracer interface methods
 var _ internalTracer = (*tagTracer)(nil)
 
@@ -175,8 +238,12 @@ func (t *tagTracer) Join(topic string) {
 }
 
 func (t *tagTracer) DeliverMessage(msg *Message) {
-	// TODO: also give a bump to "near-first" message deliveries
+	nearFirst := t.nearFirstPeers(msg)
+
 	t.bumpTagsForMessage(msg.ReceivedFrom, msg)
+	for _, p := range nearFirst {
+		t.bumpTagsForMessage(p, msg)
+	}
 }
 
 func (t *tagTracer) Leave(topic string) {
@@ -191,7 +258,41 @@ func (t *tagTracer) Prune(p peer.ID, topic string) {
 	t.untagMeshPeer(p, topic)
 }
 
-func (t *tagTracer) RemovePeer(peer.ID)             {}
-func (t *tagTracer) ValidateMessage(*Message)       {}
-func (t *tagTracer) RejectMessage(*Message, string) {}
-func (t *tagTracer) DuplicateMessage(*Message)      {}
+func (t *tagTracer) ValidateMessage(msg *Message) {
+	t.Lock()
+	defer t.Unlock()
+
+	// create a delivery record for the message
+	_ = t.deliveries.getRecord(t.msgID(msg.Message))
+}
+
+func (t *tagTracer) DuplicateMessage(msg *Message) {
+	t.Lock()
+	defer t.Unlock()
+
+	drec := t.deliveries.getRecord(t.msgID(msg.Message))
+	if drec.status == deliveryUnknown {
+		// the message is being validated; track the peer delivery and wait for
+		// the Deliver/Reject notification.
+		drec.peers[msg.ReceivedFrom] = struct{}{}
+	}
+}
+
+func (t *tagTracer) RejectMessage(msg *Message, reason string) {
+	t.Lock()
+	defer t.Unlock()
+
+	// mark message as invalid and release tracking info
+	drec := t.deliveries.getRecord(t.msgID(msg.Message))
+
+	// defensive check that this is the first rejection trace -- delivery status should be unknown
+	if drec.status != deliveryUnknown {
+		log.Warnf("unexpected rejection trace: message from %s was first seen %s ago and has delivery status %d", msg.ReceivedFrom, time.Now().Sub(drec.firstSeen), drec.status)
+		return
+	}
+
+	drec.status = deliveryInvalid
+	drec.peers = nil
+}
+
+func (t *tagTracer) RemovePeer(peer.ID) {}

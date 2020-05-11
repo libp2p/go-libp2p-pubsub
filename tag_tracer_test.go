@@ -1,6 +1,7 @@
 package pubsub
 
 import (
+	"fmt"
 	"github.com/benbjohnson/clock"
 	connmgr "github.com/libp2p/go-libp2p-connmgr"
 	connmgri "github.com/libp2p/go-libp2p-core/connmgr"
@@ -136,6 +137,76 @@ func TestTagTracerDeliveryTags(t *testing.T) {
 	expected = 0
 	if val != expected {
 		t.Errorf("expected delivery tag value = %d, got %d", expected, val)
+	}
+}
+
+func TestTagTracerDeliveryTagsNearFirst(t *testing.T) {
+	// use fake time to test the tag decay
+	clk := clock.NewMock()
+	decayCfg := &connmgr.DecayerCfg{
+		Clock:      clk,
+		Resolution: time.Minute,
+	}
+	cmgr := connmgr.NewConnManager(5, 10, time.Minute, connmgr.DecayerConfig(decayCfg))
+
+	tt := newTagTracer(cmgr)
+
+	topic := "test"
+
+	p := peer.ID("a-peer")
+	p2 := peer.ID("another-peer")
+	p3 := peer.ID("slow-peer")
+
+	tt.Join(topic)
+
+	for i := 0; i < GossipSubConnTagMessageDeliveryCap+5; i++ {
+		topics := []string{topic}
+		msg := &Message{
+			ReceivedFrom: p,
+			Message: &pb.Message{
+				From:     []byte(p),
+				Data:     []byte(fmt.Sprintf("msg-%d", i)),
+				TopicIDs: topics,
+				Seqno:    []byte(fmt.Sprintf("%d", i)),
+			},
+		}
+
+		// a duplicate of the message, received from p2
+		dup := &Message{
+			ReceivedFrom: p2,
+			Message:      msg.Message,
+		}
+
+		// the message starts validating as soon as we receive it from p
+		tt.ValidateMessage(msg)
+		// p2 should get near-first credit for the duplicate message that arrives before
+		// validation is complete
+		tt.DuplicateMessage(dup)
+		// DeliverMessage gets called when validation is complete
+		tt.DeliverMessage(msg)
+
+		// p3 delivers a duplicate after validation completes & gets no credit
+		dup.ReceivedFrom = p3
+		tt.DuplicateMessage(dup)
+	}
+
+	clk.Add(time.Minute)
+
+	// both p and p2 should get delivery tags equal to the cap
+	tag := "pubsub-deliveries:test"
+	val := getTagValue(cmgr, p, tag)
+	if val != GossipSubConnTagMessageDeliveryCap {
+		t.Errorf("expected tag %s to have val %d, was %d", tag, GossipSubConnTagMessageDeliveryCap, val)
+	}
+	val = getTagValue(cmgr, p2, tag)
+	if val != GossipSubConnTagMessageDeliveryCap {
+		t.Errorf("expected tag %s for near-first peer to have val %d, was %d", tag, GossipSubConnTagMessageDeliveryCap, val)
+	}
+
+	// p3 should have no delivery tag credit
+	val = getTagValue(cmgr, p3, tag)
+	if val != 0 {
+		t.Errorf("expected tag %s for slow peer to have val %d, was %d", tag, 0, val)
 	}
 }
 
