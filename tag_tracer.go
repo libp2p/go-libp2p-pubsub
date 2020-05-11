@@ -120,6 +120,9 @@ func (t *tagTracer) removeDeliveryTag(topic string) {
 }
 
 func (t *tagTracer) decayingDeliveryTag(topic string) (connmgr.DecayingTag, error) {
+	if t.decayer == nil {
+		return nil, fmt.Errorf("connection manager does not support decaying tags")
+	}
 	name := fmt.Sprintf("pubsub-deliveries:%s", topic)
 
 	// decrement tag value by GossipSubConnTagDecayAmount at each decay interval
