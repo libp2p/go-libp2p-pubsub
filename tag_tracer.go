@@ -30,7 +30,7 @@ var (
 	GossipSubConnTagBumpMessageDelivery = 1
 
 	// GossipSubConnTagDecayInterval is the decay interval for decaying connection manager tags.
-	GossipSubConnTagDecayInterval = time.Minute
+	GossipSubConnTagDecayInterval = 10 * time.Minute
 
 	// GossipSubConnTagDecayAmount is subtracted from decaying tag values at each decay interval.
 	GossipSubConnTagDecayAmount = 1
@@ -50,9 +50,7 @@ var (
 // - For each message that we receive, we bump a delivery tag for peer that delivered the message
 //   first.
 //   The delivery tags have a maximum value, GossipSubConnTagMessageDeliveryCap, and they decay at
-//   a rate of GossipSubConnTagDecayAmount / GossipSubConnTagDecayInterval (default 1/minute).
-//   With the defaults, a peer who stops delivering messages will have their delivery tag decay to zero
-//   in fifteen minutes.
+//   a rate of GossipSubConnTagDecayAmount / GossipSubConnTagDecayInterval.
 type tagTracer struct {
 	sync.Mutex
 
