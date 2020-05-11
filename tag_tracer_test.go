@@ -122,8 +122,8 @@ func TestTagTracerDeliveryTags(t *testing.T) {
 		t.Errorf("expected delivery tag value = %d, got %d", expected, val)
 	}
 
-	// if we jump forward a few minutes, we should see the tags decrease by 1 / minute
-	clk.Add(5 * time.Minute)
+	// if we jump forward a few minutes, we should see the tags decrease by 1 / 10 minutes
+	clk.Add(50 * time.Minute)
 
 	val = getTagValue(cmgr, p, "pubsub-deliveries:topic-1")
 	expected = GossipSubConnTagMessageDeliveryCap - 5
