@@ -16,7 +16,7 @@ const ChatRoomBufSize = 128
 // can be published to the topic with ChatRoom.Publish, and received
 // messages are pushed to the Messages channel.
 type ChatRoom struct {
-	// C is a channel of messages received from other peers in the chat room
+	// Messages is a channel of messages received from other peers in the chat room
 	Messages chan *ChatMessage
 
 	ctx   context.Context
@@ -67,7 +67,7 @@ func JoinChatRoom(ctx context.Context, ps *pubsub.PubSub, selfID peer.ID, nickna
 	return cr, nil
 }
 
-// Publish sends the message to the pubsub topic.
+// Publish sends a message to the pubsub topic.
 func (cr *ChatRoom) Publish(message string) error {
 	m := ChatMessage{
 		Message:    message,
