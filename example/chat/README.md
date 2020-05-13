@@ -184,22 +184,21 @@ method:
 ```go
 func (ui *ChatUI) handleEvents() {
 	peerRefreshTicker := time.NewTicker(time.Second)
+	defer peerRefreshTicker.Stop()
 
 	for {
 		select {
 		case input := <-ui.inputCh:
-			// when the user types in a line, publish it to the chat room
-			// and print to the message window
+			// when the user types in a line, publish it to the chat room and print to the message window
 			err := ui.cr.Publish(input)
 			if err != nil {
 				printErr("publish error: %s", err)
 			}
-			ui.writeChatMsg(ui.cr.nick, input, true)
+			ui.displaySelfMessage(input)
 
 		case m := <-ui.cr.Messages:
-			// when we receive a message from the chat room, print it to
-			// the message window
-			ui.writeChatMsg(m.SenderNick, m.Message, false)
+			// when we receive a message from the chat room, print it to the message window
+			ui.displayChatMessage(m)
 
 		case <-peerRefreshTicker.C:
 			// refresh the list of peers in the chat room periodically

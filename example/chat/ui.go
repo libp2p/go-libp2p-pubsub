@@ -129,15 +129,17 @@ func (ui *ChatUI) refreshPeers() {
 	ui.app.Draw()
 }
 
-// writeChatMsg writes a message to the chat window from the peer with
-// the given nickname. If fromSelf is true, the message will be in a
-// distinct color.
-func (ui *ChatUI) writeChatMsg(nick string, msg string, fromSelf bool) {
-	color := "green"
-	if fromSelf {
-		color = "yellow"
-	}
-	prompt := withColor(color, fmt.Sprintf("<%s>:", nick))
+// displayChatMessage writes a ChatMessage from the room to the message window,
+// with the sender's nick highlighted in green.
+func (ui *ChatUI) displayChatMessage(cm *ChatMessage) {
+	prompt := withColor("green", fmt.Sprintf("<%s>:", cm.SenderNick))
+	fmt.Fprintf(ui.msgW, "%s %s\n", prompt, cm.Message)
+}
+
+// displaySelfMessage writes a message from ourself to the message window,
+// with our nick highlighted in yellow.
+func (ui *ChatUI) displaySelfMessage(msg string) {
+	prompt := withColor("yellow", fmt.Sprintf("<%s>:", ui.cr.nick))
 	fmt.Fprintf(ui.msgW, "%s %s\n", prompt, msg)
 }
 
@@ -146,22 +148,21 @@ func (ui *ChatUI) writeChatMsg(nick string, msg string, fromSelf bool) {
 // refreshes the list of peers in the UI.
 func (ui *ChatUI) handleEvents() {
 	peerRefreshTicker := time.NewTicker(time.Second)
+	defer peerRefreshTicker.Stop()
 
 	for {
 		select {
 		case input := <-ui.inputCh:
-			// when the user types in a line, publish it to the chat room
-			// and print to the message window
+			// when the user types in a line, publish it to the chat room and print to the message window
 			err := ui.cr.Publish(input)
 			if err != nil {
 				printErr("publish error: %s", err)
 			}
-			ui.writeChatMsg(ui.cr.nick, input, true)
+			ui.displaySelfMessage(input)
 
 		case m := <-ui.cr.Messages:
-			// when we receive a message from the chat room, print it to
-			// the message window
-			ui.writeChatMsg(m.SenderNick, m.Message, false)
+			// when we receive a message from the chat room, print it to the message window
+			ui.displayChatMessage(m)
 
 		case <-peerRefreshTicker.C:
 			// refresh the list of peers in the chat room periodically
