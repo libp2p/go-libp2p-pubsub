@@ -270,12 +270,13 @@ func (v *validation) validate(vals []*topicVal, src peer.ID, msg *Message) {
 
 	// apply inline (synchronous) validators
 	result := ValidationAccept
+loop:
 	for _, val := range inline {
 		switch val.validateMsg(v.p.ctx, src, msg) {
 		case ValidationAccept:
 		case ValidationReject:
 			result = ValidationReject
-			break
+			break loop
 		case ValidationIgnore:
 			result = ValidationIgnore
 		}
@@ -377,12 +378,13 @@ func (v *validation) validateTopic(vals []*topicVal, src peer.ID, msg *Message) 
 	}
 
 	result := ValidationAccept
+loop:
 	for i := 0; i < rcount; i++ {
 		switch <-rch {
 		case ValidationAccept:
 		case ValidationReject:
 			result = ValidationReject
-			return result
+			break loop
 		case ValidationIgnore:
 			// throttled validation has the same effect, but takes precedence over Ignore as it is not
 			// known whether the throttled validator would have signaled rejection.
