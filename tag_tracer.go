@@ -239,7 +239,6 @@ func (t *tagTracer) DuplicateMessage(msg *Message) {
 	id := t.msgID(msg.Message)
 	peers, ok := t.nearFirst[id]
 	if !ok {
-		// the peers map should have been created in ValidateMessage
 		return
 	}
 	peers[msg.ReceivedFrom] = struct{}{}
