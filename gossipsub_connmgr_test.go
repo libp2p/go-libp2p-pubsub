@@ -2,11 +2,12 @@ package pubsub
 
 import (
 	"context"
+	"testing"
+	"time"
+
 	"github.com/benbjohnson/clock"
 	"github.com/libp2p/go-libp2p-core/host"
 	swarmt "github.com/libp2p/go-libp2p-swarm/testing"
-	"testing"
-	"time"
 
 	bhost "github.com/libp2p/go-libp2p-blankhost"
 	connmgr "github.com/libp2p/go-libp2p-connmgr"

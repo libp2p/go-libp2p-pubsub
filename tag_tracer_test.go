@@ -2,13 +2,15 @@ package pubsub
 
 import (
 	"fmt"
+	"testing"
+	"time"
+
 	"github.com/benbjohnson/clock"
 	connmgr "github.com/libp2p/go-libp2p-connmgr"
 	connmgri "github.com/libp2p/go-libp2p-core/connmgr"
 	"github.com/libp2p/go-libp2p-core/peer"
+
 	pb "github.com/libp2p/go-libp2p-pubsub/pb"
-	"testing"
-	"time"
 )
 
 func TestTagTracerMeshTags(t *testing.T) {
