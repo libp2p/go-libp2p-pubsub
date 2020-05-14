@@ -249,8 +249,17 @@ func (t *tagTracer) RejectMessage(msg *Message, reason string) {
 	t.Lock()
 	defer t.Unlock()
 
-	// stop tracking near-first deliveries for rejected message
-	delete(t.nearFirst, t.msgID(msg.Message))
+	// We want to delete the near-first delivery tracking for messages that have passed through
+	// the validation pipeline. Other rejection reasons (missing signature, etc) skip the validation
+	// queue, so we don't want to remove the state in case the message is still validating.
+	switch reason {
+	case rejectValidationThrottled:
+		fallthrough
+	case rejectValidationIgnored:
+		fallthrough
+	case rejectValidationFailed:
+		delete(t.nearFirst, t.msgID(msg.Message))
+	}
 }
 
 func (t *tagTracer) RemovePeer(peer.ID) {}
