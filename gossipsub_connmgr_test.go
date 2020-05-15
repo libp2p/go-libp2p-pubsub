@@ -19,6 +19,7 @@ func TestGossipsubConnTagMessageDeliveries(t *testing.T) {
 	defer cancel()
 
 	oldGossipSubD := GossipSubD
+	oldGossipSubDlo := GossipSubDlo
 	oldGossipSubDHi := GossipSubDhi
 	oldGossipSubConnTagDecayInterval := GossipSubConnTagDecayInterval
 	oldGossipSubConnTagMessageDeliveryCap := GossipSubConnTagMessageDeliveryCap
@@ -26,8 +27,9 @@ func TestGossipsubConnTagMessageDeliveries(t *testing.T) {
 	oldSilencePeriod := connmgr.SilencePeriod
 
 	// set the gossipsub D parameters low, so that we have some peers outside the mesh
+	GossipSubDlo = 4
 	GossipSubD = 4
-	GossipSubDhi = 5
+	GossipSubDhi = 4
 	// also set the tag decay interval so we don't have to wait forever for tests
 	GossipSubConnTagDecayInterval = time.Second
 
@@ -39,6 +41,7 @@ func TestGossipsubConnTagMessageDeliveries(t *testing.T) {
 	// reset globals after test
 	defer func() {
 		GossipSubD = oldGossipSubD
+		GossipSubDlo = oldGossipSubDlo
 		GossipSubDhi = oldGossipSubDHi
 		GossipSubConnTagDecayInterval = oldGossipSubConnTagDecayInterval
 		GossipSubConnTagMessageDeliveryCap = oldGossipSubConnTagMessageDeliveryCap
@@ -51,9 +54,9 @@ func TestGossipsubConnTagMessageDeliveries(t *testing.T) {
 		Clock:      decayClock,
 	}
 
-	nHonest := 20
-	nSquatter := 60
-	connLimit := 30
+	nHonest := 10
+	nSquatter := 30
+	connLimit := 15
 
 	connmgrs := make([]*connmgr.BasicConnMgr, nHonest)
 	honestHosts := make([]host.Host, nHonest)
@@ -108,7 +111,7 @@ func TestGossipsubConnTagMessageDeliveries(t *testing.T) {
 	time.Sleep(2 * time.Second)
 
 	// have all the hosts publish enough messages to ensure that they get some delivery credit
-	nMessages := 1000
+	nMessages := GossipSubConnTagMessageDeliveryCap * 2
 	for _, ps := range psubs {
 		for i := 0; i < nMessages; i++ {
 			ps.Publish(topic, []byte("hello"))
@@ -159,7 +162,7 @@ func TestGossipsubConnTagMessageDeliveries(t *testing.T) {
 				nHonestConns++
 			}
 		}
-		if nDishonestConns > 10 {
+		if nDishonestConns > 5 {
 			t.Errorf("expected most dishonest conns to be pruned, have %d", nDishonestConns)
 		}
 		if nHonestConns != nHonest-1 {
