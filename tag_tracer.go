@@ -132,6 +132,14 @@ func (t *tagTracer) addDeliveryTag(topic string) {
 func (t *tagTracer) removeDeliveryTag(topic string) {
 	t.Lock()
 	defer t.Unlock()
+	tag, ok := t.decaying[topic]
+	if !ok {
+		return
+	}
+	err := tag.Close()
+	if err != nil {
+		log.Warnf("error closing decaying connmgr tag: %s", err)
+	}
 	delete(t.decaying, topic)
 }
 
