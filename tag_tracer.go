@@ -119,9 +119,15 @@ func (t *tagTracer) addDeliveryTag(topic string) {
 		return
 	}
 
+	name := fmt.Sprintf("pubsub-deliveries:%s", topic)
 	t.Lock()
 	defer t.Unlock()
-	tag, err := t.decayingDeliveryTag(topic)
+	tag, err := t.decayer.RegisterDecayingTag(
+		name,
+		GossipSubConnTagDecayInterval,
+		connmgr.DecayFixed(GossipSubConnTagDecayAmount),
+		connmgr.BumpSumBounded(0, GossipSubConnTagMessageDeliveryCap))
+
 	if err != nil {
 		log.Warnf("unable to create decaying delivery tag: %s", err)
 		return
@@ -141,19 +147,6 @@ func (t *tagTracer) removeDeliveryTag(topic string) {
 		log.Warnf("error closing decaying connmgr tag: %s", err)
 	}
 	delete(t.decaying, topic)
-}
-
-func (t *tagTracer) decayingDeliveryTag(topic string) (connmgr.DecayingTag, error) {
-	if t.decayer == nil {
-		return nil, fmt.Errorf("connection manager does not support decaying tags")
-	}
-	name := fmt.Sprintf("pubsub-deliveries:%s", topic)
-
-	return t.decayer.RegisterDecayingTag(
-		name,
-		GossipSubConnTagDecayInterval,
-		connmgr.DecayFixed(GossipSubConnTagDecayAmount),
-		connmgr.BumpSumBounded(0, GossipSubConnTagMessageDeliveryCap))
 }
 
 func (t *tagTracer) bumpDeliveryTag(p peer.ID, topic string) error {
