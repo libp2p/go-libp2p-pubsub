@@ -111,15 +111,18 @@ func TestTagTracerDeliveryTags(t *testing.T) {
 	// we have to tick the fake clock once to apply the bump
 	clk.Add(time.Minute)
 
+	tag1 := "pubsub-deliveries:topic-1"
+	tag2 := "pubsub-deliveries:topic-2"
+
 	// the tag value for topic-1 should be capped at GossipSubConnTagMessageDeliveryCap (default 15)
-	val := getTagValue(cmgr, p, "pubsub-deliveries:topic-1")
+	val := getTagValue(cmgr, p, tag1)
 	expected := GossipSubConnTagMessageDeliveryCap
 	if val != expected {
 		t.Errorf("expected delivery tag to be capped at %d, was %d", expected, val)
 	}
 
 	// the value for topic-2 should equal the number of messages delivered (5), since it was less than the cap
-	val = getTagValue(cmgr, p, "pubsub-deliveries:topic-2")
+	val = getTagValue(cmgr, p, tag2)
 	expected = 5
 	if val != expected {
 		t.Errorf("expected delivery tag value = %d, got %d", expected, val)
@@ -128,17 +131,28 @@ func TestTagTracerDeliveryTags(t *testing.T) {
 	// if we jump forward a few minutes, we should see the tags decrease by 1 / 10 minutes
 	clk.Add(50 * time.Minute)
 
-	val = getTagValue(cmgr, p, "pubsub-deliveries:topic-1")
+	val = getTagValue(cmgr, p, tag1)
 	expected = GossipSubConnTagMessageDeliveryCap - 5
 	if val != expected {
 		t.Errorf("expected delivery tag value = %d, got %d", expected, val)
 	}
 
 	// the tag for topic-2 should have reset to zero by now
-	val = getTagValue(cmgr, p, "pubsub-deliveries:topic-2")
+	val = getTagValue(cmgr, p, tag2)
 	expected = 0
 	if val != expected {
 		t.Errorf("expected delivery tag value = %d, got %d", expected, val)
+	}
+
+	// leaving the topic should remove the tag
+	if !tagExists(cmgr, p, tag1) {
+		t.Errorf("expected delivery tag %s to be applied to peer %s", tag1, p)
+	}
+	tt.Leave(topic1)
+	// advance the real clock a bit to allow the connmgr to remove the tag async
+	time.Sleep(500 * time.Millisecond)
+	if tagExists(cmgr, p, tag1) {
+		t.Errorf("expected delivery tag %s to be removed after leaving the topic", tag1)
 	}
 }
 
@@ -222,4 +236,13 @@ func getTagValue(mgr connmgri.ConnManager, p peer.ID, tag string) int {
 		return 0
 	}
 	return val
+}
+
+func tagExists(mgr connmgri.ConnManager, p peer.ID, tag string) bool {
+	info := mgr.GetTagInfo(p)
+	if info == nil {
+		return false
+	}
+	_, exists := info.Tags[tag]
+	return exists
 }
