@@ -537,6 +537,12 @@ func (gs *GossipSubRouter) handleGraft(p peer.ID, ctl *pb.ControlMessage) []*pb.
 			continue
 		}
 
+		// check if it is already in the mesh; if so do nothing (we might have concurrent grafting)
+		_, inMesh := peers[p]
+		if inMesh {
+			continue
+		}
+
 		// we don't GRAFT to/from direct peers; complain loudly if this happens
 		_, direct := gs.direct[p]
 		if direct {
