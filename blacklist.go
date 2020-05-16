@@ -10,7 +10,7 @@ import (
 
 // Blacklist is an interface for peer blacklisting.
 type Blacklist interface {
-	Add(peer.ID)
+	Add(peer.ID) bool
 	Contains(peer.ID) bool
 }
 
@@ -22,8 +22,9 @@ func NewMapBlacklist() Blacklist {
 	return MapBlacklist(make(map[peer.ID]struct{}))
 }
 
-func (b MapBlacklist) Add(p peer.ID) {
+func (b MapBlacklist) Add(p peer.ID) bool {
 	b[p] = struct{}{}
+	return true
 }
 
 func (b MapBlacklist) Contains(p peer.ID) bool {
@@ -43,11 +44,16 @@ func NewTimeCachedBlacklist(expiry time.Duration) (Blacklist, error) {
 	return b, nil
 }
 
-func (b *TimeCachedBlacklist) Add(p peer.ID) {
+// Add returns a bool saying whether Add of peer was successful
+func (b *TimeCachedBlacklist) Add(p peer.ID) bool {
 	b.Lock()
 	defer b.Unlock()
-
-	b.tc.Add(p.String())
+	s := p.String()
+	if b.tc.Has(s) {
+		return false
+	}
+	b.tc.Add(s)
+	return true
 }
 
 func (b *TimeCachedBlacklist) Contains(p peer.ID) bool {
