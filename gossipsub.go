@@ -1208,11 +1208,66 @@ func (gs *GossipSubRouter) heartbeat() {
 				return scores[plst[i]] > scores[plst[j]]
 			})
 
-			// We keep the first D_score peers by score and the remaining up to D_lo randomly
+			// We keep the first D_score peers by score and the remaining up to D randomly
+			// under the constraint that we keep D_out peers in the mesh (if we have that many)
 			shufflePeers(plst[gs.Dscore:])
+
+			// count the outbound peers we are keeping
+			outbound := 0
+			for _, p := range plst[:gs.D] {
+				if gs.outbound[p] {
+					outbound++
+				}
+			}
+
+			// if it's less than D_out, bubble up some outbound peers from the random selection
+			if outbound < gs.Dout {
+				ineed := gs.Dout - outbound
+				for i := gs.D; i < len(plst) && ineed > 0; i++ {
+					p := plst[i]
+					if gs.outbound[p] {
+						// rotate the plst to the right and put the outbound peer in the front
+						for j := i; j > 0; j-- {
+							plst[j] = plst[j-1]
+						}
+						plst[0] = p
+						ineed--
+					}
+				}
+			}
+
+			// prune the excess peers
 			for _, p := range plst[gs.D:] {
 				log.Debugf("HEARTBEAT: Remove mesh link to %s in %s", p, topic)
 				prunePeer(p)
+			}
+		}
+
+		// do we have enough outboud peers?
+		if len(peers) >= gs.Dlo {
+			// count the outbound peers we have
+			outbound := 0
+			for p := range peers {
+				if gs.outbound[p] {
+					outbound++
+				}
+			}
+
+			// if it's less than D_out, select some peers with outbound connections and graft them
+			if outbound < gs.Dout {
+				ineed := gs.Dout - outbound
+				backoff := gs.backoff[topic]
+				plst := gs.getPeers(topic, ineed, func(p peer.ID) bool {
+					// filter our current and direct peers, peers we are backing off, and peers with negative score
+					_, inMesh := peers[p]
+					_, doBackoff := backoff[p]
+					_, direct := gs.direct[p]
+					return !inMesh && !doBackoff && !direct && gs.outbound[p] && gs.score.Score(p) >= 0
+				})
+
+				for _, p := range plst {
+					graftPeer(p)
+				}
 			}
 		}
 
