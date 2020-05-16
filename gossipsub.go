@@ -587,6 +587,15 @@ func (gs *GossipSubRouter) handleGraft(p peer.ID, ctl *pb.ControlMessage) []*pb.
 			continue
 		}
 
+		// check the number of mesh peers; if it is at (or over) Dhi, we only accept grafts
+		// from peers with outbound connections; this is a defensive check to restrict potential
+		// mesh takeover attacks combined with love bombing
+		if len(peers) >= gs.Dhi && !gs.isOutboundConnection(p) {
+			prune = append(prune, topic)
+			gs.addBackoff(p, topic)
+			continue
+		}
+
 		log.Debugf("GRAFT: add mesh link from %s in %s", p, topic)
 		gs.tracer.Graft(p, topic)
 		peers[p] = struct{}{}
@@ -638,6 +647,17 @@ func (gs *GossipSubRouter) handlePrune(p peer.ID, ctl *pb.ControlMessage) {
 			gs.pxConnect(px)
 		}
 	}
+}
+
+func (gs *GossipSubRouter) isOutboundConnection(p peer.ID) bool {
+	conns := gs.p.host.Network().ConnsToPeer(p)
+	for _, c := range conns {
+		if c.Stat().Direction == network.DirOutbound {
+			return true
+		}
+	}
+
+	return false
 }
 
 func (gs *GossipSubRouter) addBackoff(p peer.ID, topic string) {
