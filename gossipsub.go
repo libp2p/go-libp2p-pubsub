@@ -361,12 +361,7 @@ loop:
 		if c.Stat().Direction == network.DirOutbound {
 			// only count the connection if it has a pubsub stream
 			for _, s := range c.GetStreams() {
-				switch s.Protocol() {
-				case FloodSubID:
-					fallthrough
-				case GossipSubID_v10:
-					fallthrough
-				case GossipSubID_v11:
+				if s.Protocol() == proto {
 					outbound = true
 					break loop
 				}
