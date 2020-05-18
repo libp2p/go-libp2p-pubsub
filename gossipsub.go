@@ -356,10 +356,21 @@ func (gs *GossipSubRouter) AddPeer(p peer.ID, proto protocol.ID) {
 	// track the connection direction
 	outbound := false
 	conns := gs.p.host.Network().ConnsToPeer(p)
+loop:
 	for _, c := range conns {
 		if c.Stat().Direction == network.DirOutbound {
-			outbound = true
-			break
+			// only count the connection if it has a pubsub stream
+			for _, s := range c.GetStreams() {
+				switch s.Protocol() {
+				case FloodSubID:
+					fallthrough
+				case GossipSubID_v10:
+					fallthrough
+				case GossipSubID_v11:
+					outbound = true
+					break loop
+				}
+			}
 		}
 	}
 	gs.outbound[p] = outbound
