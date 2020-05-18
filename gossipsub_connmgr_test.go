@@ -27,9 +27,9 @@ func TestGossipsubConnTagMessageDeliveries(t *testing.T) {
 	oldSilencePeriod := connmgr.SilencePeriod
 
 	// set the gossipsub D parameters low, so that we have some peers outside the mesh
-	GossipSubDlo = 4
-	GossipSubD = 4
-	GossipSubDhi = 4
+	GossipSubDlo = 3
+	GossipSubD = 3
+	GossipSubDhi = 3
 	// also set the tag decay interval so we don't have to wait forever for tests
 	GossipSubConnTagDecayInterval = time.Second
 
@@ -54,9 +54,9 @@ func TestGossipsubConnTagMessageDeliveries(t *testing.T) {
 		Clock:      decayClock,
 	}
 
-	nHonest := 10
-	nSquatter := 30
-	connLimit := 15
+	nHonest := 5
+	nSquatter := 10
+	connLimit := 10
 
 	connmgrs := make([]*connmgr.BasicConnMgr, nHonest)
 	honestHosts := make([]host.Host, nHonest)
@@ -162,7 +162,7 @@ func TestGossipsubConnTagMessageDeliveries(t *testing.T) {
 				nHonestConns++
 			}
 		}
-		if nDishonestConns > 5 {
+		if nDishonestConns > connLimit-nHonest {
 			t.Errorf("expected most dishonest conns to be pruned, have %d", nDishonestConns)
 		}
 		if nHonestConns != nHonest-1 {
