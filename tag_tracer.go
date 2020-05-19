@@ -175,7 +175,7 @@ func (t *tagTracer) nearFirstPeers(msg *Message) []peer.ID {
 	defer t.Unlock()
 	peersMap, ok := t.nearFirst[t.msgID(msg.Message)]
 	if !ok {
-		return []peer.ID{}
+		return nil
 	}
 	peers := make([]peer.ID, 0, len(peersMap))
 	for p := range peersMap {
