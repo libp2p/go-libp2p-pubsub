@@ -132,18 +132,18 @@ func TestTagTracerDeliveryTags(t *testing.T) {
 	clk.Add(50 * time.Minute)
 
 	val = getTagValue(cmgr, p, tag1)
+	expected = GossipSubConnTagMessageDeliveryCap - 5
 	// the actual expected value should be GossipSubConnTagMessageDeliveryCap - 5,
 	// however due to timing issues on Travis, we consistently get GossipSubConnTagMessageDeliveryCap - 4
-	// there instead.
-	expected = GossipSubConnTagMessageDeliveryCap - 4
-	if val > expected {
+	// there instead. So our assertion checks for the expected value +/- 1
+	if val > expected+1 || val < expected-1 {
 		t.Errorf("expected delivery tag value <= %d, got %d", expected, val)
 	}
 
 	// the tag for topic-2 should have reset to zero by now, but again we add one for Travis since it's slow...
 	val = getTagValue(cmgr, p, tag2)
-	expected = 1
-	if val > expected {
+	expected = 0
+	if val > expected+1 || val < expected-1 {
 		t.Errorf("expected delivery tag value <= %d, got %d", expected, val)
 	}
 
