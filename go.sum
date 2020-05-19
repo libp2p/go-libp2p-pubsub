@@ -116,6 +116,8 @@ github.com/libp2p/go-flow-metrics v0.0.3/go.mod h1:HeoSNUrOJVK1jEpDqVEiUOIXqhbnS
 github.com/libp2p/go-libp2p-blankhost v0.1.4/go.mod h1:oJF0saYsAXQCSfDq254GMNmLNz6ZTHTOvtF4ZydUvwU=
 github.com/libp2p/go-libp2p-blankhost v0.1.6/go.mod h1:jONCAJqEP+Z8T6EQviGL4JsQcLx1LgTGtVqFNY8EMfQ=
 github.com/libp2p/go-libp2p-connmgr v0.2.2-0.20200508190152-8ff0dd307f71/go.mod h1:QYQIgwcOZE1PEk+hPWPr3JAndG8yjKecWsOqyMy7z1U=
+github.com/libp2p/go-libp2p-connmgr v0.2.2-0.20200511143627-be11534e2984 h1:hTVsQbkC5NeTUgcXp977V1GfKEvDJhuwgRduxTrHOM0=
+github.com/libp2p/go-libp2p-connmgr v0.2.2-0.20200511143627-be11534e2984/go.mod h1:QYQIgwcOZE1PEk+hPWPr3JAndG8yjKecWsOqyMy7z1U=
 github.com/libp2p/go-libp2p-core v0.0.1/go.mod h1:g/VxnTZ/1ygHxH3dKok7Vno1VfpvGcGip57wjTU4fco=
 github.com/libp2p/go-libp2p-core v0.2.0/go.mod h1:X0eyB0Gy93v0DZtSYbEM7RnMChm9Uv3j7yRXjO77xSI=
 github.com/libp2p/go-libp2p-core v0.2.2/go.mod h1:8fcwTbsG2B+lTgRJ1ICZtiM5GWCWZVoVrLaDRvIRng0=
