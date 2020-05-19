@@ -141,22 +141,11 @@ func (t *tagTracer) decayingDeliveryTag(topic string) (connmgr.DecayingTag, erro
 	}
 	name := fmt.Sprintf("pubsub-deliveries:%s", topic)
 
-	// decrement tag value by GossipSubConnTagDecayAmount at each decay interval
-	decayFn := func(value connmgr.DecayingValue) (after int, rm bool) {
-		v := value.Value - GossipSubConnTagDecayAmount
-		return v, v <= 0
-	}
-
-	// bump up to max of GossipSubConnTagMessageDeliveryCap
-	bumpFn := func(value connmgr.DecayingValue, delta int) (after int) {
-		val := value.Value + delta
-		if val > GossipSubConnTagMessageDeliveryCap {
-			return GossipSubConnTagMessageDeliveryCap
-		}
-		return val
-	}
-
-	return t.decayer.RegisterDecayingTag(name, GossipSubConnTagDecayInterval, decayFn, bumpFn)
+	return t.decayer.RegisterDecayingTag(
+		name,
+		GossipSubConnTagDecayInterval,
+		connmgr.DecayFixed(GossipSubConnTagDecayAmount),
+		connmgr.BumpSumBounded(0, GossipSubConnTagMessageDeliveryCap))
 }
 
 func (t *tagTracer) bumpDeliveryTag(p peer.ID, topic string) error {
