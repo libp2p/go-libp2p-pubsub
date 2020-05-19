@@ -3,7 +3,7 @@ module github.com/libp2p/go-libp2p-pubsub
 require (
 	github.com/gogo/protobuf v1.3.1
 	github.com/ipfs/go-log v1.0.4
-	github.com/libp2p/go-libp2p-blankhost v0.1.4
+	github.com/libp2p/go-libp2p-blankhost v0.1.6
 	github.com/libp2p/go-libp2p-core v0.5.6
 	github.com/libp2p/go-libp2p-discovery v0.4.0
 	github.com/libp2p/go-libp2p-swarm v0.2.4
