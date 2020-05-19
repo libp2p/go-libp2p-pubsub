@@ -130,7 +130,7 @@ func TestTagTracerDeliveryTags(t *testing.T) {
 
 	// if we jump forward a few minutes, we should see the tags decrease by 1 / 10 minutes
 	clk.Add(50 * time.Minute)
-	time.Sleep(time.Second)
+	time.Sleep(5 * time.Second)
 
 	val = getTagValue(cmgr, p, tag1)
 	expected = GossipSubConnTagMessageDeliveryCap - 5
