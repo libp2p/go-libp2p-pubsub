@@ -49,7 +49,14 @@ var (
 	// At least GossipSubDscore of the retained peers will be high-scoring, while the remainder are
 	// chosen randomly.
 	GossipSubDscore = 4
-	GossipSubDout   = 2
+
+	// GossipSubDout sets the quota for the number of outbound connections to maintain in a topic mesh.
+	// When the mesh is pruned due to over subscription, we make sure that we have outbound connections
+	// to at least GossipSubDout of the survivor peers. This prevents sybil attackers from overwhelming
+	// our mesh with incoming connections.
+	//
+	// GossipSubDout must be set below GossipSubDlo, and must not exceed GossipSubD / 2.
+	GossipSubDout = 2
 
 	// gossip parameters
 
