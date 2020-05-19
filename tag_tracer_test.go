@@ -130,7 +130,7 @@ func TestTagTracerDeliveryTags(t *testing.T) {
 
 	// if we jump forward a few minutes, we should see the tags decrease by 1 / 10 minutes
 	clk.Add(50 * time.Minute)
-	time.Sleep(500 * time.Millisecond)
+	time.Sleep(time.Second)
 
 	val = getTagValue(cmgr, p, tag1)
 	expected = GossipSubConnTagMessageDeliveryCap - 5
@@ -151,7 +151,7 @@ func TestTagTracerDeliveryTags(t *testing.T) {
 	}
 	tt.Leave(topic1)
 	// advance the real clock a bit to allow the connmgr to remove the tag async
-	time.Sleep(500 * time.Millisecond)
+	time.Sleep(time.Second)
 	if tagExists(cmgr, p, tag1) {
 		t.Errorf("expected delivery tag %s to be removed after leaving the topic", tag1)
 	}
