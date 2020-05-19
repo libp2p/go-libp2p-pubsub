@@ -383,6 +383,18 @@ func WithEventTracer(tracer EventTracer) Option {
 	}
 }
 
+// withInternalTracer adds an internal event tracer to the pubsub system
+func withInternalTracer(tracer internalTracer) Option {
+	return func(p *PubSub) error {
+		if p.tracer != nil {
+			p.tracer.internal = append(p.tracer.internal, tracer)
+		} else {
+			p.tracer = &pubsubTracer{internal: []internalTracer{tracer}, pid: p.host.ID(), msgID: p.msgID}
+		}
+		return nil
+	}
+}
+
 // WithMaxMessageSize sets the global maximum message size for pubsub wire
 // messages. The default value is 1MiB (DefaultMaxMessageSize).
 //
