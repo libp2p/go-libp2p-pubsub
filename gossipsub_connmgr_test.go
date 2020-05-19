@@ -63,7 +63,6 @@ func TestGossipsubConnTagMessageDeliveries(t *testing.T) {
 			connmgr.DecayerConfig(&decayCfg))
 
 		netw := swarmt.GenSwarm(t, ctx)
-		netw.Notify(connmgrs[i].Notifee()) // TODO: move this to go-libp2p-blankhost
 		h := bhost.NewBlankHost(netw, bhost.WithConnectionManager(connmgrs[i]))
 		honestHosts[i] = h
 		honestPeers[h.ID()] = struct{}{}
