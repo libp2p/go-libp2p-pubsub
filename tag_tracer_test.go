@@ -130,6 +130,7 @@ func TestTagTracerDeliveryTags(t *testing.T) {
 
 	// if we jump forward a few minutes, we should see the tags decrease by 1 / 10 minutes
 	clk.Add(50 * time.Minute)
+	time.Sleep(2 * time.Second)
 
 	val = getTagValue(cmgr, p, tag1)
 	expected = GossipSubConnTagMessageDeliveryCap - 5
@@ -137,14 +138,14 @@ func TestTagTracerDeliveryTags(t *testing.T) {
 	// however due to timing issues on Travis, we consistently get GossipSubConnTagMessageDeliveryCap - 4
 	// there instead. So our assertion checks for the expected value +/- 1
 	if val > expected+1 || val < expected-1 {
-		t.Errorf("expected delivery tag value <= %d, got %d", expected, val)
+		t.Errorf("expected delivery tag value = %d ± 1, got %d", expected, val)
 	}
 
 	// the tag for topic-2 should have reset to zero by now, but again we add one for Travis since it's slow...
 	val = getTagValue(cmgr, p, tag2)
 	expected = 0
 	if val > expected+1 || val < expected-1 {
-		t.Errorf("expected delivery tag value <= %d, got %d", expected, val)
+		t.Errorf("expected delivery tag value = %d ± 1, got %d", expected, val)
 	}
 
 	// leaving the topic should remove the tag
