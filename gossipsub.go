@@ -124,7 +124,12 @@ func NewGossipSub(ctx context.Context, h host.Host, opts ...Option) (*PubSub, er
 		opportunisticGraftTicks: GossipSubOpportunisticGraftTicks,
 
 		fanoutTTL: GossipSubFanoutTTL,
+
+		tagTracer: newTagTracer(h.ConnManager()),
 	}
+
+	// use the withInternalTracer option to hook up the tag tracer
+	opts = append(opts, withInternalTracer(rt.tagTracer))
 	return NewPubSub(ctx, h, rt, opts...)
 }
 
@@ -224,6 +229,10 @@ func WithDirectPeers(pis []peer.AddrInfo) Option {
 
 		gs.direct = direct
 
+		if gs.tagTracer != nil {
+			gs.tagTracer.direct = direct
+		}
+
 		return nil
 	}
 }
@@ -254,6 +263,7 @@ type GossipSubRouter struct {
 	tracer       *pubsubTracer
 	score        *peerScore
 	gossipTracer *gossipTracer
+	tagTracer    *tagTracer
 
 	// whether PX is enabled; this should be enabled in bootstrappers and other well connected/trusted
 	// nodes.
@@ -346,12 +356,6 @@ func (gs *GossipSubRouter) AddPeer(p peer.ID, proto protocol.ID) {
 	log.Debugf("PEERUP: Add new peer %s using %s", p, proto)
 	gs.tracer.AddPeer(p, proto)
 	gs.peers[p] = proto
-
-	// tag peer if it is a direct peer
-	_, direct := gs.direct[p]
-	if direct {
-		gs.p.host.ConnManager().TagPeer(p, "pubsub:direct", 1000)
-	}
 
 	// track the connection direction
 	outbound := false
@@ -621,7 +625,6 @@ func (gs *GossipSubRouter) handleGraft(p peer.ID, ctl *pb.ControlMessage) []*pb.
 		log.Debugf("GRAFT: add mesh link from %s in %s", p, topic)
 		gs.tracer.Graft(p, topic)
 		peers[p] = struct{}{}
-		gs.tagPeer(p, topic)
 	}
 
 	if len(prune) == 0 {
@@ -649,7 +652,6 @@ func (gs *GossipSubRouter) handlePrune(p peer.ID, ctl *pb.ControlMessage) {
 		log.Debugf("PRUNE: Remove mesh link to %s in %s", p, topic)
 		gs.tracer.Prune(p, topic)
 		delete(peers, p)
-		gs.untagPeer(p, topic)
 		// is there a backoff specified by the peer? if so obey it.
 		backoff := prune.GetBackoff()
 		if backoff > 0 {
@@ -889,7 +891,6 @@ func (gs *GossipSubRouter) Join(topic string) {
 		log.Debugf("JOIN: Add mesh link to %s in %s", p, topic)
 		gs.tracer.Graft(p, topic)
 		gs.sendGraft(p, topic)
-		gs.tagPeer(p, topic)
 	}
 }
 
@@ -908,7 +909,6 @@ func (gs *GossipSubRouter) Leave(topic string) {
 		log.Debugf("LEAVE: Remove mesh link to %s in %s", p, topic)
 		gs.tracer.Prune(p, topic)
 		gs.sendPrune(p, topic)
-		gs.untagPeer(p, topic)
 	}
 }
 
@@ -1168,7 +1168,6 @@ func (gs *GossipSubRouter) heartbeat() {
 		prunePeer := func(p peer.ID) {
 			gs.tracer.Prune(p, topic)
 			delete(peers, p)
-			gs.untagPeer(p, topic)
 			gs.addBackoff(p, topic)
 			topics := toprune[p]
 			toprune[p] = append(topics, topic)
@@ -1178,7 +1177,6 @@ func (gs *GossipSubRouter) heartbeat() {
 			log.Debugf("HEARTBEAT: Add mesh link to %s in %s", p, topic)
 			gs.tracer.Graft(p, topic)
 			peers[p] = struct{}{}
-			gs.tagPeer(p, topic)
 			topics := tograft[p]
 			tograft[p] = append(topics, topic)
 		}
@@ -1670,20 +1668,6 @@ func (gs *GossipSubRouter) getPeers(topic string, count int, filter func(peer.ID
 	}
 
 	return peers
-}
-
-func (gs *GossipSubRouter) tagPeer(p peer.ID, topic string) {
-	tag := topicTag(topic)
-	gs.p.host.ConnManager().TagPeer(p, tag, 20)
-}
-
-func (gs *GossipSubRouter) untagPeer(p peer.ID, topic string) {
-	tag := topicTag(topic)
-	gs.p.host.ConnManager().UntagPeer(p, tag)
-}
-
-func topicTag(topic string) string {
-	return fmt.Sprintf("pubsub:%s", topic)
 }
 
 func peerListToMap(peers []peer.ID) map[peer.ID]struct{} {
