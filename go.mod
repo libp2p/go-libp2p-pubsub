@@ -1,7 +1,7 @@
 module github.com/libp2p/go-libp2p-pubsub
 
 require (
-	github.com/benbjohnson/clock v1.0.1
+	github.com/benbjohnson/clock v1.0.2
 	github.com/gogo/protobuf v1.3.1
 	github.com/ipfs/go-log v1.0.4
 	github.com/libp2p/go-libp2p-blankhost v0.1.6
