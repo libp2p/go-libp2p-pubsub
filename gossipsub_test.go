@@ -1172,7 +1172,7 @@ func TestGossipsubDirectPeers(t *testing.T) {
 		c.Close()
 	}
 
-	time.Sleep(3 * time.Second)
+	time.Sleep(5 * time.Second)
 
 	if len(h[1].Network().ConnsToPeer(h[2].ID())) == 0 {
 		t.Fatal("expected a connection between direct peers")

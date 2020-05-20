@@ -38,7 +38,7 @@ func defaultDiscoverOptions() *discoverOptions {
 	dialTimeout := time.Minute * 2
 	discoverOpts := &discoverOptions{
 		connFactory: func(host host.Host) (*discimpl.BackoffConnector, error) {
-			backoff := discimpl.NewExponentialBackoff(minBackoff, maxBackoff, discimpl.FullJitter, time.Second, 5.0, 0, rngSrc)
+			backoff := discimpl.NewExponentialBackoff(minBackoff, maxBackoff, discimpl.FullJitter, time.Second, 5.0, 0, rand.New(rngSrc))
 			return discimpl.NewBackoffConnector(host, cacheSize, dialTimeout, backoff)
 		},
 	}
