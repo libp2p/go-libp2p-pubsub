@@ -1302,15 +1302,33 @@ func (gs *GossipSubRouter) heartbeat() {
 
 			// if it's less than D_out, bubble up some outbound peers from the random selection
 			if outbound < gs.Dout {
+				rotate := func(i int) {
+					// rotate the plst to the right and put the ith peer in the front
+					p := plst[i]
+					for j := i; j > 0; j-- {
+						plst[j] = plst[j-1]
+					}
+					plst[0] = p
+				}
+
+				// first bubble up all outbound peers already in the selection to the front
+				if outbound > 0 {
+					ihave := outbound
+					for i := 1; i < gs.D && ihave > 0; i++ {
+						p := plst[i]
+						if gs.outbound[p] {
+							rotate(i)
+							ihave--
+						}
+					}
+				}
+
+				// now bubble up enough outbound peers outside the selection to the front
 				ineed := gs.Dout - outbound
 				for i := gs.D; i < len(plst) && ineed > 0; i++ {
 					p := plst[i]
 					if gs.outbound[p] {
-						// rotate the plst to the right and put the outbound peer in the front
-						for j := i; j > 0; j-- {
-							plst[j] = plst[j-1]
-						}
-						plst[0] = p
+						rotate(i)
 						ineed--
 					}
 				}
