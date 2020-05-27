@@ -305,6 +305,21 @@ func WithDirectPeers(pis []peer.AddrInfo) Option {
 	}
 }
 
+// WithDirectConnectTicks is a gossipsub router option that sets the number of
+// heartbeat ticks between attempting to reconnect direct peers that are not
+// currently connected. A "tick" is based on the heartbeat interval, which is
+// 1s by default. The default value for direct connect ticks is 300.
+func WithDirectConnectTicks(t uint64) Option {
+	return func(ps *PubSub) error {
+		gs, ok := ps.rt.(*GossipSubRouter)
+		if !ok {
+			return fmt.Errorf("pubsub router is not gossipsub")
+		}
+		gs.directConnectTicks = t
+		return nil
+	}
+}
+
 // GossipSubRouter is a router that implements the gossipsub protocol.
 // For each topic we have joined, we maintain an overlay through which
 // messages flow; this is the mesh map.
