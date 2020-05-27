@@ -1120,20 +1120,14 @@ func TestGossipsubStarTopologyWithSignedPeerRecords(t *testing.T) {
 }
 
 func TestGossipsubDirectPeers(t *testing.T) {
-	originalGossipSubDirectConnectTicks := GossipSubDirectConnectTicks
-	GossipSubDirectConnectTicks = 2
-	defer func() {
-		GossipSubDirectConnectTicks = originalGossipSubDirectConnectTicks
-	}()
-
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
 	h := getNetHosts(t, ctx, 3)
 	psubs := []*PubSub{
-		getGossipsub(ctx, h[0]),
-		getGossipsub(ctx, h[1], WithDirectPeers([]peer.AddrInfo{peer.AddrInfo{h[2].ID(), h[2].Addrs()}})),
-		getGossipsub(ctx, h[2], WithDirectPeers([]peer.AddrInfo{peer.AddrInfo{h[1].ID(), h[1].Addrs()}})),
+		getGossipsub(ctx, h[0], WithDirectConnectTicks(2)),
+		getGossipsub(ctx, h[1], WithDirectPeers([]peer.AddrInfo{peer.AddrInfo{h[2].ID(), h[2].Addrs()}}), WithDirectConnectTicks(2)),
+		getGossipsub(ctx, h[2], WithDirectPeers([]peer.AddrInfo{peer.AddrInfo{h[1].ID(), h[1].Addrs()}}), WithDirectConnectTicks(2)),
 	}
 
 	connect(t, h[0], h[1])
