@@ -14,64 +14,55 @@ import (
 )
 
 func TestTagTracerMeshTags(t *testing.T) {
-	t.Skip("test disabled until we figure out an interface for getting protected peers from the connman")
-
 	// test that tags are applied when the tagTracer sees graft and prune events
 
-	// cmgr := connmgr.NewConnManager(5, 10, time.Minute)
-	// tt := newTagTracer(cmgr)
+	cmgr := connmgr.NewConnManager(5, 10, time.Minute)
+	tt := newTagTracer(cmgr)
 
-	// p := peer.ID("a-peer")
-	// topic := "a-topic"
+	p := peer.ID("a-peer")
+	topic := "a-topic"
 
-	// tt.Join(topic)
-	// tt.Graft(p, topic)
+	tt.Join(topic)
+	tt.Graft(p, topic)
 
-	// tag := "pubsub:" + topic
-	// val := getTagValue(cmgr, p, tag)
-	// if val != GossipSubConnTagValueMeshPeer {
-	// 	t.Errorf("expected mesh peer to have tag %s with value %d, got %d",
-	// 		tag, GossipSubConnTagValueMeshPeer, val)
-	// }
+	tag := "pubsub:" + topic
+	if !cmgr.IsProtected(p, tag) {
+		t.Fatal("expected the mesh peer to be protected")
+	}
 
-	// tt.Prune(p, topic)
-	// val = getTagValue(cmgr, p, tag)
-	// if val != 0 {
-	// 	t.Errorf("expected peer to be untagged when pruned from mesh, but tag %s was %d", tag, val)
-	// }
+	tt.Prune(p, topic)
+	if cmgr.IsProtected(p, tag) {
+		t.Fatal("expected the former mesh peer to be unprotected")
+	}
 }
 
 func TestTagTracerDirectPeerTags(t *testing.T) {
-	t.Skip("test disabled until we figure out an interface for getting protected peers from the connman")
+	// test that we add a tag to direct peers
+	cmgr := connmgr.NewConnManager(5, 10, time.Minute)
+	tt := newTagTracer(cmgr)
 
-	// // test that we add a tag to direct peers
-	// cmgr := connmgr.NewConnManager(5, 10, time.Minute)
-	// tt := newTagTracer(cmgr)
+	p1 := peer.ID("1")
+	p2 := peer.ID("2")
+	p3 := peer.ID("3")
 
-	// p1 := peer.ID("1")
-	// p2 := peer.ID("2")
-	// p3 := peer.ID("3")
+	// in the real world, tagTracer.direct is set in the WithDirectPeers option function
+	tt.direct = make(map[peer.ID]struct{})
+	tt.direct[p1] = struct{}{}
 
-	// // in the real world, tagTracer.direct is set in the WithDirectPeers option function
-	// tt.direct = make(map[peer.ID]struct{})
-	// tt.direct[p1] = struct{}{}
+	tt.AddPeer(p1, GossipSubID_v10)
+	tt.AddPeer(p2, GossipSubID_v10)
+	tt.AddPeer(p3, GossipSubID_v10)
 
-	// tt.AddPeer(p1, GossipSubID_v10)
-	// tt.AddPeer(p2, GossipSubID_v10)
-	// tt.AddPeer(p3, GossipSubID_v10)
+	tag := "pubsub:<direct>"
+	if !cmgr.IsProtected(p1, tag) {
+		t.Fatal("expected direct peer to be protected")
+	}
 
-	// tag := "pubsub:direct"
-	// val := getTagValue(cmgr, p1, tag)
-	// if val != GossipSubConnTagValueDirectPeer {
-	// 	t.Errorf("expected direct peer to have tag %s value %d, was %d", tag, GossipSubConnTagValueDirectPeer, val)
-	// }
-
-	// for _, p := range []peer.ID{p2, p3} {
-	// 	val := getTagValue(cmgr, p, tag)
-	// 	if val != 0 {
-	// 		t.Errorf("expected non-direct peer to have tag %s value %d, was %d", tag, 0, val)
-	// 	}
-	// }
+	for _, p := range []peer.ID{p2, p3} {
+		if cmgr.IsProtected(p, tag) {
+			t.Fatal("expected non-direct peer to be unprotected")
+		}
+	}
 }
 
 func TestTagTracerDeliveryTags(t *testing.T) {
