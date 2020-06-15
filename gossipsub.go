@@ -1005,7 +1005,7 @@ func (gs *GossipSubRouter) sendGraft(p peer.ID, topic string) {
 }
 
 func (gs *GossipSubRouter) sendPrune(p peer.ID, topic string) {
-	prune := []*pb.ControlPrune{gs.makePrune(p, topic, true)}
+	prune := []*pb.ControlPrune{gs.makePrune(p, topic, gs.doPX)}
 	out := rpcWithControl(nil, nil, nil, nil, prune)
 	gs.sendRPC(p, out)
 }
