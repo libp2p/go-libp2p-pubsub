@@ -131,12 +131,19 @@ func (p *PubSub) handleSendingMessages(ctx context.Context, s network.Stream, ou
 			if !ok {
 				return
 			}
-
-			err := writeMsg(&rpc.RPC)
+			rpcFragments, err := fragmentRPC(rpc, p.maxMessageSize)
 			if err != nil {
 				s.Reset()
-				log.Infof("writing message to %s: %s", s.Conn().RemotePeer(), err)
+				log.Infof("unable to fragment RPC: %s", err)
 				return
+			}
+			for _, rpcFragment := range rpcFragments {
+				err := writeMsg(rpcFragment)
+				if err != nil {
+					s.Reset()
+					log.Infof("writing message to %s: %s", s.Conn().RemotePeer(), err)
+					return
+				}
 			}
 		case <-ctx.Done():
 			return
