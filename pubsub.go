@@ -28,6 +28,10 @@ const DefaultMaxMessageSize = 1 << 20
 
 var (
 	TimeCacheDuration = 120 * time.Second
+
+	// ErrSubscriptionCancelled may be returned when a subscription Next() is called after the
+	// subscription has been cancelled.
+	ErrSubscriptionCancelled = errors.New("subscription cancelled by calling sub.Cancel()")
 )
 
 var log = logging.Logger("pubsub")
@@ -629,7 +633,7 @@ func (p *PubSub) handleRemoveSubscription(sub *Subscription) {
 		return
 	}
 
-	sub.err = fmt.Errorf("subscription cancelled by calling sub.Cancel()")
+	sub.err = ErrSubscriptionCancelled
 	sub.close()
 	delete(subs, sub)
 
