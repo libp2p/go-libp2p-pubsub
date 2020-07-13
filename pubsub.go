@@ -31,7 +31,7 @@ var (
 
 	// ErrSubscriptionCancelled may be returned when a subscription Next() is called after the
 	// subscription has been cancelled.
-	ErrSubscriptionCancelled = errors.New("subscription cancelled by calling sub.Cancel()")
+	ErrSubscriptionCancelled = errors.New("subscription cancelled")
 )
 
 var log = logging.Logger("pubsub")
