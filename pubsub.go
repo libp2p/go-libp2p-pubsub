@@ -145,7 +145,7 @@ type PubSub struct {
 	// source ID for signed messages; corresponds to signKey
 	signID peer.ID
 	// strict mode rejects all unsigned messages prior to validation
-	signStrict bool
+	signPolicy MessageSignaturePolicy
 
 	ctx context.Context
 }
@@ -212,8 +212,8 @@ func NewPubSub(ctx context.Context, h host.Host, rt PubSubRouter, opts ...Option
 		maxMessageSize:        DefaultMaxMessageSize,
 		peerOutboundQueueSize: 32,
 		signID:                h.ID(),
-		signKey:               h.Peerstore().PrivKey(h.ID()),
-		signStrict:            true,
+		signKey:               nil,
+		signPolicy:            StrictSign,
 		incoming:              make(chan *RPC, 32),
 		publish:               make(chan *Message),
 		newPeers:              make(chan peer.ID),
@@ -251,8 +251,14 @@ func NewPubSub(ctx context.Context, h host.Host, rt PubSubRouter, opts ...Option
 		}
 	}
 
-	if ps.signStrict && ps.signKey == nil {
-		return nil, fmt.Errorf("strict signature verification enabled but message signing is disabled")
+	if ps.signPolicy.mustSign() {
+		if ps.signID == "" {
+			return nil, fmt.Errorf("strict signature usage enabled but message author was disabled")
+		}
+		ps.signKey = ps.host.Peerstore().PrivKey(ps.signID)
+		if ps.signKey == nil {
+			return nil, fmt.Errorf("can't sign for peer %s: no private key", ps.signID)
+		}
 	}
 
 	if err := ps.disc.Start(ps); err != nil {
@@ -303,17 +309,23 @@ func WithPeerOutboundQueueSize(size int) Option {
 	}
 }
 
+// WithMessageSignaturePolicy sets the mode of operation for producing and verifying message signatures.
+func WithMessageSignaturePolicy(policy MessageSignaturePolicy) Option {
+	return func(p *PubSub) error {
+		p.signPolicy = policy
+		return nil
+	}
+}
+
 // WithMessageSigning enables or disables message signing (enabled by default).
+// Deprecated: signature verification without message signing,
+// or message signing without verification, are not recommended.
 func WithMessageSigning(enabled bool) Option {
 	return func(p *PubSub) error {
 		if enabled {
-			p.signKey = p.host.Peerstore().PrivKey(p.signID)
-			if p.signKey == nil {
-				return fmt.Errorf("can't sign for peer %s: no private key", p.signID)
-			}
+			p.signPolicy |= msgSigning
 		} else {
-			p.signKey = nil
-			p.signStrict = false
+			p.signPolicy &^= msgSigning
 		}
 		return nil
 	}
@@ -328,23 +340,31 @@ func WithMessageAuthor(author peer.ID) Option {
 		if author == "" {
 			author = p.host.ID()
 		}
-		if p.signKey != nil {
-			newSignKey := p.host.Peerstore().PrivKey(author)
-			if newSignKey == nil {
-				return fmt.Errorf("can't sign for peer %s: no private key", author)
-			}
-			p.signKey = newSignKey
-		}
 		p.signID = author
+		return nil
+	}
+}
+
+// WithNoAuthor omits the author data of pubsub messages, and disables the use of signatures.
+func WithNoAuthor() Option {
+	return func(p *PubSub) error {
+		p.signID = ""
+		p.signPolicy &^= msgSigning
 		return nil
 	}
 }
 
 // WithStrictSignatureVerification is an option to enable or disable strict message signing.
 // When enabled (which is the default), unsigned messages will be discarded.
+// Deprecated: signature verification without message signing,
+// or message signing without verification, are not recommended.
 func WithStrictSignatureVerification(required bool) Option {
 	return func(p *PubSub) error {
-		p.signStrict = required
+		if required {
+			p.signPolicy |= msgVerification
+		} else {
+			p.signPolicy &^= msgVerification
+		}
 		return nil
 	}
 }
@@ -942,10 +962,23 @@ func (p *PubSub) pushMsg(msg *Message) {
 	}
 
 	// reject unsigned messages when strict before we even process the id
-	if p.signStrict && msg.Signature == nil {
-		log.Debugf("dropping unsigned message from %s", src)
-		p.tracer.RejectMessage(msg, rejectMissingSignature)
-		return
+	if p.signPolicy.mustVerify() {
+		if p.signPolicy.mustSign() {
+			if msg.Signature == nil {
+				log.Debugf("dropping unsigned message from %s", src)
+				p.tracer.RejectMessage(msg, rejectMissingSignature)
+				return
+			}
+			// Actual signature verification happens in the validation pipeline,
+			// after checking if the message was already seen or not,
+			// to avoid unnecessary signature verification processing-cost.
+		} else {
+			if msg.Signature != nil {
+				log.Debugf("dropping message with unexpected signature from %s", src)
+				p.tracer.RejectMessage(msg, rejectUnexpectedSignature)
+				return
+			}
+		}
 	}
 
 	// reject messages claiming to be from ourselves but not locally published

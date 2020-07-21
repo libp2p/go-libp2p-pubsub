@@ -241,6 +241,8 @@ func (v *validation) validateWorker() {
 // signature validation is performed synchronously, while user validators are invoked
 // asynchronously, throttled by the global validation throttle.
 func (v *validation) validate(vals []*topicVal, src peer.ID, msg *Message) {
+	// If signature verification is enabled, but signing is disabled,
+	// the Signature is required to be nil upon receiving the message in PubSub.pushMsg.
 	if msg.Signature != nil {
 		if !v.validateSignature(msg) {
 			log.Warnf("message signature validation failed; dropping message from %s", src)
