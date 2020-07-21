@@ -142,7 +142,8 @@ type PubSub struct {
 
 	// key for signing messages; nil when signing is disabled
 	signKey crypto.PrivKey
-	// source ID for signed messages; corresponds to signKey, empty when signing is disabled
+	// source ID for signed messages; corresponds to signKey, empty when signing is disabled.
+	// If empty, the author and seq-nr are completely omitted from the messages.
 	signID peer.ID
 	// strict mode rejects all unsigned messages prior to validation
 	signPolicy MessageSignaturePolicy
@@ -345,7 +346,8 @@ func WithMessageAuthor(author peer.ID) Option {
 	}
 }
 
-// WithNoAuthor omits the author data of pubsub messages, and disables the use of signatures.
+// WithNoAuthor omits the author and seq-number data of messages, and disables the use of signatures.
+// Not recommended to use with the default message ID function, see WithMessageIdFn.
 func WithNoAuthor() Option {
 	return func(p *PubSub) error {
 		p.signID = ""
