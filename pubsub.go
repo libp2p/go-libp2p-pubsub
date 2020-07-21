@@ -140,9 +140,9 @@ type PubSub struct {
 	// function used to compute the ID for a message
 	msgID MsgIdFunction
 
-	// key for signing messages; nil when signing is disabled (default for now)
+	// key for signing messages; nil when signing is disabled
 	signKey crypto.PrivKey
-	// source ID for signed messages; corresponds to signKey
+	// source ID for signed messages; corresponds to signKey, empty when signing is disabled
 	signID peer.ID
 	// strict mode rejects all unsigned messages prior to validation
 	signPolicy MessageSignaturePolicy
