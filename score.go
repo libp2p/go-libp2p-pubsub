@@ -570,6 +570,8 @@ func (ps *peerScore) RejectMessage(msg *Message, reason string) {
 		fallthrough
 	case rejectInvalidSignature:
 		fallthrough
+	case rejectUnexpectedSignature:
+		fallthrough
 	case rejectSelfOrigin:
 		ps.markInvalidMessageDelivery(msg.ReceivedFrom, msg)
 		return
