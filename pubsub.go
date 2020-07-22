@@ -980,6 +980,17 @@ func (p *PubSub) pushMsg(msg *Message) {
 				p.tracer.RejectMessage(msg, rejectUnexpectedSignature)
 				return
 			}
+			// If we are expecting signed messages, and not authoring messages,
+			// then do no accept seq numbers, from data, or key data.
+			// The default msgID function still relies on Seqno and From,
+			// but is not used if we are not authoring messages ourselves.
+			if p.signID == "" {
+				if msg.Seqno != nil || msg.From != nil || msg.Key != nil {
+					log.Debugf("dropping message with unexpected auth info from %s", src)
+					p.tracer.RejectMessage(msg, rejectUnexpectedAuthInfo)
+					return
+				}
+			}
 		}
 	}
 
