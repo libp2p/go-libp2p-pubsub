@@ -29,6 +29,8 @@ const (
 	rejectBlacklstedPeer      = "blacklisted peer"
 	rejectBlacklistedSource   = "blacklisted source"
 	rejectMissingSignature    = "missing signature"
+	rejectUnexpectedSignature = "unexpected signature"
+	rejectUnexpectedAuthInfo  = "unexpected auth info"
 	rejectInvalidSignature    = "invalid signature"
 	rejectValidationQueueFull = "validation queue full"
 	rejectValidationThrottled = "validation throttled"

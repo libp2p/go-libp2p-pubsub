@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
+	"encoding/base64"
 	"fmt"
 	"io"
 	"math/rand"
@@ -717,13 +718,48 @@ func assertPeerList(t *testing.T, peers []peer.ID, expected ...peer.ID) {
 	}
 }
 
-func TestNonsensicalSigningOptions(t *testing.T) {
+func TestWithNoSigning(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	hosts := getNetHosts(t, ctx, 1)
-	_, err := NewFloodSub(ctx, hosts[0], WithMessageSigning(false), WithStrictSignatureVerification(true))
-	if err == nil {
-		t.Error("expected constructor to fail on nonsensical options")
+
+	hosts := getNetHosts(t, ctx, 2)
+	psubs := getPubsubs(ctx, hosts, WithNoAuthor(), WithMessageIdFn(func(pmsg *pb.Message) string {
+		// silly content-based test message-ID: just use the data as whole
+		return base64.URLEncoding.EncodeToString(pmsg.Data)
+	}))
+
+	connect(t, hosts[0], hosts[1])
+
+	topic := "foobar"
+	data := []byte("this is a message")
+
+	sub, err := psubs[1].Subscribe(topic)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	time.Sleep(time.Millisecond * 10)
+
+	err = psubs[0].Publish(topic, data)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	msg, err := sub.Next(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if msg.Signature != nil {
+		t.Fatal("signature in message")
+	}
+	if msg.From != nil {
+		t.Fatal("from in message")
+	}
+	if msg.Seqno != nil {
+		t.Fatal("seqno in message")
+	}
+	if string(msg.Data) != string(data) {
+		t.Fatalf("unexpected data: %s", string(msg.Data))
 	}
 }
 
@@ -757,6 +793,12 @@ func TestWithSigning(t *testing.T) {
 	}
 	if msg.Signature == nil {
 		t.Fatal("no signature in message")
+	}
+	if msg.From == nil {
+		t.Fatal("from not in message")
+	}
+	if msg.Seqno == nil {
+		t.Fatal("seqno not in message")
 	}
 	if string(msg.Data) != string(data) {
 		t.Fatalf("unexpected data: %s", string(msg.Data))
