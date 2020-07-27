@@ -1292,7 +1292,7 @@ func TestGossipsubCustomParams(t *testing.T) {
 		t.Errorf("Wanted %d of param GossipSubIWantFollowupTime but got %d", wantedFollowTime, rt.paramsCfg.GossipSubIWantFollowupTime)
 	}
 	if rt.paramsCfg.GossipSubGossipFactor != customGossipFactor {
-		t.Errorf("Wanted %d of param GossipSubGossipFactor but got %d", customGossipFactor, rt.paramsCfg.GossipSubGossipFactor)
+		t.Errorf("Wanted %f of param GossipSubGossipFactor but got %f", customGossipFactor, rt.paramsCfg.GossipSubGossipFactor)
 	}
 	if rt.paramsCfg.GossipSubMaxPendingConnections != wantedMaxPendingConns {
 		t.Errorf("Wanted %d of param GossipSubMaxPendingConnections but got %d", wantedMaxPendingConns, rt.paramsCfg.GossipSubMaxPendingConnections)
