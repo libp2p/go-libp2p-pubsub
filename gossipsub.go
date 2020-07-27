@@ -264,6 +264,8 @@ func NewGossipSub(ctx context.Context, h host.Host, opts ...Option) (*PubSub, er
 	return ps, nil
 }
 
+// DefaultGossipSubParams returns the default gossip sub parameters
+// as a config.
 func DefaultGossipSubParams() *GossipSubParams {
 	return &GossipSubParams{
 		GossipSubD:                         GossipSubD,
@@ -414,6 +416,8 @@ func WithDirectConnectTicks(t uint64) Option {
 	}
 }
 
+// WithGossipSubParams is a gossip sub router option that allows a custom
+// config to be set when instantiating the gossipsub router.
 func WithGossipSubParams(cfg *GossipSubParams) Option {
 	return func(ps *PubSub) error {
 		gs, ok := ps.rt.(*GossipSubRouter)
