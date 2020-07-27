@@ -1260,6 +1260,45 @@ func TestGossipsubEnoughPeers(t *testing.T) {
 	}
 }
 
+func TestGossipsubCustomParams(t *testing.T) {
+	// in this test we score sinkhole a peer to exercise code paths relative to negative scores
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	params := DefaultGossipSubParams()
+
+	wantedFollowTime := 1 * time.Second
+	params.GossipSubIWantFollowupTime = wantedFollowTime
+
+	customGossipFactor := 0.12
+	params.GossipSubGossipFactor = customGossipFactor
+
+	wantedMaxPendingConns := 23
+	params.GossipSubMaxPendingConnections = wantedMaxPendingConns
+	hosts := getNetHosts(t, ctx, 1)
+	psubs := getGossipsubs(ctx, hosts,
+		WithGossipSubParams(params))
+
+	if len(psubs) != 1 {
+		t.Fatalf("incorrect number of pusbub objects received: wanted %d but got %d", 1, len(psubs))
+	}
+
+	rt, ok := psubs[0].rt.(*GossipSubRouter)
+	if !ok {
+		t.Fatal("Did not get gossip sub router from pub sub object")
+	}
+
+	if rt.paramsCfg.GossipSubIWantFollowupTime != wantedFollowTime {
+		t.Errorf("Wanted %d of param GossipSubIWantFollowupTime but got %d", wantedFollowTime, rt.paramsCfg.GossipSubIWantFollowupTime)
+	}
+	if rt.paramsCfg.GossipSubGossipFactor != customGossipFactor {
+		t.Errorf("Wanted %d of param GossipSubGossipFactor but got %d", customGossipFactor, rt.paramsCfg.GossipSubGossipFactor)
+	}
+	if rt.paramsCfg.GossipSubMaxPendingConnections != wantedMaxPendingConns {
+		t.Errorf("Wanted %d of param GossipSubMaxPendingConnections but got %d", wantedMaxPendingConns, rt.paramsCfg.GossipSubMaxPendingConnections)
+	}
+}
+
 func TestGossipsubNegativeScore(t *testing.T) {
 	// in this test we score sinkhole a peer to exercise code paths relative to negative scores
 	ctx, cancel := context.WithCancel(context.Background())

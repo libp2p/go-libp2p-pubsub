@@ -14,8 +14,9 @@ import (
 // The tracking of promises is probabilistic to avoid using too much memory.
 type gossipTracer struct {
 	sync.Mutex
-	msgID    MsgIdFunction
-	promises map[string]map[peer.ID]time.Time
+	msgID        MsgIdFunction
+	followUpTime time.Duration
+	promises     map[string]map[peer.ID]time.Time
 }
 
 func newGossipTracer() *gossipTracer {
@@ -31,6 +32,7 @@ func (gt *gossipTracer) Start(gs *GossipSubRouter) {
 	}
 
 	gt.msgID = gs.p.msgID
+	gt.followUpTime = gs.paramsCfg.GossipSubIWantFollowupTime
 }
 
 // track a promise to deliver a message from a list of msgIDs we are requesting
@@ -53,7 +55,7 @@ func (gt *gossipTracer) AddPromise(p peer.ID, msgIDs []string) {
 
 	_, ok = peers[p]
 	if !ok {
-		peers[p] = time.Now().Add(GossipSubIWantFollowupTime)
+		peers[p] = time.Now().Add(gt.followUpTime)
 	}
 }
 
