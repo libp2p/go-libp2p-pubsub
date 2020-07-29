@@ -386,14 +386,15 @@ func (ps *peerScore) inspectScoresExtended() {
 		if len(pstats.topics) > 0 {
 			pss.Topics = make(map[string]*TopicScoreSnapshot, len(pstats.topics))
 			for t, ts := range pstats.topics {
-				pss.Topics[t] = &TopicScoreSnapshot{
+				tss := &TopicScoreSnapshot{
 					FirstMessageDeliveries:   ts.firstMessageDeliveries,
 					MeshMessageDeliveries:    ts.meshMessageDeliveries,
 					InvalidMessageDeliveries: ts.invalidMessageDeliveries,
 				}
 				if ts.inMesh {
-					pss.Topics[t].TimeInMesh = ts.meshTime
+					tss.TimeInMesh = ts.meshTime
 				}
+				pss.Topics[t] = tss
 			}
 		}
 		pss.AppSpecificScore = ps.params.AppSpecificScore(p)
