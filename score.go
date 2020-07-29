@@ -121,7 +121,7 @@ type PeerScoreSnapshot struct {
 	Score              float64
 	Topics             map[string]*TopicScoreSnapshot
 	AppSpecificScore   float64
-	IPColocationFactor int
+	IPColocationFactor float64
 	BehaviourPenalty   float64
 }
 
@@ -270,6 +270,23 @@ func (ps *peerScore) score(p peer.ID) float64 {
 	score += p5 * ps.params.AppSpecificWeight
 
 	// P6: IP collocation factor
+	p6 := ps.ipColocationFactor(p)
+	score += p6 * ps.params.IPColocationFactorWeight
+
+	// P7: behavioural pattern penalty
+	p7 := pstats.behaviourPenalty * pstats.behaviourPenalty
+	score += p7 * ps.params.BehaviourPenaltyWeight
+
+	return score
+}
+
+func (ps *peerScore) ipColocationFactor(p peer.ID) float64 {
+	pstats, ok := ps.peerStats[p]
+	if !ok {
+		return 0
+	}
+
+	var result float64
 	for _, ip := range pstats.ips {
 		_, whitelisted := ps.params.IPColocationFactorWhitelist[ip]
 		if whitelisted {
@@ -283,16 +300,11 @@ func (ps *peerScore) score(p peer.ID) float64 {
 		peersInIP := len(ps.peerIPs[ip])
 		if peersInIP > ps.params.IPColocationFactorThreshold {
 			surpluss := float64(peersInIP - ps.params.IPColocationFactorThreshold)
-			p6 := surpluss * surpluss
-			score += p6 * ps.params.IPColocationFactorWeight
+			result += surpluss * surpluss
 		}
 	}
 
-	// P7: behavioural pattern penalty
-	p7 := pstats.behaviourPenalty * pstats.behaviourPenalty
-	score += p7 * ps.params.BehaviourPenaltyWeight
-
-	return score
+	return result
 }
 
 // behavioural pattern penalties
@@ -398,17 +410,7 @@ func (ps *peerScore) inspectScoresExtended() {
 			}
 		}
 		pss.AppSpecificScore = ps.params.AppSpecificScore(p)
-		for _, ip := range pstats.ips {
-			_, whitelisted := ps.params.IPColocationFactorWhitelist[ip]
-			if whitelisted {
-				continue
-			}
-			peersInIP := len(ps.peerIPs[ip])
-			if peersInIP > ps.params.IPColocationFactorThreshold {
-				surpluss := peersInIP - ps.params.IPColocationFactorThreshold
-				pss.IPColocationFactor += surpluss
-			}
-		}
+		pss.IPColocationFactor = ps.ipColocationFactor(p)
 		pss.BehaviourPenalty = pstats.behaviourPenalty
 		scores[p] = pss
 	}
