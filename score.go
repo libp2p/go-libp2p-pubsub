@@ -152,6 +152,10 @@ func WithPeerScoreInspect(inspect interface{}, period time.Duration) Option {
 			return fmt.Errorf("peer scoring is not enabled")
 		}
 
+		if gs.score.inspect != nil || gs.score.inspectEx != nil {
+			return fmt.Errorf("duplicate peer score inspector")
+		}
+
 		switch i := inspect.(type) {
 		case PeerScoreInspectFn:
 			gs.score.inspect = i
@@ -352,7 +356,8 @@ func (ps *peerScore) background(ctx context.Context) {
 func (ps *peerScore) inspectScores() {
 	if ps.inspect != nil {
 		ps.inspectScoresSimple()
-	} else if ps.inspectEx != nil {
+	}
+	if ps.inspectEx != nil {
 		ps.inspectScoresExtended()
 	}
 }
