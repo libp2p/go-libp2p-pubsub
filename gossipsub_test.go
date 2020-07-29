@@ -21,7 +21,7 @@ import (
 	bhost "github.com/libp2p/go-libp2p-blankhost"
 	swarmt "github.com/libp2p/go-libp2p-swarm/testing"
 
-	ggio "github.com/gogo/protobuf/io"
+	"github.com/libp2p/go-msgio/protoio"
 )
 
 func getGossipsub(ctx context.Context, h host.Host, opts ...Option) *PubSub {
@@ -1611,8 +1611,8 @@ func (sq *sybilSquatter) handleStream(s network.Stream) {
 
 	// send a subscription for test in the output stream to become candidate for GRAFT
 	// and then just read and ignore the incoming RPCs
-	r := ggio.NewDelimitedReader(s, 1<<20)
-	w := ggio.NewDelimitedWriter(os)
+	r := protoio.NewDelimitedReader(s, 1<<20)
+	w := protoio.NewDelimitedWriter(os)
 	truth := true
 	topic := "test"
 	err = w.WriteMsg(&pb.RPC{Subscriptions: []*pb.RPC_SubOpts{&pb.RPC_SubOpts{Subscribe: &truth, Topicid: &topic}}})
@@ -1792,8 +1792,8 @@ func (iwe *iwantEverything) handleStream(s network.Stream) {
 	gossipMsgIdsReceived := make(map[string]struct{})
 
 	// send a subscription for test in the output stream to become candidate for gossip
-	r := ggio.NewDelimitedReader(s, 1<<20)
-	w := ggio.NewDelimitedWriter(os)
+	r := protoio.NewDelimitedReader(s, 1<<20)
+	w := protoio.NewDelimitedWriter(os)
 	truth := true
 	topic := "test"
 	err = w.WriteMsg(&pb.RPC{Subscriptions: []*pb.RPC_SubOpts{&pb.RPC_SubOpts{Subscribe: &truth, Topicid: &topic}}})

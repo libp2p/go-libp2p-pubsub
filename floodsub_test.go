@@ -23,7 +23,7 @@ import (
 	bhost "github.com/libp2p/go-libp2p-blankhost"
 	swarmt "github.com/libp2p/go-libp2p-swarm/testing"
 
-	ggio "github.com/gogo/protobuf/io"
+	"github.com/libp2p/go-msgio/protoio"
 )
 
 func checkMessageRouting(t *testing.T, topic string, pubs []*PubSub, subs []*Subscription) {
@@ -1057,7 +1057,7 @@ type announceWatcher struct {
 func (aw *announceWatcher) handleStream(s network.Stream) {
 	defer s.Close()
 
-	r := ggio.NewDelimitedReader(s, 1<<20)
+	r := protoio.NewDelimitedReader(s, 1<<20)
 
 	var rpc pb.RPC
 	for {
