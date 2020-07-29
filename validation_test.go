@@ -15,7 +15,7 @@ import (
 	"github.com/libp2p/go-libp2p-core/network"
 	"github.com/libp2p/go-libp2p-core/peer"
 
-	ggio "github.com/gogo/protobuf/io"
+	"github.com/libp2p/go-msgio/protoio"
 )
 
 func TestRegisterUnregisterValidator(t *testing.T) {
@@ -731,7 +731,7 @@ func (p *multiTopicPublisher) handleStream(s network.Stream) {
 	p.out = append(p.out, os)
 	p.mx.Unlock()
 
-	r := ggio.NewDelimitedReader(s, 1<<20)
+	r := protoio.NewDelimitedReader(s, 1<<20)
 	var rpc pb.RPC
 	for {
 		rpc.Reset()
@@ -761,7 +761,7 @@ func (p *multiTopicPublisher) publish(msg string, topics ...string) {
 	p.mx.Lock()
 	defer p.mx.Unlock()
 	for _, os := range p.out {
-		w := ggio.NewDelimitedWriter(os)
+		w := protoio.NewDelimitedWriter(os)
 		err := w.WriteMsg(rpc)
 		if err != nil {
 			panic(err)
