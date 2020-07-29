@@ -114,8 +114,8 @@ const (
 	deliveryThrottled        // we can't tell if it is valid because validation throttled
 )
 
-type PeerScoreInspectFn func(map[peer.ID]float64)
-type ExtendedPeerScoreInspectFn func(map[peer.ID]*PeerScoreSnapshot)
+type PeerScoreInspectFn = func(map[peer.ID]float64)
+type ExtendedPeerScoreInspectFn = func(map[peer.ID]*PeerScoreSnapshot)
 
 type PeerScoreSnapshot struct {
 	Score              float64
@@ -155,12 +155,8 @@ func WithPeerScoreInspect(inspect interface{}, period time.Duration) Option {
 		switch i := inspect.(type) {
 		case PeerScoreInspectFn:
 			gs.score.inspect = i
-		case func(map[peer.ID]float64):
-			gs.score.inspect = PeerScoreInspectFn(i)
 		case ExtendedPeerScoreInspectFn:
 			gs.score.inspectEx = i
-		case func(map[peer.ID]*PeerScoreSnapshot):
-			gs.score.inspectEx = ExtendedPeerScoreInspectFn(i)
 		default:
 			return fmt.Errorf("unknown peer score insector type: %v", inspect)
 		}
