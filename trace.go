@@ -95,6 +95,7 @@ func (t *pubsubTracer) RejectMessage(msg *Message, reason string) {
 			MessageID:    []byte(t.msgID(msg.Message)),
 			ReceivedFrom: []byte(msg.ReceivedFrom),
 			Reason:       &reason,
+			Topics:       msg.TopicIDs,
 		},
 	}
 
@@ -124,6 +125,7 @@ func (t *pubsubTracer) DuplicateMessage(msg *Message) {
 		DuplicateMessage: &pb.TraceEvent_DuplicateMessage{
 			MessageID:    []byte(t.msgID(msg.Message)),
 			ReceivedFrom: []byte(msg.ReceivedFrom),
+			Topics:       msg.TopicIDs,
 		},
 	}
 
@@ -152,6 +154,7 @@ func (t *pubsubTracer) DeliverMessage(msg *Message) {
 		Timestamp: &now,
 		DeliverMessage: &pb.TraceEvent_DeliverMessage{
 			MessageID: []byte(t.msgID(msg.Message)),
+			Topics:    msg.TopicIDs,
 		},
 	}
 
