@@ -26,6 +26,11 @@ type Topic struct {
 	closed bool
 }
 
+// String returns the topic associated with t
+func (t *Topic) String() string {
+	return t.topic
+}
+
 // EventHandler creates a handle for topic specific events
 // Multiple event handlers may be created and will operate independently of each other
 func (t *Topic) EventHandler(opts ...TopicEventHandlerOpt) (*TopicEventHandler, error) {
