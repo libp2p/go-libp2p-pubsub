@@ -118,6 +118,10 @@ var (
 	// before attempting to re-graft.
 	GossipSubPruneBackoff = time.Minute
 
+	// GossipSubPruneBackoffSlack is the slack time after expiry of a backoff and before
+	// attempting a GRAFT.
+	GossipSubPruneBackoffSlack = time.Second
+
 	// GossipSubConnectors controls the number of active connection attempts for peers obtained through PX.
 	GossipSubConnectors = 8
 
@@ -1497,7 +1501,7 @@ func (gs *GossipSubRouter) clearBackoff() {
 		return
 	}
 
-	now := time.Now()
+	now := time.Now().Add(GossipSubPruneBackoffSlack)
 	for topic, backoff := range gs.backoff {
 		for p, expire := range backoff {
 			if expire.Before(now) {
