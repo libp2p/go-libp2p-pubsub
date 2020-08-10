@@ -1501,6 +1501,7 @@ func (gs *GossipSubRouter) clearBackoff() {
 	for topic, backoff := range gs.backoff {
 		for p, expire := range backoff {
 			// add some slack time to the expiration
+			// https://github.com/libp2p/specs/pull/289
 			if expire.Add(2 * GossipSubHeartbeatInterval).Before(now) {
 				delete(backoff, p)
 			}
