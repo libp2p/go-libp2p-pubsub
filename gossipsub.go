@@ -903,7 +903,8 @@ func (gs *GossipSubRouter) Publish(msg *Message) {
 			if !ok || len(gmap) == 0 {
 				// we don't have any, pick some with score above the publish threshold
 				peers := gs.getPeers(topic, gs.D, func(p peer.ID) bool {
-					return gs.score.Score(p) >= gs.publishThreshold
+					_, direct := gs.direct[p]
+					return !direct && gs.score.Score(p) >= gs.publishThreshold
 				})
 
 				if len(peers) > 0 {
