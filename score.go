@@ -182,6 +182,50 @@ func newPeerScore(params *PeerScoreParams) *peerScore {
 	}
 }
 
+// update interface
+func (ps *peerScore) SetTopicScoreParams(topic string, p *TopicScoreParams) error {
+	// Note: assumes that the topic score parameters have already been validated
+	ps.Lock()
+	defer ps.Unlock()
+
+	old, exist := ps.params.Topics[topic]
+	ps.params.Topics[topic] = p
+
+	if !exist {
+		return nil
+	}
+
+	// check to see if the counter Caps are being lowered; if that's the case we need to recap them
+	recap := false
+	if p.FirstMessageDeliveriesCap < old.FirstMessageDeliveriesCap {
+		recap = true
+	}
+	if p.MeshMessageDeliveriesCap < old.MeshMessageDeliveriesCap {
+		recap = true
+	}
+	if !recap {
+		return nil
+	}
+
+	// recap counters for topic
+	for _, pstats := range ps.peerStats {
+		tstats, ok := pstats.topics[topic]
+		if !ok {
+			continue
+		}
+
+		if tstats.firstMessageDeliveries > p.FirstMessageDeliveriesCap {
+			tstats.firstMessageDeliveries = p.FirstMessageDeliveriesCap
+		}
+
+		if tstats.meshMessageDeliveries > p.MeshMessageDeliveriesCap {
+			tstats.meshMessageDeliveries = p.MeshMessageDeliveriesCap
+		}
+	}
+
+	return nil
+}
+
 // router interface
 func (ps *peerScore) Start(gs *GossipSubRouter) {
 	if ps == nil {
