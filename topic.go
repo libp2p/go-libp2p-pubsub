@@ -31,6 +31,45 @@ func (t *Topic) String() string {
 	return t.topic
 }
 
+// SetScoreParams sets the topic score parameters if the pubsub router supports peer
+// scoring
+func (t *Topic) SetScoreParams(p *TopicScoreParams) error {
+	t.mux.Lock()
+	defer t.mux.Unlock()
+
+	if t.closed {
+		return ErrTopicClosed
+	}
+
+	err := p.validate()
+	if err != nil {
+		return fmt.Errorf("invalid topic score parameters: %w", err)
+	}
+
+	result := make(chan error, 1)
+	select {
+	case t.p.eval <- func() {
+		gs, ok := t.p.rt.(*GossipSubRouter)
+		if !ok {
+			result <- fmt.Errorf("pubsub router is not gossipsub")
+			return
+		}
+
+		if gs.score == nil {
+			result <- fmt.Errorf("peer scoring is not enabled in router")
+			return
+		}
+
+		result <- gs.score.SetTopicScoreParams(t.topic, p)
+	}:
+		err = <-result
+		return err
+
+	case <-t.p.ctx.Done():
+		return t.p.ctx.Err()
+	}
+}
+
 // EventHandler creates a handle for topic specific events
 // Multiple event handlers may be created and will operate independently of each other
 func (t *Topic) EventHandler(opts ...TopicEventHandlerOpt) (*TopicEventHandler, error) {
