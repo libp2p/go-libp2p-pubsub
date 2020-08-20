@@ -274,8 +274,11 @@ func (ps *peerScore) score(p peer.ID) float64 {
 	score += p6 * ps.params.IPColocationFactorWeight
 
 	// P7: behavioural pattern penalty
-	p7 := pstats.behaviourPenalty * pstats.behaviourPenalty
-	score += p7 * ps.params.BehaviourPenaltyWeight
+	if pstats.behaviourPenalty > ps.params.BehaviourPenaltyThreshold {
+		excess := pstats.behaviourPenalty - ps.params.BehaviourPenaltyThreshold
+		p7 := excess * excess
+		score += p7 * ps.params.BehaviourPenaltyWeight
+	}
 
 	return score
 }
