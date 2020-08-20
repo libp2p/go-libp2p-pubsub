@@ -111,8 +111,6 @@ func (gt *gossipTracer) RejectMessage(msg *Message, reason string) {
 		return
 	case rejectInvalidSignature:
 		return
-	case rejectSelfOrigin:
-		return
 	}
 
 	mid := gt.msgID(msg.Message)
