@@ -416,6 +416,11 @@ func (v *validation) validateSingleTopic(val *topicVal, src peer.ID, msg *Messag
 }
 
 func (val *topicVal) validateMsg(ctx context.Context, src peer.ID, msg *Message) ValidationResult {
+	start := time.Now()
+	defer func() {
+		log.Debugf("validation done; took %s", time.Since(start))
+	}()
+
 	if val.validateTimeout > 0 {
 		var cancel func()
 		ctx, cancel = context.WithTimeout(ctx, val.validateTimeout)
