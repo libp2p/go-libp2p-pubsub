@@ -216,15 +216,7 @@ func NewGossipSub(ctx context.Context, h host.Host, opts ...Option) (*PubSub, er
 
 	// use the withInternalTracer option to hook up the tag tracer
 	opts = append(opts, withInternalTracer(rt.tagTracer))
-	ps, err := NewPubSub(ctx, h, rt, opts...)
-	if err != nil {
-		return nil, err
-	}
-	rt, ok := ps.rt.(*GossipSubRouter)
-	if !ok {
-		return nil, fmt.Errorf("pubsub router is not gossipsub")
-	}
-	return ps, nil
+	return NewPubSub(ctx, h, rt, opts...)
 }
 
 // DefaultGossipSubParams returns the default gossip sub parameters
