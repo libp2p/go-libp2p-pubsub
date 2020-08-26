@@ -32,7 +32,7 @@ func (gt *gossipTracer) Start(gs *GossipSubRouter) {
 	}
 
 	gt.msgID = gs.p.msgID
-	gt.followUpTime = gs.paramsCfg.IWantFollowupTime
+	gt.followUpTime = gs.params.IWantFollowupTime
 }
 
 // track a promise to deliver a message from a list of msgIDs we are requesting

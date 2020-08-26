@@ -967,10 +967,10 @@ func TestGossipsubStarTopology(t *testing.T) {
 	// configure the center of the star with a very low D
 	psubs[0].eval <- func() {
 		gs := psubs[0].rt.(*GossipSubRouter)
-		gs.D = 0
-		gs.Dlo = 0
-		gs.Dhi = 0
-		gs.Dscore = 0
+		gs.params.D = 0
+		gs.params.Dlo = 0
+		gs.params.Dhi = 0
+		gs.params.Dscore = 0
 	}
 
 	// add all peer addresses to the peerstores
@@ -1051,10 +1051,10 @@ func TestGossipsubStarTopologyWithSignedPeerRecords(t *testing.T) {
 	// configure the center of the star with a very low D
 	psubs[0].eval <- func() {
 		gs := psubs[0].rt.(*GossipSubRouter)
-		gs.D = 0
-		gs.Dlo = 0
-		gs.Dhi = 0
-		gs.Dscore = 0
+		gs.params.D = 0
+		gs.params.Dlo = 0
+		gs.params.Dhi = 0
+		gs.params.Dscore = 0
 	}
 
 	// manually create signed peer records for each host and add them to the
@@ -1288,14 +1288,14 @@ func TestGossipsubCustomParams(t *testing.T) {
 		t.Fatal("Did not get gossip sub router from pub sub object")
 	}
 
-	if rt.paramsCfg.IWantFollowupTime != wantedFollowTime {
-		t.Errorf("Wanted %d of param GossipSubIWantFollowupTime but got %d", wantedFollowTime, rt.paramsCfg.IWantFollowupTime)
+	if rt.params.IWantFollowupTime != wantedFollowTime {
+		t.Errorf("Wanted %d of param GossipSubIWantFollowupTime but got %d", wantedFollowTime, rt.params.IWantFollowupTime)
 	}
-	if rt.paramsCfg.GossipFactor != customGossipFactor {
-		t.Errorf("Wanted %f of param GossipSubGossipFactor but got %f", customGossipFactor, rt.paramsCfg.GossipFactor)
+	if rt.params.GossipFactor != customGossipFactor {
+		t.Errorf("Wanted %f of param GossipSubGossipFactor but got %f", customGossipFactor, rt.params.GossipFactor)
 	}
-	if rt.paramsCfg.MaxPendingConnections != wantedMaxPendingConns {
-		t.Errorf("Wanted %d of param GossipSubMaxPendingConnections but got %d", wantedMaxPendingConns, rt.paramsCfg.MaxPendingConnections)
+	if rt.params.MaxPendingConnections != wantedMaxPendingConns {
+		t.Errorf("Wanted %d of param GossipSubMaxPendingConnections but got %d", wantedMaxPendingConns, rt.params.MaxPendingConnections)
 	}
 }
 

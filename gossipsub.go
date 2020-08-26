@@ -198,35 +198,20 @@ type GossipSubParams struct {
 func NewGossipSub(ctx context.Context, h host.Host, opts ...Option) (*PubSub, error) {
 	params := DefaultGossipSubParams()
 	rt := &GossipSubRouter{
-		peers:    make(map[peer.ID]protocol.ID),
-		mesh:     make(map[string]map[peer.ID]struct{}),
-		fanout:   make(map[string]map[peer.ID]struct{}),
-		lastpub:  make(map[string]int64),
-		gossip:   make(map[peer.ID][]*pb.ControlIHave),
-		control:  make(map[peer.ID]*pb.ControlMessage),
-		backoff:  make(map[string]map[peer.ID]time.Time),
-		peerhave: make(map[peer.ID]int),
-		iasked:   make(map[peer.ID]int),
-		outbound: make(map[peer.ID]bool),
-		connect:  make(chan connectInfo, params.MaxPendingConnections),
-		mcache:   NewMessageCache(params.HistoryGossip, params.HistoryLength),
-
-		// these are configured per router to allow variation in tests
-		D:      params.D,
-		Dlo:    params.Dlo,
-		Dhi:    params.Dhi,
-		Dscore: params.Dscore,
-		Dout:   params.Dout,
-		Dlazy:  params.Dlazy,
-
-		// these must be pulled in to resolve races in tests... sigh.
-		directConnectTicks:      params.DirectConnectTicks,
-		opportunisticGraftTicks: params.OpportunisticGraftTicks,
-
-		fanoutTTL: params.FanoutTTL,
-
+		peers:     make(map[peer.ID]protocol.ID),
+		mesh:      make(map[string]map[peer.ID]struct{}),
+		fanout:    make(map[string]map[peer.ID]struct{}),
+		lastpub:   make(map[string]int64),
+		gossip:    make(map[peer.ID][]*pb.ControlIHave),
+		control:   make(map[peer.ID]*pb.ControlMessage),
+		backoff:   make(map[string]map[peer.ID]time.Time),
+		peerhave:  make(map[peer.ID]int),
+		iasked:    make(map[peer.ID]int),
+		outbound:  make(map[peer.ID]bool),
+		connect:   make(chan connectInfo, params.MaxPendingConnections),
+		mcache:    NewMessageCache(params.HistoryGossip, params.HistoryLength),
 		tagTracer: newTagTracer(h.ConnManager()),
-		paramsCfg: params,
+		params:    params,
 	}
 
 	// use the withInternalTracer option to hook up the tag tracer
@@ -239,35 +224,13 @@ func NewGossipSub(ctx context.Context, h host.Host, opts ...Option) (*PubSub, er
 	if !ok {
 		return nil, fmt.Errorf("pubsub router is not gossipsub")
 	}
-	if rt.paramsCfg == nil {
-		rt.paramsCfg = DefaultGossipSubParams()
-		return ps, nil
-	}
-	// Initialize values using our set params overwriting any previously
-	// set value from our default parameters.
-	cfg := rt.paramsCfg
-	rt.connect = make(chan connectInfo, cfg.MaxPendingConnections)
-	rt.mcache = NewMessageCache(cfg.HistoryGossip, cfg.HistoryLength)
-
-	rt.D = cfg.D
-	rt.Dlo = cfg.Dlo
-	rt.Dhi = cfg.Dhi
-	rt.Dscore = cfg.Dscore
-	rt.Dout = cfg.Dout
-	rt.Dlazy = cfg.Dlazy
-
-	rt.directConnectTicks = cfg.DirectConnectTicks
-	rt.opportunisticGraftTicks = cfg.OpportunisticGraftTicks
-
-	rt.fanoutTTL = cfg.FanoutTTL
-
 	return ps, nil
 }
 
 // DefaultGossipSubParams returns the default gossip sub parameters
 // as a config.
-func DefaultGossipSubParams() *GossipSubParams {
-	return &GossipSubParams{
+func DefaultGossipSubParams() GossipSubParams {
+	return GossipSubParams{
 		D:                         GossipSubD,
 		Dlo:                       GossipSubDlo,
 		Dhi:                       GossipSubDhi,
@@ -411,37 +374,24 @@ func WithDirectConnectTicks(t uint64) Option {
 		if !ok {
 			return fmt.Errorf("pubsub router is not gossipsub")
 		}
-		gs.directConnectTicks = t
+		gs.params.DirectConnectTicks = t
 		return nil
 	}
 }
 
 // WithGossipSubParams is a gossip sub router option that allows a custom
 // config to be set when instantiating the gossipsub router.
-func WithGossipSubParams(cfg *GossipSubParams) Option {
+func WithGossipSubParams(cfg GossipSubParams) Option {
 	return func(ps *PubSub) error {
 		gs, ok := ps.rt.(*GossipSubRouter)
 		if !ok {
 			return fmt.Errorf("pubsub router is not gossipsub")
 		}
 		// Overwrite current config and associated variables in the router.
-		gs.paramsCfg = cfg
+		gs.params = cfg
 		gs.connect = make(chan connectInfo, cfg.MaxPendingConnections)
 		gs.mcache = NewMessageCache(cfg.HistoryGossip, cfg.HistoryLength)
 
-		gs.D = cfg.D
-		gs.Dlo = cfg.Dlo
-		gs.Dhi = cfg.Dhi
-		gs.Dscore = cfg.Dscore
-		gs.Dout = cfg.Dout
-		gs.Dlazy = cfg.Dlazy
-
-		gs.directConnectTicks = cfg.DirectConnectTicks
-		gs.opportunisticGraftTicks = cfg.OpportunisticGraftTicks
-
-		gs.fanoutTTL = cfg.FanoutTTL
-
-		gs.paramsCfg = cfg
 		return nil
 	}
 }
@@ -475,7 +425,7 @@ type GossipSubRouter struct {
 	tagTracer    *tagTracer
 
 	// config for gossipsub parameters
-	paramsCfg *GossipSubParams
+	params GossipSubParams
 
 	// whether PX is enabled; this should be enabled in bootstrappers and other well connected/trusted
 	// nodes.
@@ -506,19 +456,6 @@ type GossipSubRouter struct {
 	// number of heartbeats since the beginning of time; this allows us to amortize some resource
 	// clean up -- eg backoff clean up.
 	heartbeatTicks uint64
-
-	// overly parameter "constants"
-	// these are pulled from their global value or else the race detector is angry on travis
-	// it also allows us to change them per peer in tests, which is a plus
-	D, Dlo, Dhi, Dscore, Dout, Dlazy int
-
-	// tick "constants" for triggering direct connect and opportunistic grafting
-	// these are pulled from their global value or else the race detector is angry on travis
-	directConnectTicks, opportunisticGraftTicks uint64
-
-	// fanout expiry ttl "constant"
-	// this is pulled from its global value or else the race detector is angry on travis
-	fanoutTTL time.Duration
 }
 
 type connectInfo struct {
@@ -550,15 +487,15 @@ func (gs *GossipSubRouter) Attach(p *PubSub) {
 	go gs.heartbeatTimer()
 
 	// start the PX connectors
-	for i := 0; i < gs.paramsCfg.Connectors; i++ {
+	for i := 0; i < gs.params.Connectors; i++ {
 		go gs.connector()
 	}
 
 	// connect to direct peers
 	if len(gs.direct) > 0 {
 		go func() {
-			if gs.paramsCfg.DirectConnectInitialDelay > 0 {
-				time.Sleep(gs.paramsCfg.DirectConnectInitialDelay)
+			if gs.params.DirectConnectInitialDelay > 0 {
+				time.Sleep(gs.params.DirectConnectInitialDelay)
 			}
 			for p := range gs.direct {
 				gs.connect <- connectInfo{p: p}
@@ -624,10 +561,10 @@ func (gs *GossipSubRouter) EnoughPeers(topic string, suggested int) bool {
 	gsPeers = len(gs.mesh[topic])
 
 	if suggested == 0 {
-		suggested = gs.Dlo
+		suggested = gs.params.Dlo
 	}
 
-	if fsPeers+gsPeers >= suggested || gsPeers >= gs.Dhi {
+	if fsPeers+gsPeers >= suggested || gsPeers >= gs.params.Dhi {
 		return true
 	}
 
@@ -668,12 +605,12 @@ func (gs *GossipSubRouter) handleIHave(p peer.ID, ctl *pb.ControlMessage) []*pb.
 
 	// IHAVE flood protection
 	gs.peerhave[p]++
-	if gs.peerhave[p] > gs.paramsCfg.MaxIHaveMessages {
+	if gs.peerhave[p] > gs.params.MaxIHaveMessages {
 		log.Debugf("IHAVE: peer %s has advertised too many times (%d) within this heartbeat interval; ignoring", p, gs.peerhave[p])
 		return nil
 	}
 
-	if gs.iasked[p] >= gs.paramsCfg.MaxIHaveLength {
+	if gs.iasked[p] >= gs.params.MaxIHaveLength {
 		log.Debugf("IHAVE: peer %s has already advertised too many messages (%d); ignoring", p, gs.iasked[p])
 		return nil
 	}
@@ -699,8 +636,8 @@ func (gs *GossipSubRouter) handleIHave(p peer.ID, ctl *pb.ControlMessage) []*pb.
 	}
 
 	iask := len(iwant)
-	if iask+gs.iasked[p] > gs.paramsCfg.MaxIHaveLength {
-		iask = gs.paramsCfg.MaxIHaveLength - gs.iasked[p]
+	if iask+gs.iasked[p] > gs.params.MaxIHaveLength {
+		iask = gs.params.MaxIHaveLength - gs.iasked[p]
 	}
 
 	log.Debugf("IHAVE: Asking for %d out of %d messages from %s", iask, len(iwant), p)
@@ -738,7 +675,7 @@ func (gs *GossipSubRouter) handleIWant(p peer.ID, ctl *pb.ControlMessage) []*pb.
 				continue
 			}
 
-			if count > gs.paramsCfg.GossipRetransmission {
+			if count > gs.params.GossipRetransmission {
 				log.Debugf("IWANT: Peer %s has asked for message %s too many times; ignoring request", p, mid)
 				continue
 			}
@@ -804,7 +741,7 @@ func (gs *GossipSubRouter) handleGraft(p peer.ID, ctl *pb.ControlMessage) []*pb.
 			// no PX
 			doPX = false
 			// check the flood cutoff -- is the GRAFT coming too fast?
-			floodCutoff := expire.Add(gs.paramsCfg.GraftFloodThreshold - gs.paramsCfg.PruneBackoff)
+			floodCutoff := expire.Add(gs.params.GraftFloodThreshold - gs.params.PruneBackoff)
 			if now.Before(floodCutoff) {
 				// extra penalty
 				gs.score.AddPenalty(p, 1)
@@ -831,7 +768,7 @@ func (gs *GossipSubRouter) handleGraft(p peer.ID, ctl *pb.ControlMessage) []*pb.
 		// check the number of mesh peers; if it is at (or over) Dhi, we only accept grafts
 		// from peers with outbound connections; this is a defensive check to restrict potential
 		// mesh takeover attacks combined with love bombing
-		if len(peers) >= gs.Dhi && !gs.outbound[p] {
+		if len(peers) >= gs.params.Dhi && !gs.outbound[p] {
 			prune = append(prune, topic)
 			gs.addBackoff(p, topic)
 			continue
@@ -889,7 +826,7 @@ func (gs *GossipSubRouter) handlePrune(p peer.ID, ctl *pb.ControlMessage) {
 }
 
 func (gs *GossipSubRouter) addBackoff(p peer.ID, topic string) {
-	gs.doAddBackoff(p, topic, gs.paramsCfg.PruneBackoff)
+	gs.doAddBackoff(p, topic, gs.params.PruneBackoff)
 }
 
 func (gs *GossipSubRouter) doAddBackoff(p peer.ID, topic string, interval time.Duration) {
@@ -905,9 +842,9 @@ func (gs *GossipSubRouter) doAddBackoff(p peer.ID, topic string, interval time.D
 }
 
 func (gs *GossipSubRouter) pxConnect(peers []*pb.PeerInfo) {
-	if len(peers) > gs.paramsCfg.PrunePeers {
+	if len(peers) > gs.params.PrunePeers {
 		shufflePeerInfo(peers)
-		peers = peers[:gs.paramsCfg.PrunePeers]
+		peers = peers[:gs.params.PrunePeers]
 	}
 
 	toconnect := make([]connectInfo, 0, len(peers))
@@ -974,7 +911,7 @@ func (gs *GossipSubRouter) connector() {
 				}
 			}
 
-			ctx, cancel := context.WithTimeout(gs.p.ctx, gs.paramsCfg.ConnectionTimeout)
+			ctx, cancel := context.WithTimeout(gs.p.ctx, gs.params.ConnectionTimeout)
 			err := gs.p.host.Connect(ctx, peer.AddrInfo{ID: ci.p})
 			cancel()
 			if err != nil {
@@ -1031,7 +968,7 @@ func (gs *GossipSubRouter) Publish(msg *Message) {
 			gmap, ok = gs.fanout[topic]
 			if !ok || len(gmap) == 0 {
 				// we don't have any, pick some with score above the publish threshold
-				peers := gs.getPeers(topic, gs.D, func(p peer.ID) bool {
+				peers := gs.getPeers(topic, gs.params.D, func(p peer.ID) bool {
 					return gs.score.Score(p) >= gs.publishThreshold
 				})
 
@@ -1077,9 +1014,9 @@ func (gs *GossipSubRouter) Join(topic string) {
 			}
 		}
 
-		if len(gmap) < gs.D {
+		if len(gmap) < gs.params.D {
 			// we need more peers; eager, as this would get fixed in the next heartbeat
-			more := gs.getPeers(topic, gs.D-len(gmap), func(p peer.ID) bool {
+			more := gs.getPeers(topic, gs.params.D-len(gmap), func(p peer.ID) bool {
 				// filter our current peers, direct peers, and peers with negative scores
 				_, inMesh := gmap[p]
 				_, direct := gs.direct[p]
@@ -1093,7 +1030,7 @@ func (gs *GossipSubRouter) Join(topic string) {
 		delete(gs.fanout, topic)
 		delete(gs.lastpub, topic)
 	} else {
-		peers := gs.getPeers(topic, gs.D, func(p peer.ID) bool {
+		peers := gs.getPeers(topic, gs.params.D, func(p peer.ID) bool {
 			// filter direct peers and peers with negative score
 			_, direct := gs.direct[p]
 			return !direct && gs.score.Score(p) >= 0
@@ -1322,14 +1259,14 @@ func fragmentMessageIds(msgIds []string, limit int) [][]string {
 }
 
 func (gs *GossipSubRouter) heartbeatTimer() {
-	time.Sleep(gs.paramsCfg.HeartbeatInitialDelay)
+	time.Sleep(gs.params.HeartbeatInitialDelay)
 	select {
 	case gs.p.eval <- gs.heartbeat:
 	case <-gs.p.ctx.Done():
 		return
 	}
 
-	ticker := time.NewTicker(gs.paramsCfg.HeartbeatInterval)
+	ticker := time.NewTicker(gs.params.HeartbeatInterval)
 	defer ticker.Stop()
 
 	for {
@@ -1406,9 +1343,9 @@ func (gs *GossipSubRouter) heartbeat() {
 		}
 
 		// do we have enough peers?
-		if l := len(peers); l < gs.Dlo {
+		if l := len(peers); l < gs.params.Dlo {
 			backoff := gs.backoff[topic]
-			ineed := gs.D - l
+			ineed := gs.params.D - l
 			plst := gs.getPeers(topic, ineed, func(p peer.ID) bool {
 				// filter our current and direct peers, peers we are backing off, and peers with negative score
 				_, inMesh := peers[p]
@@ -1423,7 +1360,7 @@ func (gs *GossipSubRouter) heartbeat() {
 		}
 
 		// do we have too many peers?
-		if len(peers) > gs.Dhi {
+		if len(peers) > gs.params.Dhi {
 			plst := peerMapToList(peers)
 
 			// sort by score (but shuffle first for the case we don't use the score)
@@ -1434,18 +1371,18 @@ func (gs *GossipSubRouter) heartbeat() {
 
 			// We keep the first D_score peers by score and the remaining up to D randomly
 			// under the constraint that we keep D_out peers in the mesh (if we have that many)
-			shufflePeers(plst[gs.Dscore:])
+			shufflePeers(plst[gs.params.Dscore:])
 
 			// count the outbound peers we are keeping
 			outbound := 0
-			for _, p := range plst[:gs.D] {
+			for _, p := range plst[:gs.params.D] {
 				if gs.outbound[p] {
 					outbound++
 				}
 			}
 
 			// if it's less than D_out, bubble up some outbound peers from the random selection
-			if outbound < gs.Dout {
+			if outbound < gs.params.Dout {
 				rotate := func(i int) {
 					// rotate the plst to the right and put the ith peer in the front
 					p := plst[i]
@@ -1458,7 +1395,7 @@ func (gs *GossipSubRouter) heartbeat() {
 				// first bubble up all outbound peers already in the selection to the front
 				if outbound > 0 {
 					ihave := outbound
-					for i := 1; i < gs.D && ihave > 0; i++ {
+					for i := 1; i < gs.params.D && ihave > 0; i++ {
 						p := plst[i]
 						if gs.outbound[p] {
 							rotate(i)
@@ -1468,8 +1405,8 @@ func (gs *GossipSubRouter) heartbeat() {
 				}
 
 				// now bubble up enough outbound peers outside the selection to the front
-				ineed := gs.Dout - outbound
-				for i := gs.D; i < len(plst) && ineed > 0; i++ {
+				ineed := gs.params.Dout - outbound
+				for i := gs.params.D; i < len(plst) && ineed > 0; i++ {
 					p := plst[i]
 					if gs.outbound[p] {
 						rotate(i)
@@ -1479,14 +1416,14 @@ func (gs *GossipSubRouter) heartbeat() {
 			}
 
 			// prune the excess peers
-			for _, p := range plst[gs.D:] {
+			for _, p := range plst[gs.params.D:] {
 				log.Debugf("HEARTBEAT: Remove mesh link to %s in %s", p, topic)
 				prunePeer(p)
 			}
 		}
 
 		// do we have enough outboud peers?
-		if len(peers) >= gs.Dlo {
+		if len(peers) >= gs.params.Dlo {
 			// count the outbound peers we have
 			outbound := 0
 			for p := range peers {
@@ -1496,8 +1433,8 @@ func (gs *GossipSubRouter) heartbeat() {
 			}
 
 			// if it's less than D_out, select some peers with outbound connections and graft them
-			if outbound < gs.Dout {
-				ineed := gs.Dout - outbound
+			if outbound < gs.params.Dout {
+				ineed := gs.params.Dout - outbound
 				backoff := gs.backoff[topic]
 				plst := gs.getPeers(topic, ineed, func(p peer.ID) bool {
 					// filter our current and direct peers, peers we are backing off, and peers with negative score
@@ -1514,7 +1451,7 @@ func (gs *GossipSubRouter) heartbeat() {
 		}
 
 		// should we try to improve the mesh with opportunistic grafting?
-		if gs.heartbeatTicks%gs.opportunisticGraftTicks == 0 && len(peers) > 1 {
+		if gs.heartbeatTicks%gs.params.OpportunisticGraftTicks == 0 && len(peers) > 1 {
 			// Opportunistic grafting works as follows: we check the median score of peers in the
 			// mesh; if this score is below the opportunisticGraftThreshold, we select a few peers at
 			// random with score over the median.
@@ -1533,7 +1470,7 @@ func (gs *GossipSubRouter) heartbeat() {
 			// if the median score is below the threshold, select a better peer (if any) and GRAFT
 			if medianScore < gs.opportunisticGraftThreshold {
 				backoff := gs.backoff[topic]
-				plst = gs.getPeers(topic, gs.paramsCfg.OpportunisticGraftPeers, func(p peer.ID) bool {
+				plst = gs.getPeers(topic, gs.params.OpportunisticGraftPeers, func(p peer.ID) bool {
 					_, inMesh := peers[p]
 					_, doBackoff := backoff[p]
 					_, direct := gs.direct[p]
@@ -1555,7 +1492,7 @@ func (gs *GossipSubRouter) heartbeat() {
 	// expire fanout for topics we haven't published to in a while
 	now := time.Now().UnixNano()
 	for topic, lastpub := range gs.lastpub {
-		if lastpub+int64(gs.fanoutTTL) < now {
+		if lastpub+int64(gs.params.FanoutTTL) < now {
 			delete(gs.fanout, topic)
 			delete(gs.lastpub, topic)
 		}
@@ -1572,8 +1509,8 @@ func (gs *GossipSubRouter) heartbeat() {
 		}
 
 		// do we need more peers?
-		if len(peers) < gs.D {
-			ineed := gs.D - len(peers)
+		if len(peers) < gs.params.D {
+			ineed := gs.params.D - len(peers)
 			plst := gs.getPeers(topic, ineed, func(p peer.ID) bool {
 				// filter our current and direct peers and peers with score above the publish threshold
 				_, inFanout := peers[p]
@@ -1642,7 +1579,7 @@ func (gs *GossipSubRouter) clearBackoff() {
 func (gs *GossipSubRouter) directConnect() {
 	// we donly do this every some ticks to allow pending connections to complete and account
 	// for restarts/downtime
-	if gs.heartbeatTicks%gs.directConnectTicks != 0 {
+	if gs.heartbeatTicks%gs.params.DirectConnectTicks != 0 {
 		return
 	}
 
@@ -1708,7 +1645,7 @@ func (gs *GossipSubRouter) emitGossip(topic string, exclude map[peer.ID]struct{}
 	shuffleStrings(mids)
 
 	// if we are emitting more than GossipSubMaxIHaveLength mids, truncate the list
-	if len(mids) > gs.paramsCfg.MaxIHaveLength {
+	if len(mids) > gs.params.MaxIHaveLength {
 		// we do the truncation (with shuffling) per peer below
 		log.Debugf("too many messages for gossip; will truncate IHAVE list (%d messages)", len(mids))
 	}
@@ -1726,8 +1663,8 @@ func (gs *GossipSubRouter) emitGossip(topic string, exclude map[peer.ID]struct{}
 		}
 	}
 
-	target := gs.Dlazy
-	factor := int(gs.paramsCfg.GossipFactor * float64(len(peers)))
+	target := gs.params.Dlazy
+	factor := int(gs.params.GossipFactor * float64(len(peers)))
 	if factor > target {
 		target = factor
 	}
@@ -1742,11 +1679,11 @@ func (gs *GossipSubRouter) emitGossip(topic string, exclude map[peer.ID]struct{}
 	// Emit the IHAVE gossip to the selected peers.
 	for _, p := range peers {
 		peerMids := mids
-		if len(mids) > gs.paramsCfg.MaxIHaveLength {
+		if len(mids) > gs.params.MaxIHaveLength {
 			// we do this per peer so that we emit a different set for each peer.
 			// we have enough redundancy in the system that this will significantly increase the message
 			// coverage when we do truncate.
-			peerMids = make([]string, gs.paramsCfg.MaxIHaveLength)
+			peerMids = make([]string, gs.params.MaxIHaveLength)
 			shuffleStrings(mids)
 			copy(peerMids, mids)
 		}
@@ -1849,11 +1786,11 @@ func (gs *GossipSubRouter) makePrune(p peer.ID, topic string, doPX bool) *pb.Con
 		return &pb.ControlPrune{TopicID: &topic}
 	}
 
-	backoff := uint64(gs.paramsCfg.PruneBackoff / time.Second)
+	backoff := uint64(gs.params.PruneBackoff / time.Second)
 	var px []*pb.PeerInfo
 	if doPX {
 		// select peers for Peer eXchange
-		peers := gs.getPeers(topic, gs.paramsCfg.PrunePeers, func(xp peer.ID) bool {
+		peers := gs.getPeers(topic, gs.params.PrunePeers, func(xp peer.ID) bool {
 			return p != xp && gs.score.Score(xp) >= 0
 		})
 
