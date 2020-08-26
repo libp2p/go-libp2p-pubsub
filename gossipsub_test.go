@@ -1268,13 +1268,13 @@ func TestGossipsubCustomParams(t *testing.T) {
 	params := DefaultGossipSubParams()
 
 	wantedFollowTime := 1 * time.Second
-	params.GossipSubIWantFollowupTime = wantedFollowTime
+	params.IWantFollowupTime = wantedFollowTime
 
 	customGossipFactor := 0.12
-	params.GossipSubGossipFactor = customGossipFactor
+	params.GossipFactor = customGossipFactor
 
 	wantedMaxPendingConns := 23
-	params.GossipSubMaxPendingConnections = wantedMaxPendingConns
+	params.MaxPendingConnections = wantedMaxPendingConns
 	hosts := getNetHosts(t, ctx, 1)
 	psubs := getGossipsubs(ctx, hosts,
 		WithGossipSubParams(params))
@@ -1288,14 +1288,14 @@ func TestGossipsubCustomParams(t *testing.T) {
 		t.Fatal("Did not get gossip sub router from pub sub object")
 	}
 
-	if rt.paramsCfg.GossipSubIWantFollowupTime != wantedFollowTime {
-		t.Errorf("Wanted %d of param GossipSubIWantFollowupTime but got %d", wantedFollowTime, rt.paramsCfg.GossipSubIWantFollowupTime)
+	if rt.paramsCfg.IWantFollowupTime != wantedFollowTime {
+		t.Errorf("Wanted %d of param GossipSubIWantFollowupTime but got %d", wantedFollowTime, rt.paramsCfg.IWantFollowupTime)
 	}
-	if rt.paramsCfg.GossipSubGossipFactor != customGossipFactor {
-		t.Errorf("Wanted %f of param GossipSubGossipFactor but got %f", customGossipFactor, rt.paramsCfg.GossipSubGossipFactor)
+	if rt.paramsCfg.GossipFactor != customGossipFactor {
+		t.Errorf("Wanted %f of param GossipSubGossipFactor but got %f", customGossipFactor, rt.paramsCfg.GossipFactor)
 	}
-	if rt.paramsCfg.GossipSubMaxPendingConnections != wantedMaxPendingConns {
-		t.Errorf("Wanted %d of param GossipSubMaxPendingConnections but got %d", wantedMaxPendingConns, rt.paramsCfg.GossipSubMaxPendingConnections)
+	if rt.paramsCfg.MaxPendingConnections != wantedMaxPendingConns {
+		t.Errorf("Wanted %d of param GossipSubMaxPendingConnections but got %d", wantedMaxPendingConns, rt.paramsCfg.MaxPendingConnections)
 	}
 }
 

@@ -62,136 +62,136 @@ var (
 type GossipSubParams struct {
 	// overlay parameters.
 
-	// GossipSubD sets the optimal degree for a GossipSub topic mesh. For example, if GossipSubD == 6,
+	// D sets the optimal degree for a GossipSub topic mesh. For example, if D == 6,
 	// each peer will want to have about six peers in their mesh for each topic they're subscribed to.
-	// GossipSubD should be set somewhere between GossipSubDlo and GossipSubDhi.
-	GossipSubD int
+	// D should be set somewhere between Dlo and Dhi.
+	D int
 
-	// GossipSubDlo sets the lower bound on the number of peers we keep in a GossipSub topic mesh.
-	// If we have fewer than GossipSubDlo peers, we will attempt to graft some more into the mesh at
+	// Dlo sets the lower bound on the number of peers we keep in a GossipSub topic mesh.
+	// If we have fewer than Dlo peers, we will attempt to graft some more into the mesh at
 	// the next heartbeat.
-	GossipSubDlo int
+	Dlo int
 
-	// GossipSubDhi sets the upper bound on the number of peers we keep in a GossipSub topic mesh.
-	// If we have more than GossipSubDhi peers, we will select some to prune from the mesh at the next heartbeat.
-	GossipSubDhi int
+	// Dhi sets the upper bound on the number of peers we keep in a GossipSub topic mesh.
+	// If we have more than Dhi peers, we will select some to prune from the mesh at the next heartbeat.
+	Dhi int
 
-	// GossipSubDscore affects how peers are selected when pruning a mesh due to over subscription.
-	// At least GossipSubDscore of the retained peers will be high-scoring, while the remainder are
+	// Dscore affects how peers are selected when pruning a mesh due to over subscription.
+	// At least Dscore of the retained peers will be high-scoring, while the remainder are
 	// chosen randomly.
-	GossipSubDscore int
+	Dscore int
 
-	// GossipSubDout sets the quota for the number of outbound connections to maintain in a topic mesh.
+	// Dout sets the quota for the number of outbound connections to maintain in a topic mesh.
 	// When the mesh is pruned due to over subscription, we make sure that we have outbound connections
-	// to at least GossipSubDout of the survivor peers. This prevents sybil attackers from overwhelming
+	// to at least Dout of the survivor peers. This prevents sybil attackers from overwhelming
 	// our mesh with incoming connections.
 	//
-	// GossipSubDout must be set below GossipSubDlo, and must not exceed GossipSubD / 2.
-	GossipSubDout int
+	// Dout must be set below Dlo, and must not exceed D / 2.
+	Dout int
 
 	// gossip parameters
 
-	// GossipSubHistoryLength controls the size of the message cache used for gossip.
-	// The message cache will remember messages for GossipSubHistoryLength heartbeats.
-	GossipSubHistoryLength int
+	// HistoryLength controls the size of the message cache used for gossip.
+	// The message cache will remember messages for HistoryLength heartbeats.
+	HistoryLength int
 
-	// GossipSubHistoryGossip controls how many cached message ids we will advertise in
+	// HistoryGossip controls how many cached message ids we will advertise in
 	// IHAVE gossip messages. When asked for our seen message IDs, we will return
-	// only those from the most recent GossipSubHistoryGossip heartbeats. The slack between
-	// GossipSubHistoryGossip and GossipSubHistoryLength allows us to avoid advertising messages
+	// only those from the most recent HistoryGossip heartbeats. The slack between
+	// HistoryGossip and HistoryLength allows us to avoid advertising messages
 	// that will be expired by the time they're requested.
 	//
-	// GossipSubHistoryGossip must be less than or equal to GossipSubHistoryLength to
+	// HistoryGossip must be less than or equal to HistoryLength to
 	// avoid a runtime panic.
-	GossipSubHistoryGossip int
+	HistoryGossip int
 
-	// GossipSubDlazy affects how many peers we will emit gossip to at each heartbeat.
-	// We will send gossip to at least GossipSubDlazy peers outside our mesh. The actual
-	// number may be more, depending on GossipSubGossipFactor and how many peers we're
+	// Dlazy affects how many peers we will emit gossip to at each heartbeat.
+	// We will send gossip to at least Dlazy peers outside our mesh. The actual
+	// number may be more, depending on GossipFactor and how many peers we're
 	// connected to.
-	GossipSubDlazy int
+	Dlazy int
 
-	// GossipSubGossipFactor affects how many peers we will emit gossip to at each heartbeat.
-	// We will send gossip to GossipSubGossipFactor * (total number of non-mesh peers), or
-	// GossipSubDlazy, whichever is greater.
-	GossipSubGossipFactor float64
+	// GossipFactor affects how many peers we will emit gossip to at each heartbeat.
+	// We will send gossip to GossipFactor * (total number of non-mesh peers), or
+	// Dlazy, whichever is greater.
+	GossipFactor float64
 
-	// GossipSubGossipRetransmission controls how many times we will allow a peer to request
+	// GossipRetransmission controls how many times we will allow a peer to request
 	// the same message id through IWANT gossip before we start ignoring them. This is designed
 	// to prevent peers from spamming us with requests and wasting our resources.
-	GossipSubGossipRetransmission int
+	GossipRetransmission int
 
 	// heartbeat interval
 
-	// GossipSubHeartbeatInitialDelay is the short delay before the heartbeat timer begins
+	// HeartbeatInitialDelay is the short delay before the heartbeat timer begins
 	// after the router is initialized.
-	GossipSubHeartbeatInitialDelay time.Duration
+	HeartbeatInitialDelay time.Duration
 
-	// GossipSubHeartbeatInterval controls the time between heartbeats.
-	GossipSubHeartbeatInterval time.Duration
+	// HeartbeatInterval controls the time between heartbeats.
+	HeartbeatInterval time.Duration
 
-	// GossipSubFanoutTTL controls how long we keep track of the fanout state. If it's been
-	// GossipSubFanoutTTL since we've published to a topic that we're not subscribed to,
+	// FanoutTTL controls how long we keep track of the fanout state. If it's been
+	// FanoutTTL since we've published to a topic that we're not subscribed to,
 	// we'll delete the fanout map for that topic.
-	GossipSubFanoutTTL time.Duration
+	FanoutTTL time.Duration
 
-	// GossipSubPrunePeers controls the number of peers to include in prune Peer eXchange.
+	// PrunePeers controls the number of peers to include in prune Peer eXchange.
 	// When we prune a peer that's eligible for PX (has a good score, etc), we will try to
-	// send them signed peer records for up to GossipSubPrunePeers other peers that we
+	// send them signed peer records for up to PrunePeers other peers that we
 	// know of.
-	GossipSubPrunePeers int
+	PrunePeers int
 
-	// GossipSubPruneBackoff controls the backoff time for pruned peers. This is how long
+	// PruneBackoff controls the backoff time for pruned peers. This is how long
 	// a peer must wait before attempting to graft into our mesh again after being pruned.
-	// When pruning a peer, we send them our value of GossipSubPruneBackoff so they know
+	// When pruning a peer, we send them our value of PruneBackoff so they know
 	// the minimum time to wait. Peers running older versions may not send a backoff time,
-	// so if we receive a prune message without one, we will wait at least GossipSubPruneBackoff
+	// so if we receive a prune message without one, we will wait at least PruneBackoff
 	// before attempting to re-graft.
-	GossipSubPruneBackoff time.Duration
+	PruneBackoff time.Duration
 
-	// GossipSubConnectors controls the number of active connection attempts for peers obtained through PX.
-	GossipSubConnectors int
+	// Connectors controls the number of active connection attempts for peers obtained through PX.
+	Connectors int
 
-	// GossipSubMaxPendingConnections sets the maximum number of pending connections for peers attempted through px.
-	GossipSubMaxPendingConnections int
+	// MaxPendingConnections sets the maximum number of pending connections for peers attempted through px.
+	MaxPendingConnections int
 
-	// GossipSubConnectionTimeout controls the timeout for connection attempts.
-	GossipSubConnectionTimeout time.Duration
+	// ConnectionTimeout controls the timeout for connection attempts.
+	ConnectionTimeout time.Duration
 
-	// GossipSubDirectConnectTicks is the number of heartbeat ticks for attempting to reconnect direct peers
+	// DirectConnectTicks is the number of heartbeat ticks for attempting to reconnect direct peers
 	// that are not currently connected.
-	GossipSubDirectConnectTicks uint64
+	DirectConnectTicks uint64
 
-	// GossipSubDirectConnectInitialDelay is the initial delay before opening connections to direct peers
-	GossipSubDirectConnectInitialDelay time.Duration
+	// DirectConnectInitialDelay is the initial delay before opening connections to direct peers
+	DirectConnectInitialDelay time.Duration
 
-	// GossipSubOpportunisticGraftTicks is the number of heartbeat ticks for attempting to improve the mesh
-	// with opportunistic grafting. Every GossipSubOpportunisticGraftTicks we will attempt to select some
+	// OpportunisticGraftTicks is the number of heartbeat ticks for attempting to improve the mesh
+	// with opportunistic grafting. Every OpportunisticGraftTicks we will attempt to select some
 	// high-scoring mesh peers to replace lower-scoring ones, if the median score of our mesh peers falls
 	// below a threshold (see https://godoc.org/github.com/libp2p/go-libp2p-pubsub#PeerScoreThresholds).
-	GossipSubOpportunisticGraftTicks uint64
+	OpportunisticGraftTicks uint64
 
-	// GossipSubOpportunisticGraftPeers is the number of peers to opportunistically graft.
-	GossipSubOpportunisticGraftPeers int
+	// OpportunisticGraftPeers is the number of peers to opportunistically graft.
+	OpportunisticGraftPeers int
 
-	// If a GRAFT comes before GossipSubGraftFloodThreshold has elapsed since the last PRUNE,
+	// If a GRAFT comes before GraftFloodThreshold has elapsed since the last PRUNE,
 	// then there is an extra score penalty applied to the peer through P7.
-	GossipSubGraftFloodThreshold time.Duration
+	GraftFloodThreshold time.Duration
 
-	// GossipSubMaxIHaveLength is the maximum number of messages to include in an IHAVE message.
+	// MaxIHaveLength is the maximum number of messages to include in an IHAVE message.
 	// Also controls the maximum number of IHAVE ids we will accept and request with IWANT from a
 	// peer within a heartbeat, to protect from IHAVE floods. You should adjust this value from the
-	// default if your system is pushing more than 5000 messages in GossipSubHistoryGossip heartbeats;
+	// default if your system is pushing more than 5000 messages in HistoryGossip heartbeats;
 	// with the defaults this is 1666 messages/s.
-	GossipSubMaxIHaveLength int
+	MaxIHaveLength int
 
-	// GossipSubMaxIHaveMessages is the maximum number of IHAVE messages to accept from a peer within a heartbeat.
-	GossipSubMaxIHaveMessages int
+	// MaxIHaveMessages is the maximum number of IHAVE messages to accept from a peer within a heartbeat.
+	MaxIHaveMessages int
 
 	// Time to wait for a message requested through IWANT following an IHAVE advertisement.
 	// If the message is not received within this window, a broken promise is declared and
 	// the router may apply bahavioural penalties.
-	GossipSubIWantFollowupTime time.Duration
+	IWantFollowupTime time.Duration
 }
 
 // NewGossipSub returns a new PubSub object using GossipSubRouter as the router.
@@ -208,22 +208,22 @@ func NewGossipSub(ctx context.Context, h host.Host, opts ...Option) (*PubSub, er
 		peerhave: make(map[peer.ID]int),
 		iasked:   make(map[peer.ID]int),
 		outbound: make(map[peer.ID]bool),
-		connect:  make(chan connectInfo, params.GossipSubMaxPendingConnections),
-		mcache:   NewMessageCache(params.GossipSubHistoryGossip, params.GossipSubHistoryLength),
+		connect:  make(chan connectInfo, params.MaxPendingConnections),
+		mcache:   NewMessageCache(params.HistoryGossip, params.HistoryLength),
 
 		// these are configured per router to allow variation in tests
-		D:      params.GossipSubD,
-		Dlo:    params.GossipSubDlo,
-		Dhi:    params.GossipSubDhi,
-		Dscore: params.GossipSubDscore,
-		Dout:   params.GossipSubDout,
-		Dlazy:  params.GossipSubDlazy,
+		D:      params.D,
+		Dlo:    params.Dlo,
+		Dhi:    params.Dhi,
+		Dscore: params.Dscore,
+		Dout:   params.Dout,
+		Dlazy:  params.Dlazy,
 
 		// these must be pulled in to resolve races in tests... sigh.
-		directConnectTicks:      params.GossipSubDirectConnectTicks,
-		opportunisticGraftTicks: params.GossipSubOpportunisticGraftTicks,
+		directConnectTicks:      params.DirectConnectTicks,
+		opportunisticGraftTicks: params.OpportunisticGraftTicks,
 
-		fanoutTTL: params.GossipSubFanoutTTL,
+		fanoutTTL: params.FanoutTTL,
 
 		tagTracer: newTagTracer(h.ConnManager()),
 		paramsCfg: params,
@@ -246,20 +246,20 @@ func NewGossipSub(ctx context.Context, h host.Host, opts ...Option) (*PubSub, er
 	// Initialize values using our set params overwriting any previously
 	// set value from our default parameters.
 	cfg := rt.paramsCfg
-	rt.connect = make(chan connectInfo, cfg.GossipSubMaxPendingConnections)
-	rt.mcache = NewMessageCache(cfg.GossipSubHistoryGossip, cfg.GossipSubHistoryLength)
+	rt.connect = make(chan connectInfo, cfg.MaxPendingConnections)
+	rt.mcache = NewMessageCache(cfg.HistoryGossip, cfg.HistoryLength)
 
-	rt.D = cfg.GossipSubD
-	rt.Dlo = cfg.GossipSubDlo
-	rt.Dhi = cfg.GossipSubDhi
-	rt.Dscore = cfg.GossipSubDscore
-	rt.Dout = cfg.GossipSubDout
-	rt.Dlazy = cfg.GossipSubDlazy
+	rt.D = cfg.D
+	rt.Dlo = cfg.Dlo
+	rt.Dhi = cfg.Dhi
+	rt.Dscore = cfg.Dscore
+	rt.Dout = cfg.Dout
+	rt.Dlazy = cfg.Dlazy
 
-	rt.directConnectTicks = cfg.GossipSubDirectConnectTicks
-	rt.opportunisticGraftTicks = cfg.GossipSubOpportunisticGraftTicks
+	rt.directConnectTicks = cfg.DirectConnectTicks
+	rt.opportunisticGraftTicks = cfg.OpportunisticGraftTicks
 
-	rt.fanoutTTL = cfg.GossipSubFanoutTTL
+	rt.fanoutTTL = cfg.FanoutTTL
 
 	return ps, nil
 }
@@ -268,32 +268,32 @@ func NewGossipSub(ctx context.Context, h host.Host, opts ...Option) (*PubSub, er
 // as a config.
 func DefaultGossipSubParams() *GossipSubParams {
 	return &GossipSubParams{
-		GossipSubD:                         GossipSubD,
-		GossipSubDlo:                       GossipSubDlo,
-		GossipSubDhi:                       GossipSubDhi,
-		GossipSubDscore:                    GossipSubDscore,
-		GossipSubDout:                      GossipSubDout,
-		GossipSubHistoryLength:             GossipSubHistoryLength,
-		GossipSubHistoryGossip:             GossipSubHistoryLength,
-		GossipSubDlazy:                     GossipSubDlazy,
-		GossipSubGossipFactor:              GossipSubGossipFactor,
-		GossipSubGossipRetransmission:      GossipSubGossipRetransmission,
-		GossipSubHeartbeatInitialDelay:     GossipSubHeartbeatInitialDelay,
-		GossipSubHeartbeatInterval:         GossipSubHeartbeatInterval,
-		GossipSubFanoutTTL:                 GossipSubFanoutTTL,
-		GossipSubPrunePeers:                GossipSubPrunePeers,
-		GossipSubPruneBackoff:              GossipSubPruneBackoff,
-		GossipSubConnectors:                GossipSubConnectors,
-		GossipSubMaxPendingConnections:     GossipSubMaxPendingConnections,
-		GossipSubConnectionTimeout:         GossipSubConnectionTimeout,
-		GossipSubDirectConnectTicks:        GossipSubDirectConnectTicks,
-		GossipSubDirectConnectInitialDelay: GossipSubDirectConnectInitialDelay,
-		GossipSubOpportunisticGraftTicks:   GossipSubOpportunisticGraftTicks,
-		GossipSubOpportunisticGraftPeers:   GossipSubOpportunisticGraftPeers,
-		GossipSubGraftFloodThreshold:       GossipSubGraftFloodThreshold,
-		GossipSubMaxIHaveLength:            GossipSubMaxIHaveLength,
-		GossipSubMaxIHaveMessages:          GossipSubMaxIHaveMessages,
-		GossipSubIWantFollowupTime:         GossipSubIWantFollowupTime,
+		D:                         GossipSubD,
+		Dlo:                       GossipSubDlo,
+		Dhi:                       GossipSubDhi,
+		Dscore:                    GossipSubDscore,
+		Dout:                      GossipSubDout,
+		HistoryLength:             GossipSubHistoryLength,
+		HistoryGossip:             GossipSubHistoryLength,
+		Dlazy:                     GossipSubDlazy,
+		GossipFactor:              GossipSubGossipFactor,
+		GossipRetransmission:      GossipSubGossipRetransmission,
+		HeartbeatInitialDelay:     GossipSubHeartbeatInitialDelay,
+		HeartbeatInterval:         GossipSubHeartbeatInterval,
+		FanoutTTL:                 GossipSubFanoutTTL,
+		PrunePeers:                GossipSubPrunePeers,
+		PruneBackoff:              GossipSubPruneBackoff,
+		Connectors:                GossipSubConnectors,
+		MaxPendingConnections:     GossipSubMaxPendingConnections,
+		ConnectionTimeout:         GossipSubConnectionTimeout,
+		DirectConnectTicks:        GossipSubDirectConnectTicks,
+		DirectConnectInitialDelay: GossipSubDirectConnectInitialDelay,
+		OpportunisticGraftTicks:   GossipSubOpportunisticGraftTicks,
+		OpportunisticGraftPeers:   GossipSubOpportunisticGraftPeers,
+		GraftFloodThreshold:       GossipSubGraftFloodThreshold,
+		MaxIHaveLength:            GossipSubMaxIHaveLength,
+		MaxIHaveMessages:          GossipSubMaxIHaveMessages,
+		IWantFollowupTime:         GossipSubIWantFollowupTime,
 	}
 }
 
@@ -426,20 +426,20 @@ func WithGossipSubParams(cfg *GossipSubParams) Option {
 		}
 		// Overwrite current config and associated variables in the router.
 		gs.paramsCfg = cfg
-		gs.connect = make(chan connectInfo, cfg.GossipSubMaxPendingConnections)
-		gs.mcache = NewMessageCache(cfg.GossipSubHistoryGossip, cfg.GossipSubHistoryLength)
+		gs.connect = make(chan connectInfo, cfg.MaxPendingConnections)
+		gs.mcache = NewMessageCache(cfg.HistoryGossip, cfg.HistoryLength)
 
-		gs.D = cfg.GossipSubD
-		gs.Dlo = cfg.GossipSubDlo
-		gs.Dhi = cfg.GossipSubDhi
-		gs.Dscore = cfg.GossipSubDscore
-		gs.Dout = cfg.GossipSubDout
-		gs.Dlazy = cfg.GossipSubDlazy
+		gs.D = cfg.D
+		gs.Dlo = cfg.Dlo
+		gs.Dhi = cfg.Dhi
+		gs.Dscore = cfg.Dscore
+		gs.Dout = cfg.Dout
+		gs.Dlazy = cfg.Dlazy
 
-		gs.directConnectTicks = cfg.GossipSubDirectConnectTicks
-		gs.opportunisticGraftTicks = cfg.GossipSubOpportunisticGraftTicks
+		gs.directConnectTicks = cfg.DirectConnectTicks
+		gs.opportunisticGraftTicks = cfg.OpportunisticGraftTicks
 
-		gs.fanoutTTL = cfg.GossipSubFanoutTTL
+		gs.fanoutTTL = cfg.FanoutTTL
 
 		gs.paramsCfg = cfg
 		return nil
@@ -550,15 +550,15 @@ func (gs *GossipSubRouter) Attach(p *PubSub) {
 	go gs.heartbeatTimer()
 
 	// start the PX connectors
-	for i := 0; i < gs.paramsCfg.GossipSubConnectors; i++ {
+	for i := 0; i < gs.paramsCfg.Connectors; i++ {
 		go gs.connector()
 	}
 
 	// connect to direct peers
 	if len(gs.direct) > 0 {
 		go func() {
-			if gs.paramsCfg.GossipSubDirectConnectInitialDelay > 0 {
-				time.Sleep(gs.paramsCfg.GossipSubDirectConnectInitialDelay)
+			if gs.paramsCfg.DirectConnectInitialDelay > 0 {
+				time.Sleep(gs.paramsCfg.DirectConnectInitialDelay)
 			}
 			for p := range gs.direct {
 				gs.connect <- connectInfo{p: p}
@@ -668,12 +668,12 @@ func (gs *GossipSubRouter) handleIHave(p peer.ID, ctl *pb.ControlMessage) []*pb.
 
 	// IHAVE flood protection
 	gs.peerhave[p]++
-	if gs.peerhave[p] > gs.paramsCfg.GossipSubMaxIHaveMessages {
+	if gs.peerhave[p] > gs.paramsCfg.MaxIHaveMessages {
 		log.Debugf("IHAVE: peer %s has advertised too many times (%d) within this heartbeat interval; ignoring", p, gs.peerhave[p])
 		return nil
 	}
 
-	if gs.iasked[p] >= gs.paramsCfg.GossipSubMaxIHaveLength {
+	if gs.iasked[p] >= gs.paramsCfg.MaxIHaveLength {
 		log.Debugf("IHAVE: peer %s has already advertised too many messages (%d); ignoring", p, gs.iasked[p])
 		return nil
 	}
@@ -699,8 +699,8 @@ func (gs *GossipSubRouter) handleIHave(p peer.ID, ctl *pb.ControlMessage) []*pb.
 	}
 
 	iask := len(iwant)
-	if iask+gs.iasked[p] > gs.paramsCfg.GossipSubMaxIHaveLength {
-		iask = gs.paramsCfg.GossipSubMaxIHaveLength - gs.iasked[p]
+	if iask+gs.iasked[p] > gs.paramsCfg.MaxIHaveLength {
+		iask = gs.paramsCfg.MaxIHaveLength - gs.iasked[p]
 	}
 
 	log.Debugf("IHAVE: Asking for %d out of %d messages from %s", iask, len(iwant), p)
@@ -738,7 +738,7 @@ func (gs *GossipSubRouter) handleIWant(p peer.ID, ctl *pb.ControlMessage) []*pb.
 				continue
 			}
 
-			if count > gs.paramsCfg.GossipSubGossipRetransmission {
+			if count > gs.paramsCfg.GossipRetransmission {
 				log.Debugf("IWANT: Peer %s has asked for message %s too many times; ignoring request", p, mid)
 				continue
 			}
@@ -804,7 +804,7 @@ func (gs *GossipSubRouter) handleGraft(p peer.ID, ctl *pb.ControlMessage) []*pb.
 			// no PX
 			doPX = false
 			// check the flood cutoff -- is the GRAFT coming too fast?
-			floodCutoff := expire.Add(gs.paramsCfg.GossipSubGraftFloodThreshold - gs.paramsCfg.GossipSubPruneBackoff)
+			floodCutoff := expire.Add(gs.paramsCfg.GraftFloodThreshold - gs.paramsCfg.PruneBackoff)
 			if now.Before(floodCutoff) {
 				// extra penalty
 				gs.score.AddPenalty(p, 1)
@@ -889,7 +889,7 @@ func (gs *GossipSubRouter) handlePrune(p peer.ID, ctl *pb.ControlMessage) {
 }
 
 func (gs *GossipSubRouter) addBackoff(p peer.ID, topic string) {
-	gs.doAddBackoff(p, topic, gs.paramsCfg.GossipSubPruneBackoff)
+	gs.doAddBackoff(p, topic, gs.paramsCfg.PruneBackoff)
 }
 
 func (gs *GossipSubRouter) doAddBackoff(p peer.ID, topic string, interval time.Duration) {
@@ -905,9 +905,9 @@ func (gs *GossipSubRouter) doAddBackoff(p peer.ID, topic string, interval time.D
 }
 
 func (gs *GossipSubRouter) pxConnect(peers []*pb.PeerInfo) {
-	if len(peers) > gs.paramsCfg.GossipSubPrunePeers {
+	if len(peers) > gs.paramsCfg.PrunePeers {
 		shufflePeerInfo(peers)
-		peers = peers[:gs.paramsCfg.GossipSubPrunePeers]
+		peers = peers[:gs.paramsCfg.PrunePeers]
 	}
 
 	toconnect := make([]connectInfo, 0, len(peers))
@@ -974,7 +974,7 @@ func (gs *GossipSubRouter) connector() {
 				}
 			}
 
-			ctx, cancel := context.WithTimeout(gs.p.ctx, gs.paramsCfg.GossipSubConnectionTimeout)
+			ctx, cancel := context.WithTimeout(gs.p.ctx, gs.paramsCfg.ConnectionTimeout)
 			err := gs.p.host.Connect(ctx, peer.AddrInfo{ID: ci.p})
 			cancel()
 			if err != nil {
@@ -1322,14 +1322,14 @@ func fragmentMessageIds(msgIds []string, limit int) [][]string {
 }
 
 func (gs *GossipSubRouter) heartbeatTimer() {
-	time.Sleep(gs.paramsCfg.GossipSubHeartbeatInitialDelay)
+	time.Sleep(gs.paramsCfg.HeartbeatInitialDelay)
 	select {
 	case gs.p.eval <- gs.heartbeat:
 	case <-gs.p.ctx.Done():
 		return
 	}
 
-	ticker := time.NewTicker(gs.paramsCfg.GossipSubHeartbeatInterval)
+	ticker := time.NewTicker(gs.paramsCfg.HeartbeatInterval)
 	defer ticker.Stop()
 
 	for {
@@ -1533,7 +1533,7 @@ func (gs *GossipSubRouter) heartbeat() {
 			// if the median score is below the threshold, select a better peer (if any) and GRAFT
 			if medianScore < gs.opportunisticGraftThreshold {
 				backoff := gs.backoff[topic]
-				plst = gs.getPeers(topic, gs.paramsCfg.GossipSubOpportunisticGraftPeers, func(p peer.ID) bool {
+				plst = gs.getPeers(topic, gs.paramsCfg.OpportunisticGraftPeers, func(p peer.ID) bool {
 					_, inMesh := peers[p]
 					_, doBackoff := backoff[p]
 					_, direct := gs.direct[p]
@@ -1708,7 +1708,7 @@ func (gs *GossipSubRouter) emitGossip(topic string, exclude map[peer.ID]struct{}
 	shuffleStrings(mids)
 
 	// if we are emitting more than GossipSubMaxIHaveLength mids, truncate the list
-	if len(mids) > gs.paramsCfg.GossipSubMaxIHaveLength {
+	if len(mids) > gs.paramsCfg.MaxIHaveLength {
 		// we do the truncation (with shuffling) per peer below
 		log.Debugf("too many messages for gossip; will truncate IHAVE list (%d messages)", len(mids))
 	}
@@ -1727,7 +1727,7 @@ func (gs *GossipSubRouter) emitGossip(topic string, exclude map[peer.ID]struct{}
 	}
 
 	target := gs.Dlazy
-	factor := int(gs.paramsCfg.GossipSubGossipFactor * float64(len(peers)))
+	factor := int(gs.paramsCfg.GossipFactor * float64(len(peers)))
 	if factor > target {
 		target = factor
 	}
@@ -1742,11 +1742,11 @@ func (gs *GossipSubRouter) emitGossip(topic string, exclude map[peer.ID]struct{}
 	// Emit the IHAVE gossip to the selected peers.
 	for _, p := range peers {
 		peerMids := mids
-		if len(mids) > gs.paramsCfg.GossipSubMaxIHaveLength {
+		if len(mids) > gs.paramsCfg.MaxIHaveLength {
 			// we do this per peer so that we emit a different set for each peer.
 			// we have enough redundancy in the system that this will significantly increase the message
 			// coverage when we do truncate.
-			peerMids = make([]string, gs.paramsCfg.GossipSubMaxIHaveLength)
+			peerMids = make([]string, gs.paramsCfg.MaxIHaveLength)
 			shuffleStrings(mids)
 			copy(peerMids, mids)
 		}
@@ -1849,11 +1849,11 @@ func (gs *GossipSubRouter) makePrune(p peer.ID, topic string, doPX bool) *pb.Con
 		return &pb.ControlPrune{TopicID: &topic}
 	}
 
-	backoff := uint64(gs.paramsCfg.GossipSubPruneBackoff / time.Second)
+	backoff := uint64(gs.paramsCfg.PruneBackoff / time.Second)
 	var px []*pb.PeerInfo
 	if doPX {
 		// select peers for Peer eXchange
-		peers := gs.getPeers(topic, gs.paramsCfg.GossipSubPrunePeers, func(xp peer.ID) bool {
+		peers := gs.getPeers(topic, gs.paramsCfg.PrunePeers, func(xp peer.ID) bool {
 			return p != xp && gs.score.Score(xp) >= 0
 		})
 
