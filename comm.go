@@ -9,10 +9,11 @@ import (
 	"github.com/libp2p/go-libp2p-core/network"
 	"github.com/libp2p/go-libp2p-core/peer"
 
-	ggio "github.com/gogo/protobuf/io"
-	proto "github.com/gogo/protobuf/proto"
 	pb "github.com/libp2p/go-libp2p-pubsub/pb"
 
+	"github.com/libp2p/go-msgio/protoio"
+
+	"github.com/gogo/protobuf/proto"
 	ms "github.com/multiformats/go-multistream"
 )
 
@@ -41,7 +42,7 @@ func (p *PubSub) getHelloPacket() *RPC {
 }
 
 func (p *PubSub) handleNewStream(s network.Stream) {
-	r := ggio.NewDelimitedReader(s, p.maxMessageSize)
+	r := protoio.NewDelimitedReader(s, p.maxMessageSize)
 	for {
 		rpc := new(RPC)
 		err := r.ReadMsg(&rpc.RPC)
@@ -96,7 +97,7 @@ func (p *PubSub) handleNewPeer(ctx context.Context, pid peer.ID, outgoing <-chan
 }
 
 func (p *PubSub) handlePeerEOF(ctx context.Context, s network.Stream) {
-	r := ggio.NewDelimitedReader(s, p.maxMessageSize)
+	r := protoio.NewDelimitedReader(s, p.maxMessageSize)
 	rpc := new(RPC)
 	for {
 		err := r.ReadMsg(&rpc.RPC)
@@ -113,7 +114,7 @@ func (p *PubSub) handlePeerEOF(ctx context.Context, s network.Stream) {
 
 func (p *PubSub) handleSendingMessages(ctx context.Context, s network.Stream, outgoing <-chan *RPC) {
 	bufw := bufio.NewWriter(s)
-	wc := ggio.NewDelimitedWriter(bufw)
+	wc := protoio.NewDelimitedWriter(bufw)
 
 	writeMsg := func(msg proto.Message) error {
 		err := wc.WriteMsg(msg)

@@ -93,8 +93,7 @@ func (gt *gossipTracer) GetBrokenPromises() map[peer.ID]int {
 
 var _ internalTracer = (*gossipTracer)(nil)
 
-func (gt *gossipTracer) DeliverMessage(msg *Message) {
-	// someone delivered a message, stop tracking promises for it
+func (gt *gossipTracer) fullfillPromise(msg *Message) {
 	mid := gt.msgID(msg.Message)
 
 	gt.Lock()
@@ -103,8 +102,13 @@ func (gt *gossipTracer) DeliverMessage(msg *Message) {
 	delete(gt.promises, mid)
 }
 
+func (gt *gossipTracer) DeliverMessage(msg *Message) {
+	// someone delivered a message, fullfill promises for it
+	gt.fullfillPromise(msg)
+}
+
 func (gt *gossipTracer) RejectMessage(msg *Message, reason string) {
-	// A message got rejected, so we can stop tracking promises and let the score penalty apply
+	// A message got rejected, so we can fullfill promises and let the score penalty apply
 	// from invalid message delivery.
 	// We do take exception and apply promise penalty regardless in the following cases, where
 	// the peer delivered an obviously invalid message.
@@ -113,16 +117,16 @@ func (gt *gossipTracer) RejectMessage(msg *Message, reason string) {
 		return
 	case rejectInvalidSignature:
 		return
-	case rejectSelfOrigin:
-		return
 	}
 
-	mid := gt.msgID(msg.Message)
+	gt.fullfillPromise(msg)
+}
 
-	gt.Lock()
-	defer gt.Unlock()
-
-	delete(gt.promises, mid)
+func (gt *gossipTracer) ValidateMessage(msg *Message) {
+	// we consider the promise fullfilled as soon as the message begins validation
+	// if it was a case of signature issue it would have been rejected immediately
+	// without triggering the Validate trace
+	gt.fullfillPromise(msg)
 }
 
 func (gt *gossipTracer) AddPeer(p peer.ID, proto protocol.ID) {}
@@ -131,5 +135,4 @@ func (gt *gossipTracer) Join(topic string)                    {}
 func (gt *gossipTracer) Leave(topic string)                   {}
 func (gt *gossipTracer) Graft(p peer.ID, topic string)        {}
 func (gt *gossipTracer) Prune(p peer.ID, topic string)        {}
-func (gt *gossipTracer) ValidateMessage(msg *Message)         {}
 func (gt *gossipTracer) DuplicateMessage(msg *Message)        {}

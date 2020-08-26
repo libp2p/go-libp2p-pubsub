@@ -20,7 +20,7 @@ import (
 	bhost "github.com/libp2p/go-libp2p-blankhost"
 	swarmt "github.com/libp2p/go-libp2p-swarm/testing"
 
-	ggio "github.com/gogo/protobuf/io"
+	"github.com/libp2p/go-msgio/protoio"
 )
 
 func testWithTracer(t *testing.T, tracer EventTracer) {
@@ -244,7 +244,7 @@ func TestPBTracer(t *testing.T) {
 	}
 	defer f.Close()
 
-	r := ggio.NewDelimitedReader(f, 1<<20)
+	r := protoio.NewDelimitedReader(f, 1<<20)
 	for {
 		evt.Reset()
 		err := r.ReadMsg(&evt)
@@ -271,7 +271,7 @@ func (mrt *mockRemoteTracer) handleStream(s network.Stream) {
 		panic(err)
 	}
 
-	r := ggio.NewDelimitedReader(gzr, 1<<24)
+	r := protoio.NewDelimitedReader(gzr, 1<<24)
 
 	var batch pb.TraceEventBatch
 	for {

@@ -79,9 +79,10 @@ type PeerScoreParams struct {
 	// - attempting to re-graft before the prune backoff time has elapsed.
 	// - not following up in IWANT requests for messages advertised with IHAVE.
 	//
-	// The value of the parameter is the square of the counter, which decays with  BehaviourPenaltyDecay.
+	// The value of the parameter is the square of the counter over the threshold, which decays with
+	// BehaviourPenaltyDecay.
 	// The weight of the parameter MUST be negative (or zero to disable).
-	BehaviourPenaltyWeight, BehaviourPenaltyDecay float64
+	BehaviourPenaltyWeight, BehaviourPenaltyThreshold, BehaviourPenaltyDecay float64
 
 	// the decay interval for parameter counters.
 	DecayInterval time.Duration
@@ -178,6 +179,9 @@ func (p *PeerScoreParams) validate() error {
 	}
 	if p.BehaviourPenaltyWeight != 0 && (p.BehaviourPenaltyDecay <= 0 || p.BehaviourPenaltyDecay >= 1) {
 		return fmt.Errorf("invalid BehaviourPenaltyDecay; must be between 0 and 1")
+	}
+	if p.BehaviourPenaltyThreshold < 0 {
+		return fmt.Errorf("invalid BehaviourPenaltyThreshold; must be >= 0")
 	}
 
 	// check the decay parameters

@@ -969,7 +969,8 @@ func (gs *GossipSubRouter) Publish(msg *Message) {
 			if !ok || len(gmap) == 0 {
 				// we don't have any, pick some with score above the publish threshold
 				peers := gs.getPeers(topic, gs.params.D, func(p peer.ID) bool {
-					return gs.score.Score(p) >= gs.publishThreshold
+					_, direct := gs.direct[p]
+					return !direct && gs.score.Score(p) >= gs.publishThreshold
 				})
 
 				if len(peers) > 0 {
@@ -1566,7 +1567,9 @@ func (gs *GossipSubRouter) clearBackoff() {
 	now := time.Now()
 	for topic, backoff := range gs.backoff {
 		for p, expire := range backoff {
-			if expire.Before(now) {
+			// add some slack time to the expiration
+			// https://github.com/libp2p/specs/pull/289
+			if expire.Add(2 * GossipSubHeartbeatInterval).Before(now) {
 				delete(backoff, p)
 			}
 		}

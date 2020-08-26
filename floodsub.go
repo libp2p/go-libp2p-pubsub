@@ -115,5 +115,5 @@ func (fs *FloodSubRouter) Join(topic string) {
 }
 
 func (fs *FloodSubRouter) Leave(topic string) {
-	fs.tracer.Join(topic)
+	fs.tracer.Leave(topic)
 }
