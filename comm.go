@@ -49,7 +49,7 @@ func (p *PubSub) handleNewStream(s network.Stream) {
 		if err != nil {
 			if err != io.EOF {
 				s.Reset()
-				log.Infof("error reading rpc from %s: %s", s.Conn().RemotePeer(), err)
+				log.Debugf("error reading rpc from %s: %s", s.Conn().RemotePeer(), err)
 			} else {
 				// Just be nice. They probably won't read this
 				// but it doesn't hurt to send it.
@@ -108,7 +108,7 @@ func (p *PubSub) handlePeerEOF(ctx context.Context, s network.Stream) {
 			}
 			return
 		}
-		log.Warn("unexpected message from ", s.Conn().RemotePeer())
+		log.Debugf("unexpected message from %s", s.Conn().RemotePeer())
 	}
 }
 
@@ -136,7 +136,7 @@ func (p *PubSub) handleSendingMessages(ctx context.Context, s network.Stream, ou
 			err := writeMsg(&rpc.RPC)
 			if err != nil {
 				s.Reset()
-				log.Infof("writing message to %s: %s", s.Conn().RemotePeer(), err)
+				log.Debugf("writing message to %s: %s", s.Conn().RemotePeer(), err)
 				return
 			}
 		case <-ctx.Done():

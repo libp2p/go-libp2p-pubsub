@@ -924,13 +924,13 @@ func (p *PubSub) handleIncomingRPC(rpc *RPC) {
 
 	// ask the router to vet the peer before commiting any processing resources
 	if !p.rt.AcceptFrom(rpc.from) {
-		log.Infof("received message from router graylisted peer %s. Dropping RPC", rpc.from)
+		log.Debugf("received message from router graylisted peer %s. Dropping RPC", rpc.from)
 		return
 	}
 
 	for _, pmsg := range rpc.GetPublish() {
 		if !(p.subscribedToMsg(pmsg) || p.canRelayMsg(pmsg)) {
-			log.Warn("received message we didn't subscribe to. Dropping.")
+			log.Debug("received message we didn't subscribe to. Dropping.")
 			continue
 		}
 
@@ -951,14 +951,14 @@ func (p *PubSub) pushMsg(msg *Message) {
 	src := msg.ReceivedFrom
 	// reject messages from blacklisted peers
 	if p.blacklist.Contains(src) {
-		log.Warnf("dropping message from blacklisted peer %s", src)
+		log.Debugf("dropping message from blacklisted peer %s", src)
 		p.tracer.RejectMessage(msg, rejectBlacklstedPeer)
 		return
 	}
 
 	// even if they are forwarded by good peers
 	if p.blacklist.Contains(msg.GetFrom()) {
-		log.Warnf("dropping message from blacklisted source %s", src)
+		log.Debugf("dropping message from blacklisted source %s", src)
 		p.tracer.RejectMessage(msg, rejectBlacklistedSource)
 		return
 	}
