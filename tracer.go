@@ -11,7 +11,6 @@ import (
 
 	pb "github.com/libp2p/go-libp2p-pubsub/pb"
 
-	"github.com/libp2p/go-libp2p-core/helpers"
 	"github.com/libp2p/go-libp2p-core/host"
 	"github.com/libp2p/go-libp2p-core/network"
 	"github.com/libp2p/go-libp2p-core/peer"
@@ -260,7 +259,7 @@ func (t *RemoteTracer) doWrite() {
 				s.Reset()
 			} else {
 				gzipW.Close()
-				helpers.FullClose(s)
+				s.Close()
 			}
 			return
 		}
