@@ -165,12 +165,12 @@ func (pg *peerGater) AcceptFrom(p peer.ID) AcceptStatus {
 	}
 
 	// we make a randomized decision based on the goodput of the peer
-	goodput := st.deliver / total
-	if rand.Float64() < goodput {
+	threshold := (1 + st.deliver) / (1 + total)
+	if rand.Float64() < threshold {
 		return AcceptAll
 	}
 
-	log.Debugf("throttling peer %s with goodput %f", p, goodput)
+	log.Debugf("throttling peer %s with threshold %f", p, threshold)
 	return AcceptControl
 }
 
