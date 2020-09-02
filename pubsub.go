@@ -943,6 +943,7 @@ func (p *PubSub) handleIncomingRPC(rpc *RPC) {
 		if len(rpc.GetPublish()) > 0 {
 			log.Debugf("peer %s was throttled by router; ignoring %d payload messages", rpc.from, len(rpc.GetPublish()))
 		}
+		p.tracer.ThrottlePeer(rpc.from)
 
 	case AcceptAll:
 		for _, pmsg := range rpc.GetPublish() {

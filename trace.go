@@ -26,6 +26,7 @@ type internalTracer interface {
 	DeliverMessage(msg *Message)
 	RejectMessage(msg *Message, reason string)
 	DuplicateMessage(msg *Message)
+	ThrottlePeer(p peer.ID)
 }
 
 // pubsub tracer details
@@ -463,4 +464,14 @@ func (t *pubsubTracer) Prune(p peer.ID, topic string) {
 	}
 
 	t.tracer.Trace(evt)
+}
+
+func (t *pubsubTracer) ThrottlePeer(p peer.ID) {
+	if t == nil {
+		return
+	}
+
+	for _, tr := range t.internal {
+		tr.ThrottlePeer(p)
+	}
 }

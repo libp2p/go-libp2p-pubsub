@@ -252,4 +252,5 @@ func (t *tagTracer) RejectMessage(msg *Message, reason string) {
 	}
 }
 
-func (t *tagTracer) RemovePeer(peer.ID) {}
+func (t *tagTracer) RemovePeer(peer.ID)      {}
+func (gt *tagTracer) ThrottlePeer(p peer.ID) {}
