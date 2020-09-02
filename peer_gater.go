@@ -62,7 +62,11 @@ func WithPeerGater(threshold, decay float64) Option {
 }
 
 func newPeerGater(ctx context.Context, threshold, decay float64) *peerGater {
-	pg := &peerGater{threshold: threshold, decay: decay}
+	pg := &peerGater{
+		threshold: threshold,
+		decay:     decay,
+		stats:     make(map[peer.ID]*peerGaterStats),
+	}
 	go pg.background(ctx)
 	return pg
 }
