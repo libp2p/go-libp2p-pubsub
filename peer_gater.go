@@ -29,7 +29,7 @@ type peerGaterStats struct {
 	connected bool
 	expire    time.Time
 
-	deliver, ignore, reject float64
+	deliver, duplicate, ignore, reject float64
 }
 
 // WithPeerGater is a gossipsub router option that enables reactive validation queue
@@ -108,6 +108,11 @@ func (pg *peerGater) decayStats() {
 				st.deliver = 0
 			}
 
+			st.duplicate *= pg.decay
+			if st.duplicate < DefaultDecayToZero {
+				st.duplicate = 0
+			}
+
 			st.ignore *= pg.decay
 			if st.ignore < DefaultDecayToZero {
 				st.ignore = 0
@@ -154,7 +159,7 @@ func (pg *peerGater) AcceptFrom(p peer.ID) AcceptStatus {
 
 	st := pg.getPeerStats(p)
 
-	total := st.deliver + st.ignore + st.reject
+	total := st.deliver + st.duplicate + st.ignore + st.reject
 	if total == 0 {
 		return AcceptAll
 	}
@@ -236,5 +241,12 @@ func (pg *peerGater) RejectMessage(msg *Message, reason string) {
 	}
 }
 
-func (pg *peerGater) DuplicateMessage(msg *Message) {}
-func (pg *peerGater) ThrottlePeer(p peer.ID)        {}
+func (pg *peerGater) DuplicateMessage(msg *Message) {
+	pg.Lock()
+	defer pg.Unlock()
+
+	st := pg.getPeerStats(msg.ReceivedFrom)
+	st.duplicate++
+}
+
+func (pg *peerGater) ThrottlePeer(p peer.ID) {}
