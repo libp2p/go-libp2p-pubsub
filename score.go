@@ -749,6 +749,8 @@ func (ps *peerScore) DuplicateMessage(msg *Message) {
 	}
 }
 
+func (ps *peerScore) ThrottlePeer(p peer.ID) {}
+
 // message delivery records
 func (d *messageDeliveries) getRecord(id string) *deliveryRecord {
 	rec, ok := d.records[id]

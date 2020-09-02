@@ -233,3 +233,4 @@ func (pg *peerGater) RejectMessage(msg *Message, reason string) {
 }
 
 func (pg *peerGater) DuplicateMessage(msg *Message) {}
+func (pg *peerGater) ThrottlePeer(p peer.ID)        {}
