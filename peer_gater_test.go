@@ -38,15 +38,19 @@ func TestPeerGater(t *testing.T) {
 		t.Fatal("expected AcceptAll")
 	}
 
-	pg.RejectMessage(msg, rejectValidationIgnored)
-	status = pg.AcceptFrom(peerA)
-	if status != AcceptControl {
-		t.Fatal("expected AcceptControl")
+	for i := 0; i < 100; i++ {
+		pg.RejectMessage(msg, rejectValidationIgnored)
+		pg.RejectMessage(msg, rejectValidationFailed)
 	}
 
-	pg.RejectMessage(msg, rejectValidationFailed)
-	status = pg.AcceptFrom(peerA)
-	if status != AcceptControl {
+	accepted := false
+	for i := 0; !accepted && i < 1000; i++ {
+		status = pg.AcceptFrom(peerA)
+		if status == AcceptControl {
+			accepted = true
+		}
+	}
+	if !accepted {
 		t.Fatal("expected AcceptControl")
 	}
 
@@ -54,7 +58,7 @@ func TestPeerGater(t *testing.T) {
 		pg.DeliverMessage(msg)
 	}
 
-	accepted := false
+	accepted = false
 	for i := 0; !accepted && i < 1000; i++ {
 		status = pg.AcceptFrom(peerA)
 		if status == AcceptAll {
