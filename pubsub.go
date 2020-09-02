@@ -168,8 +168,8 @@ type PubSubRouter interface {
 	// AcceptFrom is invoked on any incoming message before pushing it to the validation pipeline
 	// or processing control information.
 	// Allows routers with internal scoring to vet peers before committing any processing resources
-	// to the message and implement an effective graylist.
-	AcceptFrom(peer.ID) bool
+	// to the message and implement an effective graylist and react to validation queue overload.
+	AcceptFrom(peer.ID) AcceptStatus
 	// HandleRPC is invoked to process control messages in the RPC envelope.
 	// It is invoked after subscriptions and payload messages have been processed.
 	HandleRPC(*RPC)
@@ -182,6 +182,17 @@ type PubSubRouter interface {
 	// It is invoked after the unsubscription announcement.
 	Leave(topic string)
 }
+
+type AcceptStatus int
+
+const (
+	// AcceptAll signals to accept the incoming RPC for full processing
+	AcceptNone AcceptStatus = iota
+	// AcceptControl signals to accept the incoming RPC only for control message processing
+	AcceptControl
+	// AcceptNone signals to drop the incoming RPC
+	AcceptAll
+)
 
 type Message struct {
 	*pb.Message
@@ -923,19 +934,26 @@ func (p *PubSub) handleIncomingRPC(rpc *RPC) {
 	}
 
 	// ask the router to vet the peer before commiting any processing resources
-	if !p.rt.AcceptFrom(rpc.from) {
-		log.Debugf("received message from router graylisted peer %s. Dropping RPC", rpc.from)
+	switch p.rt.AcceptFrom(rpc.from) {
+	case AcceptNone:
+		log.Debugf("received message from router graylisted peer %s; dropping RPC", rpc.from)
 		return
-	}
 
-	for _, pmsg := range rpc.GetPublish() {
-		if !(p.subscribedToMsg(pmsg) || p.canRelayMsg(pmsg)) {
-			log.Debug("received message we didn't subscribe to. Dropping.")
-			continue
+	case AcceptControl:
+		if len(rpc.GetPublish()) > 0 {
+			log.Debugf("ignoring payload in message from peer %s", rpc.from)
 		}
 
-		msg := &Message{pmsg, rpc.from, nil}
-		p.pushMsg(msg)
+	case AcceptAll:
+		for _, pmsg := range rpc.GetPublish() {
+			if !(p.subscribedToMsg(pmsg) || p.canRelayMsg(pmsg)) {
+				log.Debug("received message we didn't subscribe to; ignoring payload message")
+				continue
+			}
+
+			msg := &Message{pmsg, rpc.from, nil}
+			p.pushMsg(msg)
+		}
 	}
 
 	p.rt.HandleRPC(rpc)

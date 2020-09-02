@@ -90,8 +90,8 @@ func (rs *RandomSubRouter) EnoughPeers(topic string, suggested int) bool {
 	return false
 }
 
-func (rs *RandomSubRouter) AcceptFrom(peer.ID) bool {
-	return true
+func (rs *RandomSubRouter) AcceptFrom(peer.ID) AcceptStatus {
+	return AcceptAll
 }
 
 func (rs *RandomSubRouter) HandleRPC(rpc *RPC) {}
@@ -133,7 +133,7 @@ func (rs *RandomSubRouter) Publish(msg *Message) {
 		}
 		xpeers := peerMapToList(rspeers)
 		shufflePeers(xpeers)
-		xpeers = xpeers[:RandomSubD]
+		xpeers = xpeers[:target]
 		for _, p := range xpeers {
 			tosend[p] = struct{}{}
 		}

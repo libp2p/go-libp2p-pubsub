@@ -505,9 +505,18 @@ func (gs *GossipSubRouter) EnoughPeers(topic string, suggested int) bool {
 	return false
 }
 
-func (gs *GossipSubRouter) AcceptFrom(p peer.ID) bool {
+func (gs *GossipSubRouter) AcceptFrom(p peer.ID) AcceptStatus {
 	_, direct := gs.direct[p]
-	return direct || gs.score.Score(p) >= gs.graylistThreshold
+	if direct {
+		return AcceptAll
+	}
+
+	if gs.score.Score(p) < gs.graylistThreshold {
+		return AcceptNone
+	}
+
+	// TODO throttle tracking and reaction
+	return AcceptAll
 }
 
 func (gs *GossipSubRouter) HandleRPC(rpc *RPC) {
