@@ -936,18 +936,18 @@ func (p *PubSub) handleIncomingRPC(rpc *RPC) {
 	// ask the router to vet the peer before commiting any processing resources
 	switch p.rt.AcceptFrom(rpc.from) {
 	case AcceptNone:
-		log.Debugf("received message from router graylisted peer %s; dropping RPC", rpc.from)
+		log.Debugf("received RPC from router graylisted peer %s; dropping RPC", rpc.from)
 		return
 
 	case AcceptControl:
 		if len(rpc.GetPublish()) > 0 {
-			log.Debugf("ignoring payload in message from peer %s", rpc.from)
+			log.Debugf("peer %s was throttled by router; ignoring %d payload messages", rpc.from, len(rpc.GetPublish()))
 		}
 
 	case AcceptAll:
 		for _, pmsg := range rpc.GetPublish() {
 			if !(p.subscribedToMsg(pmsg) || p.canRelayMsg(pmsg)) {
-				log.Debug("received message we didn't subscribe to; ignoring payload message")
+				log.Debug("received message in topic we didn't subscribe to; ignoring message")
 				continue
 			}
 
