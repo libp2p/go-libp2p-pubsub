@@ -347,6 +347,7 @@ type GossipSubRouter struct {
 	score        *peerScore
 	gossipTracer *gossipTracer
 	tagTracer    *tagTracer
+	gate         *peerGater
 
 	// whether PX is enabled; this should be enabled in bootstrappers and other well connected/trusted
 	// nodes.
@@ -515,8 +516,7 @@ func (gs *GossipSubRouter) AcceptFrom(p peer.ID) AcceptStatus {
 		return AcceptNone
 	}
 
-	// TODO throttle tracking and reaction
-	return AcceptAll
+	return gs.gate.AcceptFrom(p)
 }
 
 func (gs *GossipSubRouter) HandleRPC(rpc *RPC) {
