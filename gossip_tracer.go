@@ -14,14 +14,16 @@ import (
 // The tracking of promises is probabilistic to avoid using too much memory.
 type gossipTracer struct {
 	sync.Mutex
-	msgID    MsgIdFunction
-	promises map[string]map[peer.ID]time.Time
+	msgID        MsgIdFunction
+	promises     map[string]map[peer.ID]time.Time
+	peerPromises map[peer.ID]map[string]struct{}
 }
 
 func newGossipTracer() *gossipTracer {
 	return &gossipTracer{
-		msgID:    DefaultMsgIdFn,
-		promises: make(map[string]map[peer.ID]time.Time),
+		msgID:        DefaultMsgIdFn,
+		promises:     make(map[string]map[peer.ID]time.Time),
+		peerPromises: make(map[peer.ID]map[string]struct{}),
 	}
 }
 
@@ -45,15 +47,21 @@ func (gt *gossipTracer) AddPromise(p peer.ID, msgIDs []string) {
 	gt.Lock()
 	defer gt.Unlock()
 
-	peers, ok := gt.promises[mid]
+	promises, ok := gt.promises[mid]
 	if !ok {
-		peers = make(map[peer.ID]time.Time)
-		gt.promises[mid] = peers
+		promises = make(map[peer.ID]time.Time)
+		gt.promises[mid] = promises
 	}
 
-	_, ok = peers[p]
+	_, ok = promises[p]
 	if !ok {
-		peers[p] = time.Now().Add(GossipSubIWantFollowupTime)
+		promises[p] = time.Now().Add(GossipSubIWantFollowupTime)
+		peerPromises, ok := gt.peerPromises[p]
+		if !ok {
+			peerPromises = make(map[string]struct{})
+			gt.peerPromises[p] = peerPromises
+		}
+		peerPromises[mid] = struct{}{}
 	}
 }
 
@@ -71,18 +79,25 @@ func (gt *gossipTracer) GetBrokenPromises() map[peer.ID]int {
 	now := time.Now()
 
 	// find broken promises from peers
-	for mid, peers := range gt.promises {
-		for p, expire := range peers {
+	for mid, promises := range gt.promises {
+		for p, expire := range promises {
 			if expire.Before(now) {
 				if res == nil {
 					res = make(map[peer.ID]int)
 				}
 				res[p]++
 
-				delete(peers, p)
+				delete(promises, p)
+
+				peerPromises := gt.peerPromises[p]
+				delete(peerPromises, mid)
+				if len(peerPromises) == 0 {
+					delete(gt.peerPromises, p)
+				}
 			}
 		}
-		if len(peers) == 0 {
+
+		if len(promises) == 0 {
 			delete(gt.promises, mid)
 		}
 	}
@@ -140,14 +155,18 @@ func (gt *gossipTracer) ThrottlePeer(p peer.ID) {
 	gt.Lock()
 	defer gt.Unlock()
 
-	// remove promises for peers that have been throttled so that they are not unfairly penalized
-	for mid, peers := range gt.promises {
-		_, hasPromise := peers[p]
-		if hasPromise {
-			delete(peers, p)
-			if len(peers) == 0 {
-				delete(gt.promises, mid)
-			}
+	peerPromises, ok := gt.peerPromises[p]
+	if !ok {
+		return
+	}
+
+	for mid := range peerPromises {
+		promises := gt.promises[mid]
+		delete(promises, p)
+		if len(promises) == 0 {
+			delete(gt.promises, mid)
 		}
 	}
+
+	delete(gt.peerPromises, p)
 }
