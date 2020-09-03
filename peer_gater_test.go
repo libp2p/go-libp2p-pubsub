@@ -93,20 +93,29 @@ func TestPeerGater(t *testing.T) {
 	}
 
 	pg.RemovePeer(peerA)
+	pg.Lock()
 	_, ok := pg.peerStats[peerA]
+	pg.Unlock()
 	if ok {
 		t.Fatal("still have a stat record for peerA")
 	}
 
+	pg.Lock()
 	_, ok = pg.ipStats[peerAip]
+	pg.Unlock()
 	if !ok {
 		t.Fatal("expected to still have a stat record for peerA's ip")
 	}
 
+	pg.Lock()
 	pg.ipStats[peerAip].expire = time.Now()
+	pg.Unlock()
 
 	time.Sleep(2 * time.Second)
+
+	pg.Lock()
 	_, ok = pg.ipStats["1.2.3.4"]
+	pg.Unlock()
 	if ok {
 		t.Fatal("still have a stat record for peerA's ip")
 	}
