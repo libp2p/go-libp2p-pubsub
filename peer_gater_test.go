@@ -1,6 +1,7 @@
 package pubsub
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -8,9 +9,22 @@ import (
 )
 
 func TestPeerGater(t *testing.T) {
-	pg := &peerGater{threshold: 0.1, decay: .9, stats: make(map[peer.ID]*peerGaterStats)}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 
 	peerA := peer.ID("A")
+	peerAip := "1.2.3.4"
+
+	pg := newPeerGater(ctx, nil, .1, .9)
+	pg.getIP = func(p peer.ID) string {
+		switch p {
+		case peerA:
+			return peerAip
+		default:
+			return "<wtf>"
+		}
+	}
+
 	pg.AddPeer(peerA, "")
 
 	status := pg.AcceptFrom(peerA)
@@ -79,14 +93,21 @@ func TestPeerGater(t *testing.T) {
 	}
 
 	pg.RemovePeer(peerA)
-	pg.stats[peerA].expire = time.Now()
-
-	time.Sleep(time.Millisecond)
-
-	pg.decayStats()
-
-	_, ok := pg.stats[peerA]
+	_, ok := pg.peerStats[peerA]
 	if ok {
 		t.Fatal("still have a stat record for peerA")
+	}
+
+	_, ok = pg.ipStats[peerAip]
+	if !ok {
+		t.Fatal("expected to still have a stat record for peerA's ip")
+	}
+
+	pg.ipStats[peerAip].expire = time.Now()
+
+	time.Sleep(2 * time.Second)
+	_, ok = pg.ipStats["1.2.3.4"]
+	if ok {
+		t.Fatal("still have a stat record for peerA's ip")
 	}
 }
