@@ -216,7 +216,7 @@ func (pg *peerGater) AcceptFrom(p peer.ID) AcceptStatus {
 
 	st := pg.getPeerStats(p)
 
-	total := st.deliver + 0.5*st.duplicate + st.ignore + 2*st.reject
+	total := st.deliver + 0.25*st.duplicate + st.ignore + 4*st.reject
 	if total == 0 {
 		return AcceptAll
 	}
