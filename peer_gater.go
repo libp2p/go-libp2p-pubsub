@@ -227,15 +227,7 @@ func (pg *peerGater) RejectMessage(msg *Message, reason string) {
 		st := pg.getPeerStats(msg.ReceivedFrom)
 		st.ignore++
 
-	case rejectMissingSignature:
-		fallthrough
-	case rejectUnexpectedSignature:
-		fallthrough
-	case rejectUnexpectedAuthInfo:
-		fallthrough
-	case rejectInvalidSignature:
-		fallthrough
-	case rejectValidationFailed:
+	default:
 		st := pg.getPeerStats(msg.ReceivedFrom)
 		st.reject++
 	}
