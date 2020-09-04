@@ -188,7 +188,8 @@ type AcceptStatus int
 const (
 	// AcceptAll signals to accept the incoming RPC for full processing
 	AcceptNone AcceptStatus = iota
-	// AcceptControl signals to accept the incoming RPC only for control message processing
+	// AcceptControl signals to accept the incoming RPC only for control message processing by
+	// the router. Included payload messages will _not_ be pushed to the validation queue.
 	AcceptControl
 	// AcceptNone signals to drop the incoming RPC
 	AcceptAll

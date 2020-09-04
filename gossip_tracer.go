@@ -14,8 +14,14 @@ import (
 // The tracking of promises is probabilistic to avoid using too much memory.
 type gossipTracer struct {
 	sync.Mutex
-	msgID        MsgIdFunction
-	promises     map[string]map[peer.ID]time.Time
+
+	msgID MsgIdFunction
+
+	// promises for messages by message ID; for each message tracked, we track the promise
+	// expiration time for each peer.
+	promises map[string]map[peer.ID]time.Time
+	// promises for each peer; for each peer, we track the promised message IDs.
+	// this index allows us to quickly void promises when a peer is throttled.
 	peerPromises map[peer.ID]map[string]struct{}
 }
 
