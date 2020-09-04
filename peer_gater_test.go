@@ -15,7 +15,13 @@ func TestPeerGater(t *testing.T) {
 	peerA := peer.ID("A")
 	peerAip := "1.2.3.4"
 
-	pg := newPeerGater(ctx, nil, .1, .9)
+	params := NewPeerGaterParams(.1, .9)
+	err := params.validate()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	pg := newPeerGater(ctx, nil, params)
 	pg.getIP = func(p peer.ID) string {
 		switch p {
 		case peerA:
