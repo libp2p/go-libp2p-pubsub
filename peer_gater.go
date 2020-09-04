@@ -271,6 +271,7 @@ func (pg *peerGater) getPeerIP(p peer.ID) string {
 		remote := c.RemoteMultiaddr()
 		ip, err := manet.ToIP(remote)
 		if err != nil {
+			log.Warnf("error determining IP for remote peer in %s: %s", remote, err)
 			return "<unknown>"
 		}
 		return ip.String()
