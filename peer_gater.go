@@ -23,7 +23,8 @@ var (
 	DefaultPeerGaterIgnoreWeight    = 1.0
 	DefaultPeerGaterRejectWeight    = 4.0
 	DefaultPeerGaterThreshold       = 0.33
-	DefaultPeerGaterDecay           = ScoreParameterDecay(time.Hour)
+	DefaultPeerGaterGlobalDecay     = ScoreParameterDecay(10 * time.Minute)
+	DefaultPeerGaterSourceDecay     = ScoreParameterDecay(time.Hour)
 )
 
 // PeerGaterParams groups together parameters that control the operation of the peer gater
@@ -31,7 +32,8 @@ type PeerGaterParams struct {
 	// when the ratio of throttled/validated messages exceeds this threshold, the gater turns on
 	Threshold float64
 	// (linear) decay parameter for gater counters
-	Decay float64
+	GlobalDecay float64 // global counter decay
+	SourceDecay float64 // per IP counter decay
 	// decay interval
 	DecayInterval time.Duration
 	// counter zeroing threshold
@@ -53,8 +55,11 @@ func (p *PeerGaterParams) validate() error {
 	if p.Threshold <= 0 {
 		return fmt.Errorf("invalid Threshold; must be > 0")
 	}
-	if p.Decay <= 0 || p.Decay >= 1 {
-		return fmt.Errorf("invalid Decay; must be between 0 and 1")
+	if p.GlobalDecay <= 0 || p.GlobalDecay >= 1 {
+		return fmt.Errorf("invalid GlobalDecay; must be between 0 and 1")
+	}
+	if p.SourceDecay <= 0 || p.SourceDecay >= 1 {
+		return fmt.Errorf("invalid SourceDecay; must be between 0 and 1")
 	}
 	if p.DecayInterval < time.Second {
 		return fmt.Errorf("invalid DecayInterval; must be at least 1s")
@@ -81,10 +86,11 @@ func (p *PeerGaterParams) validate() error {
 
 // NewPeerGaterParams creates a new PeerGaterParams struct, using the specified threshold and decay
 // parameters and default values for all other parameters.
-func NewPeerGaterParams(threshold, decay float64) *PeerGaterParams {
+func NewPeerGaterParams(threshold, globalDecay, sourceDecay float64) *PeerGaterParams {
 	return &PeerGaterParams{
 		Threshold:       threshold,
-		Decay:           decay,
+		GlobalDecay:     globalDecay,
+		SourceDecay:     sourceDecay,
 		DecayToZero:     DefaultDecayToZero,
 		DecayInterval:   DefaultDecayInterval,
 		RetainStats:     DefaultPeerGaterRetainStats,
@@ -97,7 +103,7 @@ func NewPeerGaterParams(threshold, decay float64) *PeerGaterParams {
 
 // DefaultPeerGaterParams creates a new PeerGaterParams struct using default values
 func DefaultPeerGaterParams() *PeerGaterParams {
-	return NewPeerGaterParams(DefaultPeerGaterThreshold, DefaultPeerGaterDecay)
+	return NewPeerGaterParams(DefaultPeerGaterThreshold, DefaultPeerGaterGlobalDecay, DefaultPeerGaterSourceDecay)
 }
 
 // the gater object.
@@ -205,12 +211,12 @@ func (pg *peerGater) decayStats() {
 	pg.Lock()
 	defer pg.Unlock()
 
-	pg.validate *= pg.params.Decay
+	pg.validate *= pg.params.GlobalDecay
 	if pg.validate < pg.params.DecayToZero {
 		pg.validate = 0
 	}
 
-	pg.throttle *= pg.params.Decay
+	pg.throttle *= pg.params.GlobalDecay
 	if pg.throttle < pg.params.DecayToZero {
 		pg.throttle = 0
 	}
@@ -218,22 +224,22 @@ func (pg *peerGater) decayStats() {
 	now := time.Now()
 	for ip, st := range pg.ipStats {
 		if st.connected > 0 {
-			st.deliver *= pg.params.Decay
+			st.deliver *= pg.params.SourceDecay
 			if st.deliver < pg.params.DecayToZero {
 				st.deliver = 0
 			}
 
-			st.duplicate *= pg.params.Decay
+			st.duplicate *= pg.params.SourceDecay
 			if st.duplicate < pg.params.DecayToZero {
 				st.duplicate = 0
 			}
 
-			st.ignore *= pg.params.Decay
+			st.ignore *= pg.params.SourceDecay
 			if st.ignore < pg.params.DecayToZero {
 				st.ignore = 0
 			}
 
-			st.reject *= pg.params.Decay
+			st.reject *= pg.params.SourceDecay
 			if st.reject < pg.params.DecayToZero {
 				st.reject = 0
 			}
