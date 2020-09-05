@@ -49,6 +49,9 @@ type PeerGaterParams struct {
 	IgnoreWeight float64
 	// weight of rejected messages
 	RejectWeight float64
+
+	// priority topic delivery weights
+	TopicDeliveryWeights map[string]float64
 }
 
 func (p *PeerGaterParams) validate() error {
@@ -82,6 +85,12 @@ func (p *PeerGaterParams) validate() error {
 	}
 
 	return nil
+}
+
+// WithTopicDeliveryWeights is a fluid setter for the priority topic delivery weights
+func (p *PeerGaterParams) WithTopicDeliveryWeights(w map[string]float64) *PeerGaterParams {
+	p.TopicDeliveryWeights = w
+	return p
 }
 
 // NewPeerGaterParams creates a new PeerGaterParams struct, using the specified threshold and decay
@@ -386,7 +395,17 @@ func (pg *peerGater) DeliverMessage(msg *Message) {
 	defer pg.Unlock()
 
 	st := pg.getPeerStats(msg.ReceivedFrom)
-	st.deliver++
+
+	weight := 0.0
+	for _, topic := range msg.GetTopicIDs() {
+		weight += pg.params.TopicDeliveryWeights[topic]
+	}
+
+	if weight == 0 {
+		weight = 1
+	}
+
+	st.deliver += weight
 }
 
 func (pg *peerGater) RejectMessage(msg *Message, reason string) {
