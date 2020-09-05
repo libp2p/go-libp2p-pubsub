@@ -15,7 +15,7 @@ func TestPeerGater(t *testing.T) {
 	peerA := peer.ID("A")
 	peerAip := "1.2.3.4"
 
-	params := NewPeerGaterParams(.1, .9)
+	params := NewPeerGaterParams(.1, .9, .999)
 	err := params.validate()
 	if err != nil {
 		t.Fatal(err)
