@@ -19,9 +19,9 @@ import (
 var (
 	DefaultPeerGaterRetainStats     = 6 * time.Hour
 	DefaultPeerGaterQuiet           = time.Minute
-	DefaultPeerGaterDuplicateWeight = 0.25
+	DefaultPeerGaterDuplicateWeight = 0.125
 	DefaultPeerGaterIgnoreWeight    = 1.0
-	DefaultPeerGaterRejectWeight    = 4.0
+	DefaultPeerGaterRejectWeight    = 16.0
 	DefaultPeerGaterThreshold       = 0.33
 	DefaultPeerGaterGlobalDecay     = ScoreParameterDecay(2 * time.Minute)
 	DefaultPeerGaterSourceDecay     = ScoreParameterDecay(time.Hour)
