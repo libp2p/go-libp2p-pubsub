@@ -23,7 +23,7 @@ var (
 	DefaultPeerGaterIgnoreWeight    = 1.0
 	DefaultPeerGaterRejectWeight    = 4.0
 	DefaultPeerGaterThreshold       = 0.33
-	DefaultPeerGaterGlobalDecay     = ScoreParameterDecay(10 * time.Minute)
+	DefaultPeerGaterGlobalDecay     = ScoreParameterDecay(2 * time.Minute)
 	DefaultPeerGaterSourceDecay     = ScoreParameterDecay(time.Hour)
 )
 
