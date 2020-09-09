@@ -34,6 +34,11 @@ func (t *Topic) String() string {
 // SetScoreParams sets the topic score parameters if the pubsub router supports peer
 // scoring
 func (t *Topic) SetScoreParams(p *TopicScoreParams) error {
+	err := p.validate()
+	if err != nil {
+		return fmt.Errorf("invalid topic score parameters: %w", err)
+	}
+
 	t.mux.Lock()
 	defer t.mux.Unlock()
 
@@ -41,14 +46,8 @@ func (t *Topic) SetScoreParams(p *TopicScoreParams) error {
 		return ErrTopicClosed
 	}
 
-	err := p.validate()
-	if err != nil {
-		return fmt.Errorf("invalid topic score parameters: %w", err)
-	}
-
 	result := make(chan error, 1)
-	select {
-	case t.p.eval <- func() {
+	update := func() {
 		gs, ok := t.p.rt.(*GossipSubRouter)
 		if !ok {
 			result <- fmt.Errorf("pubsub router is not gossipsub")
@@ -60,8 +59,12 @@ func (t *Topic) SetScoreParams(p *TopicScoreParams) error {
 			return
 		}
 
-		result <- gs.score.SetTopicScoreParams(t.topic, p)
-	}:
+		err := gs.score.SetTopicScoreParams(t.topic, p)
+		result <- err
+	}
+
+	select {
+	case t.p.eval <- update:
 		err = <-result
 		return err
 

@@ -182,9 +182,11 @@ func newPeerScore(params *PeerScoreParams) *peerScore {
 	}
 }
 
-// update interface
+// SetTopicScoreParams sets new score parameters for a topic.
+// If the topic previously had parameters and the parameters are lowering delivery caps,
+// then the score counters are recapped appropriately.
+// Note: assumes that the topic score parameters have already been validated
 func (ps *peerScore) SetTopicScoreParams(topic string, p *TopicScoreParams) error {
-	// Note: assumes that the topic score parameters have already been validated
 	ps.Lock()
 	defer ps.Unlock()
 
