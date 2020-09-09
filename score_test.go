@@ -842,7 +842,7 @@ func TestScoreRetention(t *testing.T) {
 	}
 }
 
-func TestScoreResetTopicParams(t *testing.T) {
+func TestScoreRecapTopicParams(t *testing.T) {
 	// Create parameters with reasonable default values
 	mytopic := "mytopic"
 	params := &PeerScoreParams{
