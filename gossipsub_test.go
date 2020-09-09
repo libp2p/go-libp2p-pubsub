@@ -1781,6 +1781,57 @@ func TestGossipsubPeerScoreInspect(t *testing.T) {
 	}
 }
 
+func TestGossipsubPeerScoreResetTopicParams(t *testing.T) {
+	// this test exercises the code path sof peer score inspection
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	hosts := getNetHosts(t, ctx, 1)
+
+	ps := getGossipsub(ctx, hosts[0],
+		WithPeerScore(
+			&PeerScoreParams{
+				Topics: map[string]*TopicScoreParams{
+					"test": &TopicScoreParams{
+						TopicWeight:                    1,
+						TimeInMeshQuantum:              time.Second,
+						FirstMessageDeliveriesWeight:   1,
+						FirstMessageDeliveriesDecay:    0.999,
+						FirstMessageDeliveriesCap:      100,
+						InvalidMessageDeliveriesWeight: -1,
+						InvalidMessageDeliveriesDecay:  0.9999,
+					},
+				},
+				AppSpecificScore: func(peer.ID) float64 { return 0 },
+				DecayInterval:    time.Second,
+				DecayToZero:      0.01,
+			},
+			&PeerScoreThresholds{
+				GossipThreshold:   -1,
+				PublishThreshold:  -10,
+				GraylistThreshold: -1000,
+			}))
+
+	topic, err := ps.Join("test")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = topic.SetScoreParams(
+		&TopicScoreParams{
+			TopicWeight:                    1,
+			TimeInMeshQuantum:              time.Second,
+			FirstMessageDeliveriesWeight:   1,
+			FirstMessageDeliveriesDecay:    0.999,
+			FirstMessageDeliveriesCap:      200,
+			InvalidMessageDeliveriesWeight: -1,
+			InvalidMessageDeliveriesDecay:  0.9999,
+		})
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
 type mockPeerScoreInspector struct {
 	mx     sync.Mutex
 	scores map[peer.ID]float64
