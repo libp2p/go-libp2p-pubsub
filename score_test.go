@@ -939,6 +939,68 @@ func TestScoreRecapTopicParams(t *testing.T) {
 	}
 }
 
+func TestScoreResetTopicParams(t *testing.T) {
+	// Create parameters with reasonable default values
+	mytopic := "mytopic"
+	params := &PeerScoreParams{
+		AppSpecificScore: func(peer.ID) float64 { return 0 },
+		Topics:           make(map[string]*TopicScoreParams),
+	}
+	topicScoreParams := &TopicScoreParams{
+		TopicWeight:                    1,
+		TimeInMeshQuantum:              time.Second,
+		InvalidMessageDeliveriesWeight: -1,
+		InvalidMessageDeliveriesDecay:  1.0,
+	}
+
+	params.Topics[mytopic] = topicScoreParams
+
+	// peer A always delivers the message first.
+	// peer B delivers next (within the delivery window).
+	// peer C delivers outside the delivery window.
+	// we expect peers A and B to have a score of zero, since all other parameter weights are zero.
+	// Peer C should have a negative score.
+	peerA := peer.ID("A")
+
+	ps := newPeerScore(params)
+	ps.AddPeer(peerA, "myproto")
+
+	// reject a bunch of messages
+	nMessages := 100
+	for i := 0; i < nMessages; i++ {
+		pbMsg := makeTestMessage(i)
+		pbMsg.TopicIDs = []string{mytopic}
+		msg := Message{ReceivedFrom: peerA, Message: pbMsg}
+		ps.ValidateMessage(&msg)
+		ps.RejectMessage(&msg, rejectValidationFailed)
+	}
+
+	// check the topic score
+	aScore := ps.Score(peerA)
+	if aScore != -10000 {
+		t.Fatalf("expected a -10000 score, but got %f instead", aScore)
+	}
+
+	// reset the topic paramaters recapping the deliveries counters
+	newTopicScoreParams := &TopicScoreParams{
+		TopicWeight:                    1,
+		TimeInMeshQuantum:              time.Second,
+		InvalidMessageDeliveriesWeight: -10,
+		InvalidMessageDeliveriesDecay:  1.0,
+	}
+
+	err := ps.SetTopicScoreParams(mytopic, newTopicScoreParams)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// verify the topic score was adjusted
+	aScore = ps.Score(peerA)
+	if aScore != -100000 {
+		t.Fatalf("expected a -1000000 score, but got %f instead", aScore)
+	}
+}
+
 func withinVariance(score float64, expected float64, variance float64) bool {
 	if expected >= 0 {
 		return score > expected*(1-variance) && score < expected*(1+variance)
