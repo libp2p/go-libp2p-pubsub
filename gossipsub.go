@@ -1550,7 +1550,12 @@ func (gs *GossipSubRouter) sendGraftPrune(tograft, toprune map[peer.ID][]string,
 	for p, topics := range tograft {
 		graft := make([]*pb.ControlGraft, 0, len(topics))
 		for _, topic := range topics {
-			graft = append(graft, &pb.ControlGraft{TopicID: &topic})
+			// copy topic string here since
+			// the reference to the string
+			// topic here changes with every
+			// iteration of the slice.
+			copiedID := topic
+			graft = append(graft, &pb.ControlGraft{TopicID: &copiedID})
 		}
 
 		var prune []*pb.ControlPrune
