@@ -1584,12 +1584,21 @@ func TestGossipsubMultipleGraftTopics(t *testing.T) {
 	firstPeer := hosts[0].ID()
 	secondPeer := hosts[1].ID()
 
+	p2Sub := psubs[1]
 	p1Router := psubs[0].rt.(*GossipSubRouter)
 	p2Router := psubs[1].rt.(*GossipSubRouter)
-	// Add topics to second peer
-	p2Router.mesh[firstTopic] = map[peer.ID]struct{}{}
-	p2Router.mesh[secondTopic] = map[peer.ID]struct{}{}
-	p2Router.mesh[thirdTopic] = map[peer.ID]struct{}{}
+
+	finChan := make(chan struct{})
+
+	p2Sub.eval <- func() {
+		// Add topics to second peer
+		p2Router.mesh[firstTopic] = map[peer.ID]struct{}{}
+		p2Router.mesh[secondTopic] = map[peer.ID]struct{}{}
+		p2Router.mesh[thirdTopic] = map[peer.ID]struct{}{}
+
+		finChan <- struct{}{}
+	}
+	<-finChan
 
 	// Send multiple GRAFT messages to second peer from
 	// 1st peer
@@ -1599,15 +1608,19 @@ func TestGossipsubMultipleGraftTopics(t *testing.T) {
 
 	time.Sleep(time.Second * 1)
 
-	if _, ok := p2Router.mesh[firstTopic][firstPeer]; !ok {
-		t.Errorf("First peer wasnt added to mesh of the second peer for the topic %s", firstTopic)
+	p2Sub.eval <- func() {
+		if _, ok := p2Router.mesh[firstTopic][firstPeer]; !ok {
+			t.Errorf("First peer wasnt added to mesh of the second peer for the topic %s", firstTopic)
+		}
+		if _, ok := p2Router.mesh[secondTopic][firstPeer]; !ok {
+			t.Errorf("First peer wasnt added to mesh of the second peer for the topic %s", secondTopic)
+		}
+		if _, ok := p2Router.mesh[thirdTopic][firstPeer]; !ok {
+			t.Errorf("First peer wasnt added to mesh of the second peer for the topic %s", thirdTopic)
+		}
+		finChan <- struct{}{}
 	}
-	if _, ok := p2Router.mesh[secondTopic][firstPeer]; !ok {
-		t.Errorf("First peer wasnt added to mesh of the second peer for the topic %s", secondTopic)
-	}
-	if _, ok := p2Router.mesh[thirdTopic][firstPeer]; !ok {
-		t.Errorf("First peer wasnt added to mesh of the second peer for the topic %s", thirdTopic)
-	}
+	<-finChan
 }
 
 func TestGossipsubOpportunisticGrafting(t *testing.T) {
