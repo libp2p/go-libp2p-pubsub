@@ -1567,6 +1567,50 @@ func TestGossipsubPiggybackControl(t *testing.T) {
 	}
 }
 
+func TestGossipsubMultipleGraftTopics(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	hosts := getNetHosts(t, ctx, 2)
+
+	psubs := getGossipsubs(ctx, hosts)
+
+	sparseConnect(t, hosts)
+
+	time.Sleep(time.Second * 1)
+
+	firstTopic := "topic1"
+	secondTopic := "topic2"
+	thirdTopic := "topic3"
+
+	firstPeer := hosts[0].ID()
+	secondPeer := hosts[1].ID()
+
+	p1Router := psubs[0].rt.(*GossipSubRouter)
+	p2Router := psubs[1].rt.(*GossipSubRouter)
+	// Add topics to second peer
+	p2Router.mesh[firstTopic] = map[peer.ID]struct{}{}
+	p2Router.mesh[secondTopic] = map[peer.ID]struct{}{}
+	p2Router.mesh[thirdTopic] = map[peer.ID]struct{}{}
+
+	// Send multiple GRAFT messages to second peer from
+	// 1st peer
+	p1Router.sendGraftPrune(map[peer.ID][]string{
+		secondPeer: []string{firstTopic, secondTopic, thirdTopic},
+	}, map[peer.ID][]string{}, map[peer.ID]bool{})
+
+	time.Sleep(time.Second * 1)
+
+	if _, ok := p2Router.mesh[firstTopic][firstPeer]; !ok {
+		t.Errorf("First peer wasnt added to mesh of the second peer for the topic %s", firstTopic)
+	}
+	if _, ok := p2Router.mesh[secondTopic][firstPeer]; !ok {
+		t.Errorf("First peer wasnt added to mesh of the second peer for the topic %s", secondTopic)
+	}
+	if _, ok := p2Router.mesh[thirdTopic][firstPeer]; !ok {
+		t.Errorf("First peer wasnt added to mesh of the second peer for the topic %s", thirdTopic)
+	}
+}
+
 func TestGossipsubOpportunisticGrafting(t *testing.T) {
 	originalGossipSubPruneBackoff := GossipSubPruneBackoff
 	GossipSubPruneBackoff = 500 * time.Millisecond
