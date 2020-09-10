@@ -1570,10 +1570,9 @@ func TestGossipsubPiggybackControl(t *testing.T) {
 func TestGossipsubMultipleGraftTopics(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+
 	hosts := getNetHosts(t, ctx, 2)
-
 	psubs := getGossipsubs(ctx, hosts)
-
 	sparseConnect(t, hosts)
 
 	time.Sleep(time.Second * 1)
