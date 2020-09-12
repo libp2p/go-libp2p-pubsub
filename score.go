@@ -14,9 +14,6 @@ import (
 	manet "github.com/multiformats/go-multiaddr-net"
 )
 
-// IPv6SubnetColocation controls whether /64 IPv6 subnets should be considered colocated.
-var IPv6SubnetColocation = false
-
 type peerStats struct {
 	// true if the peer is currently connected
 	connected bool
@@ -983,7 +980,7 @@ func (ps *peerScore) getIPs(p peer.ID) []string {
 			ip6 := ip.String()
 			res = append(res, ip6)
 
-			if IPv6SubnetColocation {
+			if ps.params.IPv6SubnetColocation {
 				ip6mask := ip.Mask(net.CIDRMask(64, 128)).String()
 				res = append(res, ip6mask)
 			}
