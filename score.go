@@ -865,14 +865,13 @@ func (ps *peerScore) markInvalidMessageDelivery(p peer.ID, msg *Message) {
 		return
 	}
 
-	for _, topic := range msg.GetTopicIDs() {
-		tstats, ok := pstats.getTopicStats(topic, ps.params)
-		if !ok {
-			continue
-		}
-
-		tstats.invalidMessageDeliveries += 1
+	topic := msg.GetTopic()
+	tstats, ok := pstats.getTopicStats(topic, ps.params)
+	if !ok {
+		return
 	}
+
+	tstats.invalidMessageDeliveries += 1
 }
 
 // markFirstMessageDelivery increments the "first message deliveries" counter
@@ -884,27 +883,26 @@ func (ps *peerScore) markFirstMessageDelivery(p peer.ID, msg *Message) {
 		return
 	}
 
-	for _, topic := range msg.GetTopicIDs() {
-		tstats, ok := pstats.getTopicStats(topic, ps.params)
-		if !ok {
-			continue
-		}
+	topic := msg.GetTopic()
+	tstats, ok := pstats.getTopicStats(topic, ps.params)
+	if !ok {
+		return
+	}
 
-		cap := ps.params.Topics[topic].FirstMessageDeliveriesCap
-		tstats.firstMessageDeliveries += 1
-		if tstats.firstMessageDeliveries > cap {
-			tstats.firstMessageDeliveries = cap
-		}
+	cap := ps.params.Topics[topic].FirstMessageDeliveriesCap
+	tstats.firstMessageDeliveries += 1
+	if tstats.firstMessageDeliveries > cap {
+		tstats.firstMessageDeliveries = cap
+	}
 
-		if !tstats.inMesh {
-			continue
-		}
+	if !tstats.inMesh {
+		return
+	}
 
-		cap = ps.params.Topics[topic].MeshMessageDeliveriesCap
-		tstats.meshMessageDeliveries += 1
-		if tstats.meshMessageDeliveries > cap {
-			tstats.meshMessageDeliveries = cap
-		}
+	cap = ps.params.Topics[topic].MeshMessageDeliveriesCap
+	tstats.meshMessageDeliveries += 1
+	if tstats.meshMessageDeliveries > cap {
+		tstats.meshMessageDeliveries = cap
 	}
 }
 
@@ -912,41 +910,34 @@ func (ps *peerScore) markFirstMessageDelivery(p peer.ID, msg *Message) {
 // for messages we've seen before, as long the message was received within the
 // P3 window.
 func (ps *peerScore) markDuplicateMessageDelivery(p peer.ID, msg *Message, validated time.Time) {
-	var now time.Time
-
 	pstats, ok := ps.peerStats[p]
 	if !ok {
 		return
 	}
 
-	if !validated.IsZero() {
-		now = time.Now()
+	topic := msg.GetTopic()
+	tstats, ok := pstats.getTopicStats(topic, ps.params)
+	if !ok {
+		return
 	}
 
-	for _, topic := range msg.GetTopicIDs() {
-		tstats, ok := pstats.getTopicStats(topic, ps.params)
-		if !ok {
-			continue
-		}
+	if !tstats.inMesh {
+		return
+	}
 
-		if !tstats.inMesh {
-			continue
-		}
+	tparams := ps.params.Topics[topic]
 
-		tparams := ps.params.Topics[topic]
+	// check against the mesh delivery window -- if the validated time is passed as 0, then
+	// the message was received before we finished validation and thus falls within the mesh
+	// delivery window.
+	if !validated.IsZero() && time.Since(validated) > tparams.MeshMessageDeliveriesWindow {
+		return
+	}
 
-		// check against the mesh delivery window -- if the validated time is passed as 0, then
-		// the message was received before we finished validation and thus falls within the mesh
-		// delivery window.
-		if !validated.IsZero() && now.After(validated.Add(tparams.MeshMessageDeliveriesWindow)) {
-			continue
-		}
-
-		cap := tparams.MeshMessageDeliveriesCap
-		tstats.meshMessageDeliveries += 1
-		if tstats.meshMessageDeliveries > cap {
-			tstats.meshMessageDeliveries = cap
-		}
+	cap := tparams.MeshMessageDeliveriesCap
+	tstats.meshMessageDeliveries += 1
+	if tstats.meshMessageDeliveries > cap {
+		tstats.meshMessageDeliveries = cap
 	}
 }
 

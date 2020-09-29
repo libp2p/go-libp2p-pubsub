@@ -53,7 +53,7 @@ func (t *pubsubTracer) PublishMessage(msg *Message) {
 		Timestamp: &now,
 		PublishMessage: &pb.TraceEvent_PublishMessage{
 			MessageID: []byte(t.msgID(msg.Message)),
-			Topics:    msg.Message.TopicIDs,
+			Topic:     msg.Message.Topic,
 		},
 	}
 
@@ -96,7 +96,7 @@ func (t *pubsubTracer) RejectMessage(msg *Message, reason string) {
 			MessageID:    []byte(t.msgID(msg.Message)),
 			ReceivedFrom: []byte(msg.ReceivedFrom),
 			Reason:       &reason,
-			Topics:       msg.TopicIDs,
+			Topic:        msg.Topic,
 		},
 	}
 
@@ -126,7 +126,7 @@ func (t *pubsubTracer) DuplicateMessage(msg *Message) {
 		DuplicateMessage: &pb.TraceEvent_DuplicateMessage{
 			MessageID:    []byte(t.msgID(msg.Message)),
 			ReceivedFrom: []byte(msg.ReceivedFrom),
-			Topics:       msg.TopicIDs,
+			Topic:        msg.Topic,
 		},
 	}
 
@@ -155,7 +155,7 @@ func (t *pubsubTracer) DeliverMessage(msg *Message) {
 		Timestamp: &now,
 		DeliverMessage: &pb.TraceEvent_DeliverMessage{
 			MessageID: []byte(t.msgID(msg.Message)),
-			Topics:    msg.TopicIDs,
+			Topic:     msg.Topic,
 		},
 	}
 
@@ -292,7 +292,7 @@ func (t *pubsubTracer) traceRPCMeta(rpc *RPC) *pb.TraceEvent_RPCMeta {
 	for _, m := range rpc.Publish {
 		msgs = append(msgs, &pb.TraceEvent_MessageMeta{
 			MessageID: []byte(t.msgID(m)),
-			Topics:    m.TopicIDs,
+			Topic:     m.Topic,
 		})
 	}
 	rpcMeta.Messages = msgs

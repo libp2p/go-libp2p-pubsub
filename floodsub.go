@@ -75,21 +75,10 @@ func (fs *FloodSubRouter) HandleRPC(rpc *RPC) {}
 
 func (fs *FloodSubRouter) Publish(msg *Message) {
 	from := msg.ReceivedFrom
-
-	tosend := make(map[peer.ID]struct{})
-	for _, topic := range msg.GetTopicIDs() {
-		tmap, ok := fs.p.topics[topic]
-		if !ok {
-			continue
-		}
-
-		for p := range tmap {
-			tosend[p] = struct{}{}
-		}
-	}
+	topic := msg.GetTopic()
 
 	out := rpcWithMessages(msg.Message)
-	for pid := range tosend {
+	for pid := range fs.p.topics[topic] {
 		if pid == from || pid == peer.ID(msg.GetFrom()) {
 			continue
 		}
