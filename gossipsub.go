@@ -869,26 +869,26 @@ func (gs *GossipSubRouter) connector() {
 
 func (gs *GossipSubRouter) Publish(msg *Message) {
 	gs.mcache.Put(msg.Message)
+
 	from := msg.ReceivedFrom
+	topic := msg.GetTopic()
 
 	tosend := make(map[peer.ID]struct{})
-	for _, topic := range msg.GetTopicIDs() {
-		// any peers in the topic?
-		tmap, ok := gs.p.topics[topic]
-		if !ok {
-			continue
-		}
 
-		if gs.floodPublish && from == gs.p.host.ID() {
-			for p := range tmap {
-				_, direct := gs.direct[p]
-				if direct || gs.score.Score(p) >= gs.publishThreshold {
-					tosend[p] = struct{}{}
-				}
+	// any peers in the topic?
+	tmap, ok := gs.p.topics[topic]
+	if !ok {
+		return
+	}
+
+	if gs.floodPublish && from == gs.p.host.ID() {
+		for p := range tmap {
+			_, direct := gs.direct[p]
+			if direct || gs.score.Score(p) >= gs.publishThreshold {
+				tosend[p] = struct{}{}
 			}
-			continue
 		}
-
+	} else {
 		// direct peers
 		for p := range gs.direct {
 			_, inTopic := tmap[p]

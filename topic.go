@@ -212,10 +212,10 @@ func (t *Topic) Publish(ctx context.Context, data []byte, opts ...PubOpt) error 
 	}
 
 	m := &pb.Message{
-		Data:     data,
-		TopicIDs: []string{t.topic},
-		From:     nil,
-		Seqno:    nil,
+		Data:  data,
+		Topic: &t.topic,
+		From:  nil,
+		Seqno: nil,
 	}
 	if t.p.signID != "" {
 		m.From = []byte(t.p.signID)

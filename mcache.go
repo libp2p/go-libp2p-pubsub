@@ -48,14 +48,14 @@ func (mc *MessageCache) SetMsgIdFn(msgID MsgIdFunction) {
 }
 
 type CacheEntry struct {
-	mid    string
-	topics []string
+	mid   string
+	topic string
 }
 
 func (mc *MessageCache) Put(msg *pb.Message) {
 	mid := mc.msgID(msg)
 	mc.msgs[mid] = msg
-	mc.history[0] = append(mc.history[0], CacheEntry{mid: mid, topics: msg.GetTopicIDs()})
+	mc.history[0] = append(mc.history[0], CacheEntry{mid: mid, topic: msg.GetTopic()})
 }
 
 func (mc *MessageCache) Get(mid string) (*pb.Message, bool) {
@@ -83,11 +83,8 @@ func (mc *MessageCache) GetGossipIDs(topic string) []string {
 	var mids []string
 	for _, entries := range mc.history[:mc.gossip] {
 		for _, entry := range entries {
-			for _, t := range entry.topics {
-				if t == topic {
-					mids = append(mids, entry.mid)
-					break
-				}
+			if entry.topic == topic {
+				mids = append(mids, entry.mid)
 			}
 		}
 	}

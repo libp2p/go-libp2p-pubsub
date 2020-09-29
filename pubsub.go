@@ -834,14 +834,13 @@ func (p *PubSub) doAnnounceRetry(pid peer.ID, topic string, sub bool) {
 // notifySubs sends a given message to all corresponding subscribers.
 // Only called from processLoop.
 func (p *PubSub) notifySubs(msg *Message) {
-	for _, topic := range msg.GetTopicIDs() {
-		subs := p.mySubs[topic]
-		for f := range subs {
-			select {
-			case f.ch <- msg:
-			default:
-				log.Infof("Can't deliver message to subscription for topic %s; subscriber too slow", topic)
-			}
+	topic := msg.GetTopic()
+	subs := p.mySubs[topic]
+	for f := range subs {
+		select {
+		case f.ch <- msg:
+		default:
+			log.Infof("Can't deliver message to subscription for topic %s; subscriber too slow", topic)
 		}
 	}
 }
@@ -873,12 +872,10 @@ func (p *PubSub) subscribedToMsg(msg *pb.Message) bool {
 		return false
 	}
 
-	for _, t := range msg.GetTopicIDs() {
-		if _, ok := p.mySubs[t]; ok {
-			return true
-		}
-	}
-	return false
+	topic := msg.GetTopic()
+	_, ok := p.mySubs[topic]
+
+	return ok
 }
 
 // canRelayMsg returns whether we are able to relay for one of the topics
@@ -888,12 +885,10 @@ func (p *PubSub) canRelayMsg(msg *pb.Message) bool {
 		return false
 	}
 
-	for _, t := range msg.GetTopicIDs() {
-		if relays := p.myRelays[t]; relays != 0 {
-			return true
-		}
-	}
-	return false
+	topic := msg.GetTopic()
+	relays := p.myRelays[topic]
+
+	return relays > 0
 }
 
 func (p *PubSub) notifyLeave(topic string, pid peer.ID) {

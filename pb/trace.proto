@@ -39,25 +39,25 @@ message TraceEvent {
 
   message PublishMessage {
     optional bytes messageID = 1;
-    repeated string topics = 2;
+    optional string topic = 2;
   }
 
   message RejectMessage {
     optional bytes messageID = 1;
     optional bytes receivedFrom = 2;
     optional string reason = 3;
-    repeated string topics = 4;
+    optional string topic = 4;
   }
 
   message DuplicateMessage {
     optional bytes messageID = 1;
     optional bytes receivedFrom = 2;
-    repeated string topics = 3;
+    optional string topic = 3;
   }
 
   message DeliverMessage {
     optional bytes messageID = 1;
-    repeated string topics = 2;
+    optional string topic = 2;
   }
 
   message AddPeer {
@@ -110,7 +110,7 @@ message TraceEvent {
 
   message MessageMeta {
     optional bytes messageID = 1;
-    repeated string topics = 2;
+    optional string topic = 2;
   }
 
   message SubMeta {

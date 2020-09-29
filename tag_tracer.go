@@ -151,11 +151,10 @@ func (t *tagTracer) bumpDeliveryTag(p peer.ID, topic string) error {
 }
 
 func (t *tagTracer) bumpTagsForMessage(p peer.ID, msg *Message) {
-	for _, topic := range msg.TopicIDs {
-		err := t.bumpDeliveryTag(p, topic)
-		if err != nil {
-			log.Warnf("error bumping delivery tag: %s", err)
-		}
+	topic := msg.GetTopic()
+	err := t.bumpDeliveryTag(p, topic)
+	if err != nil {
+		log.Warnf("error bumping delivery tag: %s", err)
 	}
 }
 

@@ -211,18 +211,14 @@ func (v *validation) Push(src peer.ID, msg *Message) bool {
 
 // getValidators returns all validators that apply to a given message
 func (v *validation) getValidators(msg *Message) []*topicVal {
-	var vals []*topicVal
+	topic := msg.GetTopic()
 
-	for _, topic := range msg.GetTopicIDs() {
-		val, ok := v.topicVals[topic]
-		if !ok {
-			continue
-		}
-
-		vals = append(vals, val)
+	val, ok := v.topicVals[topic]
+	if !ok {
+		return nil
 	}
 
-	return vals
+	return []*topicVal{val}
 }
 
 // validateWorker is an active goroutine performing inline validation
