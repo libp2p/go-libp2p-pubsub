@@ -164,13 +164,15 @@ func (t *Topic) Publish(ctx context.Context, data []byte, opts ...PubOpt) error 
 		return ErrTopicClosed
 	}
 
-	seqno := t.p.nextSeqno()
-	id := t.p.host.ID()
 	m := &pb.Message{
 		Data:     data,
 		TopicIDs: []string{t.topic},
-		From:     []byte(id),
-		Seqno:    seqno,
+		From:     nil,
+		Seqno:    nil,
+	}
+	if t.p.signID != "" {
+		m.From = []byte(t.p.signID)
+		m.Seqno = t.p.nextSeqno()
 	}
 	if t.p.signKey != nil {
 		m.From = []byte(t.p.signID)
@@ -193,7 +195,7 @@ func (t *Topic) Publish(ctx context.Context, data []byte, opts ...PubOpt) error 
 	}
 
 	select {
-	case t.p.publish <- &Message{m, id, nil}:
+	case t.p.publish <- &Message{m, t.p.host.ID(), nil}:
 	case <-t.p.ctx.Done():
 		return t.p.ctx.Err()
 	}

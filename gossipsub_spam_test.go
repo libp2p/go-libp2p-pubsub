@@ -8,13 +8,15 @@ import (
 	"testing"
 	"time"
 
-	ggio "github.com/gogo/protobuf/io"
-	logging "github.com/ipfs/go-log"
 	"github.com/libp2p/go-libp2p-core/host"
 	"github.com/libp2p/go-libp2p-core/network"
 	"github.com/libp2p/go-libp2p-core/peer"
 	"github.com/libp2p/go-libp2p-core/protocol"
+
 	pb "github.com/libp2p/go-libp2p-pubsub/pb"
+
+	logging "github.com/ipfs/go-log"
+	"github.com/libp2p/go-msgio/protoio"
 )
 
 // Test that when Gossipsub receives too many IWANT messages from a peer
@@ -718,8 +720,8 @@ func newMockGS(ctx context.Context, t *testing.T, attacker host.Host, onReadMsg 
 			t.Fatal(err)
 		}
 
-		r := ggio.NewDelimitedReader(stream, maxMessageSize)
-		w := ggio.NewDelimitedWriter(ostream)
+		r := protoio.NewDelimitedReader(stream, maxMessageSize)
+		w := protoio.NewDelimitedWriter(ostream)
 
 		var irpc pb.RPC
 

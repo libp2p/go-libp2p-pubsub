@@ -32,10 +32,12 @@ message ControlMessage {
 
 message ControlIHave {
 	optional string topicID = 1;
+	// implementors from other languages should use bytes here - go protobuf emits invalid utf8 strings
 	repeated string messageIDs = 2;
 }
 
 message ControlIWant {
+	// implementors from other languages should use bytes here - go protobuf emits invalid utf8 strings
 	repeated string messageIDs = 1;
 }
 
