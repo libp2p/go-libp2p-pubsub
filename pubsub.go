@@ -148,6 +148,9 @@ type PubSub struct {
 	// strict mode rejects all unsigned messages prior to validation
 	signPolicy MessageSignaturePolicy
 
+	// filter for tracking subscriptions in topics of interest; if nil, then we track all subscriptions
+	subFilter SubscriptionFilter
+
 	ctx context.Context
 }
 
@@ -900,8 +903,19 @@ func (p *PubSub) notifyLeave(topic string, pid peer.ID) {
 func (p *PubSub) handleIncomingRPC(rpc *RPC) {
 	p.tracer.RecvRPC(rpc)
 
-	for _, subopt := range rpc.GetSubscriptions() {
+	subs := rpc.GetSubscriptions()
+	if len(subs) != 0 && p.subFilter != nil {
+		var err error
+		subs, err = p.subFilter.FilterIncomingSubscriptions(rpc.from, subs)
+		if err != nil {
+			log.Debugf("subscription filter error: %s; ignoring RPC", err)
+			return
+		}
+	}
+
+	for _, subopt := range subs {
 		t := subopt.GetTopicid()
+
 		if subopt.GetSubscribe() {
 			tmap, ok := p.topics[t]
 			if !ok {
@@ -1073,6 +1087,10 @@ func (p *PubSub) Join(topic string, opts ...TopicOpt) (*Topic, error) {
 // Returns true if the topic was newly created, false otherwise
 // Can be removed once pubsub.Publish() and pubsub.Subscribe() are removed
 func (p *PubSub) tryJoin(topic string, opts ...TopicOpt) (*Topic, bool, error) {
+	if p.subFilter != nil && !p.subFilter.CanSubscribe(topic) {
+		return nil, false, fmt.Errorf("topic is not allowed by the subscription filter")
+	}
+
 	t := &Topic{
 		p:           p,
 		topic:       topic,
