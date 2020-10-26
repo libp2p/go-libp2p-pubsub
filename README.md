@@ -55,9 +55,9 @@ go get github.com/libp2p/go-libp2p-pubsub
 
 To be used for messaging in p2p instrastructure (as part of libp2p) such as IPFS, Ethereum, other blockchains, etc.
 
-### Examples
+### Example
 
-`To be written`
+https://github.com/libp2p/go-libp2p-examples/tree/master/pubsub
 
 ## Documentation
 
