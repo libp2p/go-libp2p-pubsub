@@ -88,16 +88,16 @@ func TestTagTracerDeliveryTags(t *testing.T) {
 
 	for i := 0; i < 20; i++ {
 		// deliver only 5 messages to topic 2 (less than the cap)
-		topics := []string{topic1}
+		topic := &topic1
 		if i < 5 {
-			topics = append(topics, topic2)
+			topic = &topic2
 		}
 		msg := &Message{
 			ReceivedFrom: p,
 			Message: &pb.Message{
-				From:     []byte(p),
-				Data:     []byte("hello"),
-				TopicIDs: topics,
+				From:  []byte(p),
+				Data:  []byte("hello"),
+				Topic: topic,
 			},
 		}
 		tt.DeliverMessage(msg)
@@ -175,14 +175,13 @@ func TestTagTracerDeliveryTagsNearFirst(t *testing.T) {
 	tt.Join(topic)
 
 	for i := 0; i < GossipSubConnTagMessageDeliveryCap+5; i++ {
-		topics := []string{topic}
 		msg := &Message{
 			ReceivedFrom: p,
 			Message: &pb.Message{
-				From:     []byte(p),
-				Data:     []byte(fmt.Sprintf("msg-%d", i)),
-				TopicIDs: topics,
-				Seqno:    []byte(fmt.Sprintf("%d", i)),
+				From:  []byte(p),
+				Data:  []byte(fmt.Sprintf("msg-%d", i)),
+				Topic: &topic,
+				Seqno: []byte(fmt.Sprintf("%d", i)),
 			},
 		}
 

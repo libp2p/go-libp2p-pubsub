@@ -415,6 +415,7 @@ type GossipSubRouter struct {
 	score        *peerScore
 	gossipTracer *gossipTracer
 	tagTracer    *tagTracer
+	gate         *peerGater
 
 	// config for gossipsub parameters
 	params GossipSubParams
@@ -563,9 +564,17 @@ func (gs *GossipSubRouter) EnoughPeers(topic string, suggested int) bool {
 	return false
 }
 
-func (gs *GossipSubRouter) AcceptFrom(p peer.ID) bool {
+func (gs *GossipSubRouter) AcceptFrom(p peer.ID) AcceptStatus {
 	_, direct := gs.direct[p]
-	return direct || gs.score.Score(p) >= gs.graylistThreshold
+	if direct {
+		return AcceptAll
+	}
+
+	if gs.score.Score(p) < gs.graylistThreshold {
+		return AcceptNone
+	}
+
+	return gs.gate.AcceptFrom(p)
 }
 
 func (gs *GossipSubRouter) HandleRPC(rpc *RPC) {
@@ -918,26 +927,26 @@ func (gs *GossipSubRouter) connector() {
 
 func (gs *GossipSubRouter) Publish(msg *Message) {
 	gs.mcache.Put(msg.Message)
+
 	from := msg.ReceivedFrom
+	topic := msg.GetTopic()
 
 	tosend := make(map[peer.ID]struct{})
-	for _, topic := range msg.GetTopicIDs() {
-		// any peers in the topic?
-		tmap, ok := gs.p.topics[topic]
-		if !ok {
-			continue
-		}
 
-		if gs.floodPublish && from == gs.p.host.ID() {
-			for p := range tmap {
-				_, direct := gs.direct[p]
-				if direct || gs.score.Score(p) >= gs.publishThreshold {
-					tosend[p] = struct{}{}
-				}
+	// any peers in the topic?
+	tmap, ok := gs.p.topics[topic]
+	if !ok {
+		return
+	}
+
+	if gs.floodPublish && from == gs.p.host.ID() {
+		for p := range tmap {
+			_, direct := gs.direct[p]
+			if direct || gs.score.Score(p) >= gs.publishThreshold {
+				tosend[p] = struct{}{}
 			}
-			continue
 		}
-
+	} else {
 		// direct peers
 		for p := range gs.direct {
 			_, inTopic := tmap[p]
@@ -1117,7 +1126,7 @@ func (gs *GossipSubRouter) sendRPC(p peer.ID, out *RPC) {
 }
 
 func (gs *GossipSubRouter) doDropRPC(rpc *RPC, p peer.ID, reason string) {
-	log.Warnf("dropping message to peer %s: %s", p.Pretty(), reason)
+	log.Debugf("dropping message to peer %s: %s", p.Pretty(), reason)
 	gs.tracer.DropRPC(rpc, p)
 	// push control messages that need to be retried
 	ctl := rpc.GetControl()
@@ -1599,7 +1608,12 @@ func (gs *GossipSubRouter) sendGraftPrune(tograft, toprune map[peer.ID][]string,
 	for p, topics := range tograft {
 		graft := make([]*pb.ControlGraft, 0, len(topics))
 		for _, topic := range topics {
-			graft = append(graft, &pb.ControlGraft{TopicID: &topic})
+			// copy topic string here since
+			// the reference to the string
+			// topic here changes with every
+			// iteration of the slice.
+			copiedID := topic
+			graft = append(graft, &pb.ControlGraft{TopicID: &copiedID})
 		}
 
 		var prune []*pb.ControlPrune

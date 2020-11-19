@@ -28,11 +28,12 @@ func testSignVerify(t *testing.T, privk crypto.PrivKey) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	topic := "foo"
 	m := pb.Message{
-		Data:     []byte("abc"),
-		TopicIDs: []string{"foo"},
-		From:     []byte(id),
-		Seqno:    []byte("123"),
+		Data:  []byte("abc"),
+		Topic: &topic,
+		From:  []byte(id),
+		Seqno: []byte("123"),
 	}
 	signMessage(id, privk, &m)
 	err = verifyMessageSignature(&m)

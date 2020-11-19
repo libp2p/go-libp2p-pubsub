@@ -1606,6 +1606,62 @@ func TestGossipsubPiggybackControl(t *testing.T) {
 	}
 }
 
+func TestGossipsubMultipleGraftTopics(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	hosts := getNetHosts(t, ctx, 2)
+	psubs := getGossipsubs(ctx, hosts)
+	sparseConnect(t, hosts)
+
+	time.Sleep(time.Second * 1)
+
+	firstTopic := "topic1"
+	secondTopic := "topic2"
+	thirdTopic := "topic3"
+
+	firstPeer := hosts[0].ID()
+	secondPeer := hosts[1].ID()
+
+	p2Sub := psubs[1]
+	p1Router := psubs[0].rt.(*GossipSubRouter)
+	p2Router := psubs[1].rt.(*GossipSubRouter)
+
+	finChan := make(chan struct{})
+
+	p2Sub.eval <- func() {
+		// Add topics to second peer
+		p2Router.mesh[firstTopic] = map[peer.ID]struct{}{}
+		p2Router.mesh[secondTopic] = map[peer.ID]struct{}{}
+		p2Router.mesh[thirdTopic] = map[peer.ID]struct{}{}
+
+		finChan <- struct{}{}
+	}
+	<-finChan
+
+	// Send multiple GRAFT messages to second peer from
+	// 1st peer
+	p1Router.sendGraftPrune(map[peer.ID][]string{
+		secondPeer: []string{firstTopic, secondTopic, thirdTopic},
+	}, map[peer.ID][]string{}, map[peer.ID]bool{})
+
+	time.Sleep(time.Second * 1)
+
+	p2Sub.eval <- func() {
+		if _, ok := p2Router.mesh[firstTopic][firstPeer]; !ok {
+			t.Errorf("First peer wasnt added to mesh of the second peer for the topic %s", firstTopic)
+		}
+		if _, ok := p2Router.mesh[secondTopic][firstPeer]; !ok {
+			t.Errorf("First peer wasnt added to mesh of the second peer for the topic %s", secondTopic)
+		}
+		if _, ok := p2Router.mesh[thirdTopic][firstPeer]; !ok {
+			t.Errorf("First peer wasnt added to mesh of the second peer for the topic %s", thirdTopic)
+		}
+		finChan <- struct{}{}
+	}
+	<-finChan
+}
+
 func TestGossipsubOpportunisticGrafting(t *testing.T) {
 	originalGossipSubPruneBackoff := GossipSubPruneBackoff
 	GossipSubPruneBackoff = 500 * time.Millisecond
@@ -1817,6 +1873,57 @@ func TestGossipsubPeerScoreInspect(t *testing.T) {
 	score2 := inspector.score(hosts[1].ID())
 	if score2 < 9 {
 		t.Fatalf("expected score to be at least 9, instead got %f", score2)
+	}
+}
+
+func TestGossipsubPeerScoreResetTopicParams(t *testing.T) {
+	// this test exercises the code path sof peer score inspection
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	hosts := getNetHosts(t, ctx, 1)
+
+	ps := getGossipsub(ctx, hosts[0],
+		WithPeerScore(
+			&PeerScoreParams{
+				Topics: map[string]*TopicScoreParams{
+					"test": &TopicScoreParams{
+						TopicWeight:                    1,
+						TimeInMeshQuantum:              time.Second,
+						FirstMessageDeliveriesWeight:   1,
+						FirstMessageDeliveriesDecay:    0.999,
+						FirstMessageDeliveriesCap:      100,
+						InvalidMessageDeliveriesWeight: -1,
+						InvalidMessageDeliveriesDecay:  0.9999,
+					},
+				},
+				AppSpecificScore: func(peer.ID) float64 { return 0 },
+				DecayInterval:    time.Second,
+				DecayToZero:      0.01,
+			},
+			&PeerScoreThresholds{
+				GossipThreshold:   -1,
+				PublishThreshold:  -10,
+				GraylistThreshold: -1000,
+			}))
+
+	topic, err := ps.Join("test")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = topic.SetScoreParams(
+		&TopicScoreParams{
+			TopicWeight:                    1,
+			TimeInMeshQuantum:              time.Second,
+			FirstMessageDeliveriesWeight:   1,
+			FirstMessageDeliveriesDecay:    0.999,
+			FirstMessageDeliveriesCap:      200,
+			InvalidMessageDeliveriesWeight: -1,
+			InvalidMessageDeliveriesDecay:  0.9999,
+		})
+	if err != nil {
+		t.Fatal(err)
 	}
 }
 

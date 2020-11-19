@@ -8,6 +8,7 @@ import (
 	proto "github.com/gogo/protobuf/proto"
 	io "io"
 	math "math"
+	math_bits "math/bits"
 )
 
 // Reference imports to suppress errors if they are not otherwise used.
@@ -19,7 +20,7 @@ var _ = math.Inf
 // is compatible with the proto package it is being compiled against.
 // A compilation error at this line likely means your copy of the
 // proto package needs to be updated.
-const _ = proto.GoGoProtoPackageIsVersion2 // please upgrade the proto package
+const _ = proto.GoGoProtoPackageIsVersion3 // please upgrade the proto package
 
 type TraceEvent_Type int32
 
@@ -130,7 +131,7 @@ func (m *TraceEvent) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 		return xxx_messageInfo_TraceEvent.Marshal(b, m, deterministic)
 	} else {
 		b = b[:cap(b)]
-		n, err := m.MarshalTo(b)
+		n, err := m.MarshalToSizedBuffer(b)
 		if err != nil {
 			return nil, err
 		}
@@ -263,7 +264,7 @@ func (m *TraceEvent) GetPrune() *TraceEvent_Prune {
 
 type TraceEvent_PublishMessage struct {
 	MessageID            []byte   `protobuf:"bytes,1,opt,name=messageID" json:"messageID,omitempty"`
-	Topics               []string `protobuf:"bytes,2,rep,name=topics" json:"topics,omitempty"`
+	Topic                *string  `protobuf:"bytes,2,opt,name=topic" json:"topic,omitempty"`
 	XXX_NoUnkeyedLiteral struct{} `json:"-"`
 	XXX_unrecognized     []byte   `json:"-"`
 	XXX_sizecache        int32    `json:"-"`
@@ -283,7 +284,7 @@ func (m *TraceEvent_PublishMessage) XXX_Marshal(b []byte, deterministic bool) ([
 		return xxx_messageInfo_TraceEvent_PublishMessage.Marshal(b, m, deterministic)
 	} else {
 		b = b[:cap(b)]
-		n, err := m.MarshalTo(b)
+		n, err := m.MarshalToSizedBuffer(b)
 		if err != nil {
 			return nil, err
 		}
@@ -309,18 +310,18 @@ func (m *TraceEvent_PublishMessage) GetMessageID() []byte {
 	return nil
 }
 
-func (m *TraceEvent_PublishMessage) GetTopics() []string {
-	if m != nil {
-		return m.Topics
+func (m *TraceEvent_PublishMessage) GetTopic() string {
+	if m != nil && m.Topic != nil {
+		return *m.Topic
 	}
-	return nil
+	return ""
 }
 
 type TraceEvent_RejectMessage struct {
 	MessageID            []byte   `protobuf:"bytes,1,opt,name=messageID" json:"messageID,omitempty"`
 	ReceivedFrom         []byte   `protobuf:"bytes,2,opt,name=receivedFrom" json:"receivedFrom,omitempty"`
 	Reason               *string  `protobuf:"bytes,3,opt,name=reason" json:"reason,omitempty"`
-	Topics               []string `protobuf:"bytes,4,rep,name=topics" json:"topics,omitempty"`
+	Topic                *string  `protobuf:"bytes,4,opt,name=topic" json:"topic,omitempty"`
 	XXX_NoUnkeyedLiteral struct{} `json:"-"`
 	XXX_unrecognized     []byte   `json:"-"`
 	XXX_sizecache        int32    `json:"-"`
@@ -340,7 +341,7 @@ func (m *TraceEvent_RejectMessage) XXX_Marshal(b []byte, deterministic bool) ([]
 		return xxx_messageInfo_TraceEvent_RejectMessage.Marshal(b, m, deterministic)
 	} else {
 		b = b[:cap(b)]
-		n, err := m.MarshalTo(b)
+		n, err := m.MarshalToSizedBuffer(b)
 		if err != nil {
 			return nil, err
 		}
@@ -380,17 +381,17 @@ func (m *TraceEvent_RejectMessage) GetReason() string {
 	return ""
 }
 
-func (m *TraceEvent_RejectMessage) GetTopics() []string {
-	if m != nil {
-		return m.Topics
+func (m *TraceEvent_RejectMessage) GetTopic() string {
+	if m != nil && m.Topic != nil {
+		return *m.Topic
 	}
-	return nil
+	return ""
 }
 
 type TraceEvent_DuplicateMessage struct {
 	MessageID            []byte   `protobuf:"bytes,1,opt,name=messageID" json:"messageID,omitempty"`
 	ReceivedFrom         []byte   `protobuf:"bytes,2,opt,name=receivedFrom" json:"receivedFrom,omitempty"`
-	Topics               []string `protobuf:"bytes,3,rep,name=topics" json:"topics,omitempty"`
+	Topic                *string  `protobuf:"bytes,3,opt,name=topic" json:"topic,omitempty"`
 	XXX_NoUnkeyedLiteral struct{} `json:"-"`
 	XXX_unrecognized     []byte   `json:"-"`
 	XXX_sizecache        int32    `json:"-"`
@@ -410,7 +411,7 @@ func (m *TraceEvent_DuplicateMessage) XXX_Marshal(b []byte, deterministic bool) 
 		return xxx_messageInfo_TraceEvent_DuplicateMessage.Marshal(b, m, deterministic)
 	} else {
 		b = b[:cap(b)]
-		n, err := m.MarshalTo(b)
+		n, err := m.MarshalToSizedBuffer(b)
 		if err != nil {
 			return nil, err
 		}
@@ -443,16 +444,16 @@ func (m *TraceEvent_DuplicateMessage) GetReceivedFrom() []byte {
 	return nil
 }
 
-func (m *TraceEvent_DuplicateMessage) GetTopics() []string {
-	if m != nil {
-		return m.Topics
+func (m *TraceEvent_DuplicateMessage) GetTopic() string {
+	if m != nil && m.Topic != nil {
+		return *m.Topic
 	}
-	return nil
+	return ""
 }
 
 type TraceEvent_DeliverMessage struct {
 	MessageID            []byte   `protobuf:"bytes,1,opt,name=messageID" json:"messageID,omitempty"`
-	Topics               []string `protobuf:"bytes,2,rep,name=topics" json:"topics,omitempty"`
+	Topic                *string  `protobuf:"bytes,2,opt,name=topic" json:"topic,omitempty"`
 	XXX_NoUnkeyedLiteral struct{} `json:"-"`
 	XXX_unrecognized     []byte   `json:"-"`
 	XXX_sizecache        int32    `json:"-"`
@@ -472,7 +473,7 @@ func (m *TraceEvent_DeliverMessage) XXX_Marshal(b []byte, deterministic bool) ([
 		return xxx_messageInfo_TraceEvent_DeliverMessage.Marshal(b, m, deterministic)
 	} else {
 		b = b[:cap(b)]
-		n, err := m.MarshalTo(b)
+		n, err := m.MarshalToSizedBuffer(b)
 		if err != nil {
 			return nil, err
 		}
@@ -498,11 +499,11 @@ func (m *TraceEvent_DeliverMessage) GetMessageID() []byte {
 	return nil
 }
 
-func (m *TraceEvent_DeliverMessage) GetTopics() []string {
-	if m != nil {
-		return m.Topics
+func (m *TraceEvent_DeliverMessage) GetTopic() string {
+	if m != nil && m.Topic != nil {
+		return *m.Topic
 	}
-	return nil
+	return ""
 }
 
 type TraceEvent_AddPeer struct {
@@ -527,7 +528,7 @@ func (m *TraceEvent_AddPeer) XXX_Marshal(b []byte, deterministic bool) ([]byte, 
 		return xxx_messageInfo_TraceEvent_AddPeer.Marshal(b, m, deterministic)
 	} else {
 		b = b[:cap(b)]
-		n, err := m.MarshalTo(b)
+		n, err := m.MarshalToSizedBuffer(b)
 		if err != nil {
 			return nil, err
 		}
@@ -581,7 +582,7 @@ func (m *TraceEvent_RemovePeer) XXX_Marshal(b []byte, deterministic bool) ([]byt
 		return xxx_messageInfo_TraceEvent_RemovePeer.Marshal(b, m, deterministic)
 	} else {
 		b = b[:cap(b)]
-		n, err := m.MarshalTo(b)
+		n, err := m.MarshalToSizedBuffer(b)
 		if err != nil {
 			return nil, err
 		}
@@ -629,7 +630,7 @@ func (m *TraceEvent_RecvRPC) XXX_Marshal(b []byte, deterministic bool) ([]byte, 
 		return xxx_messageInfo_TraceEvent_RecvRPC.Marshal(b, m, deterministic)
 	} else {
 		b = b[:cap(b)]
-		n, err := m.MarshalTo(b)
+		n, err := m.MarshalToSizedBuffer(b)
 		if err != nil {
 			return nil, err
 		}
@@ -684,7 +685,7 @@ func (m *TraceEvent_SendRPC) XXX_Marshal(b []byte, deterministic bool) ([]byte, 
 		return xxx_messageInfo_TraceEvent_SendRPC.Marshal(b, m, deterministic)
 	} else {
 		b = b[:cap(b)]
-		n, err := m.MarshalTo(b)
+		n, err := m.MarshalToSizedBuffer(b)
 		if err != nil {
 			return nil, err
 		}
@@ -739,7 +740,7 @@ func (m *TraceEvent_DropRPC) XXX_Marshal(b []byte, deterministic bool) ([]byte, 
 		return xxx_messageInfo_TraceEvent_DropRPC.Marshal(b, m, deterministic)
 	} else {
 		b = b[:cap(b)]
-		n, err := m.MarshalTo(b)
+		n, err := m.MarshalToSizedBuffer(b)
 		if err != nil {
 			return nil, err
 		}
@@ -793,7 +794,7 @@ func (m *TraceEvent_Join) XXX_Marshal(b []byte, deterministic bool) ([]byte, err
 		return xxx_messageInfo_TraceEvent_Join.Marshal(b, m, deterministic)
 	} else {
 		b = b[:cap(b)]
-		n, err := m.MarshalTo(b)
+		n, err := m.MarshalToSizedBuffer(b)
 		if err != nil {
 			return nil, err
 		}
@@ -840,7 +841,7 @@ func (m *TraceEvent_Leave) XXX_Marshal(b []byte, deterministic bool) ([]byte, er
 		return xxx_messageInfo_TraceEvent_Leave.Marshal(b, m, deterministic)
 	} else {
 		b = b[:cap(b)]
-		n, err := m.MarshalTo(b)
+		n, err := m.MarshalToSizedBuffer(b)
 		if err != nil {
 			return nil, err
 		}
@@ -888,7 +889,7 @@ func (m *TraceEvent_Graft) XXX_Marshal(b []byte, deterministic bool) ([]byte, er
 		return xxx_messageInfo_TraceEvent_Graft.Marshal(b, m, deterministic)
 	} else {
 		b = b[:cap(b)]
-		n, err := m.MarshalTo(b)
+		n, err := m.MarshalToSizedBuffer(b)
 		if err != nil {
 			return nil, err
 		}
@@ -943,7 +944,7 @@ func (m *TraceEvent_Prune) XXX_Marshal(b []byte, deterministic bool) ([]byte, er
 		return xxx_messageInfo_TraceEvent_Prune.Marshal(b, m, deterministic)
 	} else {
 		b = b[:cap(b)]
-		n, err := m.MarshalTo(b)
+		n, err := m.MarshalToSizedBuffer(b)
 		if err != nil {
 			return nil, err
 		}
@@ -999,7 +1000,7 @@ func (m *TraceEvent_RPCMeta) XXX_Marshal(b []byte, deterministic bool) ([]byte, 
 		return xxx_messageInfo_TraceEvent_RPCMeta.Marshal(b, m, deterministic)
 	} else {
 		b = b[:cap(b)]
-		n, err := m.MarshalTo(b)
+		n, err := m.MarshalToSizedBuffer(b)
 		if err != nil {
 			return nil, err
 		}
@@ -1041,7 +1042,7 @@ func (m *TraceEvent_RPCMeta) GetControl() *TraceEvent_ControlMeta {
 
 type TraceEvent_MessageMeta struct {
 	MessageID            []byte   `protobuf:"bytes,1,opt,name=messageID" json:"messageID,omitempty"`
-	Topics               []string `protobuf:"bytes,2,rep,name=topics" json:"topics,omitempty"`
+	Topic                *string  `protobuf:"bytes,2,opt,name=topic" json:"topic,omitempty"`
 	XXX_NoUnkeyedLiteral struct{} `json:"-"`
 	XXX_unrecognized     []byte   `json:"-"`
 	XXX_sizecache        int32    `json:"-"`
@@ -1061,7 +1062,7 @@ func (m *TraceEvent_MessageMeta) XXX_Marshal(b []byte, deterministic bool) ([]by
 		return xxx_messageInfo_TraceEvent_MessageMeta.Marshal(b, m, deterministic)
 	} else {
 		b = b[:cap(b)]
-		n, err := m.MarshalTo(b)
+		n, err := m.MarshalToSizedBuffer(b)
 		if err != nil {
 			return nil, err
 		}
@@ -1087,11 +1088,11 @@ func (m *TraceEvent_MessageMeta) GetMessageID() []byte {
 	return nil
 }
 
-func (m *TraceEvent_MessageMeta) GetTopics() []string {
-	if m != nil {
-		return m.Topics
+func (m *TraceEvent_MessageMeta) GetTopic() string {
+	if m != nil && m.Topic != nil {
+		return *m.Topic
 	}
-	return nil
+	return ""
 }
 
 type TraceEvent_SubMeta struct {
@@ -1116,7 +1117,7 @@ func (m *TraceEvent_SubMeta) XXX_Marshal(b []byte, deterministic bool) ([]byte, 
 		return xxx_messageInfo_TraceEvent_SubMeta.Marshal(b, m, deterministic)
 	} else {
 		b = b[:cap(b)]
-		n, err := m.MarshalTo(b)
+		n, err := m.MarshalToSizedBuffer(b)
 		if err != nil {
 			return nil, err
 		}
@@ -1173,7 +1174,7 @@ func (m *TraceEvent_ControlMeta) XXX_Marshal(b []byte, deterministic bool) ([]by
 		return xxx_messageInfo_TraceEvent_ControlMeta.Marshal(b, m, deterministic)
 	} else {
 		b = b[:cap(b)]
-		n, err := m.MarshalTo(b)
+		n, err := m.MarshalToSizedBuffer(b)
 		if err != nil {
 			return nil, err
 		}
@@ -1242,7 +1243,7 @@ func (m *TraceEvent_ControlIHaveMeta) XXX_Marshal(b []byte, deterministic bool) 
 		return xxx_messageInfo_TraceEvent_ControlIHaveMeta.Marshal(b, m, deterministic)
 	} else {
 		b = b[:cap(b)]
-		n, err := m.MarshalTo(b)
+		n, err := m.MarshalToSizedBuffer(b)
 		if err != nil {
 			return nil, err
 		}
@@ -1296,7 +1297,7 @@ func (m *TraceEvent_ControlIWantMeta) XXX_Marshal(b []byte, deterministic bool) 
 		return xxx_messageInfo_TraceEvent_ControlIWantMeta.Marshal(b, m, deterministic)
 	} else {
 		b = b[:cap(b)]
-		n, err := m.MarshalTo(b)
+		n, err := m.MarshalToSizedBuffer(b)
 		if err != nil {
 			return nil, err
 		}
@@ -1343,7 +1344,7 @@ func (m *TraceEvent_ControlGraftMeta) XXX_Marshal(b []byte, deterministic bool) 
 		return xxx_messageInfo_TraceEvent_ControlGraftMeta.Marshal(b, m, deterministic)
 	} else {
 		b = b[:cap(b)]
-		n, err := m.MarshalTo(b)
+		n, err := m.MarshalToSizedBuffer(b)
 		if err != nil {
 			return nil, err
 		}
@@ -1391,7 +1392,7 @@ func (m *TraceEvent_ControlPruneMeta) XXX_Marshal(b []byte, deterministic bool) 
 		return xxx_messageInfo_TraceEvent_ControlPruneMeta.Marshal(b, m, deterministic)
 	} else {
 		b = b[:cap(b)]
-		n, err := m.MarshalTo(b)
+		n, err := m.MarshalToSizedBuffer(b)
 		if err != nil {
 			return nil, err
 		}
@@ -1445,7 +1446,7 @@ func (m *TraceEventBatch) XXX_Marshal(b []byte, deterministic bool) ([]byte, err
 		return xxx_messageInfo_TraceEventBatch.Marshal(b, m, deterministic)
 	} else {
 		b = b[:cap(b)]
-		n, err := m.MarshalTo(b)
+		n, err := m.MarshalToSizedBuffer(b)
 		if err != nil {
 			return nil, err
 		}
@@ -1501,70 +1502,76 @@ func init() {
 func init() { proto.RegisterFile("trace.proto", fileDescriptor_0571941a1d628a80) }
 
 var fileDescriptor_0571941a1d628a80 = []byte{
-	// 906 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xa4, 0x96, 0xd1, 0x6e, 0xe3, 0x44,
-	0x14, 0x86, 0x71, 0x63, 0xc7, 0xf1, 0x89, 0xe3, 0xba, 0x03, 0x45, 0x56, 0x80, 0x2a, 0x5b, 0x56,
-	0x55, 0xc4, 0x4a, 0xd1, 0xaa, 0x65, 0x85, 0x84, 0xb8, 0x20, 0x8d, 0xdd, 0x6e, 0x4a, 0xda, 0x5a,
-	0x4e, 0x5a, 0xb8, 0xab, 0x1c, 0x67, 0xd8, 0x7a, 0x95, 0xd8, 0x96, 0x3d, 0x09, 0xda, 0x27, 0x82,
-	0x47, 0xe1, 0x0e, 0x1e, 0x01, 0xf5, 0x8e, 0xb7, 0x40, 0x33, 0x63, 0x3b, 0x89, 0xd7, 0xc9, 0x06,
-	0xb8, 0x9b, 0x19, 0x7f, 0xff, 0x39, 0x67, 0xce, 0xfc, 0x33, 0x09, 0xd4, 0x49, 0xec, 0x7a, 0xb8,
-	0x13, 0xc5, 0x21, 0x09, 0x91, 0x12, 0xcd, 0xc7, 0xc9, 0x7c, 0xdc, 0x89, 0xc6, 0xc7, 0xbf, 0x21,
-	0x80, 0x11, 0xfd, 0x64, 0x2d, 0x70, 0x40, 0x50, 0x1b, 0x44, 0xf2, 0x2e, 0xc2, 0x86, 0xd0, 0x12,
-	0xda, 0xda, 0x69, 0xb3, 0x93, 0x83, 0x9d, 0x25, 0xd4, 0x19, 0xbd, 0x8b, 0x30, 0xd2, 0xa0, 0x1a,
-	0x61, 0x1c, 0xf7, 0x4d, 0x63, 0xaf, 0x25, 0xb4, 0x55, 0x74, 0x00, 0x0a, 0xf1, 0x67, 0x38, 0x21,
-	0xee, 0x2c, 0x32, 0x2a, 0x2d, 0xa1, 0x5d, 0x41, 0xdf, 0x81, 0x16, 0xcd, 0xc7, 0x53, 0x3f, 0x79,
-	0xbc, 0xc6, 0x49, 0xe2, 0xbe, 0xc1, 0x86, 0xd8, 0x12, 0xda, 0xf5, 0xd3, 0xe7, 0xe5, 0x61, 0xed,
-	0x35, 0x16, 0x7d, 0x0b, 0x8d, 0x18, 0xbf, 0xc5, 0x1e, 0xc9, 0xc4, 0x12, 0x13, 0x7f, 0x59, 0x2e,
-	0x76, 0x56, 0x51, 0xf4, 0x3d, 0xe8, 0x93, 0x79, 0x34, 0xf5, 0x3d, 0x97, 0xe0, 0x4c, 0x5e, 0x65,
-	0xf2, 0x93, 0x72, 0xb9, 0x59, 0xa0, 0x69, 0xed, 0x13, 0x3c, 0xf5, 0x17, 0x38, 0xce, 0xf4, 0xf2,
-	0xb6, 0xda, 0xcd, 0x35, 0x16, 0x75, 0x40, 0x76, 0x27, 0x13, 0x1b, 0xe3, 0xd8, 0xa8, 0x31, 0xd9,
-	0x17, 0xe5, 0xb2, 0x2e, 0x87, 0xd0, 0xd7, 0x00, 0x31, 0x9e, 0x85, 0x0b, 0xcc, 0x24, 0x0a, 0x93,
-	0xb4, 0x36, 0x6d, 0x34, 0xe3, 0x68, 0x96, 0x18, 0x7b, 0x0b, 0xc7, 0xee, 0x19, 0xb0, 0x2d, 0x8b,
-	0xc3, 0x21, 0xca, 0x27, 0x38, 0x98, 0x50, 0xbe, 0xbe, 0x8d, 0x1f, 0x72, 0x88, 0xf2, 0x93, 0x38,
-	0x8c, 0x28, 0xaf, 0x6e, 0xe3, 0x4d, 0x0e, 0x51, 0xf3, 0xbc, 0x0d, 0xfd, 0xc0, 0x68, 0x30, 0x78,
-	0x83, 0x79, 0xae, 0x42, 0x3f, 0x40, 0x5f, 0x81, 0x34, 0xc5, 0xee, 0x02, 0x1b, 0x1a, 0x43, 0x3f,
-	0x2b, 0x47, 0x07, 0x14, 0xa1, 0xec, 0x9b, 0xd8, 0xfd, 0x99, 0x18, 0xfb, 0xdb, 0xd8, 0x4b, 0x8a,
-	0x50, 0x36, 0x8a, 0xe7, 0x01, 0x36, 0xf4, 0x6d, 0xac, 0x4d, 0x91, 0xe6, 0x19, 0x68, 0x05, 0xc7,
-	0x1d, 0x80, 0x32, 0xe3, 0xc3, 0xbe, 0xc9, 0x6e, 0x80, 0x4a, 0x5d, 0x4e, 0xc2, 0xc8, 0xf7, 0x12,
-	0x63, 0xaf, 0x55, 0x69, 0x2b, 0xcd, 0x9f, 0xa0, 0xb1, 0xee, 0xb4, 0x12, 0xcd, 0x27, 0xa0, 0xc6,
-	0xd8, 0xc3, 0xfe, 0x02, 0x4f, 0x2e, 0xe2, 0x70, 0x96, 0xde, 0x0f, 0x0d, 0xaa, 0x31, 0x76, 0x93,
-	0x30, 0x60, 0x97, 0x43, 0x59, 0x89, 0x2c, 0xb2, 0xc8, 0x3f, 0x80, 0xfe, 0x9e, 0x09, 0xff, 0x4d,
-	0xf0, 0x34, 0x58, 0x85, 0x05, 0x3b, 0x03, 0xad, 0xe0, 0xc8, 0x1d, 0xf6, 0xd6, 0x06, 0x39, 0xf3,
-	0xe3, 0xf2, 0x72, 0x73, 0xb4, 0x41, 0xfb, 0x1a, 0x92, 0x90, 0xa5, 0x53, 0x9a, 0x9f, 0x03, 0xac,
-	0xd8, 0xb0, 0x00, 0x37, 0x07, 0x20, 0x67, 0x8e, 0x2b, 0x56, 0xcb, 0xa3, 0xbd, 0x00, 0x71, 0x86,
-	0x89, 0xcb, 0x82, 0x6d, 0x36, 0xad, 0xdd, 0xbb, 0xc6, 0xc4, 0x6d, 0x5e, 0x80, 0x9c, 0xf9, 0x51,
-	0x83, 0x2a, 0xf5, 0xef, 0x28, 0xfc, 0x8f, 0x71, 0x32, 0x9f, 0xfe, 0xaf, 0x38, 0x87, 0x20, 0x32,
-	0x0b, 0x37, 0x40, 0x62, 0xdd, 0x63, 0x31, 0x94, 0xe6, 0xa7, 0x20, 0x71, 0xbb, 0xe6, 0xeb, 0xbc,
-	0x55, 0x27, 0x20, 0x71, 0x6b, 0x96, 0xb4, 0xb4, 0xc0, 0x31, 0x5b, 0x7e, 0x88, 0xfb, 0x55, 0x00,
-	0x39, 0x2d, 0x05, 0x9d, 0x41, 0x2d, 0x3d, 0xd3, 0xc4, 0x10, 0x5a, 0x95, 0x76, 0xfd, 0xf4, 0x59,
-	0x79, 0xed, 0xa9, 0x09, 0x52, 0x91, 0x9a, 0xcc, 0xc7, 0x89, 0x17, 0xfb, 0x11, 0xf1, 0xc3, 0x80,
-	0x9d, 0xfd, 0xe6, 0x97, 0x60, 0x3e, 0x66, 0xa2, 0x53, 0x90, 0xbd, 0x30, 0x20, 0x71, 0x38, 0x65,
-	0xee, 0xdd, 0x98, 0xa8, 0xc7, 0x21, 0xd6, 0xa8, 0x97, 0x50, 0x5f, 0xcd, 0xbb, 0x83, 0x01, 0x5f,
-	0x80, 0x9c, 0x25, 0x3c, 0x00, 0x25, 0xad, 0x72, 0xcc, 0x7f, 0x8c, 0x6a, 0xc5, 0x46, 0xfc, 0x2d,
-	0x40, 0x7d, 0x25, 0x1d, 0x7a, 0x05, 0x92, 0xff, 0x48, 0x9f, 0x14, 0xde, 0x89, 0x93, 0xad, 0x05,
-	0xf6, 0x5f, 0xbb, 0x0b, 0x9c, 0xcb, 0x7e, 0x71, 0x03, 0x92, 0xf6, 0xe1, 0x03, 0xb2, 0x1f, 0xdd,
-	0x80, 0x64, 0x32, 0xfe, 0x28, 0x55, 0x76, 0x90, 0x31, 0x03, 0x64, 0x32, 0xfe, 0x3e, 0x89, 0x3b,
-	0xc8, 0x98, 0x1f, 0x58, 0x2b, 0x5f, 0x81, 0xfe, 0x5e, 0xe1, 0xeb, 0xfe, 0x43, 0x08, 0x20, 0x6f,
-	0x2f, 0xef, 0xa7, 0xda, 0x3c, 0x59, 0xca, 0xf2, 0xc2, 0xd7, 0x39, 0x81, 0x71, 0xcf, 0x72, 0x6e,
-	0x59, 0x69, 0xc1, 0xde, 0x2f, 0x73, 0x24, 0xaf, 0xaa, 0x58, 0x01, 0x7d, 0x23, 0x30, 0x8e, 0xd3,
-	0xe4, 0xc7, 0x7f, 0x08, 0x20, 0xb2, 0x3f, 0x0a, 0x1f, 0xc3, 0xbe, 0x7d, 0x77, 0x3e, 0xe8, 0x0f,
-	0x5f, 0x3f, 0x5c, 0x5b, 0xc3, 0x61, 0xf7, 0xd2, 0xd2, 0x3f, 0x42, 0x08, 0x34, 0xc7, 0xba, 0xb2,
-	0x7a, 0xa3, 0x7c, 0x4d, 0x40, 0x87, 0x70, 0x60, 0xde, 0xd9, 0x83, 0x7e, 0xaf, 0x3b, 0xb2, 0xf2,
-	0xe5, 0x3d, 0xaa, 0x37, 0xad, 0x41, 0xff, 0xde, 0x72, 0xf2, 0xc5, 0x0a, 0x52, 0xa1, 0xd6, 0x35,
-	0xcd, 0x07, 0xdb, 0xb2, 0x1c, 0x5d, 0x44, 0xfb, 0x50, 0x77, 0xac, 0xeb, 0xdb, 0x7b, 0x8b, 0x2f,
-	0x48, 0xf4, 0xb3, 0x63, 0xf5, 0xee, 0x1f, 0x1c, 0xbb, 0xa7, 0x57, 0xe9, 0x6c, 0x68, 0xdd, 0x98,
-	0x6c, 0x26, 0xd3, 0x99, 0xe9, 0xdc, 0xda, 0x6c, 0x56, 0x43, 0x35, 0x10, 0xaf, 0x6e, 0xfb, 0x37,
-	0xba, 0x82, 0x14, 0x90, 0x06, 0x56, 0xf7, 0xde, 0xd2, 0x81, 0x0e, 0x2f, 0x9d, 0xee, 0xc5, 0x48,
-	0xaf, 0xd3, 0xa1, 0xed, 0xdc, 0xdd, 0x58, 0xba, 0x7a, 0xfc, 0x0d, 0xec, 0x2f, 0x0f, 0xe9, 0xdc,
-	0x25, 0xde, 0x23, 0x7a, 0x0e, 0xd2, 0x98, 0x0e, 0x52, 0xd3, 0x1d, 0x96, 0x9e, 0xe7, 0xb9, 0xfa,
-	0xfb, 0xd3, 0x91, 0xf0, 0xe7, 0xd3, 0x91, 0xf0, 0xd7, 0xd3, 0x91, 0xf0, 0x4f, 0x00, 0x00, 0x00,
-	0xff, 0xff, 0x99, 0xba, 0xca, 0x75, 0x8a, 0x09, 0x00, 0x00,
+	// 993 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xac, 0x96, 0xcf, 0x6e, 0xdb, 0x46,
+	0x10, 0xc6, 0x4b, 0x4b, 0xb2, 0xa4, 0x91, 0x2c, 0xb3, 0xdb, 0x24, 0x20, 0xd4, 0xc4, 0x50, 0xdd,
+	0x20, 0x10, 0x50, 0x40, 0x40, 0x0c, 0x14, 0x39, 0x34, 0x09, 0x2a, 0x8b, 0x8c, 0x2d, 0x43, 0xb6,
+	0x89, 0xb1, 0xec, 0x1e, 0x5d, 0x4a, 0xda, 0xc6, 0x34, 0x24, 0x92, 0x20, 0x57, 0x2a, 0x72, 0xea,
+	0xa9, 0x6f, 0xd5, 0x07, 0xc8, 0xad, 0x7d, 0x84, 0xc2, 0x4f, 0x52, 0xec, 0x2e, 0xff, 0xca, 0xa4,
+	0x92, 0x1a, 0xb9, 0x71, 0x56, 0xdf, 0x6f, 0x76, 0x66, 0x77, 0xbe, 0x85, 0xa0, 0xc1, 0x7c, 0x6b,
+	0x4a, 0x7b, 0x9e, 0xef, 0x32, 0x97, 0xd4, 0xbd, 0xe5, 0x24, 0x58, 0x4e, 0x7a, 0xde, 0x64, 0xff,
+	0xaf, 0x27, 0x00, 0x63, 0xfe, 0x93, 0xb1, 0xa2, 0x0e, 0x23, 0x3d, 0x28, 0xb3, 0x0f, 0x1e, 0xd5,
+	0x94, 0x8e, 0xd2, 0x6d, 0x1d, 0xb4, 0x7b, 0xb1, 0xb0, 0x97, 0x88, 0x7a, 0xe3, 0x0f, 0x1e, 0x45,
+	0xa1, 0x23, 0x4f, 0x60, 0xdb, 0xa3, 0xd4, 0x1f, 0xea, 0xda, 0x56, 0x47, 0xe9, 0x36, 0x31, 0x8c,
+	0xc8, 0x53, 0xa8, 0x33, 0x7b, 0x41, 0x03, 0x66, 0x2d, 0x3c, 0xad, 0xd4, 0x51, 0xba, 0x25, 0x4c,
+	0x16, 0xc8, 0x08, 0x5a, 0xde, 0x72, 0x32, 0xb7, 0x83, 0x9b, 0x53, 0x1a, 0x04, 0xd6, 0x7b, 0xaa,
+	0x95, 0x3b, 0x4a, 0xb7, 0x71, 0xf0, 0x3c, 0x7f, 0x3f, 0x33, 0xa3, 0xc5, 0x35, 0x96, 0x0c, 0x61,
+	0xc7, 0xa7, 0xb7, 0x74, 0xca, 0xa2, 0x64, 0x15, 0x91, 0xec, 0xfb, 0xfc, 0x64, 0x98, 0x96, 0x62,
+	0x96, 0x24, 0x08, 0xea, 0x6c, 0xe9, 0xcd, 0xed, 0xa9, 0xc5, 0x68, 0x94, 0x6d, 0x5b, 0x64, 0x7b,
+	0x91, 0x9f, 0x4d, 0x5f, 0x53, 0xe3, 0x3d, 0x9e, 0x37, 0x3b, 0xa3, 0x73, 0x7b, 0x45, 0xfd, 0x28,
+	0x63, 0x75, 0x53, 0xb3, 0x7a, 0x46, 0x8b, 0x6b, 0x2c, 0x79, 0x05, 0x55, 0x6b, 0x36, 0x33, 0x29,
+	0xf5, 0xb5, 0x9a, 0x48, 0xf3, 0x2c, 0x3f, 0x4d, 0x5f, 0x8a, 0x30, 0x52, 0x93, 0x9f, 0x01, 0x7c,
+	0xba, 0x70, 0x57, 0x54, 0xb0, 0x75, 0xc1, 0x76, 0x8a, 0x8e, 0x28, 0xd2, 0x61, 0x8a, 0xe1, 0x5b,
+	0xfb, 0x74, 0xba, 0x42, 0x73, 0xa0, 0xc1, 0xa6, 0xad, 0x51, 0x8a, 0x30, 0x52, 0x73, 0x30, 0xa0,
+	0xce, 0x8c, 0x83, 0x8d, 0x4d, 0xe0, 0x85, 0x14, 0x61, 0xa4, 0xe6, 0xe0, 0xcc, 0x77, 0x3d, 0x0e,
+	0x36, 0x37, 0x81, 0xba, 0x14, 0x61, 0xa4, 0xe6, 0x63, 0x7c, 0xeb, 0xda, 0x8e, 0xb6, 0x23, 0xa8,
+	0x82, 0x31, 0x3e, 0x71, 0x6d, 0x07, 0x85, 0x8e, 0xbc, 0x84, 0xca, 0x9c, 0x5a, 0x2b, 0xaa, 0xb5,
+	0x04, 0xf0, 0x6d, 0x3e, 0x30, 0xe2, 0x12, 0x94, 0x4a, 0x8e, 0xbc, 0xf7, 0xad, 0xdf, 0x98, 0xb6,
+	0xbb, 0x09, 0x39, 0xe2, 0x12, 0x94, 0x4a, 0x8e, 0x78, 0xfe, 0xd2, 0xa1, 0x9a, 0xba, 0x09, 0x31,
+	0xb9, 0x04, 0xa5, 0xb2, 0xad, 0x43, 0x2b, 0x3b, 0xfd, 0xdc, 0x59, 0x0b, 0xf9, 0x39, 0xd4, 0x85,
+	0x4d, 0x9b, 0x98, 0x2c, 0x90, 0x47, 0x50, 0x61, 0xae, 0x67, 0x4f, 0x85, 0x1d, 0xeb, 0x28, 0x83,
+	0xf6, 0x1f, 0xb0, 0x93, 0x19, 0xfb, 0x4f, 0x24, 0xd9, 0x87, 0xa6, 0x4f, 0xa7, 0xd4, 0x5e, 0xd1,
+	0xd9, 0x3b, 0xdf, 0x5d, 0x84, 0xd6, 0xce, 0xac, 0x71, 0xe3, 0xfb, 0xd4, 0x0a, 0x5c, 0x47, 0xb8,
+	0xbb, 0x8e, 0x61, 0x94, 0x14, 0x50, 0x4e, 0x17, 0x70, 0x0b, 0xea, 0xba, 0x53, 0xbe, 0x40, 0x0d,
+	0xf1, 0x5e, 0xa5, 0xf4, 0x5e, 0x3a, 0xb4, 0xb2, 0x1e, 0x7a, 0xd0, 0x91, 0xbd, 0x82, 0x6a, 0x68,
+	0xa1, 0xd4, 0x1b, 0xa7, 0x64, 0xde, 0xb8, 0x47, 0xfc, 0x3a, 0x5d, 0xe6, 0x46, 0xa0, 0x08, 0xda,
+	0xcf, 0x01, 0x12, 0xff, 0x14, 0xb1, 0xed, 0x5f, 0xa1, 0x1a, 0xda, 0xe4, 0x5e, 0xa7, 0x4a, 0x4e,
+	0xa7, 0x2f, 0xa1, 0xbc, 0xa0, 0xcc, 0x12, 0x3b, 0x15, 0xfb, 0xce, 0x1c, 0x9c, 0x52, 0x66, 0xa1,
+	0x90, 0xb6, 0xc7, 0x50, 0x0d, 0xfd, 0xc4, 0x8b, 0xe0, 0x8e, 0x1a, 0xbb, 0x51, 0x11, 0x32, 0x7a,
+	0x60, 0xd6, 0xd0, 0x6c, 0x5f, 0x32, 0xeb, 0x53, 0x28, 0x73, 0x33, 0x26, 0x57, 0xa1, 0xa4, 0xaf,
+	0xe2, 0x19, 0x54, 0x84, 0xf3, 0x0a, 0x6e, 0xea, 0x47, 0xa8, 0x08, 0x97, 0x6d, 0xba, 0xa7, 0x7c,
+	0x4c, 0x38, 0xed, 0x7f, 0x62, 0x1f, 0x15, 0xa8, 0x86, 0xc5, 0x93, 0x37, 0x50, 0x0b, 0xc7, 0x28,
+	0xd0, 0x94, 0x4e, 0xa9, 0xdb, 0x38, 0xf8, 0x2e, 0xbf, 0xdb, 0x70, 0x10, 0x45, 0xc7, 0x31, 0x42,
+	0xfa, 0xd0, 0x0c, 0x96, 0x93, 0x60, 0xea, 0xdb, 0x1e, 0xb3, 0x5d, 0x47, 0xdb, 0x12, 0x29, 0x8a,
+	0xde, 0xc6, 0xe5, 0x44, 0xe0, 0x19, 0x84, 0xfc, 0x04, 0xd5, 0xa9, 0xeb, 0x30, 0xdf, 0x9d, 0x0b,
+	0x0f, 0x14, 0x16, 0x30, 0x90, 0x22, 0x91, 0x21, 0x22, 0xda, 0x7d, 0x68, 0xa4, 0x0a, 0x7b, 0x90,
+	0x4b, 0xde, 0x40, 0x35, 0x2c, 0x8c, 0xe3, 0x61, 0x69, 0x13, 0xf9, 0xf7, 0xa1, 0x86, 0xc9, 0x42,
+	0x01, 0xfe, 0xe7, 0x16, 0x34, 0x52, 0xa5, 0x91, 0xd7, 0x50, 0xb1, 0x6f, 0xf8, 0x33, 0x2c, 0x4f,
+	0xf3, 0xc5, 0xc6, 0x66, 0x86, 0xc7, 0xd6, 0x4a, 0x1e, 0xa9, 0x84, 0x04, 0xfd, 0xbb, 0xe5, 0xb0,
+	0xf0, 0x20, 0x3f, 0x41, 0xff, 0x62, 0x39, 0x2c, 0xa4, 0x39, 0xc4, 0x69, 0xf9, 0x9e, 0x97, 0x3e,
+	0x83, 0x16, 0x03, 0x27, 0x69, 0xf9, 0xb4, 0xbf, 0x8e, 0x9e, 0xf6, 0xf2, 0x67, 0xd0, 0x62, 0xee,
+	0x24, 0x2d, 0x5f, 0xf9, 0x63, 0x50, 0xd7, 0x9b, 0xca, 0xf7, 0x02, 0xd9, 0x03, 0x88, 0xef, 0x24,
+	0x10, 0x8d, 0x36, 0x31, 0xb5, 0xd2, 0x3e, 0x48, 0x32, 0x45, 0x0d, 0xae, 0x31, 0xca, 0x3d, 0xa6,
+	0x1b, 0x33, 0x71, 0x5b, 0x05, 0x4e, 0x7c, 0x1b, 0x2b, 0xe3, 0x16, 0x0a, 0xea, 0xe4, 0x6f, 0x23,
+	0xa5, 0x7e, 0x54, 0xa2, 0x0c, 0xf6, 0xff, 0x56, 0xa0, 0xcc, 0xff, 0x3c, 0x92, 0x6f, 0x60, 0xd7,
+	0xbc, 0x3c, 0x1c, 0x0d, 0x2f, 0x8e, 0xaf, 0x4f, 0x8d, 0x8b, 0x8b, 0xfe, 0x91, 0xa1, 0x7e, 0x45,
+	0x08, 0xb4, 0xd0, 0x38, 0x31, 0x06, 0xe3, 0x78, 0x4d, 0x21, 0x8f, 0xe1, 0x6b, 0xfd, 0xd2, 0x1c,
+	0x0d, 0x07, 0xfd, 0xb1, 0x11, 0x2f, 0x6f, 0x71, 0x5e, 0x37, 0x46, 0xc3, 0x2b, 0x03, 0xe3, 0xc5,
+	0x12, 0x69, 0x42, 0xad, 0xaf, 0xeb, 0xd7, 0xa6, 0x61, 0xa0, 0x5a, 0x26, 0xbb, 0xd0, 0x40, 0xe3,
+	0xf4, 0xfc, 0xca, 0x90, 0x0b, 0x15, 0xfe, 0x33, 0x1a, 0x83, 0xab, 0x6b, 0x34, 0x07, 0xea, 0x36,
+	0x8f, 0x2e, 0x8c, 0x33, 0x5d, 0x44, 0x55, 0x1e, 0xe9, 0x78, 0x6e, 0x8a, 0xa8, 0x46, 0x6a, 0x50,
+	0x3e, 0x39, 0x1f, 0x9e, 0xa9, 0x75, 0x52, 0x87, 0xca, 0xc8, 0xe8, 0x5f, 0x19, 0x2a, 0xf0, 0xcf,
+	0x23, 0xec, 0xbf, 0x1b, 0xab, 0x0d, 0xfe, 0x69, 0xe2, 0xe5, 0x99, 0xa1, 0x36, 0xf7, 0xdf, 0xc2,
+	0x6e, 0x72, 0xbf, 0x87, 0x16, 0x9b, 0xde, 0x90, 0x1f, 0xa0, 0x32, 0xe1, 0x1f, 0xe1, 0x10, 0x3f,
+	0xce, 0x1d, 0x05, 0x94, 0x9a, 0xc3, 0xe6, 0xc7, 0xbb, 0x3d, 0xe5, 0x9f, 0xbb, 0x3d, 0xe5, 0xdf,
+	0xbb, 0x3d, 0xe5, 0xbf, 0x00, 0x00, 0x00, 0xff, 0xff, 0x92, 0xe3, 0x70, 0x55, 0xa5, 0x0b, 0x00,
+	0x00,
 }
 
 func (m *TraceEvent) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
-	n, err := m.MarshalTo(dAtA)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
 	if err != nil {
 		return nil, err
 	}
@@ -1572,168 +1579,201 @@ func (m *TraceEvent) Marshal() (dAtA []byte, err error) {
 }
 
 func (m *TraceEvent) MarshalTo(dAtA []byte) (int, error) {
-	var i int
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *TraceEvent) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
 	_ = i
 	var l int
 	_ = l
-	if m.Type != nil {
-		dAtA[i] = 0x8
-		i++
-		i = encodeVarintTrace(dAtA, i, uint64(*m.Type))
-	}
-	if m.PeerID != nil {
-		dAtA[i] = 0x12
-		i++
-		i = encodeVarintTrace(dAtA, i, uint64(len(m.PeerID)))
-		i += copy(dAtA[i:], m.PeerID)
-	}
-	if m.Timestamp != nil {
-		dAtA[i] = 0x18
-		i++
-		i = encodeVarintTrace(dAtA, i, uint64(*m.Timestamp))
-	}
-	if m.PublishMessage != nil {
-		dAtA[i] = 0x22
-		i++
-		i = encodeVarintTrace(dAtA, i, uint64(m.PublishMessage.Size()))
-		n1, err := m.PublishMessage.MarshalTo(dAtA[i:])
-		if err != nil {
-			return 0, err
-		}
-		i += n1
-	}
-	if m.RejectMessage != nil {
-		dAtA[i] = 0x2a
-		i++
-		i = encodeVarintTrace(dAtA, i, uint64(m.RejectMessage.Size()))
-		n2, err := m.RejectMessage.MarshalTo(dAtA[i:])
-		if err != nil {
-			return 0, err
-		}
-		i += n2
-	}
-	if m.DuplicateMessage != nil {
-		dAtA[i] = 0x32
-		i++
-		i = encodeVarintTrace(dAtA, i, uint64(m.DuplicateMessage.Size()))
-		n3, err := m.DuplicateMessage.MarshalTo(dAtA[i:])
-		if err != nil {
-			return 0, err
-		}
-		i += n3
-	}
-	if m.DeliverMessage != nil {
-		dAtA[i] = 0x3a
-		i++
-		i = encodeVarintTrace(dAtA, i, uint64(m.DeliverMessage.Size()))
-		n4, err := m.DeliverMessage.MarshalTo(dAtA[i:])
-		if err != nil {
-			return 0, err
-		}
-		i += n4
-	}
-	if m.AddPeer != nil {
-		dAtA[i] = 0x42
-		i++
-		i = encodeVarintTrace(dAtA, i, uint64(m.AddPeer.Size()))
-		n5, err := m.AddPeer.MarshalTo(dAtA[i:])
-		if err != nil {
-			return 0, err
-		}
-		i += n5
-	}
-	if m.RemovePeer != nil {
-		dAtA[i] = 0x4a
-		i++
-		i = encodeVarintTrace(dAtA, i, uint64(m.RemovePeer.Size()))
-		n6, err := m.RemovePeer.MarshalTo(dAtA[i:])
-		if err != nil {
-			return 0, err
-		}
-		i += n6
-	}
-	if m.RecvRPC != nil {
-		dAtA[i] = 0x52
-		i++
-		i = encodeVarintTrace(dAtA, i, uint64(m.RecvRPC.Size()))
-		n7, err := m.RecvRPC.MarshalTo(dAtA[i:])
-		if err != nil {
-			return 0, err
-		}
-		i += n7
-	}
-	if m.SendRPC != nil {
-		dAtA[i] = 0x5a
-		i++
-		i = encodeVarintTrace(dAtA, i, uint64(m.SendRPC.Size()))
-		n8, err := m.SendRPC.MarshalTo(dAtA[i:])
-		if err != nil {
-			return 0, err
-		}
-		i += n8
-	}
-	if m.DropRPC != nil {
-		dAtA[i] = 0x62
-		i++
-		i = encodeVarintTrace(dAtA, i, uint64(m.DropRPC.Size()))
-		n9, err := m.DropRPC.MarshalTo(dAtA[i:])
-		if err != nil {
-			return 0, err
-		}
-		i += n9
-	}
-	if m.Join != nil {
-		dAtA[i] = 0x6a
-		i++
-		i = encodeVarintTrace(dAtA, i, uint64(m.Join.Size()))
-		n10, err := m.Join.MarshalTo(dAtA[i:])
-		if err != nil {
-			return 0, err
-		}
-		i += n10
-	}
-	if m.Leave != nil {
-		dAtA[i] = 0x72
-		i++
-		i = encodeVarintTrace(dAtA, i, uint64(m.Leave.Size()))
-		n11, err := m.Leave.MarshalTo(dAtA[i:])
-		if err != nil {
-			return 0, err
-		}
-		i += n11
-	}
-	if m.Graft != nil {
-		dAtA[i] = 0x7a
-		i++
-		i = encodeVarintTrace(dAtA, i, uint64(m.Graft.Size()))
-		n12, err := m.Graft.MarshalTo(dAtA[i:])
-		if err != nil {
-			return 0, err
-		}
-		i += n12
+	if m.XXX_unrecognized != nil {
+		i -= len(m.XXX_unrecognized)
+		copy(dAtA[i:], m.XXX_unrecognized)
 	}
 	if m.Prune != nil {
-		dAtA[i] = 0x82
-		i++
-		dAtA[i] = 0x1
-		i++
-		i = encodeVarintTrace(dAtA, i, uint64(m.Prune.Size()))
-		n13, err := m.Prune.MarshalTo(dAtA[i:])
-		if err != nil {
-			return 0, err
+		{
+			size, err := m.Prune.MarshalToSizedBuffer(dAtA[:i])
+			if err != nil {
+				return 0, err
+			}
+			i -= size
+			i = encodeVarintTrace(dAtA, i, uint64(size))
 		}
-		i += n13
+		i--
+		dAtA[i] = 0x1
+		i--
+		dAtA[i] = 0x82
 	}
-	if m.XXX_unrecognized != nil {
-		i += copy(dAtA[i:], m.XXX_unrecognized)
+	if m.Graft != nil {
+		{
+			size, err := m.Graft.MarshalToSizedBuffer(dAtA[:i])
+			if err != nil {
+				return 0, err
+			}
+			i -= size
+			i = encodeVarintTrace(dAtA, i, uint64(size))
+		}
+		i--
+		dAtA[i] = 0x7a
 	}
-	return i, nil
+	if m.Leave != nil {
+		{
+			size, err := m.Leave.MarshalToSizedBuffer(dAtA[:i])
+			if err != nil {
+				return 0, err
+			}
+			i -= size
+			i = encodeVarintTrace(dAtA, i, uint64(size))
+		}
+		i--
+		dAtA[i] = 0x72
+	}
+	if m.Join != nil {
+		{
+			size, err := m.Join.MarshalToSizedBuffer(dAtA[:i])
+			if err != nil {
+				return 0, err
+			}
+			i -= size
+			i = encodeVarintTrace(dAtA, i, uint64(size))
+		}
+		i--
+		dAtA[i] = 0x6a
+	}
+	if m.DropRPC != nil {
+		{
+			size, err := m.DropRPC.MarshalToSizedBuffer(dAtA[:i])
+			if err != nil {
+				return 0, err
+			}
+			i -= size
+			i = encodeVarintTrace(dAtA, i, uint64(size))
+		}
+		i--
+		dAtA[i] = 0x62
+	}
+	if m.SendRPC != nil {
+		{
+			size, err := m.SendRPC.MarshalToSizedBuffer(dAtA[:i])
+			if err != nil {
+				return 0, err
+			}
+			i -= size
+			i = encodeVarintTrace(dAtA, i, uint64(size))
+		}
+		i--
+		dAtA[i] = 0x5a
+	}
+	if m.RecvRPC != nil {
+		{
+			size, err := m.RecvRPC.MarshalToSizedBuffer(dAtA[:i])
+			if err != nil {
+				return 0, err
+			}
+			i -= size
+			i = encodeVarintTrace(dAtA, i, uint64(size))
+		}
+		i--
+		dAtA[i] = 0x52
+	}
+	if m.RemovePeer != nil {
+		{
+			size, err := m.RemovePeer.MarshalToSizedBuffer(dAtA[:i])
+			if err != nil {
+				return 0, err
+			}
+			i -= size
+			i = encodeVarintTrace(dAtA, i, uint64(size))
+		}
+		i--
+		dAtA[i] = 0x4a
+	}
+	if m.AddPeer != nil {
+		{
+			size, err := m.AddPeer.MarshalToSizedBuffer(dAtA[:i])
+			if err != nil {
+				return 0, err
+			}
+			i -= size
+			i = encodeVarintTrace(dAtA, i, uint64(size))
+		}
+		i--
+		dAtA[i] = 0x42
+	}
+	if m.DeliverMessage != nil {
+		{
+			size, err := m.DeliverMessage.MarshalToSizedBuffer(dAtA[:i])
+			if err != nil {
+				return 0, err
+			}
+			i -= size
+			i = encodeVarintTrace(dAtA, i, uint64(size))
+		}
+		i--
+		dAtA[i] = 0x3a
+	}
+	if m.DuplicateMessage != nil {
+		{
+			size, err := m.DuplicateMessage.MarshalToSizedBuffer(dAtA[:i])
+			if err != nil {
+				return 0, err
+			}
+			i -= size
+			i = encodeVarintTrace(dAtA, i, uint64(size))
+		}
+		i--
+		dAtA[i] = 0x32
+	}
+	if m.RejectMessage != nil {
+		{
+			size, err := m.RejectMessage.MarshalToSizedBuffer(dAtA[:i])
+			if err != nil {
+				return 0, err
+			}
+			i -= size
+			i = encodeVarintTrace(dAtA, i, uint64(size))
+		}
+		i--
+		dAtA[i] = 0x2a
+	}
+	if m.PublishMessage != nil {
+		{
+			size, err := m.PublishMessage.MarshalToSizedBuffer(dAtA[:i])
+			if err != nil {
+				return 0, err
+			}
+			i -= size
+			i = encodeVarintTrace(dAtA, i, uint64(size))
+		}
+		i--
+		dAtA[i] = 0x22
+	}
+	if m.Timestamp != nil {
+		i = encodeVarintTrace(dAtA, i, uint64(*m.Timestamp))
+		i--
+		dAtA[i] = 0x18
+	}
+	if m.PeerID != nil {
+		i -= len(m.PeerID)
+		copy(dAtA[i:], m.PeerID)
+		i = encodeVarintTrace(dAtA, i, uint64(len(m.PeerID)))
+		i--
+		dAtA[i] = 0x12
+	}
+	if m.Type != nil {
+		i = encodeVarintTrace(dAtA, i, uint64(*m.Type))
+		i--
+		dAtA[i] = 0x8
+	}
+	return len(dAtA) - i, nil
 }
 
 func (m *TraceEvent_PublishMessage) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
-	n, err := m.MarshalTo(dAtA)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
 	if err != nil {
 		return nil, err
 	}
@@ -1741,41 +1781,40 @@ func (m *TraceEvent_PublishMessage) Marshal() (dAtA []byte, err error) {
 }
 
 func (m *TraceEvent_PublishMessage) MarshalTo(dAtA []byte) (int, error) {
-	var i int
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *TraceEvent_PublishMessage) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
 	_ = i
 	var l int
 	_ = l
-	if m.MessageID != nil {
-		dAtA[i] = 0xa
-		i++
-		i = encodeVarintTrace(dAtA, i, uint64(len(m.MessageID)))
-		i += copy(dAtA[i:], m.MessageID)
-	}
-	if len(m.Topics) > 0 {
-		for _, s := range m.Topics {
-			dAtA[i] = 0x12
-			i++
-			l = len(s)
-			for l >= 1<<7 {
-				dAtA[i] = uint8(uint64(l)&0x7f | 0x80)
-				l >>= 7
-				i++
-			}
-			dAtA[i] = uint8(l)
-			i++
-			i += copy(dAtA[i:], s)
-		}
-	}
 	if m.XXX_unrecognized != nil {
-		i += copy(dAtA[i:], m.XXX_unrecognized)
+		i -= len(m.XXX_unrecognized)
+		copy(dAtA[i:], m.XXX_unrecognized)
 	}
-	return i, nil
+	if m.Topic != nil {
+		i -= len(*m.Topic)
+		copy(dAtA[i:], *m.Topic)
+		i = encodeVarintTrace(dAtA, i, uint64(len(*m.Topic)))
+		i--
+		dAtA[i] = 0x12
+	}
+	if m.MessageID != nil {
+		i -= len(m.MessageID)
+		copy(dAtA[i:], m.MessageID)
+		i = encodeVarintTrace(dAtA, i, uint64(len(m.MessageID)))
+		i--
+		dAtA[i] = 0xa
+	}
+	return len(dAtA) - i, nil
 }
 
 func (m *TraceEvent_RejectMessage) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
-	n, err := m.MarshalTo(dAtA)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
 	if err != nil {
 		return nil, err
 	}
@@ -1783,53 +1822,54 @@ func (m *TraceEvent_RejectMessage) Marshal() (dAtA []byte, err error) {
 }
 
 func (m *TraceEvent_RejectMessage) MarshalTo(dAtA []byte) (int, error) {
-	var i int
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *TraceEvent_RejectMessage) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
 	_ = i
 	var l int
 	_ = l
-	if m.MessageID != nil {
-		dAtA[i] = 0xa
-		i++
-		i = encodeVarintTrace(dAtA, i, uint64(len(m.MessageID)))
-		i += copy(dAtA[i:], m.MessageID)
+	if m.XXX_unrecognized != nil {
+		i -= len(m.XXX_unrecognized)
+		copy(dAtA[i:], m.XXX_unrecognized)
 	}
-	if m.ReceivedFrom != nil {
-		dAtA[i] = 0x12
-		i++
-		i = encodeVarintTrace(dAtA, i, uint64(len(m.ReceivedFrom)))
-		i += copy(dAtA[i:], m.ReceivedFrom)
+	if m.Topic != nil {
+		i -= len(*m.Topic)
+		copy(dAtA[i:], *m.Topic)
+		i = encodeVarintTrace(dAtA, i, uint64(len(*m.Topic)))
+		i--
+		dAtA[i] = 0x22
 	}
 	if m.Reason != nil {
-		dAtA[i] = 0x1a
-		i++
+		i -= len(*m.Reason)
+		copy(dAtA[i:], *m.Reason)
 		i = encodeVarintTrace(dAtA, i, uint64(len(*m.Reason)))
-		i += copy(dAtA[i:], *m.Reason)
+		i--
+		dAtA[i] = 0x1a
 	}
-	if len(m.Topics) > 0 {
-		for _, s := range m.Topics {
-			dAtA[i] = 0x22
-			i++
-			l = len(s)
-			for l >= 1<<7 {
-				dAtA[i] = uint8(uint64(l)&0x7f | 0x80)
-				l >>= 7
-				i++
-			}
-			dAtA[i] = uint8(l)
-			i++
-			i += copy(dAtA[i:], s)
-		}
+	if m.ReceivedFrom != nil {
+		i -= len(m.ReceivedFrom)
+		copy(dAtA[i:], m.ReceivedFrom)
+		i = encodeVarintTrace(dAtA, i, uint64(len(m.ReceivedFrom)))
+		i--
+		dAtA[i] = 0x12
 	}
-	if m.XXX_unrecognized != nil {
-		i += copy(dAtA[i:], m.XXX_unrecognized)
+	if m.MessageID != nil {
+		i -= len(m.MessageID)
+		copy(dAtA[i:], m.MessageID)
+		i = encodeVarintTrace(dAtA, i, uint64(len(m.MessageID)))
+		i--
+		dAtA[i] = 0xa
 	}
-	return i, nil
+	return len(dAtA) - i, nil
 }
 
 func (m *TraceEvent_DuplicateMessage) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
-	n, err := m.MarshalTo(dAtA)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
 	if err != nil {
 		return nil, err
 	}
@@ -1837,47 +1877,47 @@ func (m *TraceEvent_DuplicateMessage) Marshal() (dAtA []byte, err error) {
 }
 
 func (m *TraceEvent_DuplicateMessage) MarshalTo(dAtA []byte) (int, error) {
-	var i int
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *TraceEvent_DuplicateMessage) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
 	_ = i
 	var l int
 	_ = l
-	if m.MessageID != nil {
-		dAtA[i] = 0xa
-		i++
-		i = encodeVarintTrace(dAtA, i, uint64(len(m.MessageID)))
-		i += copy(dAtA[i:], m.MessageID)
+	if m.XXX_unrecognized != nil {
+		i -= len(m.XXX_unrecognized)
+		copy(dAtA[i:], m.XXX_unrecognized)
+	}
+	if m.Topic != nil {
+		i -= len(*m.Topic)
+		copy(dAtA[i:], *m.Topic)
+		i = encodeVarintTrace(dAtA, i, uint64(len(*m.Topic)))
+		i--
+		dAtA[i] = 0x1a
 	}
 	if m.ReceivedFrom != nil {
-		dAtA[i] = 0x12
-		i++
+		i -= len(m.ReceivedFrom)
+		copy(dAtA[i:], m.ReceivedFrom)
 		i = encodeVarintTrace(dAtA, i, uint64(len(m.ReceivedFrom)))
-		i += copy(dAtA[i:], m.ReceivedFrom)
+		i--
+		dAtA[i] = 0x12
 	}
-	if len(m.Topics) > 0 {
-		for _, s := range m.Topics {
-			dAtA[i] = 0x1a
-			i++
-			l = len(s)
-			for l >= 1<<7 {
-				dAtA[i] = uint8(uint64(l)&0x7f | 0x80)
-				l >>= 7
-				i++
-			}
-			dAtA[i] = uint8(l)
-			i++
-			i += copy(dAtA[i:], s)
-		}
+	if m.MessageID != nil {
+		i -= len(m.MessageID)
+		copy(dAtA[i:], m.MessageID)
+		i = encodeVarintTrace(dAtA, i, uint64(len(m.MessageID)))
+		i--
+		dAtA[i] = 0xa
 	}
-	if m.XXX_unrecognized != nil {
-		i += copy(dAtA[i:], m.XXX_unrecognized)
-	}
-	return i, nil
+	return len(dAtA) - i, nil
 }
 
 func (m *TraceEvent_DeliverMessage) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
-	n, err := m.MarshalTo(dAtA)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
 	if err != nil {
 		return nil, err
 	}
@@ -1885,41 +1925,40 @@ func (m *TraceEvent_DeliverMessage) Marshal() (dAtA []byte, err error) {
 }
 
 func (m *TraceEvent_DeliverMessage) MarshalTo(dAtA []byte) (int, error) {
-	var i int
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *TraceEvent_DeliverMessage) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
 	_ = i
 	var l int
 	_ = l
-	if m.MessageID != nil {
-		dAtA[i] = 0xa
-		i++
-		i = encodeVarintTrace(dAtA, i, uint64(len(m.MessageID)))
-		i += copy(dAtA[i:], m.MessageID)
-	}
-	if len(m.Topics) > 0 {
-		for _, s := range m.Topics {
-			dAtA[i] = 0x12
-			i++
-			l = len(s)
-			for l >= 1<<7 {
-				dAtA[i] = uint8(uint64(l)&0x7f | 0x80)
-				l >>= 7
-				i++
-			}
-			dAtA[i] = uint8(l)
-			i++
-			i += copy(dAtA[i:], s)
-		}
-	}
 	if m.XXX_unrecognized != nil {
-		i += copy(dAtA[i:], m.XXX_unrecognized)
+		i -= len(m.XXX_unrecognized)
+		copy(dAtA[i:], m.XXX_unrecognized)
 	}
-	return i, nil
+	if m.Topic != nil {
+		i -= len(*m.Topic)
+		copy(dAtA[i:], *m.Topic)
+		i = encodeVarintTrace(dAtA, i, uint64(len(*m.Topic)))
+		i--
+		dAtA[i] = 0x12
+	}
+	if m.MessageID != nil {
+		i -= len(m.MessageID)
+		copy(dAtA[i:], m.MessageID)
+		i = encodeVarintTrace(dAtA, i, uint64(len(m.MessageID)))
+		i--
+		dAtA[i] = 0xa
+	}
+	return len(dAtA) - i, nil
 }
 
 func (m *TraceEvent_AddPeer) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
-	n, err := m.MarshalTo(dAtA)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
 	if err != nil {
 		return nil, err
 	}
@@ -1927,32 +1966,40 @@ func (m *TraceEvent_AddPeer) Marshal() (dAtA []byte, err error) {
 }
 
 func (m *TraceEvent_AddPeer) MarshalTo(dAtA []byte) (int, error) {
-	var i int
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *TraceEvent_AddPeer) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
 	_ = i
 	var l int
 	_ = l
-	if m.PeerID != nil {
-		dAtA[i] = 0xa
-		i++
-		i = encodeVarintTrace(dAtA, i, uint64(len(m.PeerID)))
-		i += copy(dAtA[i:], m.PeerID)
+	if m.XXX_unrecognized != nil {
+		i -= len(m.XXX_unrecognized)
+		copy(dAtA[i:], m.XXX_unrecognized)
 	}
 	if m.Proto != nil {
-		dAtA[i] = 0x12
-		i++
+		i -= len(*m.Proto)
+		copy(dAtA[i:], *m.Proto)
 		i = encodeVarintTrace(dAtA, i, uint64(len(*m.Proto)))
-		i += copy(dAtA[i:], *m.Proto)
+		i--
+		dAtA[i] = 0x12
 	}
-	if m.XXX_unrecognized != nil {
-		i += copy(dAtA[i:], m.XXX_unrecognized)
+	if m.PeerID != nil {
+		i -= len(m.PeerID)
+		copy(dAtA[i:], m.PeerID)
+		i = encodeVarintTrace(dAtA, i, uint64(len(m.PeerID)))
+		i--
+		dAtA[i] = 0xa
 	}
-	return i, nil
+	return len(dAtA) - i, nil
 }
 
 func (m *TraceEvent_RemovePeer) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
-	n, err := m.MarshalTo(dAtA)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
 	if err != nil {
 		return nil, err
 	}
@@ -1960,26 +2007,33 @@ func (m *TraceEvent_RemovePeer) Marshal() (dAtA []byte, err error) {
 }
 
 func (m *TraceEvent_RemovePeer) MarshalTo(dAtA []byte) (int, error) {
-	var i int
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *TraceEvent_RemovePeer) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
 	_ = i
 	var l int
 	_ = l
-	if m.PeerID != nil {
-		dAtA[i] = 0xa
-		i++
-		i = encodeVarintTrace(dAtA, i, uint64(len(m.PeerID)))
-		i += copy(dAtA[i:], m.PeerID)
-	}
 	if m.XXX_unrecognized != nil {
-		i += copy(dAtA[i:], m.XXX_unrecognized)
+		i -= len(m.XXX_unrecognized)
+		copy(dAtA[i:], m.XXX_unrecognized)
 	}
-	return i, nil
+	if m.PeerID != nil {
+		i -= len(m.PeerID)
+		copy(dAtA[i:], m.PeerID)
+		i = encodeVarintTrace(dAtA, i, uint64(len(m.PeerID)))
+		i--
+		dAtA[i] = 0xa
+	}
+	return len(dAtA) - i, nil
 }
 
 func (m *TraceEvent_RecvRPC) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
-	n, err := m.MarshalTo(dAtA)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
 	if err != nil {
 		return nil, err
 	}
@@ -1987,36 +2041,45 @@ func (m *TraceEvent_RecvRPC) Marshal() (dAtA []byte, err error) {
 }
 
 func (m *TraceEvent_RecvRPC) MarshalTo(dAtA []byte) (int, error) {
-	var i int
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *TraceEvent_RecvRPC) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
 	_ = i
 	var l int
 	_ = l
-	if m.ReceivedFrom != nil {
-		dAtA[i] = 0xa
-		i++
-		i = encodeVarintTrace(dAtA, i, uint64(len(m.ReceivedFrom)))
-		i += copy(dAtA[i:], m.ReceivedFrom)
+	if m.XXX_unrecognized != nil {
+		i -= len(m.XXX_unrecognized)
+		copy(dAtA[i:], m.XXX_unrecognized)
 	}
 	if m.Meta != nil {
-		dAtA[i] = 0x12
-		i++
-		i = encodeVarintTrace(dAtA, i, uint64(m.Meta.Size()))
-		n14, err := m.Meta.MarshalTo(dAtA[i:])
-		if err != nil {
-			return 0, err
+		{
+			size, err := m.Meta.MarshalToSizedBuffer(dAtA[:i])
+			if err != nil {
+				return 0, err
+			}
+			i -= size
+			i = encodeVarintTrace(dAtA, i, uint64(size))
 		}
-		i += n14
+		i--
+		dAtA[i] = 0x12
 	}
-	if m.XXX_unrecognized != nil {
-		i += copy(dAtA[i:], m.XXX_unrecognized)
+	if m.ReceivedFrom != nil {
+		i -= len(m.ReceivedFrom)
+		copy(dAtA[i:], m.ReceivedFrom)
+		i = encodeVarintTrace(dAtA, i, uint64(len(m.ReceivedFrom)))
+		i--
+		dAtA[i] = 0xa
 	}
-	return i, nil
+	return len(dAtA) - i, nil
 }
 
 func (m *TraceEvent_SendRPC) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
-	n, err := m.MarshalTo(dAtA)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
 	if err != nil {
 		return nil, err
 	}
@@ -2024,36 +2087,45 @@ func (m *TraceEvent_SendRPC) Marshal() (dAtA []byte, err error) {
 }
 
 func (m *TraceEvent_SendRPC) MarshalTo(dAtA []byte) (int, error) {
-	var i int
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *TraceEvent_SendRPC) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
 	_ = i
 	var l int
 	_ = l
-	if m.SendTo != nil {
-		dAtA[i] = 0xa
-		i++
-		i = encodeVarintTrace(dAtA, i, uint64(len(m.SendTo)))
-		i += copy(dAtA[i:], m.SendTo)
+	if m.XXX_unrecognized != nil {
+		i -= len(m.XXX_unrecognized)
+		copy(dAtA[i:], m.XXX_unrecognized)
 	}
 	if m.Meta != nil {
-		dAtA[i] = 0x12
-		i++
-		i = encodeVarintTrace(dAtA, i, uint64(m.Meta.Size()))
-		n15, err := m.Meta.MarshalTo(dAtA[i:])
-		if err != nil {
-			return 0, err
+		{
+			size, err := m.Meta.MarshalToSizedBuffer(dAtA[:i])
+			if err != nil {
+				return 0, err
+			}
+			i -= size
+			i = encodeVarintTrace(dAtA, i, uint64(size))
 		}
-		i += n15
+		i--
+		dAtA[i] = 0x12
 	}
-	if m.XXX_unrecognized != nil {
-		i += copy(dAtA[i:], m.XXX_unrecognized)
+	if m.SendTo != nil {
+		i -= len(m.SendTo)
+		copy(dAtA[i:], m.SendTo)
+		i = encodeVarintTrace(dAtA, i, uint64(len(m.SendTo)))
+		i--
+		dAtA[i] = 0xa
 	}
-	return i, nil
+	return len(dAtA) - i, nil
 }
 
 func (m *TraceEvent_DropRPC) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
-	n, err := m.MarshalTo(dAtA)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
 	if err != nil {
 		return nil, err
 	}
@@ -2061,36 +2133,45 @@ func (m *TraceEvent_DropRPC) Marshal() (dAtA []byte, err error) {
 }
 
 func (m *TraceEvent_DropRPC) MarshalTo(dAtA []byte) (int, error) {
-	var i int
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *TraceEvent_DropRPC) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
 	_ = i
 	var l int
 	_ = l
-	if m.SendTo != nil {
-		dAtA[i] = 0xa
-		i++
-		i = encodeVarintTrace(dAtA, i, uint64(len(m.SendTo)))
-		i += copy(dAtA[i:], m.SendTo)
+	if m.XXX_unrecognized != nil {
+		i -= len(m.XXX_unrecognized)
+		copy(dAtA[i:], m.XXX_unrecognized)
 	}
 	if m.Meta != nil {
-		dAtA[i] = 0x12
-		i++
-		i = encodeVarintTrace(dAtA, i, uint64(m.Meta.Size()))
-		n16, err := m.Meta.MarshalTo(dAtA[i:])
-		if err != nil {
-			return 0, err
+		{
+			size, err := m.Meta.MarshalToSizedBuffer(dAtA[:i])
+			if err != nil {
+				return 0, err
+			}
+			i -= size
+			i = encodeVarintTrace(dAtA, i, uint64(size))
 		}
-		i += n16
+		i--
+		dAtA[i] = 0x12
 	}
-	if m.XXX_unrecognized != nil {
-		i += copy(dAtA[i:], m.XXX_unrecognized)
+	if m.SendTo != nil {
+		i -= len(m.SendTo)
+		copy(dAtA[i:], m.SendTo)
+		i = encodeVarintTrace(dAtA, i, uint64(len(m.SendTo)))
+		i--
+		dAtA[i] = 0xa
 	}
-	return i, nil
+	return len(dAtA) - i, nil
 }
 
 func (m *TraceEvent_Join) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
-	n, err := m.MarshalTo(dAtA)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
 	if err != nil {
 		return nil, err
 	}
@@ -2098,26 +2179,33 @@ func (m *TraceEvent_Join) Marshal() (dAtA []byte, err error) {
 }
 
 func (m *TraceEvent_Join) MarshalTo(dAtA []byte) (int, error) {
-	var i int
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *TraceEvent_Join) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
 	_ = i
 	var l int
 	_ = l
-	if m.Topic != nil {
-		dAtA[i] = 0xa
-		i++
-		i = encodeVarintTrace(dAtA, i, uint64(len(*m.Topic)))
-		i += copy(dAtA[i:], *m.Topic)
-	}
 	if m.XXX_unrecognized != nil {
-		i += copy(dAtA[i:], m.XXX_unrecognized)
+		i -= len(m.XXX_unrecognized)
+		copy(dAtA[i:], m.XXX_unrecognized)
 	}
-	return i, nil
+	if m.Topic != nil {
+		i -= len(*m.Topic)
+		copy(dAtA[i:], *m.Topic)
+		i = encodeVarintTrace(dAtA, i, uint64(len(*m.Topic)))
+		i--
+		dAtA[i] = 0xa
+	}
+	return len(dAtA) - i, nil
 }
 
 func (m *TraceEvent_Leave) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
-	n, err := m.MarshalTo(dAtA)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
 	if err != nil {
 		return nil, err
 	}
@@ -2125,26 +2213,33 @@ func (m *TraceEvent_Leave) Marshal() (dAtA []byte, err error) {
 }
 
 func (m *TraceEvent_Leave) MarshalTo(dAtA []byte) (int, error) {
-	var i int
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *TraceEvent_Leave) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
 	_ = i
 	var l int
 	_ = l
-	if m.Topic != nil {
-		dAtA[i] = 0x12
-		i++
-		i = encodeVarintTrace(dAtA, i, uint64(len(*m.Topic)))
-		i += copy(dAtA[i:], *m.Topic)
-	}
 	if m.XXX_unrecognized != nil {
-		i += copy(dAtA[i:], m.XXX_unrecognized)
+		i -= len(m.XXX_unrecognized)
+		copy(dAtA[i:], m.XXX_unrecognized)
 	}
-	return i, nil
+	if m.Topic != nil {
+		i -= len(*m.Topic)
+		copy(dAtA[i:], *m.Topic)
+		i = encodeVarintTrace(dAtA, i, uint64(len(*m.Topic)))
+		i--
+		dAtA[i] = 0x12
+	}
+	return len(dAtA) - i, nil
 }
 
 func (m *TraceEvent_Graft) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
-	n, err := m.MarshalTo(dAtA)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
 	if err != nil {
 		return nil, err
 	}
@@ -2152,32 +2247,40 @@ func (m *TraceEvent_Graft) Marshal() (dAtA []byte, err error) {
 }
 
 func (m *TraceEvent_Graft) MarshalTo(dAtA []byte) (int, error) {
-	var i int
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *TraceEvent_Graft) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
 	_ = i
 	var l int
 	_ = l
-	if m.PeerID != nil {
-		dAtA[i] = 0xa
-		i++
-		i = encodeVarintTrace(dAtA, i, uint64(len(m.PeerID)))
-		i += copy(dAtA[i:], m.PeerID)
+	if m.XXX_unrecognized != nil {
+		i -= len(m.XXX_unrecognized)
+		copy(dAtA[i:], m.XXX_unrecognized)
 	}
 	if m.Topic != nil {
-		dAtA[i] = 0x12
-		i++
+		i -= len(*m.Topic)
+		copy(dAtA[i:], *m.Topic)
 		i = encodeVarintTrace(dAtA, i, uint64(len(*m.Topic)))
-		i += copy(dAtA[i:], *m.Topic)
+		i--
+		dAtA[i] = 0x12
 	}
-	if m.XXX_unrecognized != nil {
-		i += copy(dAtA[i:], m.XXX_unrecognized)
+	if m.PeerID != nil {
+		i -= len(m.PeerID)
+		copy(dAtA[i:], m.PeerID)
+		i = encodeVarintTrace(dAtA, i, uint64(len(m.PeerID)))
+		i--
+		dAtA[i] = 0xa
 	}
-	return i, nil
+	return len(dAtA) - i, nil
 }
 
 func (m *TraceEvent_Prune) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
-	n, err := m.MarshalTo(dAtA)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
 	if err != nil {
 		return nil, err
 	}
@@ -2185,32 +2288,40 @@ func (m *TraceEvent_Prune) Marshal() (dAtA []byte, err error) {
 }
 
 func (m *TraceEvent_Prune) MarshalTo(dAtA []byte) (int, error) {
-	var i int
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *TraceEvent_Prune) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
 	_ = i
 	var l int
 	_ = l
-	if m.PeerID != nil {
-		dAtA[i] = 0xa
-		i++
-		i = encodeVarintTrace(dAtA, i, uint64(len(m.PeerID)))
-		i += copy(dAtA[i:], m.PeerID)
+	if m.XXX_unrecognized != nil {
+		i -= len(m.XXX_unrecognized)
+		copy(dAtA[i:], m.XXX_unrecognized)
 	}
 	if m.Topic != nil {
-		dAtA[i] = 0x12
-		i++
+		i -= len(*m.Topic)
+		copy(dAtA[i:], *m.Topic)
 		i = encodeVarintTrace(dAtA, i, uint64(len(*m.Topic)))
-		i += copy(dAtA[i:], *m.Topic)
+		i--
+		dAtA[i] = 0x12
 	}
-	if m.XXX_unrecognized != nil {
-		i += copy(dAtA[i:], m.XXX_unrecognized)
+	if m.PeerID != nil {
+		i -= len(m.PeerID)
+		copy(dAtA[i:], m.PeerID)
+		i = encodeVarintTrace(dAtA, i, uint64(len(m.PeerID)))
+		i--
+		dAtA[i] = 0xa
 	}
-	return i, nil
+	return len(dAtA) - i, nil
 }
 
 func (m *TraceEvent_RPCMeta) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
-	n, err := m.MarshalTo(dAtA)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
 	if err != nil {
 		return nil, err
 	}
@@ -2218,54 +2329,66 @@ func (m *TraceEvent_RPCMeta) Marshal() (dAtA []byte, err error) {
 }
 
 func (m *TraceEvent_RPCMeta) MarshalTo(dAtA []byte) (int, error) {
-	var i int
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *TraceEvent_RPCMeta) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
 	_ = i
 	var l int
 	_ = l
-	if len(m.Messages) > 0 {
-		for _, msg := range m.Messages {
-			dAtA[i] = 0xa
-			i++
-			i = encodeVarintTrace(dAtA, i, uint64(msg.Size()))
-			n, err := msg.MarshalTo(dAtA[i:])
-			if err != nil {
-				return 0, err
-			}
-			i += n
-		}
-	}
-	if len(m.Subscription) > 0 {
-		for _, msg := range m.Subscription {
-			dAtA[i] = 0x12
-			i++
-			i = encodeVarintTrace(dAtA, i, uint64(msg.Size()))
-			n, err := msg.MarshalTo(dAtA[i:])
-			if err != nil {
-				return 0, err
-			}
-			i += n
-		}
+	if m.XXX_unrecognized != nil {
+		i -= len(m.XXX_unrecognized)
+		copy(dAtA[i:], m.XXX_unrecognized)
 	}
 	if m.Control != nil {
-		dAtA[i] = 0x1a
-		i++
-		i = encodeVarintTrace(dAtA, i, uint64(m.Control.Size()))
-		n17, err := m.Control.MarshalTo(dAtA[i:])
-		if err != nil {
-			return 0, err
+		{
+			size, err := m.Control.MarshalToSizedBuffer(dAtA[:i])
+			if err != nil {
+				return 0, err
+			}
+			i -= size
+			i = encodeVarintTrace(dAtA, i, uint64(size))
 		}
-		i += n17
+		i--
+		dAtA[i] = 0x1a
 	}
-	if m.XXX_unrecognized != nil {
-		i += copy(dAtA[i:], m.XXX_unrecognized)
+	if len(m.Subscription) > 0 {
+		for iNdEx := len(m.Subscription) - 1; iNdEx >= 0; iNdEx-- {
+			{
+				size, err := m.Subscription[iNdEx].MarshalToSizedBuffer(dAtA[:i])
+				if err != nil {
+					return 0, err
+				}
+				i -= size
+				i = encodeVarintTrace(dAtA, i, uint64(size))
+			}
+			i--
+			dAtA[i] = 0x12
+		}
 	}
-	return i, nil
+	if len(m.Messages) > 0 {
+		for iNdEx := len(m.Messages) - 1; iNdEx >= 0; iNdEx-- {
+			{
+				size, err := m.Messages[iNdEx].MarshalToSizedBuffer(dAtA[:i])
+				if err != nil {
+					return 0, err
+				}
+				i -= size
+				i = encodeVarintTrace(dAtA, i, uint64(size))
+			}
+			i--
+			dAtA[i] = 0xa
+		}
+	}
+	return len(dAtA) - i, nil
 }
 
 func (m *TraceEvent_MessageMeta) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
-	n, err := m.MarshalTo(dAtA)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
 	if err != nil {
 		return nil, err
 	}
@@ -2273,41 +2396,40 @@ func (m *TraceEvent_MessageMeta) Marshal() (dAtA []byte, err error) {
 }
 
 func (m *TraceEvent_MessageMeta) MarshalTo(dAtA []byte) (int, error) {
-	var i int
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *TraceEvent_MessageMeta) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
 	_ = i
 	var l int
 	_ = l
-	if m.MessageID != nil {
-		dAtA[i] = 0xa
-		i++
-		i = encodeVarintTrace(dAtA, i, uint64(len(m.MessageID)))
-		i += copy(dAtA[i:], m.MessageID)
-	}
-	if len(m.Topics) > 0 {
-		for _, s := range m.Topics {
-			dAtA[i] = 0x12
-			i++
-			l = len(s)
-			for l >= 1<<7 {
-				dAtA[i] = uint8(uint64(l)&0x7f | 0x80)
-				l >>= 7
-				i++
-			}
-			dAtA[i] = uint8(l)
-			i++
-			i += copy(dAtA[i:], s)
-		}
-	}
 	if m.XXX_unrecognized != nil {
-		i += copy(dAtA[i:], m.XXX_unrecognized)
+		i -= len(m.XXX_unrecognized)
+		copy(dAtA[i:], m.XXX_unrecognized)
 	}
-	return i, nil
+	if m.Topic != nil {
+		i -= len(*m.Topic)
+		copy(dAtA[i:], *m.Topic)
+		i = encodeVarintTrace(dAtA, i, uint64(len(*m.Topic)))
+		i--
+		dAtA[i] = 0x12
+	}
+	if m.MessageID != nil {
+		i -= len(m.MessageID)
+		copy(dAtA[i:], m.MessageID)
+		i = encodeVarintTrace(dAtA, i, uint64(len(m.MessageID)))
+		i--
+		dAtA[i] = 0xa
+	}
+	return len(dAtA) - i, nil
 }
 
 func (m *TraceEvent_SubMeta) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
-	n, err := m.MarshalTo(dAtA)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
 	if err != nil {
 		return nil, err
 	}
@@ -2315,36 +2437,43 @@ func (m *TraceEvent_SubMeta) Marshal() (dAtA []byte, err error) {
 }
 
 func (m *TraceEvent_SubMeta) MarshalTo(dAtA []byte) (int, error) {
-	var i int
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *TraceEvent_SubMeta) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
 	_ = i
 	var l int
 	_ = l
+	if m.XXX_unrecognized != nil {
+		i -= len(m.XXX_unrecognized)
+		copy(dAtA[i:], m.XXX_unrecognized)
+	}
+	if m.Topic != nil {
+		i -= len(*m.Topic)
+		copy(dAtA[i:], *m.Topic)
+		i = encodeVarintTrace(dAtA, i, uint64(len(*m.Topic)))
+		i--
+		dAtA[i] = 0x12
+	}
 	if m.Subscribe != nil {
-		dAtA[i] = 0x8
-		i++
+		i--
 		if *m.Subscribe {
 			dAtA[i] = 1
 		} else {
 			dAtA[i] = 0
 		}
-		i++
+		i--
+		dAtA[i] = 0x8
 	}
-	if m.Topic != nil {
-		dAtA[i] = 0x12
-		i++
-		i = encodeVarintTrace(dAtA, i, uint64(len(*m.Topic)))
-		i += copy(dAtA[i:], *m.Topic)
-	}
-	if m.XXX_unrecognized != nil {
-		i += copy(dAtA[i:], m.XXX_unrecognized)
-	}
-	return i, nil
+	return len(dAtA) - i, nil
 }
 
 func (m *TraceEvent_ControlMeta) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
-	n, err := m.MarshalTo(dAtA)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
 	if err != nil {
 		return nil, err
 	}
@@ -2352,68 +2481,82 @@ func (m *TraceEvent_ControlMeta) Marshal() (dAtA []byte, err error) {
 }
 
 func (m *TraceEvent_ControlMeta) MarshalTo(dAtA []byte) (int, error) {
-	var i int
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *TraceEvent_ControlMeta) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
 	_ = i
 	var l int
 	_ = l
-	if len(m.Ihave) > 0 {
-		for _, msg := range m.Ihave {
-			dAtA[i] = 0xa
-			i++
-			i = encodeVarintTrace(dAtA, i, uint64(msg.Size()))
-			n, err := msg.MarshalTo(dAtA[i:])
-			if err != nil {
-				return 0, err
-			}
-			i += n
-		}
+	if m.XXX_unrecognized != nil {
+		i -= len(m.XXX_unrecognized)
+		copy(dAtA[i:], m.XXX_unrecognized)
 	}
-	if len(m.Iwant) > 0 {
-		for _, msg := range m.Iwant {
-			dAtA[i] = 0x12
-			i++
-			i = encodeVarintTrace(dAtA, i, uint64(msg.Size()))
-			n, err := msg.MarshalTo(dAtA[i:])
-			if err != nil {
-				return 0, err
+	if len(m.Prune) > 0 {
+		for iNdEx := len(m.Prune) - 1; iNdEx >= 0; iNdEx-- {
+			{
+				size, err := m.Prune[iNdEx].MarshalToSizedBuffer(dAtA[:i])
+				if err != nil {
+					return 0, err
+				}
+				i -= size
+				i = encodeVarintTrace(dAtA, i, uint64(size))
 			}
-			i += n
+			i--
+			dAtA[i] = 0x22
 		}
 	}
 	if len(m.Graft) > 0 {
-		for _, msg := range m.Graft {
+		for iNdEx := len(m.Graft) - 1; iNdEx >= 0; iNdEx-- {
+			{
+				size, err := m.Graft[iNdEx].MarshalToSizedBuffer(dAtA[:i])
+				if err != nil {
+					return 0, err
+				}
+				i -= size
+				i = encodeVarintTrace(dAtA, i, uint64(size))
+			}
+			i--
 			dAtA[i] = 0x1a
-			i++
-			i = encodeVarintTrace(dAtA, i, uint64(msg.Size()))
-			n, err := msg.MarshalTo(dAtA[i:])
-			if err != nil {
-				return 0, err
-			}
-			i += n
 		}
 	}
-	if len(m.Prune) > 0 {
-		for _, msg := range m.Prune {
-			dAtA[i] = 0x22
-			i++
-			i = encodeVarintTrace(dAtA, i, uint64(msg.Size()))
-			n, err := msg.MarshalTo(dAtA[i:])
-			if err != nil {
-				return 0, err
+	if len(m.Iwant) > 0 {
+		for iNdEx := len(m.Iwant) - 1; iNdEx >= 0; iNdEx-- {
+			{
+				size, err := m.Iwant[iNdEx].MarshalToSizedBuffer(dAtA[:i])
+				if err != nil {
+					return 0, err
+				}
+				i -= size
+				i = encodeVarintTrace(dAtA, i, uint64(size))
 			}
-			i += n
+			i--
+			dAtA[i] = 0x12
 		}
 	}
-	if m.XXX_unrecognized != nil {
-		i += copy(dAtA[i:], m.XXX_unrecognized)
+	if len(m.Ihave) > 0 {
+		for iNdEx := len(m.Ihave) - 1; iNdEx >= 0; iNdEx-- {
+			{
+				size, err := m.Ihave[iNdEx].MarshalToSizedBuffer(dAtA[:i])
+				if err != nil {
+					return 0, err
+				}
+				i -= size
+				i = encodeVarintTrace(dAtA, i, uint64(size))
+			}
+			i--
+			dAtA[i] = 0xa
+		}
 	}
-	return i, nil
+	return len(dAtA) - i, nil
 }
 
 func (m *TraceEvent_ControlIHaveMeta) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
-	n, err := m.MarshalTo(dAtA)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
 	if err != nil {
 		return nil, err
 	}
@@ -2421,34 +2564,42 @@ func (m *TraceEvent_ControlIHaveMeta) Marshal() (dAtA []byte, err error) {
 }
 
 func (m *TraceEvent_ControlIHaveMeta) MarshalTo(dAtA []byte) (int, error) {
-	var i int
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *TraceEvent_ControlIHaveMeta) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
 	_ = i
 	var l int
 	_ = l
-	if m.Topic != nil {
-		dAtA[i] = 0xa
-		i++
-		i = encodeVarintTrace(dAtA, i, uint64(len(*m.Topic)))
-		i += copy(dAtA[i:], *m.Topic)
+	if m.XXX_unrecognized != nil {
+		i -= len(m.XXX_unrecognized)
+		copy(dAtA[i:], m.XXX_unrecognized)
 	}
 	if len(m.MessageIDs) > 0 {
-		for _, b := range m.MessageIDs {
+		for iNdEx := len(m.MessageIDs) - 1; iNdEx >= 0; iNdEx-- {
+			i -= len(m.MessageIDs[iNdEx])
+			copy(dAtA[i:], m.MessageIDs[iNdEx])
+			i = encodeVarintTrace(dAtA, i, uint64(len(m.MessageIDs[iNdEx])))
+			i--
 			dAtA[i] = 0x12
-			i++
-			i = encodeVarintTrace(dAtA, i, uint64(len(b)))
-			i += copy(dAtA[i:], b)
 		}
 	}
-	if m.XXX_unrecognized != nil {
-		i += copy(dAtA[i:], m.XXX_unrecognized)
+	if m.Topic != nil {
+		i -= len(*m.Topic)
+		copy(dAtA[i:], *m.Topic)
+		i = encodeVarintTrace(dAtA, i, uint64(len(*m.Topic)))
+		i--
+		dAtA[i] = 0xa
 	}
-	return i, nil
+	return len(dAtA) - i, nil
 }
 
 func (m *TraceEvent_ControlIWantMeta) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
-	n, err := m.MarshalTo(dAtA)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
 	if err != nil {
 		return nil, err
 	}
@@ -2456,28 +2607,35 @@ func (m *TraceEvent_ControlIWantMeta) Marshal() (dAtA []byte, err error) {
 }
 
 func (m *TraceEvent_ControlIWantMeta) MarshalTo(dAtA []byte) (int, error) {
-	var i int
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *TraceEvent_ControlIWantMeta) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
 	_ = i
 	var l int
 	_ = l
+	if m.XXX_unrecognized != nil {
+		i -= len(m.XXX_unrecognized)
+		copy(dAtA[i:], m.XXX_unrecognized)
+	}
 	if len(m.MessageIDs) > 0 {
-		for _, b := range m.MessageIDs {
+		for iNdEx := len(m.MessageIDs) - 1; iNdEx >= 0; iNdEx-- {
+			i -= len(m.MessageIDs[iNdEx])
+			copy(dAtA[i:], m.MessageIDs[iNdEx])
+			i = encodeVarintTrace(dAtA, i, uint64(len(m.MessageIDs[iNdEx])))
+			i--
 			dAtA[i] = 0xa
-			i++
-			i = encodeVarintTrace(dAtA, i, uint64(len(b)))
-			i += copy(dAtA[i:], b)
 		}
 	}
-	if m.XXX_unrecognized != nil {
-		i += copy(dAtA[i:], m.XXX_unrecognized)
-	}
-	return i, nil
+	return len(dAtA) - i, nil
 }
 
 func (m *TraceEvent_ControlGraftMeta) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
-	n, err := m.MarshalTo(dAtA)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
 	if err != nil {
 		return nil, err
 	}
@@ -2485,26 +2643,33 @@ func (m *TraceEvent_ControlGraftMeta) Marshal() (dAtA []byte, err error) {
 }
 
 func (m *TraceEvent_ControlGraftMeta) MarshalTo(dAtA []byte) (int, error) {
-	var i int
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *TraceEvent_ControlGraftMeta) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
 	_ = i
 	var l int
 	_ = l
-	if m.Topic != nil {
-		dAtA[i] = 0xa
-		i++
-		i = encodeVarintTrace(dAtA, i, uint64(len(*m.Topic)))
-		i += copy(dAtA[i:], *m.Topic)
-	}
 	if m.XXX_unrecognized != nil {
-		i += copy(dAtA[i:], m.XXX_unrecognized)
+		i -= len(m.XXX_unrecognized)
+		copy(dAtA[i:], m.XXX_unrecognized)
 	}
-	return i, nil
+	if m.Topic != nil {
+		i -= len(*m.Topic)
+		copy(dAtA[i:], *m.Topic)
+		i = encodeVarintTrace(dAtA, i, uint64(len(*m.Topic)))
+		i--
+		dAtA[i] = 0xa
+	}
+	return len(dAtA) - i, nil
 }
 
 func (m *TraceEvent_ControlPruneMeta) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
-	n, err := m.MarshalTo(dAtA)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
 	if err != nil {
 		return nil, err
 	}
@@ -2512,34 +2677,42 @@ func (m *TraceEvent_ControlPruneMeta) Marshal() (dAtA []byte, err error) {
 }
 
 func (m *TraceEvent_ControlPruneMeta) MarshalTo(dAtA []byte) (int, error) {
-	var i int
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *TraceEvent_ControlPruneMeta) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
 	_ = i
 	var l int
 	_ = l
-	if m.Topic != nil {
-		dAtA[i] = 0xa
-		i++
-		i = encodeVarintTrace(dAtA, i, uint64(len(*m.Topic)))
-		i += copy(dAtA[i:], *m.Topic)
+	if m.XXX_unrecognized != nil {
+		i -= len(m.XXX_unrecognized)
+		copy(dAtA[i:], m.XXX_unrecognized)
 	}
 	if len(m.Peers) > 0 {
-		for _, b := range m.Peers {
+		for iNdEx := len(m.Peers) - 1; iNdEx >= 0; iNdEx-- {
+			i -= len(m.Peers[iNdEx])
+			copy(dAtA[i:], m.Peers[iNdEx])
+			i = encodeVarintTrace(dAtA, i, uint64(len(m.Peers[iNdEx])))
+			i--
 			dAtA[i] = 0x12
-			i++
-			i = encodeVarintTrace(dAtA, i, uint64(len(b)))
-			i += copy(dAtA[i:], b)
 		}
 	}
-	if m.XXX_unrecognized != nil {
-		i += copy(dAtA[i:], m.XXX_unrecognized)
+	if m.Topic != nil {
+		i -= len(*m.Topic)
+		copy(dAtA[i:], *m.Topic)
+		i = encodeVarintTrace(dAtA, i, uint64(len(*m.Topic)))
+		i--
+		dAtA[i] = 0xa
 	}
-	return i, nil
+	return len(dAtA) - i, nil
 }
 
 func (m *TraceEventBatch) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
-	n, err := m.MarshalTo(dAtA)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
 	if err != nil {
 		return nil, err
 	}
@@ -2547,36 +2720,46 @@ func (m *TraceEventBatch) Marshal() (dAtA []byte, err error) {
 }
 
 func (m *TraceEventBatch) MarshalTo(dAtA []byte) (int, error) {
-	var i int
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *TraceEventBatch) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
 	_ = i
 	var l int
 	_ = l
+	if m.XXX_unrecognized != nil {
+		i -= len(m.XXX_unrecognized)
+		copy(dAtA[i:], m.XXX_unrecognized)
+	}
 	if len(m.Batch) > 0 {
-		for _, msg := range m.Batch {
-			dAtA[i] = 0xa
-			i++
-			i = encodeVarintTrace(dAtA, i, uint64(msg.Size()))
-			n, err := msg.MarshalTo(dAtA[i:])
-			if err != nil {
-				return 0, err
+		for iNdEx := len(m.Batch) - 1; iNdEx >= 0; iNdEx-- {
+			{
+				size, err := m.Batch[iNdEx].MarshalToSizedBuffer(dAtA[:i])
+				if err != nil {
+					return 0, err
+				}
+				i -= size
+				i = encodeVarintTrace(dAtA, i, uint64(size))
 			}
-			i += n
+			i--
+			dAtA[i] = 0xa
 		}
 	}
-	if m.XXX_unrecognized != nil {
-		i += copy(dAtA[i:], m.XXX_unrecognized)
-	}
-	return i, nil
+	return len(dAtA) - i, nil
 }
 
 func encodeVarintTrace(dAtA []byte, offset int, v uint64) int {
+	offset -= sovTrace(v)
+	base := offset
 	for v >= 1<<7 {
 		dAtA[offset] = uint8(v&0x7f | 0x80)
 		v >>= 7
 		offset++
 	}
 	dAtA[offset] = uint8(v)
-	return offset + 1
+	return base
 }
 func (m *TraceEvent) Size() (n int) {
 	if m == nil {
@@ -2662,11 +2845,9 @@ func (m *TraceEvent_PublishMessage) Size() (n int) {
 		l = len(m.MessageID)
 		n += 1 + l + sovTrace(uint64(l))
 	}
-	if len(m.Topics) > 0 {
-		for _, s := range m.Topics {
-			l = len(s)
-			n += 1 + l + sovTrace(uint64(l))
-		}
+	if m.Topic != nil {
+		l = len(*m.Topic)
+		n += 1 + l + sovTrace(uint64(l))
 	}
 	if m.XXX_unrecognized != nil {
 		n += len(m.XXX_unrecognized)
@@ -2692,11 +2873,9 @@ func (m *TraceEvent_RejectMessage) Size() (n int) {
 		l = len(*m.Reason)
 		n += 1 + l + sovTrace(uint64(l))
 	}
-	if len(m.Topics) > 0 {
-		for _, s := range m.Topics {
-			l = len(s)
-			n += 1 + l + sovTrace(uint64(l))
-		}
+	if m.Topic != nil {
+		l = len(*m.Topic)
+		n += 1 + l + sovTrace(uint64(l))
 	}
 	if m.XXX_unrecognized != nil {
 		n += len(m.XXX_unrecognized)
@@ -2718,11 +2897,9 @@ func (m *TraceEvent_DuplicateMessage) Size() (n int) {
 		l = len(m.ReceivedFrom)
 		n += 1 + l + sovTrace(uint64(l))
 	}
-	if len(m.Topics) > 0 {
-		for _, s := range m.Topics {
-			l = len(s)
-			n += 1 + l + sovTrace(uint64(l))
-		}
+	if m.Topic != nil {
+		l = len(*m.Topic)
+		n += 1 + l + sovTrace(uint64(l))
 	}
 	if m.XXX_unrecognized != nil {
 		n += len(m.XXX_unrecognized)
@@ -2740,11 +2917,9 @@ func (m *TraceEvent_DeliverMessage) Size() (n int) {
 		l = len(m.MessageID)
 		n += 1 + l + sovTrace(uint64(l))
 	}
-	if len(m.Topics) > 0 {
-		for _, s := range m.Topics {
-			l = len(s)
-			n += 1 + l + sovTrace(uint64(l))
-		}
+	if m.Topic != nil {
+		l = len(*m.Topic)
+		n += 1 + l + sovTrace(uint64(l))
 	}
 	if m.XXX_unrecognized != nil {
 		n += len(m.XXX_unrecognized)
@@ -2958,11 +3133,9 @@ func (m *TraceEvent_MessageMeta) Size() (n int) {
 		l = len(m.MessageID)
 		n += 1 + l + sovTrace(uint64(l))
 	}
-	if len(m.Topics) > 0 {
-		for _, s := range m.Topics {
-			l = len(s)
-			n += 1 + l + sovTrace(uint64(l))
-		}
+	if m.Topic != nil {
+		l = len(*m.Topic)
+		n += 1 + l + sovTrace(uint64(l))
 	}
 	if m.XXX_unrecognized != nil {
 		n += len(m.XXX_unrecognized)
@@ -3122,14 +3295,7 @@ func (m *TraceEventBatch) Size() (n int) {
 }
 
 func sovTrace(x uint64) (n int) {
-	for {
-		n++
-		x >>= 7
-		if x == 0 {
-			break
-		}
-	}
-	return n
+	return (math_bits.Len64(x|1) + 6) / 7
 }
 func sozTrace(x uint64) (n int) {
 	return sovTrace(uint64((x << 1) ^ uint64((int64(x) >> 63))))
@@ -3795,7 +3961,7 @@ func (m *TraceEvent_PublishMessage) Unmarshal(dAtA []byte) error {
 			iNdEx = postIndex
 		case 2:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Topics", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field Topic", wireType)
 			}
 			var stringLen uint64
 			for shift := uint(0); ; shift += 7 {
@@ -3823,7 +3989,8 @@ func (m *TraceEvent_PublishMessage) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Topics = append(m.Topics, string(dAtA[iNdEx:postIndex]))
+			s := string(dAtA[iNdEx:postIndex])
+			m.Topic = &s
 			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
@@ -3982,7 +4149,7 @@ func (m *TraceEvent_RejectMessage) Unmarshal(dAtA []byte) error {
 			iNdEx = postIndex
 		case 4:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Topics", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field Topic", wireType)
 			}
 			var stringLen uint64
 			for shift := uint(0); ; shift += 7 {
@@ -4010,7 +4177,8 @@ func (m *TraceEvent_RejectMessage) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Topics = append(m.Topics, string(dAtA[iNdEx:postIndex]))
+			s := string(dAtA[iNdEx:postIndex])
+			m.Topic = &s
 			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
@@ -4136,7 +4304,7 @@ func (m *TraceEvent_DuplicateMessage) Unmarshal(dAtA []byte) error {
 			iNdEx = postIndex
 		case 3:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Topics", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field Topic", wireType)
 			}
 			var stringLen uint64
 			for shift := uint(0); ; shift += 7 {
@@ -4164,7 +4332,8 @@ func (m *TraceEvent_DuplicateMessage) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Topics = append(m.Topics, string(dAtA[iNdEx:postIndex]))
+			s := string(dAtA[iNdEx:postIndex])
+			m.Topic = &s
 			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
@@ -4256,7 +4425,7 @@ func (m *TraceEvent_DeliverMessage) Unmarshal(dAtA []byte) error {
 			iNdEx = postIndex
 		case 2:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Topics", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field Topic", wireType)
 			}
 			var stringLen uint64
 			for shift := uint(0); ; shift += 7 {
@@ -4284,7 +4453,8 @@ func (m *TraceEvent_DeliverMessage) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Topics = append(m.Topics, string(dAtA[iNdEx:postIndex]))
+			s := string(dAtA[iNdEx:postIndex])
+			m.Topic = &s
 			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
@@ -5531,7 +5701,7 @@ func (m *TraceEvent_MessageMeta) Unmarshal(dAtA []byte) error {
 			iNdEx = postIndex
 		case 2:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Topics", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field Topic", wireType)
 			}
 			var stringLen uint64
 			for shift := uint(0); ; shift += 7 {
@@ -5559,7 +5729,8 @@ func (m *TraceEvent_MessageMeta) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Topics = append(m.Topics, string(dAtA[iNdEx:postIndex]))
+			s := string(dAtA[iNdEx:postIndex])
+			m.Topic = &s
 			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
@@ -6386,6 +6557,7 @@ func (m *TraceEventBatch) Unmarshal(dAtA []byte) error {
 func skipTrace(dAtA []byte) (n int, err error) {
 	l := len(dAtA)
 	iNdEx := 0
+	depth := 0
 	for iNdEx < l {
 		var wire uint64
 		for shift := uint(0); ; shift += 7 {
@@ -6417,10 +6589,8 @@ func skipTrace(dAtA []byte) (n int, err error) {
 					break
 				}
 			}
-			return iNdEx, nil
 		case 1:
 			iNdEx += 8
-			return iNdEx, nil
 		case 2:
 			var length int
 			for shift := uint(0); ; shift += 7 {
@@ -6441,55 +6611,30 @@ func skipTrace(dAtA []byte) (n int, err error) {
 				return 0, ErrInvalidLengthTrace
 			}
 			iNdEx += length
-			if iNdEx < 0 {
-				return 0, ErrInvalidLengthTrace
-			}
-			return iNdEx, nil
 		case 3:
-			for {
-				var innerWire uint64
-				var start int = iNdEx
-				for shift := uint(0); ; shift += 7 {
-					if shift >= 64 {
-						return 0, ErrIntOverflowTrace
-					}
-					if iNdEx >= l {
-						return 0, io.ErrUnexpectedEOF
-					}
-					b := dAtA[iNdEx]
-					iNdEx++
-					innerWire |= (uint64(b) & 0x7F) << shift
-					if b < 0x80 {
-						break
-					}
-				}
-				innerWireType := int(innerWire & 0x7)
-				if innerWireType == 4 {
-					break
-				}
-				next, err := skipTrace(dAtA[start:])
-				if err != nil {
-					return 0, err
-				}
-				iNdEx = start + next
-				if iNdEx < 0 {
-					return 0, ErrInvalidLengthTrace
-				}
-			}
-			return iNdEx, nil
+			depth++
 		case 4:
-			return iNdEx, nil
+			if depth == 0 {
+				return 0, ErrUnexpectedEndOfGroupTrace
+			}
+			depth--
 		case 5:
 			iNdEx += 4
-			return iNdEx, nil
 		default:
 			return 0, fmt.Errorf("proto: illegal wireType %d", wireType)
 		}
+		if iNdEx < 0 {
+			return 0, ErrInvalidLengthTrace
+		}
+		if depth == 0 {
+			return iNdEx, nil
+		}
 	}
-	panic("unreachable")
+	return 0, io.ErrUnexpectedEOF
 }
 
 var (
-	ErrInvalidLengthTrace = fmt.Errorf("proto: negative length found during unmarshaling")
-	ErrIntOverflowTrace   = fmt.Errorf("proto: integer overflow")
+	ErrInvalidLengthTrace        = fmt.Errorf("proto: negative length found during unmarshaling")
+	ErrIntOverflowTrace          = fmt.Errorf("proto: integer overflow")
+	ErrUnexpectedEndOfGroupTrace = fmt.Errorf("proto: unexpected end of group")
 )

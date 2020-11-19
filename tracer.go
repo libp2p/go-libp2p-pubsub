@@ -11,7 +11,6 @@ import (
 
 	pb "github.com/libp2p/go-libp2p-pubsub/pb"
 
-	"github.com/libp2p/go-libp2p-core/helpers"
 	"github.com/libp2p/go-libp2p-core/host"
 	"github.com/libp2p/go-libp2p-core/network"
 	"github.com/libp2p/go-libp2p-core/peer"
@@ -204,7 +203,7 @@ func (t *RemoteTracer) doWrite() {
 
 	s, err := t.openStream()
 	if err != nil {
-		log.Warnf("error opening remote tracer stream: %s", err.Error())
+		log.Debugf("error opening remote tracer stream: %s", err.Error())
 		return
 	}
 
@@ -239,13 +238,13 @@ func (t *RemoteTracer) doWrite() {
 
 		err = w.WriteMsg(&batch)
 		if err != nil {
-			log.Warnf("error writing trace event batch: %s", err)
+			log.Debugf("error writing trace event batch: %s", err)
 			goto end
 		}
 
 		err = gzipW.Flush()
 		if err != nil {
-			log.Warnf("error flushin gzip stream: %s", err)
+			log.Debugf("error flushin gzip stream: %s", err)
 			goto end
 		}
 
@@ -260,7 +259,7 @@ func (t *RemoteTracer) doWrite() {
 				s.Reset()
 			} else {
 				gzipW.Close()
-				helpers.FullClose(s)
+				s.Close()
 			}
 			return
 		}
@@ -269,7 +268,7 @@ func (t *RemoteTracer) doWrite() {
 			s.Reset()
 			s, err = t.openStream()
 			if err != nil {
-				log.Warnf("error opening remote tracer stream: %s", err.Error())
+				log.Debugf("error opening remote tracer stream: %s", err.Error())
 				return
 			}
 

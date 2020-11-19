@@ -16,6 +16,7 @@ func TestBrokenPromises(t *testing.T) {
 
 	peerA := peer.ID("A")
 	peerB := peer.ID("B")
+	peerC := peer.ID("C")
 
 	var msgs []*pb.Message
 	var mids []string
@@ -29,12 +30,16 @@ func TestBrokenPromises(t *testing.T) {
 
 	gt.AddPromise(peerA, mids)
 	gt.AddPromise(peerB, mids)
+	gt.AddPromise(peerC, mids)
 
 	// no broken promises yet
 	brokenPromises := gt.GetBrokenPromises()
 	if brokenPromises != nil {
 		t.Fatal("expected no broken promises")
 	}
+
+	// throttle one of the peers to save his promises
+	gt.ThrottlePeer(peerC)
 
 	// make promises break
 	time.Sleep(GossipSubIWantFollowupTime + 10*time.Millisecond)

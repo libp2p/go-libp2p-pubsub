@@ -14,15 +14,24 @@ import (
 // The tracking of promises is probabilistic to avoid using too much memory.
 type gossipTracer struct {
 	sync.Mutex
-	msgID        MsgIdFunction
+
+	msgID MsgIdFunction
+
 	followUpTime time.Duration
-	promises     map[string]map[peer.ID]time.Time
+
+	// promises for messages by message ID; for each message tracked, we track the promise
+	// expiration time for each peer.
+	promises map[string]map[peer.ID]time.Time
+	// promises for each peer; for each peer, we track the promised message IDs.
+	// this index allows us to quickly void promises when a peer is throttled.
+	peerPromises map[peer.ID]map[string]struct{}
 }
 
 func newGossipTracer() *gossipTracer {
 	return &gossipTracer{
-		msgID:    DefaultMsgIdFn,
-		promises: make(map[string]map[peer.ID]time.Time),
+		msgID:        DefaultMsgIdFn,
+		promises:     make(map[string]map[peer.ID]time.Time),
+		peerPromises: make(map[peer.ID]map[string]struct{}),
 	}
 }
 
@@ -47,15 +56,21 @@ func (gt *gossipTracer) AddPromise(p peer.ID, msgIDs []string) {
 	gt.Lock()
 	defer gt.Unlock()
 
-	peers, ok := gt.promises[mid]
+	promises, ok := gt.promises[mid]
 	if !ok {
-		peers = make(map[peer.ID]time.Time)
-		gt.promises[mid] = peers
+		promises = make(map[peer.ID]time.Time)
+		gt.promises[mid] = promises
 	}
 
-	_, ok = peers[p]
+	_, ok = promises[p]
 	if !ok {
-		peers[p] = time.Now().Add(gt.followUpTime)
+		promises[p] = time.Now().Add(gt.followUpTime)
+		peerPromises, ok := gt.peerPromises[p]
+		if !ok {
+			peerPromises = make(map[string]struct{})
+			gt.peerPromises[p] = peerPromises
+		}
+		peerPromises[mid] = struct{}{}
 	}
 }
 
@@ -72,18 +87,26 @@ func (gt *gossipTracer) GetBrokenPromises() map[peer.ID]int {
 	var res map[peer.ID]int
 	now := time.Now()
 
-	for mid, peers := range gt.promises {
-		for p, expire := range peers {
+	// find broken promises from peers
+	for mid, promises := range gt.promises {
+		for p, expire := range promises {
 			if expire.Before(now) {
 				if res == nil {
 					res = make(map[peer.ID]int)
 				}
 				res[p]++
 
-				delete(peers, p)
+				delete(promises, p)
+
+				peerPromises := gt.peerPromises[p]
+				delete(peerPromises, mid)
+				if len(peerPromises) == 0 {
+					delete(gt.peerPromises, p)
+				}
 			}
 		}
-		if len(peers) == 0 {
+
+		if len(promises) == 0 {
 			delete(gt.promises, mid)
 		}
 	}
@@ -93,7 +116,7 @@ func (gt *gossipTracer) GetBrokenPromises() map[peer.ID]int {
 
 var _ internalTracer = (*gossipTracer)(nil)
 
-func (gt *gossipTracer) fullfillPromise(msg *Message) {
+func (gt *gossipTracer) fulfillPromise(msg *Message) {
 	mid := gt.msgID(msg.Message)
 
 	gt.Lock()
@@ -103,12 +126,12 @@ func (gt *gossipTracer) fullfillPromise(msg *Message) {
 }
 
 func (gt *gossipTracer) DeliverMessage(msg *Message) {
-	// someone delivered a message, fullfill promises for it
-	gt.fullfillPromise(msg)
+	// someone delivered a message, fulfill promises for it
+	gt.fulfillPromise(msg)
 }
 
 func (gt *gossipTracer) RejectMessage(msg *Message, reason string) {
-	// A message got rejected, so we can fullfill promises and let the score penalty apply
+	// A message got rejected, so we can fulfill promises and let the score penalty apply
 	// from invalid message delivery.
 	// We do take exception and apply promise penalty regardless in the following cases, where
 	// the peer delivered an obviously invalid message.
@@ -119,14 +142,14 @@ func (gt *gossipTracer) RejectMessage(msg *Message, reason string) {
 		return
 	}
 
-	gt.fullfillPromise(msg)
+	gt.fulfillPromise(msg)
 }
 
 func (gt *gossipTracer) ValidateMessage(msg *Message) {
-	// we consider the promise fullfilled as soon as the message begins validation
+	// we consider the promise fulfilled as soon as the message begins validation
 	// if it was a case of signature issue it would have been rejected immediately
 	// without triggering the Validate trace
-	gt.fullfillPromise(msg)
+	gt.fulfillPromise(msg)
 }
 
 func (gt *gossipTracer) AddPeer(p peer.ID, proto protocol.ID) {}
@@ -136,3 +159,23 @@ func (gt *gossipTracer) Leave(topic string)                   {}
 func (gt *gossipTracer) Graft(p peer.ID, topic string)        {}
 func (gt *gossipTracer) Prune(p peer.ID, topic string)        {}
 func (gt *gossipTracer) DuplicateMessage(msg *Message)        {}
+
+func (gt *gossipTracer) ThrottlePeer(p peer.ID) {
+	gt.Lock()
+	defer gt.Unlock()
+
+	peerPromises, ok := gt.peerPromises[p]
+	if !ok {
+		return
+	}
+
+	for mid := range peerPromises {
+		promises := gt.promises[mid]
+		delete(promises, p)
+		if len(promises) == 0 {
+			delete(gt.promises, mid)
+		}
+	}
+
+	delete(gt.peerPromises, p)
+}

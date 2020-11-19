@@ -157,10 +157,11 @@ func makeTestMessage(n int) *pb.Message {
 	seqno := make([]byte, 8)
 	binary.BigEndian.PutUint64(seqno, uint64(n))
 	data := []byte(fmt.Sprintf("%d", n))
+	topic := "test"
 	return &pb.Message{
-		Data:     data,
-		TopicIDs: []string{"test"},
-		From:     []byte("test"),
-		Seqno:    seqno,
+		Data:  data,
+		Topic: &topic,
+		From:  []byte("test"),
+		Seqno: seqno,
 	}
 }
