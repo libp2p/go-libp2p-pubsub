@@ -32,3 +32,12 @@ func (p *PubSubNotif) Listen(n network.Network, _ ma.Multiaddr) {
 
 func (p *PubSubNotif) ListenClose(n network.Network, _ ma.Multiaddr) {
 }
+
+func (p *PubSubNotif) Initialize() {
+	for _, pr := range p.host.Network().Peers() {
+		select {
+		case p.newPeers <- pr:
+		case <-p.ctx.Done():
+		}
+	}
+}
