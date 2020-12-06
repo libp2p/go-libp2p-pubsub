@@ -1137,3 +1137,66 @@ func TestWithInvalidMessageAuthor(t *testing.T) {
 		t.Fatal("expected error")
 	}
 }
+
+func TestPreconnectedNodes(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	// If this test fails it may hang so set a timeout
+	ctx, cancel = context.WithTimeout(ctx, time.Second*10)
+	defer cancel()
+
+	// Create hosts
+	h1 := bhost.NewBlankHost(swarmt.GenSwarm(t, ctx))
+	h2 := bhost.NewBlankHost(swarmt.GenSwarm(t, ctx))
+
+	opts := []Option{WithDiscovery(&dummyDiscovery{})}
+	// Setup first PubSub
+	p1, err := NewFloodSub(ctx, h1, opts...)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Connect the two hosts together
+	connect(t, h2, h1)
+
+	// Setup the second DHT
+	p2, err := NewFloodSub(ctx, h2, opts...)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// See if it works
+	p2Topic, err := p2.Join("test")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	p1Topic, err := p1.Join("test")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	testPublish := func(publisher, receiver *Topic, msg []byte) {
+		receiverSub, err := receiver.Subscribe()
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if err := publisher.Publish(ctx, msg, WithReadiness(MinTopicSize(1))); err != nil {
+			t.Fatal(err)
+		}
+
+		m, err := receiverSub.Next(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if receivedData := m.GetData(); !bytes.Equal(receivedData, msg) {
+			t.Fatalf("expected message %v, got %v", msg, receivedData)
+		}
+	}
+
+	// Test both directions since PubSub uses one directional streams
+	testPublish(p1Topic, p2Topic, []byte("test1-to-2"))
+	testPublish(p1Topic, p2Topic, []byte("test2-to-1"))
+}
