@@ -481,7 +481,7 @@ func (p *PubSub) processLoop(ctx context.Context) {
 		select {
 		case pid := <-p.newPeers:
 			if _, ok := p.peers[pid]; ok {
-				log.Warn("already have connection to peer: ", pid)
+				log.Debug("already have connection to peer: ", pid)
 				continue
 			}
 
