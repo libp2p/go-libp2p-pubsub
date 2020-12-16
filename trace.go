@@ -154,8 +154,9 @@ func (t *pubsubTracer) DeliverMessage(msg *Message) {
 		PeerID:    []byte(t.pid),
 		Timestamp: &now,
 		DeliverMessage: &pb.TraceEvent_DeliverMessage{
-			MessageID: []byte(t.msgID(msg.Message)),
-			Topic:     msg.Topic,
+			MessageID:    []byte(t.msgID(msg.Message)),
+			Topic:        msg.Topic,
+			ReceivedFrom: []byte(msg.ReceivedFrom),
 		},
 	}
 
