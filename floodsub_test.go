@@ -1200,3 +1200,57 @@ func TestPreconnectedNodes(t *testing.T) {
 	testPublish(p1Topic, p2Topic, []byte("test1-to-2"))
 	testPublish(p1Topic, p2Topic, []byte("test2-to-1"))
 }
+
+func TestDedupInboundStreams(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	h1 := bhost.NewBlankHost(swarmt.GenSwarm(t, ctx))
+	h2 := bhost.NewBlankHost(swarmt.GenSwarm(t, ctx))
+
+	_, err := NewFloodSub(ctx, h1)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Connect the two hosts together
+	connect(t, h2, h1)
+
+	// open a few streams and make sure all but the last one get reset
+	s1, err := h2.NewStream(ctx, h1.ID(), FloodSubID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(100 * time.Millisecond)
+
+	s2, err := h2.NewStream(ctx, h1.ID(), FloodSubID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(100 * time.Millisecond)
+
+	s3, err := h2.NewStream(ctx, h1.ID(), FloodSubID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(100 * time.Millisecond)
+
+	// check that s1 and s2 have been reset
+	_, err = s1.Read([]byte{0})
+	if err == nil {
+		t.Fatal("expected s1 to be reset")
+	}
+
+	_, err = s2.Read([]byte{0})
+	if err == nil {
+		t.Fatal("expected s2 to be reset")
+	}
+
+	// check that s3 is readable and simply times out
+	s3.SetReadDeadline(time.Now().Add(time.Millisecond))
+	_, err = s3.Read([]byte{0})
+	err2, ok := err.(interface{ Timeout() bool })
+	if !ok || !err2.Timeout() {
+		t.Fatal(err)
+	}
+}
