@@ -52,6 +52,14 @@ func (p *PubSub) handleNewStream(s network.Stream) {
 	p.inboundStreams[peer] = s
 	p.inboundStreamsMx.Unlock()
 
+	defer func() {
+		p.inboundStreamsMx.Lock()
+		if p.inboundStreams[peer] == s {
+			delete(p.inboundStreams, peer)
+		}
+		p.inboundStreamsMx.Unlock()
+	}()
+
 	r := protoio.NewDelimitedReader(s, p.maxMessageSize)
 	for {
 		rpc := new(RPC)
@@ -65,12 +73,6 @@ func (p *PubSub) handleNewStream(s network.Stream) {
 				// but it doesn't hurt to send it.
 				s.Close()
 			}
-
-			p.inboundStreamsMx.Lock()
-			if p.inboundStreams[peer] == s {
-				delete(p.inboundStreams, peer)
-			}
-			p.inboundStreamsMx.Unlock()
 
 			return
 		}
