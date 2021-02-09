@@ -336,10 +336,20 @@ func (ps *peerScore) ipColocationFactor(p peer.ID) float64 {
 	}
 
 	var result float64
+loop:
 	for _, ip := range pstats.ips {
 		_, whitelisted := ps.params.IPColocationFactorWhitelist[ip]
 		if whitelisted {
 			continue
+		}
+
+		if len(ps.params.IPColocationFactorWhitelistSubnets) > 0 {
+			ipObj := net.ParseIP(ip)
+			for _, ipNet := range ps.params.IPColocationFactorWhitelistSubnets {
+				if ipNet.Contains(ipObj) {
+					continue loop
+				}
+			}
 		}
 
 		// P6 has a cliff (IPColocationFactorThreshold); it's only applied iff
