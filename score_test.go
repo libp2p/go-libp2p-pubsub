@@ -743,7 +743,7 @@ func TestScoreIPColocation(t *testing.T) {
 	}
 }
 
-func TestScoreIPColocationWhitelistSubnet(t *testing.T) {
+func TestScoreIPColocationWhitelist(t *testing.T) {
 	// Create parameters with reasonable default values
 	mytopic := "mytopic"
 
@@ -753,11 +753,11 @@ func TestScoreIPColocationWhitelistSubnet(t *testing.T) {
 	}
 
 	params := &PeerScoreParams{
-		AppSpecificScore:                   func(peer.ID) float64 { return 0 },
-		IPColocationFactorThreshold:        1,
-		IPColocationFactorWeight:           -1,
-		IPColocationFactorWhitelistSubnets: []*net.IPNet{ipNet},
-		Topics:                             make(map[string]*TopicScoreParams),
+		AppSpecificScore:            func(peer.ID) float64 { return 0 },
+		IPColocationFactorThreshold: 1,
+		IPColocationFactorWeight:    -1,
+		IPColocationFactorWhitelist: []*net.IPNet{ipNet},
+		Topics:                      make(map[string]*TopicScoreParams),
 	}
 
 	peerA := peer.ID("A")
