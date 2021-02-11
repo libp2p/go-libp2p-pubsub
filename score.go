@@ -11,7 +11,7 @@ import (
 	"github.com/libp2p/go-libp2p-core/peer"
 	"github.com/libp2p/go-libp2p-core/protocol"
 
-	manet "github.com/multiformats/go-multiaddr-net"
+	manet "github.com/multiformats/go-multiaddr/net"
 )
 
 type peerStats struct {
@@ -182,6 +182,52 @@ func newPeerScore(params *PeerScoreParams) *peerScore {
 	}
 }
 
+// SetTopicScoreParams sets new score parameters for a topic.
+// If the topic previously had parameters and the parameters are lowering delivery caps,
+// then the score counters are recapped appropriately.
+// Note: assumes that the topic score parameters have already been validated
+func (ps *peerScore) SetTopicScoreParams(topic string, p *TopicScoreParams) error {
+	ps.Lock()
+	defer ps.Unlock()
+
+	old, exist := ps.params.Topics[topic]
+	ps.params.Topics[topic] = p
+
+	if !exist {
+		return nil
+	}
+
+	// check to see if the counter Caps are being lowered; if that's the case we need to recap them
+	recap := false
+	if p.FirstMessageDeliveriesCap < old.FirstMessageDeliveriesCap {
+		recap = true
+	}
+	if p.MeshMessageDeliveriesCap < old.MeshMessageDeliveriesCap {
+		recap = true
+	}
+	if !recap {
+		return nil
+	}
+
+	// recap counters for topic
+	for _, pstats := range ps.peerStats {
+		tstats, ok := pstats.topics[topic]
+		if !ok {
+			continue
+		}
+
+		if tstats.firstMessageDeliveries > p.FirstMessageDeliveriesCap {
+			tstats.firstMessageDeliveries = p.FirstMessageDeliveriesCap
+		}
+
+		if tstats.meshMessageDeliveries > p.MeshMessageDeliveriesCap {
+			tstats.meshMessageDeliveries = p.MeshMessageDeliveriesCap
+		}
+	}
+
+	return nil
+}
+
 // router interface
 func (ps *peerScore) Start(gs *GossipSubRouter) {
 	if ps == nil {
@@ -274,8 +320,11 @@ func (ps *peerScore) score(p peer.ID) float64 {
 	score += p6 * ps.params.IPColocationFactorWeight
 
 	// P7: behavioural pattern penalty
-	p7 := pstats.behaviourPenalty * pstats.behaviourPenalty
-	score += p7 * ps.params.BehaviourPenaltyWeight
+	if pstats.behaviourPenalty > ps.params.BehaviourPenaltyThreshold {
+		excess := pstats.behaviourPenalty - ps.params.BehaviourPenaltyThreshold
+		p7 := excess * excess
+		score += p7 * ps.params.BehaviourPenaltyWeight
+	}
 
 	return score
 }
@@ -629,7 +678,7 @@ func (ps *peerScore) DeliverMessage(msg *Message) {
 
 	// defensive check that this is the first delivery trace -- delivery status should be unknown
 	if drec.status != deliveryUnknown {
-		log.Warnf("unexpected delivery trace: message from %s was first seen %s ago and has delivery status %d", msg.ReceivedFrom, time.Now().Sub(drec.firstSeen), drec.status)
+		log.Debugf("unexpected delivery trace: message from %s was first seen %s ago and has delivery status %d", msg.ReceivedFrom, time.Now().Sub(drec.firstSeen), drec.status)
 		return
 	}
 
@@ -680,7 +729,7 @@ func (ps *peerScore) RejectMessage(msg *Message, reason string) {
 
 	// defensive check that this is the first rejection trace -- delivery status should be unknown
 	if drec.status != deliveryUnknown {
-		log.Warnf("unexpected rejection trace: message from %s was first seen %s ago and has delivery status %d", msg.ReceivedFrom, time.Now().Sub(drec.firstSeen), drec.status)
+		log.Debugf("unexpected rejection trace: message from %s was first seen %s ago and has delivery status %d", msg.ReceivedFrom, time.Now().Sub(drec.firstSeen), drec.status)
 		return
 	}
 
@@ -745,6 +794,8 @@ func (ps *peerScore) DuplicateMessage(msg *Message) {
 		// the message was ignored; do nothing
 	}
 }
+
+func (ps *peerScore) ThrottlePeer(p peer.ID) {}
 
 // message delivery records
 func (d *messageDeliveries) getRecord(id string) *deliveryRecord {
@@ -814,14 +865,13 @@ func (ps *peerScore) markInvalidMessageDelivery(p peer.ID, msg *Message) {
 		return
 	}
 
-	for _, topic := range msg.GetTopicIDs() {
-		tstats, ok := pstats.getTopicStats(topic, ps.params)
-		if !ok {
-			continue
-		}
-
-		tstats.invalidMessageDeliveries += 1
+	topic := msg.GetTopic()
+	tstats, ok := pstats.getTopicStats(topic, ps.params)
+	if !ok {
+		return
 	}
+
+	tstats.invalidMessageDeliveries += 1
 }
 
 // markFirstMessageDelivery increments the "first message deliveries" counter
@@ -833,27 +883,26 @@ func (ps *peerScore) markFirstMessageDelivery(p peer.ID, msg *Message) {
 		return
 	}
 
-	for _, topic := range msg.GetTopicIDs() {
-		tstats, ok := pstats.getTopicStats(topic, ps.params)
-		if !ok {
-			continue
-		}
+	topic := msg.GetTopic()
+	tstats, ok := pstats.getTopicStats(topic, ps.params)
+	if !ok {
+		return
+	}
 
-		cap := ps.params.Topics[topic].FirstMessageDeliveriesCap
-		tstats.firstMessageDeliveries += 1
-		if tstats.firstMessageDeliveries > cap {
-			tstats.firstMessageDeliveries = cap
-		}
+	cap := ps.params.Topics[topic].FirstMessageDeliveriesCap
+	tstats.firstMessageDeliveries += 1
+	if tstats.firstMessageDeliveries > cap {
+		tstats.firstMessageDeliveries = cap
+	}
 
-		if !tstats.inMesh {
-			continue
-		}
+	if !tstats.inMesh {
+		return
+	}
 
-		cap = ps.params.Topics[topic].MeshMessageDeliveriesCap
-		tstats.meshMessageDeliveries += 1
-		if tstats.meshMessageDeliveries > cap {
-			tstats.meshMessageDeliveries = cap
-		}
+	cap = ps.params.Topics[topic].MeshMessageDeliveriesCap
+	tstats.meshMessageDeliveries += 1
+	if tstats.meshMessageDeliveries > cap {
+		tstats.meshMessageDeliveries = cap
 	}
 }
 
@@ -861,41 +910,34 @@ func (ps *peerScore) markFirstMessageDelivery(p peer.ID, msg *Message) {
 // for messages we've seen before, as long the message was received within the
 // P3 window.
 func (ps *peerScore) markDuplicateMessageDelivery(p peer.ID, msg *Message, validated time.Time) {
-	var now time.Time
-
 	pstats, ok := ps.peerStats[p]
 	if !ok {
 		return
 	}
 
-	if !validated.IsZero() {
-		now = time.Now()
+	topic := msg.GetTopic()
+	tstats, ok := pstats.getTopicStats(topic, ps.params)
+	if !ok {
+		return
 	}
 
-	for _, topic := range msg.GetTopicIDs() {
-		tstats, ok := pstats.getTopicStats(topic, ps.params)
-		if !ok {
-			continue
-		}
+	if !tstats.inMesh {
+		return
+	}
 
-		if !tstats.inMesh {
-			continue
-		}
+	tparams := ps.params.Topics[topic]
 
-		tparams := ps.params.Topics[topic]
+	// check against the mesh delivery window -- if the validated time is passed as 0, then
+	// the message was received before we finished validation and thus falls within the mesh
+	// delivery window.
+	if !validated.IsZero() && time.Since(validated) > tparams.MeshMessageDeliveriesWindow {
+		return
+	}
 
-		// check against the mesh delivery window -- if the validated time is passed as 0, then
-		// the message was received before we finished validation and thus falls within the mesh
-		// delivery window.
-		if !validated.IsZero() && now.After(validated.Add(tparams.MeshMessageDeliveriesWindow)) {
-			continue
-		}
-
-		cap := tparams.MeshMessageDeliveriesCap
-		tstats.meshMessageDeliveries += 1
-		if tstats.meshMessageDeliveries > cap {
-			tstats.meshMessageDeliveries = cap
-		}
+	cap := tparams.MeshMessageDeliveriesCap
+	tstats.meshMessageDeliveries += 1
+	if tstats.meshMessageDeliveries > cap {
+		tstats.meshMessageDeliveries = cap
 	}
 }
 

@@ -1137,3 +1137,120 @@ func TestWithInvalidMessageAuthor(t *testing.T) {
 		t.Fatal("expected error")
 	}
 }
+
+func TestPreconnectedNodes(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	// If this test fails it may hang so set a timeout
+	ctx, cancel = context.WithTimeout(ctx, time.Second*10)
+	defer cancel()
+
+	// Create hosts
+	h1 := bhost.NewBlankHost(swarmt.GenSwarm(t, ctx))
+	h2 := bhost.NewBlankHost(swarmt.GenSwarm(t, ctx))
+
+	opts := []Option{WithDiscovery(&dummyDiscovery{})}
+	// Setup first PubSub
+	p1, err := NewFloodSub(ctx, h1, opts...)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Connect the two hosts together
+	connect(t, h2, h1)
+
+	// Setup the second DHT
+	p2, err := NewFloodSub(ctx, h2, opts...)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// See if it works
+	p2Topic, err := p2.Join("test")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	p1Topic, err := p1.Join("test")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	testPublish := func(publisher, receiver *Topic, msg []byte) {
+		receiverSub, err := receiver.Subscribe()
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if err := publisher.Publish(ctx, msg, WithReadiness(MinTopicSize(1))); err != nil {
+			t.Fatal(err)
+		}
+
+		m, err := receiverSub.Next(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if receivedData := m.GetData(); !bytes.Equal(receivedData, msg) {
+			t.Fatalf("expected message %v, got %v", msg, receivedData)
+		}
+	}
+
+	// Test both directions since PubSub uses one directional streams
+	testPublish(p1Topic, p2Topic, []byte("test1-to-2"))
+	testPublish(p1Topic, p2Topic, []byte("test2-to-1"))
+}
+
+func TestDedupInboundStreams(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	h1 := bhost.NewBlankHost(swarmt.GenSwarm(t, ctx))
+	h2 := bhost.NewBlankHost(swarmt.GenSwarm(t, ctx))
+
+	_, err := NewFloodSub(ctx, h1)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Connect the two hosts together
+	connect(t, h2, h1)
+
+	// open a few streams and make sure all but the last one get reset
+	s1, err := h2.NewStream(ctx, h1.ID(), FloodSubID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(100 * time.Millisecond)
+
+	s2, err := h2.NewStream(ctx, h1.ID(), FloodSubID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(100 * time.Millisecond)
+
+	s3, err := h2.NewStream(ctx, h1.ID(), FloodSubID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(100 * time.Millisecond)
+
+	// check that s1 and s2 have been reset
+	_, err = s1.Read([]byte{0})
+	if err == nil {
+		t.Fatal("expected s1 to be reset")
+	}
+
+	_, err = s2.Read([]byte{0})
+	if err == nil {
+		t.Fatal("expected s2 to be reset")
+	}
+
+	// check that s3 is readable and simply times out
+	s3.SetReadDeadline(time.Now().Add(time.Millisecond))
+	_, err = s3.Read([]byte{0})
+	err2, ok := err.(interface{ Timeout() bool })
+	if !ok || !err2.Timeout() {
+		t.Fatal(err)
+	}
+}

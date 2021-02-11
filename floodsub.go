@@ -67,29 +67,18 @@ func (fs *FloodSubRouter) EnoughPeers(topic string, suggested int) bool {
 	return false
 }
 
-func (fs *FloodSubRouter) AcceptFrom(peer.ID) bool {
-	return true
+func (fs *FloodSubRouter) AcceptFrom(peer.ID) AcceptStatus {
+	return AcceptAll
 }
 
 func (fs *FloodSubRouter) HandleRPC(rpc *RPC) {}
 
 func (fs *FloodSubRouter) Publish(msg *Message) {
 	from := msg.ReceivedFrom
-
-	tosend := make(map[peer.ID]struct{})
-	for _, topic := range msg.GetTopicIDs() {
-		tmap, ok := fs.p.topics[topic]
-		if !ok {
-			continue
-		}
-
-		for p := range tmap {
-			tosend[p] = struct{}{}
-		}
-	}
+	topic := msg.GetTopic()
 
 	out := rpcWithMessages(msg.Message)
-	for pid := range tosend {
+	for pid := range fs.p.topics[topic] {
 		if pid == from || pid == peer.ID(msg.GetFrom()) {
 			continue
 		}
@@ -115,5 +104,5 @@ func (fs *FloodSubRouter) Join(topic string) {
 }
 
 func (fs *FloodSubRouter) Leave(topic string) {
-	fs.tracer.Join(topic)
+	fs.tracer.Leave(topic)
 }

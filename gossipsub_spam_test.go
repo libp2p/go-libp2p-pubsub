@@ -662,10 +662,10 @@ func TestGossipsubAttackInvalidMessageSpam(t *testing.T) {
 					// fail validation and reduce the attacker's score)
 					for i := 0; i < 100; i++ {
 						msg := &pb.Message{
-							Data:     []byte("some data" + strconv.Itoa(i)),
-							TopicIDs: []string{mytopic},
-							From:     []byte(attacker.ID()),
-							Seqno:    []byte{byte(i + 1)},
+							Data:  []byte("some data" + strconv.Itoa(i)),
+							Topic: &mytopic,
+							From:  []byte(attacker.ID()),
+							Seqno: []byte{byte(i + 1)},
 						}
 						writeMsg(&pb.RPC{
 							Publish: []*pb.Message{msg},

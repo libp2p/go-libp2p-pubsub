@@ -108,7 +108,7 @@ func TestScoreFirstMessageDeliveries(t *testing.T) {
 	nMessages := 100
 	for i := 0; i < nMessages; i++ {
 		pbMsg := makeTestMessage(i)
-		pbMsg.TopicIDs = []string{mytopic}
+		pbMsg.Topic = &mytopic
 		msg := Message{ReceivedFrom: peerA, Message: pbMsg}
 		ps.ValidateMessage(&msg)
 		ps.DeliverMessage(&msg)
@@ -148,7 +148,7 @@ func TestScoreFirstMessageDeliveriesCap(t *testing.T) {
 	nMessages := 100
 	for i := 0; i < nMessages; i++ {
 		pbMsg := makeTestMessage(i)
-		pbMsg.TopicIDs = []string{mytopic}
+		pbMsg.Topic = &mytopic
 		msg := Message{ReceivedFrom: peerA, Message: pbMsg}
 		ps.ValidateMessage(&msg)
 		ps.DeliverMessage(&msg)
@@ -188,7 +188,7 @@ func TestScoreFirstMessageDeliveriesDecay(t *testing.T) {
 	nMessages := 100
 	for i := 0; i < nMessages; i++ {
 		pbMsg := makeTestMessage(i)
-		pbMsg.TopicIDs = []string{mytopic}
+		pbMsg.Topic = &mytopic
 		msg := Message{ReceivedFrom: peerA, Message: pbMsg}
 		ps.ValidateMessage(&msg)
 		ps.DeliverMessage(&msg)
@@ -268,7 +268,7 @@ func TestScoreMeshMessageDeliveries(t *testing.T) {
 	wg := sync.WaitGroup{}
 	for i := 0; i < nMessages; i++ {
 		pbMsg := makeTestMessage(i)
-		pbMsg.TopicIDs = []string{mytopic}
+		pbMsg.Topic = &mytopic
 		msg := Message{ReceivedFrom: peerA, Message: pbMsg}
 		ps.ValidateMessage(&msg)
 		ps.DeliverMessage(&msg)
@@ -338,7 +338,7 @@ func TestScoreMeshMessageDeliveriesDecay(t *testing.T) {
 	nMessages := 40
 	for i := 0; i < nMessages; i++ {
 		pbMsg := makeTestMessage(i)
-		pbMsg.TopicIDs = []string{mytopic}
+		pbMsg.Topic = &mytopic
 		msg := Message{ReceivedFrom: peerA, Message: pbMsg}
 		ps.ValidateMessage(&msg)
 		ps.DeliverMessage(&msg)
@@ -412,7 +412,7 @@ func TestScoreMeshFailurePenalty(t *testing.T) {
 	nMessages := 100
 	for i := 0; i < nMessages; i++ {
 		pbMsg := makeTestMessage(i)
-		pbMsg.TopicIDs = []string{mytopic}
+		pbMsg.Topic = &mytopic
 		msg := Message{ReceivedFrom: peerA, Message: pbMsg}
 		ps.ValidateMessage(&msg)
 		ps.DeliverMessage(&msg)
@@ -472,7 +472,7 @@ func TestScoreInvalidMessageDeliveries(t *testing.T) {
 	nMessages := 100
 	for i := 0; i < nMessages; i++ {
 		pbMsg := makeTestMessage(i)
-		pbMsg.TopicIDs = []string{mytopic}
+		pbMsg.Topic = &mytopic
 		msg := Message{ReceivedFrom: peerA, Message: pbMsg}
 		ps.RejectMessage(&msg, rejectInvalidSignature)
 	}
@@ -509,7 +509,7 @@ func TestScoreInvalidMessageDeliveriesDecay(t *testing.T) {
 	nMessages := 100
 	for i := 0; i < nMessages; i++ {
 		pbMsg := makeTestMessage(i)
-		pbMsg.TopicIDs = []string{mytopic}
+		pbMsg.Topic = &mytopic
 		msg := Message{ReceivedFrom: peerA, Message: pbMsg}
 		ps.RejectMessage(&msg, rejectInvalidSignature)
 	}
@@ -555,7 +555,7 @@ func TestScoreRejectMessageDeliveries(t *testing.T) {
 	ps.AddPeer(peerB, "myproto")
 
 	pbMsg := makeTestMessage(0)
-	pbMsg.TopicIDs = []string{mytopic}
+	pbMsg.Topic = &mytopic
 	msg := Message{ReceivedFrom: peerA, Message: pbMsg}
 	msg2 := Message{ReceivedFrom: peerB, Message: pbMsg}
 
@@ -839,6 +839,165 @@ func TestScoreRetention(t *testing.T) {
 	aScore = ps.Score(peerA)
 	if aScore != 0 {
 		t.Fatalf("Score: %f. Expected 0.0", aScore)
+	}
+}
+
+func TestScoreRecapTopicParams(t *testing.T) {
+	// Create parameters with reasonable default values
+	mytopic := "mytopic"
+	params := &PeerScoreParams{
+		AppSpecificScore: func(peer.ID) float64 { return 0 },
+		Topics:           make(map[string]*TopicScoreParams),
+	}
+	topicScoreParams := &TopicScoreParams{
+		TopicWeight: 1,
+
+		MeshMessageDeliveriesWeight:     -1,
+		MeshMessageDeliveriesActivation: time.Second,
+		MeshMessageDeliveriesWindow:     10 * time.Millisecond,
+		MeshMessageDeliveriesThreshold:  20,
+		MeshMessageDeliveriesCap:        100,
+		MeshMessageDeliveriesDecay:      1.0, // no decay for this test
+
+		FirstMessageDeliveriesWeight: 10,
+		FirstMessageDeliveriesDecay:  1.0, // no decay for this test
+		FirstMessageDeliveriesCap:    100,
+
+		TimeInMeshQuantum: time.Second,
+	}
+
+	params.Topics[mytopic] = topicScoreParams
+
+	// peer A always delivers the message first.
+	// peer B delivers next (within the delivery window).
+	// peer C delivers outside the delivery window.
+	// we expect peers A and B to have a score of zero, since all other parameter weights are zero.
+	// Peer C should have a negative score.
+	peerA := peer.ID("A")
+	peerB := peer.ID("B")
+	peers := []peer.ID{peerA, peerB}
+
+	ps := newPeerScore(params)
+	for _, p := range peers {
+		ps.AddPeer(p, "myproto")
+		ps.Graft(p, mytopic)
+	}
+
+	// deliver a bunch of messages from peer A, with duplicates within the window from peer B,
+	nMessages := 100
+	for i := 0; i < nMessages; i++ {
+		pbMsg := makeTestMessage(i)
+		pbMsg.Topic = &mytopic
+		msg := Message{ReceivedFrom: peerA, Message: pbMsg}
+		ps.ValidateMessage(&msg)
+		ps.DeliverMessage(&msg)
+
+		msg.ReceivedFrom = peerB
+		ps.DuplicateMessage(&msg)
+	}
+
+	// check that the FirstMessageDeliveries for peerA and MeshMessageDeliveries for PeerB is
+	// at 100
+	if ps.peerStats[peerA].topics[mytopic].firstMessageDeliveries != 100 {
+		t.Fatalf("expected 100 FirstMessageDeliveries for peerA, but got %f", ps.peerStats[peerA].topics[mytopic].firstMessageDeliveries)
+	}
+	// check that the MeshMessageDeliveries for peerB and MeshMessageDeliveries for PeerB is
+	// at 100
+	if ps.peerStats[peerB].topics[mytopic].meshMessageDeliveries != 100 {
+		t.Fatalf("expected 100 MeshMessageDeliveries for peerB, but got %f", ps.peerStats[peerB].topics[mytopic].meshMessageDeliveries)
+	}
+
+	// reset the topic paramaters recapping the deliveries counters
+	newTopicScoreParams := &TopicScoreParams{
+		TopicWeight: 1,
+
+		MeshMessageDeliveriesWeight:     -1,
+		MeshMessageDeliveriesActivation: time.Second,
+		MeshMessageDeliveriesWindow:     10 * time.Millisecond,
+		MeshMessageDeliveriesThreshold:  20,
+		MeshMessageDeliveriesCap:        50,
+		MeshMessageDeliveriesDecay:      1.0, // no decay for this test
+
+		FirstMessageDeliveriesWeight: 10,
+		FirstMessageDeliveriesDecay:  1.0, // no decay for this test
+		FirstMessageDeliveriesCap:    50,
+
+		TimeInMeshQuantum: time.Second,
+	}
+
+	err := ps.SetTopicScoreParams(mytopic, newTopicScoreParams)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// verify that the counters got recapped
+	if ps.peerStats[peerA].topics[mytopic].firstMessageDeliveries != 50 {
+		t.Fatalf("expected 50 FirstMessageDeliveries for peerA, but got %f", ps.peerStats[peerA].topics[mytopic].firstMessageDeliveries)
+	}
+	if ps.peerStats[peerB].topics[mytopic].meshMessageDeliveries != 50 {
+		t.Fatalf("expected 50 MeshMessageDeliveries for peerB, but got %f", ps.peerStats[peerB].topics[mytopic].meshMessageDeliveries)
+	}
+}
+
+func TestScoreResetTopicParams(t *testing.T) {
+	// Create parameters with reasonable default values
+	mytopic := "mytopic"
+	params := &PeerScoreParams{
+		AppSpecificScore: func(peer.ID) float64 { return 0 },
+		Topics:           make(map[string]*TopicScoreParams),
+	}
+	topicScoreParams := &TopicScoreParams{
+		TopicWeight:                    1,
+		TimeInMeshQuantum:              time.Second,
+		InvalidMessageDeliveriesWeight: -1,
+		InvalidMessageDeliveriesDecay:  1.0,
+	}
+
+	params.Topics[mytopic] = topicScoreParams
+
+	// peer A always delivers the message first.
+	// peer B delivers next (within the delivery window).
+	// peer C delivers outside the delivery window.
+	// we expect peers A and B to have a score of zero, since all other parameter weights are zero.
+	// Peer C should have a negative score.
+	peerA := peer.ID("A")
+
+	ps := newPeerScore(params)
+	ps.AddPeer(peerA, "myproto")
+
+	// reject a bunch of messages
+	nMessages := 100
+	for i := 0; i < nMessages; i++ {
+		pbMsg := makeTestMessage(i)
+		pbMsg.Topic = &mytopic
+		msg := Message{ReceivedFrom: peerA, Message: pbMsg}
+		ps.ValidateMessage(&msg)
+		ps.RejectMessage(&msg, rejectValidationFailed)
+	}
+
+	// check the topic score
+	aScore := ps.Score(peerA)
+	if aScore != -10000 {
+		t.Fatalf("expected a -10000 score, but got %f instead", aScore)
+	}
+
+	// reset the topic paramaters recapping the deliveries counters
+	newTopicScoreParams := &TopicScoreParams{
+		TopicWeight:                    1,
+		TimeInMeshQuantum:              time.Second,
+		InvalidMessageDeliveriesWeight: -10,
+		InvalidMessageDeliveriesDecay:  1.0,
+	}
+
+	err := ps.SetTopicScoreParams(mytopic, newTopicScoreParams)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// verify the topic score was adjusted
+	aScore = ps.Score(peerA)
+	if aScore != -100000 {
+		t.Fatalf("expected a -1000000 score, but got %f instead", aScore)
 	}
 }
 

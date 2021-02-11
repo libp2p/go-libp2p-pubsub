@@ -200,7 +200,7 @@ func (v *validation) Push(src peer.ID, msg *Message) bool {
 		select {
 		case v.validateQ <- &validateReq{vals, src, msg}:
 		default:
-			log.Warnf("message validation throttled: queue full; dropping message from %s", src)
+			log.Debugf("message validation throttled: queue full; dropping message from %s", src)
 			v.tracer.RejectMessage(msg, rejectValidationQueueFull)
 		}
 		return false
@@ -211,18 +211,14 @@ func (v *validation) Push(src peer.ID, msg *Message) bool {
 
 // getValidators returns all validators that apply to a given message
 func (v *validation) getValidators(msg *Message) []*topicVal {
-	var vals []*topicVal
+	topic := msg.GetTopic()
 
-	for _, topic := range msg.GetTopicIDs() {
-		val, ok := v.topicVals[topic]
-		if !ok {
-			continue
-		}
-
-		vals = append(vals, val)
+	val, ok := v.topicVals[topic]
+	if !ok {
+		return nil
 	}
 
-	return vals
+	return []*topicVal{val}
 }
 
 // validateWorker is an active goroutine performing inline validation
@@ -245,7 +241,7 @@ func (v *validation) validate(vals []*topicVal, src peer.ID, msg *Message) {
 	// the Signature is required to be nil upon receiving the message in PubSub.pushMsg.
 	if msg.Signature != nil {
 		if !v.validateSignature(msg) {
-			log.Warnf("message signature validation failed; dropping message from %s", src)
+			log.Debugf("message signature validation failed; dropping message from %s", src)
 			v.tracer.RejectMessage(msg, rejectInvalidSignature)
 			return
 		}
@@ -285,7 +281,7 @@ loop:
 	}
 
 	if result == ValidationReject {
-		log.Warnf("message validation failed; dropping message from %s", src)
+		log.Debugf("message validation failed; dropping message from %s", src)
 		v.tracer.RejectMessage(msg, rejectValidationFailed)
 		return
 	}
@@ -299,7 +295,7 @@ loop:
 				<-v.validateThrottle
 			}()
 		default:
-			log.Warnf("message validation throttled; dropping message from %s", src)
+			log.Debugf("message validation throttled; dropping message from %s", src)
 			v.tracer.RejectMessage(msg, rejectValidationThrottled)
 		}
 		return
@@ -343,7 +339,7 @@ func (v *validation) doValidateTopic(vals []*topicVal, src peer.ID, msg *Message
 		v.tracer.RejectMessage(msg, rejectValidationIgnored)
 		return
 	case validationThrottled:
-		log.Warnf("message validation throttled; ignoring message from %s", src)
+		log.Debugf("message validation throttled; ignoring message from %s", src)
 		v.tracer.RejectMessage(msg, rejectValidationThrottled)
 
 	default:
@@ -416,6 +412,11 @@ func (v *validation) validateSingleTopic(val *topicVal, src peer.ID, msg *Messag
 }
 
 func (val *topicVal) validateMsg(ctx context.Context, src peer.ID, msg *Message) ValidationResult {
+	start := time.Now()
+	defer func() {
+		log.Debugf("validation done; took %s", time.Since(start))
+	}()
+
 	if val.validateTimeout > 0 {
 		var cancel func()
 		ctx, cancel = context.WithTimeout(ctx, val.validateTimeout)

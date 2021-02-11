@@ -134,6 +134,9 @@ type PubSub struct {
 
 	peers map[peer.ID]chan *RPC
 
+	inboundStreamsMx sync.Mutex
+	inboundStreams   map[peer.ID]network.Stream
+
 	seenMessagesMx sync.Mutex
 	seenMessages   *timecache.TimeCache
 
@@ -147,6 +150,9 @@ type PubSub struct {
 	signID peer.ID
 	// strict mode rejects all unsigned messages prior to validation
 	signPolicy MessageSignaturePolicy
+
+	// filter for tracking subscriptions in topics of interest; if nil, then we track all subscriptions
+	subFilter SubscriptionFilter
 
 	ctx context.Context
 }
@@ -168,8 +174,8 @@ type PubSubRouter interface {
 	// AcceptFrom is invoked on any incoming message before pushing it to the validation pipeline
 	// or processing control information.
 	// Allows routers with internal scoring to vet peers before committing any processing resources
-	// to the message and implement an effective graylist.
-	AcceptFrom(peer.ID) bool
+	// to the message and implement an effective graylist and react to validation queue overload.
+	AcceptFrom(peer.ID) AcceptStatus
 	// HandleRPC is invoked to process control messages in the RPC envelope.
 	// It is invoked after subscriptions and payload messages have been processed.
 	HandleRPC(*RPC)
@@ -182,6 +188,18 @@ type PubSubRouter interface {
 	// It is invoked after the unsubscription announcement.
 	Leave(topic string)
 }
+
+type AcceptStatus int
+
+const (
+	// AcceptAll signals to accept the incoming RPC for full processing
+	AcceptNone AcceptStatus = iota
+	// AcceptControl signals to accept the incoming RPC only for control message processing by
+	// the router. Included payload messages will _not_ be pushed to the validation queue.
+	AcceptControl
+	// AcceptNone signals to drop the incoming RPC
+	AcceptAll
+)
 
 type Message struct {
 	*pb.Message
@@ -238,6 +256,7 @@ func NewPubSub(ctx context.Context, h host.Host, rt PubSubRouter, opts ...Option
 		myRelays:              make(map[string]int),
 		topics:                make(map[string]map[peer.ID]struct{}),
 		peers:                 make(map[peer.ID]chan *RPC),
+		inboundStreams:        make(map[peer.ID]network.Stream),
 		blacklist:             NewMapBlacklist(),
 		blacklistPeer:         make(chan peer.ID),
 		seenMessages:          timecache.NewTimeCache(TimeCacheDuration),
@@ -276,6 +295,8 @@ func NewPubSub(ctx context.Context, h host.Host, rt PubSubRouter, opts ...Option
 	ps.val.Start(ps)
 
 	go ps.processLoop(ctx)
+
+	(*PubSubNotif)(ps).Initialize()
 
 	return ps, nil
 }
@@ -464,7 +485,7 @@ func (p *PubSub) processLoop(ctx context.Context) {
 		select {
 		case pid := <-p.newPeers:
 			if _, ok := p.peers[pid]; ok {
-				log.Warn("already have connection to peer: ", pid)
+				log.Debug("already have connection to peer: ", pid)
 				continue
 			}
 
@@ -822,14 +843,13 @@ func (p *PubSub) doAnnounceRetry(pid peer.ID, topic string, sub bool) {
 // notifySubs sends a given message to all corresponding subscribers.
 // Only called from processLoop.
 func (p *PubSub) notifySubs(msg *Message) {
-	for _, topic := range msg.GetTopicIDs() {
-		subs := p.mySubs[topic]
-		for f := range subs {
-			select {
-			case f.ch <- msg:
-			default:
-				log.Infof("Can't deliver message to subscription for topic %s; subscriber too slow", topic)
-			}
+	topic := msg.GetTopic()
+	subs := p.mySubs[topic]
+	for f := range subs {
+		select {
+		case f.ch <- msg:
+		default:
+			log.Infof("Can't deliver message to subscription for topic %s; subscriber too slow", topic)
 		}
 	}
 }
@@ -861,12 +881,10 @@ func (p *PubSub) subscribedToMsg(msg *pb.Message) bool {
 		return false
 	}
 
-	for _, t := range msg.GetTopicIDs() {
-		if _, ok := p.mySubs[t]; ok {
-			return true
-		}
-	}
-	return false
+	topic := msg.GetTopic()
+	_, ok := p.mySubs[topic]
+
+	return ok
 }
 
 // canRelayMsg returns whether we are able to relay for one of the topics
@@ -876,12 +894,10 @@ func (p *PubSub) canRelayMsg(msg *pb.Message) bool {
 		return false
 	}
 
-	for _, t := range msg.GetTopicIDs() {
-		if relays := p.myRelays[t]; relays != 0 {
-			return true
-		}
-	}
-	return false
+	topic := msg.GetTopic()
+	relays := p.myRelays[topic]
+
+	return relays > 0
 }
 
 func (p *PubSub) notifyLeave(topic string, pid peer.ID) {
@@ -893,8 +909,19 @@ func (p *PubSub) notifyLeave(topic string, pid peer.ID) {
 func (p *PubSub) handleIncomingRPC(rpc *RPC) {
 	p.tracer.RecvRPC(rpc)
 
-	for _, subopt := range rpc.GetSubscriptions() {
+	subs := rpc.GetSubscriptions()
+	if len(subs) != 0 && p.subFilter != nil {
+		var err error
+		subs, err = p.subFilter.FilterIncomingSubscriptions(rpc.from, subs)
+		if err != nil {
+			log.Debugf("subscription filter error: %s; ignoring RPC", err)
+			return
+		}
+	}
+
+	for _, subopt := range subs {
 		t := subopt.GetTopicid()
+
 		if subopt.GetSubscribe() {
 			tmap, ok := p.topics[t]
 			if !ok {
@@ -923,19 +950,27 @@ func (p *PubSub) handleIncomingRPC(rpc *RPC) {
 	}
 
 	// ask the router to vet the peer before commiting any processing resources
-	if !p.rt.AcceptFrom(rpc.from) {
-		log.Infof("received message from router graylisted peer %s. Dropping RPC", rpc.from)
+	switch p.rt.AcceptFrom(rpc.from) {
+	case AcceptNone:
+		log.Debugf("received RPC from router graylisted peer %s; dropping RPC", rpc.from)
 		return
-	}
 
-	for _, pmsg := range rpc.GetPublish() {
-		if !(p.subscribedToMsg(pmsg) || p.canRelayMsg(pmsg)) {
-			log.Warn("received message we didn't subscribe to. Dropping.")
-			continue
+	case AcceptControl:
+		if len(rpc.GetPublish()) > 0 {
+			log.Debugf("peer %s was throttled by router; ignoring %d payload messages", rpc.from, len(rpc.GetPublish()))
 		}
+		p.tracer.ThrottlePeer(rpc.from)
 
-		msg := &Message{pmsg, rpc.from, nil}
-		p.pushMsg(msg)
+	case AcceptAll:
+		for _, pmsg := range rpc.GetPublish() {
+			if !(p.subscribedToMsg(pmsg) || p.canRelayMsg(pmsg)) {
+				log.Debug("received message in topic we didn't subscribe to; ignoring message")
+				continue
+			}
+
+			msg := &Message{pmsg, rpc.from, nil}
+			p.pushMsg(msg)
+		}
 	}
 
 	p.rt.HandleRPC(rpc)
@@ -951,14 +986,14 @@ func (p *PubSub) pushMsg(msg *Message) {
 	src := msg.ReceivedFrom
 	// reject messages from blacklisted peers
 	if p.blacklist.Contains(src) {
-		log.Warnf("dropping message from blacklisted peer %s", src)
+		log.Debugf("dropping message from blacklisted peer %s", src)
 		p.tracer.RejectMessage(msg, rejectBlacklstedPeer)
 		return
 	}
 
 	// even if they are forwarded by good peers
 	if p.blacklist.Contains(msg.GetFrom()) {
-		log.Warnf("dropping message from blacklisted source %s", src)
+		log.Debugf("dropping message from blacklisted source %s", src)
 		p.tracer.RejectMessage(msg, rejectBlacklistedSource)
 		return
 	}
@@ -1058,6 +1093,10 @@ func (p *PubSub) Join(topic string, opts ...TopicOpt) (*Topic, error) {
 // Returns true if the topic was newly created, false otherwise
 // Can be removed once pubsub.Publish() and pubsub.Subscribe() are removed
 func (p *PubSub) tryJoin(topic string, opts ...TopicOpt) (*Topic, bool, error) {
+	if p.subFilter != nil && !p.subFilter.CanSubscribe(topic) {
+		return nil, false, fmt.Errorf("topic is not allowed by the subscription filter")
+	}
+
 	t := &Topic{
 		p:           p,
 		topic:       topic,

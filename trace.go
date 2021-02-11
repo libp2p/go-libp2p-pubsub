@@ -26,6 +26,7 @@ type internalTracer interface {
 	DeliverMessage(msg *Message)
 	RejectMessage(msg *Message, reason string)
 	DuplicateMessage(msg *Message)
+	ThrottlePeer(p peer.ID)
 }
 
 // pubsub tracer details
@@ -52,7 +53,7 @@ func (t *pubsubTracer) PublishMessage(msg *Message) {
 		Timestamp: &now,
 		PublishMessage: &pb.TraceEvent_PublishMessage{
 			MessageID: []byte(t.msgID(msg.Message)),
-			Topics:    msg.Message.TopicIDs,
+			Topic:     msg.Message.Topic,
 		},
 	}
 
@@ -95,6 +96,7 @@ func (t *pubsubTracer) RejectMessage(msg *Message, reason string) {
 			MessageID:    []byte(t.msgID(msg.Message)),
 			ReceivedFrom: []byte(msg.ReceivedFrom),
 			Reason:       &reason,
+			Topic:        msg.Topic,
 		},
 	}
 
@@ -124,6 +126,7 @@ func (t *pubsubTracer) DuplicateMessage(msg *Message) {
 		DuplicateMessage: &pb.TraceEvent_DuplicateMessage{
 			MessageID:    []byte(t.msgID(msg.Message)),
 			ReceivedFrom: []byte(msg.ReceivedFrom),
+			Topic:        msg.Topic,
 		},
 	}
 
@@ -151,7 +154,9 @@ func (t *pubsubTracer) DeliverMessage(msg *Message) {
 		PeerID:    []byte(t.pid),
 		Timestamp: &now,
 		DeliverMessage: &pb.TraceEvent_DeliverMessage{
-			MessageID: []byte(t.msgID(msg.Message)),
+			MessageID:    []byte(t.msgID(msg.Message)),
+			Topic:        msg.Topic,
+			ReceivedFrom: []byte(msg.ReceivedFrom),
 		},
 	}
 
@@ -288,7 +293,7 @@ func (t *pubsubTracer) traceRPCMeta(rpc *RPC) *pb.TraceEvent_RPCMeta {
 	for _, m := range rpc.Publish {
 		msgs = append(msgs, &pb.TraceEvent_MessageMeta{
 			MessageID: []byte(t.msgID(m)),
-			Topics:    m.TopicIDs,
+			Topic:     m.Topic,
 		})
 	}
 	rpcMeta.Messages = msgs
@@ -460,4 +465,14 @@ func (t *pubsubTracer) Prune(p peer.ID, topic string) {
 	}
 
 	t.tracer.Trace(evt)
+}
+
+func (t *pubsubTracer) ThrottlePeer(p peer.ID) {
+	if t == nil {
+		return
+	}
+
+	for _, tr := range t.internal {
+		tr.ThrottlePeer(p)
+	}
 }
