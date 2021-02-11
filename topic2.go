@@ -16,13 +16,15 @@ func (t *Topic) PublishWithSk(ctx context.Context, data []byte, signKey crypto.P
 		return ErrTopicClosed
 	}
 
-	seqno := t.p.nextSeqno()
-	id := pid
 	m := &pb.Message{
-		Data:     data,
-		TopicIDs: []string{t.topic},
-		From:     []byte(id),
-		Seqno:    seqno,
+		Data:  data,
+		Topic: &t.topic,
+		From:  nil,
+		Seqno: nil,
+	}
+	if t.p.signID != "" {
+		m.From = []byte(t.p.signID)
+		m.Seqno = t.p.nextSeqno()
 	}
 	if signKey != nil {
 		m.From = []byte(pid)
@@ -45,7 +47,7 @@ func (t *Topic) PublishWithSk(ctx context.Context, data []byte, signKey crypto.P
 	}
 
 	select {
-	case t.p.publish <- &Message{m, id, nil}:
+	case t.p.publish <- &Message{m, pid, nil}:
 	case <-t.p.ctx.Done():
 		return t.p.ctx.Err()
 	}
