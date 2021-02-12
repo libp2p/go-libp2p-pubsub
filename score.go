@@ -27,6 +27,9 @@ type peerStats struct {
 	// IP tracking; store as string for easy processing
 	ips []string
 
+	// IP whitelisting cache
+	ipWhitelist map[string]bool
+
 	// behavioural pattern penalties (applied by the router)
 	behaviourPenalty float64
 }
@@ -339,11 +342,25 @@ func (ps *peerScore) ipColocationFactor(p peer.ID) float64 {
 loop:
 	for _, ip := range pstats.ips {
 		if len(ps.params.IPColocationFactorWhitelist) > 0 {
-			ipObj := net.ParseIP(ip)
-			for _, ipNet := range ps.params.IPColocationFactorWhitelist {
-				if ipNet.Contains(ipObj) {
-					continue loop
+			if pstats.ipWhitelist == nil {
+				pstats.ipWhitelist = make(map[string]bool)
+			}
+
+			whitelisted, ok := pstats.ipWhitelist[ip]
+			if !ok {
+				ipObj := net.ParseIP(ip)
+				for _, ipNet := range ps.params.IPColocationFactorWhitelist {
+					if ipNet.Contains(ipObj) {
+						pstats.ipWhitelist[ip] = true
+						continue loop
+					}
 				}
+
+				pstats.ipWhitelist[ip] = false
+			}
+
+			if whitelisted {
+				continue loop
 			}
 		}
 
