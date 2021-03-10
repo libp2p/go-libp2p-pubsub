@@ -133,9 +133,9 @@ func (gt *gossipTracer) RejectMessage(msg *Message, reason string) {
 	// We do take exception and apply promise penalty regardless in the following cases, where
 	// the peer delivered an obviously invalid message.
 	switch reason {
-	case rejectMissingSignature:
+	case RejectMissingSignature:
 		return
-	case rejectInvalidSignature:
+	case RejectInvalidSignature:
 		return
 	}
 

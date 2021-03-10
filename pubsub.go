@@ -987,14 +987,14 @@ func (p *PubSub) pushMsg(msg *Message) {
 	// reject messages from blacklisted peers
 	if p.blacklist.Contains(src) {
 		log.Debugf("dropping message from blacklisted peer %s", src)
-		p.tracer.RejectMessage(msg, rejectBlacklstedPeer)
+		p.tracer.RejectMessage(msg, RejectBlacklstedPeer)
 		return
 	}
 
 	// even if they are forwarded by good peers
 	if p.blacklist.Contains(msg.GetFrom()) {
 		log.Debugf("dropping message from blacklisted source %s", src)
-		p.tracer.RejectMessage(msg, rejectBlacklistedSource)
+		p.tracer.RejectMessage(msg, RejectBlacklistedSource)
 		return
 	}
 
@@ -1003,7 +1003,7 @@ func (p *PubSub) pushMsg(msg *Message) {
 		if p.signPolicy.mustSign() {
 			if msg.Signature == nil {
 				log.Debugf("dropping unsigned message from %s", src)
-				p.tracer.RejectMessage(msg, rejectMissingSignature)
+				p.tracer.RejectMessage(msg, RejectMissingSignature)
 				return
 			}
 			// Actual signature verification happens in the validation pipeline,
@@ -1012,7 +1012,7 @@ func (p *PubSub) pushMsg(msg *Message) {
 		} else {
 			if msg.Signature != nil {
 				log.Debugf("dropping message with unexpected signature from %s", src)
-				p.tracer.RejectMessage(msg, rejectUnexpectedSignature)
+				p.tracer.RejectMessage(msg, RejectUnexpectedSignature)
 				return
 			}
 			// If we are expecting signed messages, and not authoring messages,
@@ -1022,7 +1022,7 @@ func (p *PubSub) pushMsg(msg *Message) {
 			if p.signID == "" {
 				if msg.Seqno != nil || msg.From != nil || msg.Key != nil {
 					log.Debugf("dropping message with unexpected auth info from %s", src)
-					p.tracer.RejectMessage(msg, rejectUnexpectedAuthInfo)
+					p.tracer.RejectMessage(msg, RejectUnexpectedAuthInfo)
 					return
 				}
 			}
@@ -1033,7 +1033,7 @@ func (p *PubSub) pushMsg(msg *Message) {
 	self := p.host.ID()
 	if peer.ID(msg.GetFrom()) == self && src != self {
 		log.Debugf("dropping message claiming to be from self but forwarded from %s", src)
-		p.tracer.RejectMessage(msg, rejectSelfOrigin)
+		p.tracer.RejectMessage(msg, RejectSelfOrigin)
 		return
 	}
 

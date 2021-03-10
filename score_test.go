@@ -475,7 +475,7 @@ func TestScoreInvalidMessageDeliveries(t *testing.T) {
 		pbMsg := makeTestMessage(i)
 		pbMsg.Topic = &mytopic
 		msg := Message{ReceivedFrom: peerA, Message: pbMsg}
-		ps.RejectMessage(&msg, rejectInvalidSignature)
+		ps.RejectMessage(&msg, RejectInvalidSignature)
 	}
 
 	ps.refreshScores()
@@ -512,7 +512,7 @@ func TestScoreInvalidMessageDeliveriesDecay(t *testing.T) {
 		pbMsg := makeTestMessage(i)
 		pbMsg.Topic = &mytopic
 		msg := Message{ReceivedFrom: peerA, Message: pbMsg}
-		ps.RejectMessage(&msg, rejectInvalidSignature)
+		ps.RejectMessage(&msg, RejectInvalidSignature)
 	}
 
 	ps.refreshScores()
@@ -561,9 +561,9 @@ func TestScoreRejectMessageDeliveries(t *testing.T) {
 	msg2 := Message{ReceivedFrom: peerB, Message: pbMsg}
 
 	// these should have no effect in the score
-	ps.RejectMessage(&msg, rejectBlacklstedPeer)
-	ps.RejectMessage(&msg, rejectBlacklistedSource)
-	ps.RejectMessage(&msg, rejectValidationQueueFull)
+	ps.RejectMessage(&msg, RejectBlacklstedPeer)
+	ps.RejectMessage(&msg, RejectBlacklistedSource)
+	ps.RejectMessage(&msg, RejectValidationQueueFull)
 
 	aScore := ps.Score(peerA)
 	expected := 0.0
@@ -576,7 +576,7 @@ func TestScoreRejectMessageDeliveries(t *testing.T) {
 
 	// this should have no effect in the score, and subsequent duplicate messages should have no
 	// effect either
-	ps.RejectMessage(&msg, rejectValidationThrottled)
+	ps.RejectMessage(&msg, RejectValidationThrottled)
 	ps.DuplicateMessage(&msg2)
 
 	aScore = ps.Score(peerA)
@@ -601,7 +601,7 @@ func TestScoreRejectMessageDeliveries(t *testing.T) {
 
 	// this should have no effect in the score, and subsequent duplicate messages should have no
 	// effect either
-	ps.RejectMessage(&msg, rejectValidationIgnored)
+	ps.RejectMessage(&msg, RejectValidationIgnored)
 	ps.DuplicateMessage(&msg2)
 
 	aScore = ps.Score(peerA)
@@ -625,7 +625,7 @@ func TestScoreRejectMessageDeliveries(t *testing.T) {
 	ps.ValidateMessage(&msg)
 
 	// and reject the message to make sure duplicates are also penalized
-	ps.RejectMessage(&msg, rejectValidationFailed)
+	ps.RejectMessage(&msg, RejectValidationFailed)
 	ps.DuplicateMessage(&msg2)
 
 	aScore = ps.Score(peerA)
@@ -650,7 +650,7 @@ func TestScoreRejectMessageDeliveries(t *testing.T) {
 
 	// and reject the message after a duplciate has arrived
 	ps.DuplicateMessage(&msg2)
-	ps.RejectMessage(&msg, rejectValidationFailed)
+	ps.RejectMessage(&msg, RejectValidationFailed)
 
 	aScore = ps.Score(peerA)
 	expected = -4.0
@@ -1032,7 +1032,7 @@ func TestScoreResetTopicParams(t *testing.T) {
 		pbMsg.Topic = &mytopic
 		msg := Message{ReceivedFrom: peerA, Message: pbMsg}
 		ps.ValidateMessage(&msg)
-		ps.RejectMessage(&msg, rejectValidationFailed)
+		ps.RejectMessage(&msg, RejectValidationFailed)
 	}
 
 	// check the topic score

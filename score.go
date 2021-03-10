@@ -722,25 +722,25 @@ func (ps *peerScore) RejectMessage(msg *Message, reason string) {
 
 	switch reason {
 	// we don't track those messages, but we penalize the peer as they are clearly invalid
-	case rejectMissingSignature:
+	case RejectMissingSignature:
 		fallthrough
-	case rejectInvalidSignature:
+	case RejectInvalidSignature:
 		fallthrough
-	case rejectUnexpectedSignature:
+	case RejectUnexpectedSignature:
 		fallthrough
-	case rejectUnexpectedAuthInfo:
+	case RejectUnexpectedAuthInfo:
 		fallthrough
-	case rejectSelfOrigin:
+	case RejectSelfOrigin:
 		ps.markInvalidMessageDelivery(msg.ReceivedFrom, msg)
 		return
 
 		// we ignore those messages, so do nothing.
-	case rejectBlacklstedPeer:
+	case RejectBlacklstedPeer:
 		fallthrough
-	case rejectBlacklistedSource:
+	case RejectBlacklistedSource:
 		return
 
-	case rejectValidationQueueFull:
+	case RejectValidationQueueFull:
 		// the message was rejected before it entered the validation pipeline;
 		// we don't know if this message has a valid signature, and thus we also don't know if
 		// it has a valid message ID; all we can do is ignore it.
@@ -756,14 +756,14 @@ func (ps *peerScore) RejectMessage(msg *Message, reason string) {
 	}
 
 	switch reason {
-	case rejectValidationThrottled:
+	case RejectValidationThrottled:
 		// if we reject with "validation throttled" we don't penalize the peer(s) that forward it
 		// because we don't know if it was valid.
 		drec.status = deliveryThrottled
 		// release the delivery time tracking map to free some memory early
 		drec.peers = nil
 		return
-	case rejectValidationIgnored:
+	case RejectValidationIgnored:
 		// we were explicitly instructed by the validator to ignore the message but not penalize
 		// the peer
 		drec.status = deliveryIgnored
