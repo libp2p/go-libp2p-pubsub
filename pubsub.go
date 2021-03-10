@@ -430,13 +430,14 @@ func WithEventTracer(tracer EventTracer) Option {
 	}
 }
 
-// withInternalTracer adds an internal event tracer to the pubsub system
-func withInternalTracer(tracer internalTracer) Option {
+// WithRawTracer adds a raw tracer to the pubsub system.
+// Multiple tracers can be added using multiple invocations of the option.
+func WithRawTracer(tracer RawTracer) Option {
 	return func(p *PubSub) error {
 		if p.tracer != nil {
-			p.tracer.internal = append(p.tracer.internal, tracer)
+			p.tracer.raw = append(p.tracer.raw, tracer)
 		} else {
-			p.tracer = &pubsubTracer{internal: []internalTracer{tracer}, pid: p.host.ID(), msgID: p.msgID}
+			p.tracer = &pubsubTracer{raw: []RawTracer{tracer}, pid: p.host.ID(), msgID: p.msgID}
 		}
 		return nil
 	}

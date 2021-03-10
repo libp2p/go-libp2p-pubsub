@@ -177,12 +177,12 @@ func WithPeerGater(params *PeerGaterParams) Option {
 
 		// hook the tracer
 		if ps.tracer != nil {
-			ps.tracer.internal = append(ps.tracer.internal, gs.gate)
+			ps.tracer.raw = append(ps.tracer.raw, gs.gate)
 		} else {
 			ps.tracer = &pubsubTracer{
-				internal: []internalTracer{gs.gate},
-				pid:      ps.host.ID(),
-				msgID:    ps.msgID,
+				raw:   []RawTracer{gs.gate},
+				pid:   ps.host.ID(),
+				msgID: ps.msgID,
 			}
 		}
 

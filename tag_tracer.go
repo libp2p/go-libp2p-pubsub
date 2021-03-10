@@ -173,8 +173,8 @@ func (t *tagTracer) nearFirstPeers(msg *Message) []peer.ID {
 	return peers
 }
 
-// -- internalTracer interface methods
-var _ internalTracer = (*tagTracer)(nil)
+// -- RawTracer interface methods
+var _ RawTracer = (*tagTracer)(nil)
 
 func (t *tagTracer) AddPeer(p peer.ID, proto protocol.ID) {
 	t.tagPeerIfDirect(p)
