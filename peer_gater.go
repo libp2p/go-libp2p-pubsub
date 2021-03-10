@@ -411,13 +411,13 @@ func (pg *peerGater) RejectMessage(msg *Message, reason string) {
 	defer pg.Unlock()
 
 	switch reason {
-	case rejectValidationQueueFull:
+	case RejectValidationQueueFull:
 		fallthrough
-	case rejectValidationThrottled:
+	case RejectValidationThrottled:
 		pg.lastThrottle = time.Now()
 		pg.throttle++
 
-	case rejectValidationIgnored:
+	case RejectValidationIgnored:
 		st := pg.getPeerStats(msg.ReceivedFrom)
 		st.ignore++
 

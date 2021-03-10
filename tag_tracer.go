@@ -242,11 +242,11 @@ func (t *tagTracer) RejectMessage(msg *Message, reason string) {
 	// the validation pipeline. Other rejection reasons (missing signature, etc) skip the validation
 	// queue, so we don't want to remove the state in case the message is still validating.
 	switch reason {
-	case rejectValidationThrottled:
+	case RejectValidationThrottled:
 		fallthrough
-	case rejectValidationIgnored:
+	case RejectValidationIgnored:
 		fallthrough
-	case rejectValidationFailed:
+	case RejectValidationFailed:
 		delete(t.nearFirst, t.msgID(msg.Message))
 	}
 }
