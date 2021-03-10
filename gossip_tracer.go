@@ -111,7 +111,7 @@ func (gt *gossipTracer) GetBrokenPromises() map[peer.ID]int {
 	return res
 }
 
-var _ internalTracer = (*gossipTracer)(nil)
+var _ RawTracer = (*gossipTracer)(nil)
 
 func (gt *gossipTracer) fulfillPromise(msg *Message) {
 	mid := gt.msgID(msg.Message)
