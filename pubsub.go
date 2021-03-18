@@ -1045,7 +1045,7 @@ func (p *PubSub) pushMsg(msg *Message) {
 		return
 	}
 
-	if !p.val.Push(src, msg) {
+	if src != self && !p.val.Push(src, msg) {
 		return
 	}
 
