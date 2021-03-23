@@ -163,21 +163,22 @@ var (
 	GossipSubIWantFollowupTime = 3 * time.Second
 )
 
-// NewGossipSub returns a new PubSub object using GossipSubRouter as the router.
-func NewGossipSub(ctx context.Context, h host.Host, opts ...Option) (*PubSub, error) {
+// NewGossipSubWithProtocols returns a new PubSub object using GossipSubRouter as the router and the protocols specified in ps.
+func NewGossipSubWithProtocols(ctx context.Context, h host.Host, ps []protocol.ID, opts ...Option) (*PubSub, error) {
 	rt := &GossipSubRouter{
-		peers:    make(map[peer.ID]protocol.ID),
-		mesh:     make(map[string]map[peer.ID]struct{}),
-		fanout:   make(map[string]map[peer.ID]struct{}),
-		lastpub:  make(map[string]int64),
-		gossip:   make(map[peer.ID][]*pb.ControlIHave),
-		control:  make(map[peer.ID]*pb.ControlMessage),
-		backoff:  make(map[string]map[peer.ID]time.Time),
-		peerhave: make(map[peer.ID]int),
-		iasked:   make(map[peer.ID]int),
-		outbound: make(map[peer.ID]bool),
-		connect:  make(chan connectInfo, GossipSubMaxPendingConnections),
-		mcache:   NewMessageCache(GossipSubHistoryGossip, GossipSubHistoryLength),
+		peers:     make(map[peer.ID]protocol.ID),
+		mesh:      make(map[string]map[peer.ID]struct{}),
+		fanout:    make(map[string]map[peer.ID]struct{}),
+		lastpub:   make(map[string]int64),
+		gossip:    make(map[peer.ID][]*pb.ControlIHave),
+		control:   make(map[peer.ID]*pb.ControlMessage),
+		backoff:   make(map[string]map[peer.ID]time.Time),
+		peerhave:  make(map[peer.ID]int),
+		iasked:    make(map[peer.ID]int),
+		outbound:  make(map[peer.ID]bool),
+		connect:   make(chan connectInfo, GossipSubMaxPendingConnections),
+		mcache:    NewMessageCache(GossipSubHistoryGossip, GossipSubHistoryLength),
+		protocols: ps,
 
 		// these are configured per router to allow variation in tests
 		D:      GossipSubD,
@@ -199,6 +200,11 @@ func NewGossipSub(ctx context.Context, h host.Host, opts ...Option) (*PubSub, er
 	// hook the tag tracer
 	opts = append(opts, WithRawTracer(rt.tagTracer))
 	return NewPubSub(ctx, h, rt, opts...)
+}
+
+// NewGossipSub returns a new PubSub object using GossipSubRouter as the router.
+func NewGossipSub(ctx context.Context, h host.Host, opts ...Option) (*PubSub, error) {
+	return NewGossipSubWithProtocols(ctx, h, []protocol.ID{GossipSubID_v11, GossipSubID_v10, FloodSubID}, opts...)
 }
 
 // WithPeerScore is a gossipsub router option that enables peer scoring.
@@ -342,6 +348,7 @@ type GossipSubRouter struct {
 	backoff  map[string]map[peer.ID]time.Time // prune backoff
 	connect  chan connectInfo                 // px connection requests
 
+	protocols    []protocol.ID
 	mcache       *MessageCache
 	tracer       *pubsubTracer
 	score        *peerScore
@@ -399,7 +406,7 @@ type connectInfo struct {
 }
 
 func (gs *GossipSubRouter) Protocols() []protocol.ID {
-	return []protocol.ID{GossipSubID_v11, GossipSubID_v10, FloodSubID}
+	return gs.protocols
 }
 
 func (gs *GossipSubRouter) Attach(p *PubSub) {
@@ -487,7 +494,7 @@ func (gs *GossipSubRouter) EnoughPeers(topic string, suggested int) bool {
 	fsPeers, gsPeers := 0, 0
 	// floodsub peers
 	for p := range tmap {
-		if gs.peers[p] == FloodSubID {
+		if gs.peerHasAny(p, FloodSubID) {
 			fsPeers++
 		}
 	}
@@ -1584,6 +1591,16 @@ func (gs *GossipSubRouter) sendGraftPrune(tograft, toprune map[peer.ID][]string,
 
 }
 
+// tests if the peer supports at least one protocol
+func (gs *GossipSubRouter) peerHasAny(p peer.ID, ps ...protocol.ID) bool {
+	for _, protocol := range ps {
+		if gs.peers[p] == protocol {
+			return true
+		}
+	}
+	return false
+}
+
 // emitGossip emits IHAVE gossip advertising items in the message cache window
 // of this topic.
 func (gs *GossipSubRouter) emitGossip(topic string, exclude map[peer.ID]struct{}) {
@@ -1609,7 +1626,7 @@ func (gs *GossipSubRouter) emitGossip(topic string, exclude map[peer.ID]struct{}
 	for p := range gs.p.topics[topic] {
 		_, inExclude := exclude[p]
 		_, direct := gs.direct[p]
-		if !inExclude && !direct && (gs.peers[p] == GossipSubID_v10 || gs.peers[p] == GossipSubID_v11) && gs.score.Score(p) >= gs.gossipThreshold {
+		if !inExclude && !direct && gs.peerHasAny(p, GossipSubID_v10, GossipSubID_v11) && gs.score.Score(p) >= gs.gossipThreshold {
 			peers = append(peers, p)
 		}
 	}
@@ -1732,7 +1749,7 @@ func (gs *GossipSubRouter) piggybackControl(p peer.ID, out *RPC, ctl *pb.Control
 }
 
 func (gs *GossipSubRouter) makePrune(p peer.ID, topic string, doPX bool) *pb.ControlPrune {
-	if gs.peers[p] == GossipSubID_v10 {
+	if gs.peerHasAny(p, GossipSubID_v10) {
 		// GossipSub v1.0 -- no peer exchange, the peer won't be able to parse it anyway
 		return &pb.ControlPrune{TopicID: &topic}
 	}
@@ -1777,7 +1794,7 @@ func (gs *GossipSubRouter) getPeers(topic string, count int, filter func(peer.ID
 
 	peers := make([]peer.ID, 0, len(tmap))
 	for p := range tmap {
-		if (gs.peers[p] == GossipSubID_v10 || gs.peers[p] == GossipSubID_v11) && filter(p) {
+		if gs.peerHasAny(p, GossipSubID_v10, GossipSubID_v11) && filter(p) {
 			peers = append(peers, p)
 		}
 	}
