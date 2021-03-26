@@ -216,7 +216,7 @@ func (v *validation) RemoveValidator(req *rmValReq) {
 func (v *validation) PushLocal(msg *Message) error {
 	v.p.tracer.PublishMessage(msg)
 
-	err := v.p.checkSignature(msg)
+	err := v.p.checkSigningPolicy(msg)
 	if err != nil {
 		return err
 	}

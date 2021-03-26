@@ -991,7 +991,7 @@ func (p *PubSub) pushMsg(msg *Message) {
 		return
 	}
 
-	err := p.checkSignature(msg)
+	err := p.checkSigningPolicy(msg)
 	if err != nil {
 		log.Debugf("dropping message from %s: %s", src, err)
 		return
@@ -1021,7 +1021,7 @@ func (p *PubSub) pushMsg(msg *Message) {
 	}
 }
 
-func (p *PubSub) checkSignature(msg *Message) error {
+func (p *PubSub) checkSigningPolicy(msg *Message) error {
 	// reject unsigned messages when strict before we even process the id
 	if p.signPolicy.mustVerify() {
 		if p.signPolicy.mustSign() {
