@@ -210,9 +210,10 @@ func (v *validation) RemoveValidator(req *rmValReq) {
 	}
 }
 
-// Publish synchronously accepts a locally published message, performs applicable
-// validations and pushes the message for propagate by the pubsub system
-func (v *validation) Publish(msg *Message) error {
+// PushLocal synchronously pushes a locally published message and performs applicable
+// validations.
+// Returns an error if validation fails
+func (v *validation) PushLocal(msg *Message) error {
 	v.p.tracer.PublishMessage(msg)
 
 	err := v.p.checkSignature(msg)
