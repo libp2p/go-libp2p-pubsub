@@ -173,8 +173,8 @@ func (t *tagTracer) nearFirstPeers(msg *Message) []peer.ID {
 	return peers
 }
 
-// -- internalTracer interface methods
-var _ internalTracer = (*tagTracer)(nil)
+// -- RawTracer interface methods
+var _ RawTracer = (*tagTracer)(nil)
 
 func (t *tagTracer) AddPeer(p peer.ID, proto protocol.ID) {
 	t.tagPeerIfDirect(p)
@@ -242,11 +242,11 @@ func (t *tagTracer) RejectMessage(msg *Message, reason string) {
 	// the validation pipeline. Other rejection reasons (missing signature, etc) skip the validation
 	// queue, so we don't want to remove the state in case the message is still validating.
 	switch reason {
-	case rejectValidationThrottled:
+	case RejectValidationThrottled:
 		fallthrough
-	case rejectValidationIgnored:
+	case RejectValidationIgnored:
 		fallthrough
-	case rejectValidationFailed:
+	case RejectValidationFailed:
 		delete(t.nearFirst, t.msgID(msg.Message))
 	}
 }

@@ -46,21 +46,21 @@ func TestPeerGater(t *testing.T) {
 		t.Fatal("expected AcceptAll")
 	}
 
-	pg.RejectMessage(msg, rejectValidationQueueFull)
+	pg.RejectMessage(msg, RejectValidationQueueFull)
 	status = pg.AcceptFrom(peerA)
 	if status != AcceptAll {
 		t.Fatal("expected AcceptAll")
 	}
 
-	pg.RejectMessage(msg, rejectValidationThrottled)
+	pg.RejectMessage(msg, RejectValidationThrottled)
 	status = pg.AcceptFrom(peerA)
 	if status != AcceptAll {
 		t.Fatal("expected AcceptAll")
 	}
 
 	for i := 0; i < 100; i++ {
-		pg.RejectMessage(msg, rejectValidationIgnored)
-		pg.RejectMessage(msg, rejectValidationFailed)
+		pg.RejectMessage(msg, RejectValidationIgnored)
+		pg.RejectMessage(msg, RejectValidationFailed)
 	}
 
 	accepted := false

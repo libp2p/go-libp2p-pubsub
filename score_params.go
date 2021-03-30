@@ -3,6 +3,7 @@ package pubsub
 import (
 	"fmt"
 	"math"
+	"net"
 	"time"
 
 	"github.com/libp2p/go-libp2p-core/peer"
@@ -71,7 +72,7 @@ type PeerScoreParams struct {
 	//       thus disabling the IP colocation penalty.
 	IPColocationFactorWeight    float64
 	IPColocationFactorThreshold int
-	IPColocationFactorWhitelist map[string]struct{}
+	IPColocationFactorWhitelist []*net.IPNet
 
 	// P7: behavioural pattern penalties.
 	// This parameter has an associated counter which tracks misbehaviour as detected by the

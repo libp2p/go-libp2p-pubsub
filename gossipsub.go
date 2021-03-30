@@ -214,8 +214,8 @@ func NewGossipSub(ctx context.Context, h host.Host, opts ...Option) (*PubSub, er
 		params:    params,
 	}
 
-	// use the withInternalTracer option to hook up the tag tracer
-	opts = append(opts, withInternalTracer(rt.tagTracer))
+	// hook the tag tracer
+	opts = append(opts, WithRawTracer(rt.tagTracer))
 	return NewPubSub(ctx, h, rt, opts...)
 }
 
@@ -283,12 +283,12 @@ func WithPeerScore(params *PeerScoreParams, thresholds *PeerScoreThresholds) Opt
 
 		// hook the tracer
 		if ps.tracer != nil {
-			ps.tracer.internal = append(ps.tracer.internal, gs.score, gs.gossipTracer)
+			ps.tracer.raw = append(ps.tracer.raw, gs.score, gs.gossipTracer)
 		} else {
 			ps.tracer = &pubsubTracer{
-				internal: []internalTracer{gs.score, gs.gossipTracer},
-				pid:      ps.host.ID(),
-				msgID:    ps.msgID,
+				raw:   []RawTracer{gs.score, gs.gossipTracer},
+				pid:   ps.host.ID(),
+				msgID: ps.msgID,
 			}
 		}
 

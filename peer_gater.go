@@ -177,12 +177,12 @@ func WithPeerGater(params *PeerGaterParams) Option {
 
 		// hook the tracer
 		if ps.tracer != nil {
-			ps.tracer.internal = append(ps.tracer.internal, gs.gate)
+			ps.tracer.raw = append(ps.tracer.raw, gs.gate)
 		} else {
 			ps.tracer = &pubsubTracer{
-				internal: []internalTracer{gs.gate},
-				pid:      ps.host.ID(),
-				msgID:    ps.msgID,
+				raw:   []RawTracer{gs.gate},
+				pid:   ps.host.ID(),
+				msgID: ps.msgID,
 			}
 		}
 
@@ -411,13 +411,13 @@ func (pg *peerGater) RejectMessage(msg *Message, reason string) {
 	defer pg.Unlock()
 
 	switch reason {
-	case rejectValidationQueueFull:
+	case RejectValidationQueueFull:
 		fallthrough
-	case rejectValidationThrottled:
+	case RejectValidationThrottled:
 		pg.lastThrottle = time.Now()
 		pg.throttle++
 
-	case rejectValidationIgnored:
+	case RejectValidationIgnored:
 		st := pg.getPeerStats(msg.ReceivedFrom)
 		st.ignore++
 

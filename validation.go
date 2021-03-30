@@ -201,7 +201,7 @@ func (v *validation) Push(src peer.ID, msg *Message) bool {
 		case v.validateQ <- &validateReq{vals, src, msg}:
 		default:
 			log.Debugf("message validation throttled: queue full; dropping message from %s", src)
-			v.tracer.RejectMessage(msg, rejectValidationQueueFull)
+			v.tracer.RejectMessage(msg, RejectValidationQueueFull)
 		}
 		return false
 	}
@@ -242,7 +242,7 @@ func (v *validation) validate(vals []*topicVal, src peer.ID, msg *Message) {
 	if msg.Signature != nil {
 		if !v.validateSignature(msg) {
 			log.Debugf("message signature validation failed; dropping message from %s", src)
-			v.tracer.RejectMessage(msg, rejectInvalidSignature)
+			v.tracer.RejectMessage(msg, RejectInvalidSignature)
 			return
 		}
 	}
@@ -282,7 +282,7 @@ loop:
 
 	if result == ValidationReject {
 		log.Debugf("message validation failed; dropping message from %s", src)
-		v.tracer.RejectMessage(msg, rejectValidationFailed)
+		v.tracer.RejectMessage(msg, RejectValidationFailed)
 		return
 	}
 
@@ -296,13 +296,13 @@ loop:
 			}()
 		default:
 			log.Debugf("message validation throttled; dropping message from %s", src)
-			v.tracer.RejectMessage(msg, rejectValidationThrottled)
+			v.tracer.RejectMessage(msg, RejectValidationThrottled)
 		}
 		return
 	}
 
 	if result == ValidationIgnore {
-		v.tracer.RejectMessage(msg, rejectValidationIgnored)
+		v.tracer.RejectMessage(msg, RejectValidationIgnored)
 		return
 	}
 
@@ -332,15 +332,15 @@ func (v *validation) doValidateTopic(vals []*topicVal, src peer.ID, msg *Message
 		v.p.sendMsg <- msg
 	case ValidationReject:
 		log.Debugf("message validation failed; dropping message from %s", src)
-		v.tracer.RejectMessage(msg, rejectValidationFailed)
+		v.tracer.RejectMessage(msg, RejectValidationFailed)
 		return
 	case ValidationIgnore:
 		log.Debugf("message validation punted; ignoring message from %s", src)
-		v.tracer.RejectMessage(msg, rejectValidationIgnored)
+		v.tracer.RejectMessage(msg, RejectValidationIgnored)
 		return
 	case validationThrottled:
 		log.Debugf("message validation throttled; ignoring message from %s", src)
-		v.tracer.RejectMessage(msg, rejectValidationThrottled)
+		v.tracer.RejectMessage(msg, RejectValidationThrottled)
 
 	default:
 		// BUG: this would be an internal programming error, so a panic seems appropiate.
