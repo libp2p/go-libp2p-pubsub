@@ -30,6 +30,21 @@ func TestPeerScoreThresholdsValidation(t *testing.T) {
 	if (&PeerScoreThresholds{GossipThreshold: -1, PublishThreshold: -2, GraylistThreshold: -3, AcceptPXThreshold: 1, OpportunisticGraftThreshold: 2}).validate() != nil {
 		t.Fatal("expected validation success")
 	}
+	if (&PeerScoreThresholds{GossipThreshold: math.Inf(-1), PublishThreshold: -2, GraylistThreshold: -3, AcceptPXThreshold: 1, OpportunisticGraftThreshold: 2}).validate() == nil {
+		t.Fatal("expected validation error")
+	}
+	if (&PeerScoreThresholds{GossipThreshold: -1, PublishThreshold: math.Inf(-1), GraylistThreshold: -3, AcceptPXThreshold: 1, OpportunisticGraftThreshold: 2}).validate() == nil {
+		t.Fatal("expected validation error")
+	}
+	if (&PeerScoreThresholds{GossipThreshold: -1, PublishThreshold: -2, GraylistThreshold: math.Inf(-1), AcceptPXThreshold: 1, OpportunisticGraftThreshold: 2}).validate() == nil {
+		t.Fatal("expected validation error")
+	}
+	if (&PeerScoreThresholds{GossipThreshold: -1, PublishThreshold: -2, GraylistThreshold: -3, AcceptPXThreshold: math.NaN(), OpportunisticGraftThreshold: 2}).validate() == nil {
+		t.Fatal("expected validation error")
+	}
+	if (&PeerScoreThresholds{GossipThreshold: -1, PublishThreshold: -2, GraylistThreshold: -3, AcceptPXThreshold: 1, OpportunisticGraftThreshold: math.Inf(0)}).validate() == nil {
+		t.Fatal("expected validation error")
+	}
 }
 
 func TestTopicScoreParamsValidation(t *testing.T) {

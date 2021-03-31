@@ -32,20 +32,20 @@ type PeerScoreThresholds struct {
 }
 
 func (p *PeerScoreThresholds) validate() error {
-	if p.GossipThreshold > 0 {
-		return fmt.Errorf("invalid gossip threshold; it must be <= 0")
+	if p.GossipThreshold > 0 || isInvalidNumber(p.GossipThreshold) {
+		return fmt.Errorf("invalid gossip threshold; it must be <= 0 and a valid number")
 	}
-	if p.PublishThreshold > 0 || p.PublishThreshold > p.GossipThreshold {
-		return fmt.Errorf("invalid publish threshold; it must be <= 0 and <= gossip threshold")
+	if p.PublishThreshold > 0 || p.PublishThreshold > p.GossipThreshold || isInvalidNumber(p.PublishThreshold) {
+		return fmt.Errorf("invalid publish threshold; it must be <= 0 and <= gossip threshold and a valid number")
 	}
-	if p.GraylistThreshold > 0 || p.GraylistThreshold > p.PublishThreshold {
-		return fmt.Errorf("invalid graylist threshold; it must be <= 0 and <= publish threshold")
+	if p.GraylistThreshold > 0 || p.GraylistThreshold > p.PublishThreshold || isInvalidNumber(p.GraylistThreshold) {
+		return fmt.Errorf("invalid graylist threshold; it must be <= 0 and <= publish threshold and a valid number")
 	}
-	if p.AcceptPXThreshold < 0 {
-		return fmt.Errorf("invalid accept PX threshold; it must be >= 0")
+	if p.AcceptPXThreshold < 0 || isInvalidNumber(p.AcceptPXThreshold) {
+		return fmt.Errorf("invalid accept PX threshold; it must be >= 0 and a valid number")
 	}
-	if p.OpportunisticGraftThreshold < 0 {
-		return fmt.Errorf("invalid opportunistic grafting threshold; it must be >= 0")
+	if p.OpportunisticGraftThreshold < 0 || isInvalidNumber(p.OpportunisticGraftThreshold) {
+		return fmt.Errorf("invalid opportunistic grafting threshold; it must be >= 0 and a valid number")
 	}
 	return nil
 }
