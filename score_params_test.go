@@ -272,6 +272,20 @@ func TestPeerScoreParamsValidation(t *testing.T) {
 
 	// Checks the topic parameters for invalid values such as infinite and
 	// NaN numbers.
+
+	// Don't use these params in production!
+	if (&PeerScoreParams{
+		AppSpecificScore:            appScore,
+		DecayInterval:               time.Second,
+		DecayToZero:                 math.Inf(0),
+		IPColocationFactorWeight:    math.Inf(-1),
+		IPColocationFactorThreshold: 1,
+		BehaviourPenaltyWeight:      math.Inf(0),
+		BehaviourPenaltyDecay:       math.NaN(),
+	}).validate() == nil {
+		t.Fatal("expected validation failure")
+	}
+
 	if (&PeerScoreParams{
 		TopicScoreCap:               1,
 		AppSpecificScore:            appScore,
