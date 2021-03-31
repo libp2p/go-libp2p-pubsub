@@ -1,6 +1,7 @@
 package pubsub
 
 import (
+	"math"
 	"testing"
 	"time"
 
@@ -248,6 +249,40 @@ func TestPeerScoreParamsValidation(t *testing.T) {
 				MeshFailurePenaltyDecay:         0.5,
 				InvalidMessageDeliveriesWeight:  -1,
 				InvalidMessageDeliveriesDecay:   0.5,
+			},
+		},
+	}).validate() == nil {
+		t.Fatal("expected validation failure")
+	}
+
+	// Checks the topic parameters for invalid values such as infinite and
+	// NaN numbers.
+	if (&PeerScoreParams{
+		TopicScoreCap:               1,
+		AppSpecificScore:            appScore,
+		DecayInterval:               time.Second,
+		DecayToZero:                 0.01,
+		IPColocationFactorWeight:    -1,
+		IPColocationFactorThreshold: 1,
+		Topics: map[string]*TopicScoreParams{
+			"test": &TopicScoreParams{
+				TopicWeight:                     math.Inf(0),
+				TimeInMeshWeight:                math.NaN(),
+				TimeInMeshQuantum:               time.Second,
+				TimeInMeshCap:                   10,
+				FirstMessageDeliveriesWeight:    math.Inf(1),
+				FirstMessageDeliveriesDecay:     0.5,
+				FirstMessageDeliveriesCap:       10,
+				MeshMessageDeliveriesWeight:     math.Inf(-1),
+				MeshMessageDeliveriesDecay:      math.NaN(),
+				MeshMessageDeliveriesCap:        math.Inf(0),
+				MeshMessageDeliveriesThreshold:  5,
+				MeshMessageDeliveriesWindow:     time.Millisecond,
+				MeshMessageDeliveriesActivation: time.Second,
+				MeshFailurePenaltyWeight:        -1,
+				MeshFailurePenaltyDecay:         math.NaN(),
+				InvalidMessageDeliveriesWeight:  math.Inf(0),
+				InvalidMessageDeliveriesDecay:   math.NaN(),
 			},
 		},
 	}).validate() == nil {

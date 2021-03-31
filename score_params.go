@@ -199,47 +199,47 @@ func (p *PeerScoreParams) validate() error {
 
 func (p *TopicScoreParams) validate() error {
 	// make sure we have a sane topic weight
-	if p.TopicWeight < 0 {
-		return fmt.Errorf("invalid topic weight; must be >= 0")
+	if p.TopicWeight < 0 || isInvalidNumber(p.TopicWeight) {
+		return fmt.Errorf("invalid topic weight; must be >= 0 and a valid number")
 	}
 
 	// check P1
 	if p.TimeInMeshQuantum == 0 {
 		return fmt.Errorf("invalid TimeInMeshQuantum; must be non zero")
 	}
-	if p.TimeInMeshWeight < 0 {
-		return fmt.Errorf("invalid TimeInMeshWeight; must be positive (or 0 to disable)")
+	if p.TimeInMeshWeight < 0 || isInvalidNumber(p.TimeInMeshWeight) {
+		return fmt.Errorf("invalid TimeInMeshWeight; must be positive (or 0 to disable) and a valid number")
 	}
 	if p.TimeInMeshWeight != 0 && p.TimeInMeshQuantum <= 0 {
 		return fmt.Errorf("invalid TimeInMeshQuantum; must be positive")
 	}
-	if p.TimeInMeshWeight != 0 && p.TimeInMeshCap <= 0 {
-		return fmt.Errorf("invalid TimeInMeshCap; must be positive")
+	if p.TimeInMeshWeight != 0 && (p.TimeInMeshCap <= 0 || isInvalidNumber(p.TimeInMeshCap)) {
+		return fmt.Errorf("invalid TimeInMeshCap; must be positive and a valid number")
 	}
 
 	// check P2
-	if p.FirstMessageDeliveriesWeight < 0 {
-		return fmt.Errorf("invallid FirstMessageDeliveriesWeight; must be positive (or 0 to disable)")
+	if p.FirstMessageDeliveriesWeight < 0 || isInvalidNumber(p.FirstMessageDeliveriesWeight) {
+		return fmt.Errorf("invallid FirstMessageDeliveriesWeight; must be positive (or 0 to disable) and a valid number")
 	}
-	if p.FirstMessageDeliveriesWeight != 0 && (p.FirstMessageDeliveriesDecay <= 0 || p.FirstMessageDeliveriesDecay >= 1) {
+	if p.FirstMessageDeliveriesWeight != 0 && (p.FirstMessageDeliveriesDecay <= 0 || p.FirstMessageDeliveriesDecay >= 1 || isInvalidNumber(p.FirstMessageDeliveriesDecay)) {
 		return fmt.Errorf("invalid FirstMessageDeliveriesDecay; must be between 0 and 1")
 	}
-	if p.FirstMessageDeliveriesWeight != 0 && p.FirstMessageDeliveriesCap <= 0 {
-		return fmt.Errorf("invalid FirstMessageDeliveriesCap; must be positive")
+	if p.FirstMessageDeliveriesWeight != 0 && (p.FirstMessageDeliveriesCap <= 0 || isInvalidNumber(p.FirstMessageDeliveriesCap)) {
+		return fmt.Errorf("invalid FirstMessageDeliveriesCap; must be positive and a valid number")
 	}
 
 	// check P3
-	if p.MeshMessageDeliveriesWeight > 0 {
-		return fmt.Errorf("invalid MeshMessageDeliveriesWeight; must be negative (or 0 to disable)")
+	if p.MeshMessageDeliveriesWeight > 0 || isInvalidNumber(p.MeshFailurePenaltyWeight) {
+		return fmt.Errorf("invalid MeshMessageDeliveriesWeight; must be negative (or 0 to disable) and a valid number")
 	}
-	if p.MeshMessageDeliveriesWeight != 0 && (p.MeshMessageDeliveriesDecay <= 0 || p.MeshMessageDeliveriesDecay >= 1) {
+	if p.MeshMessageDeliveriesWeight != 0 && (p.MeshMessageDeliveriesDecay <= 0 || p.MeshMessageDeliveriesDecay >= 1 || isInvalidNumber(p.MeshMessageDeliveriesDecay)) {
 		return fmt.Errorf("invalid MeshMessageDeliveriesDecay; must be between 0 and 1")
 	}
-	if p.MeshMessageDeliveriesWeight != 0 && p.MeshMessageDeliveriesCap <= 0 {
-		return fmt.Errorf("invalid MeshMessageDeliveriesCap; must be positive")
+	if p.MeshMessageDeliveriesWeight != 0 && (p.MeshMessageDeliveriesCap <= 0 || isInvalidNumber(p.MeshMessageDeliveriesCap)) {
+		return fmt.Errorf("invalid MeshMessageDeliveriesCap; must be positive and a valid number")
 	}
-	if p.MeshMessageDeliveriesWeight != 0 && p.MeshMessageDeliveriesThreshold <= 0 {
-		return fmt.Errorf("invalid MeshMessageDeliveriesThreshold; must be positive")
+	if p.MeshMessageDeliveriesWeight != 0 && (p.MeshMessageDeliveriesThreshold <= 0 || isInvalidNumber(p.MeshMessageDeliveriesThreshold)) {
+		return fmt.Errorf("invalid MeshMessageDeliveriesThreshold; must be positive and a valid number")
 	}
 	if p.MeshMessageDeliveriesWindow < 0 {
 		return fmt.Errorf("invalid MeshMessageDeliveriesWindow; must be non-negative")
@@ -249,18 +249,18 @@ func (p *TopicScoreParams) validate() error {
 	}
 
 	// check P3b
-	if p.MeshFailurePenaltyWeight > 0 {
-		return fmt.Errorf("invalid MeshFailurePenaltyWeight; must be negative (or 0 to disable)")
+	if p.MeshFailurePenaltyWeight > 0 || isInvalidNumber(p.MeshFailurePenaltyWeight) {
+		return fmt.Errorf("invalid MeshFailurePenaltyWeight; must be negative (or 0 to disable) and a valid number")
 	}
-	if p.MeshFailurePenaltyWeight != 0 && (p.MeshFailurePenaltyDecay <= 0 || p.MeshFailurePenaltyDecay >= 1) {
+	if p.MeshFailurePenaltyWeight != 0 && (isInvalidNumber(p.MeshFailurePenaltyDecay) || p.MeshFailurePenaltyDecay <= 0 || p.MeshFailurePenaltyDecay >= 1) {
 		return fmt.Errorf("invalid MeshFailurePenaltyDecay; must be between 0 and 1")
 	}
 
 	// check P4
-	if p.InvalidMessageDeliveriesWeight > 0 {
-		return fmt.Errorf("invalid InvalidMessageDeliveriesWeight; must be negative (or 0 to disable)")
+	if p.InvalidMessageDeliveriesWeight > 0 || isInvalidNumber(p.InvalidMessageDeliveriesWeight) {
+		return fmt.Errorf("invalid InvalidMessageDeliveriesWeight; must be negative (or 0 to disable) and a valid number")
 	}
-	if p.InvalidMessageDeliveriesDecay <= 0 || p.InvalidMessageDeliveriesDecay >= 1 {
+	if p.InvalidMessageDeliveriesDecay <= 0 || p.InvalidMessageDeliveriesDecay >= 1 || isInvalidNumber(p.InvalidMessageDeliveriesDecay) {
 		return fmt.Errorf("invalid InvalidMessageDeliveriesDecay; must be between 0 and 1")
 	}
 
@@ -284,4 +284,10 @@ func ScoreParameterDecayWithBase(decay time.Duration, base time.Duration, decayT
 	// so factor^n = decayToZero => factor = decayToZero^(1/n)
 	ticks := float64(decay / base)
 	return math.Pow(decayToZero, 1/ticks)
+}
+
+// checks whether the provided floating-point number is `Not a Number`
+// or an infinite number.
+func isInvalidNumber(num float64) bool {
+	return math.IsNaN(num) || math.IsInf(num, 0)
 }
