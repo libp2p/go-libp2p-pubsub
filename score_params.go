@@ -229,7 +229,7 @@ func (p *TopicScoreParams) validate() error {
 	}
 
 	// check P3
-	if p.MeshMessageDeliveriesWeight > 0 || isInvalidNumber(p.MeshFailurePenaltyWeight) {
+	if p.MeshMessageDeliveriesWeight > 0 || isInvalidNumber(p.MeshMessageDeliveriesWeight) {
 		return fmt.Errorf("invalid MeshMessageDeliveriesWeight; must be negative (or 0 to disable) and a valid number")
 	}
 	if p.MeshMessageDeliveriesWeight != 0 && (p.MeshMessageDeliveriesDecay <= 0 || p.MeshMessageDeliveriesDecay >= 1 || isInvalidNumber(p.MeshMessageDeliveriesDecay)) {
