@@ -157,8 +157,8 @@ func (p *PeerScoreParams) validate() error {
 	}
 
 	// check that the topic score is 0 or something positive
-	if p.TopicScoreCap < 0 {
-		return fmt.Errorf("invalid topic score cap; must be positive (or 0 for no cap)")
+	if p.TopicScoreCap < 0 || isInvalidNumber(p.TopicScoreCap) {
+		return fmt.Errorf("invalid topic score cap; must be positive (or 0 for no cap) and a valid number")
 	}
 
 	// check that we have an app specific score; the weight can be anything (but expected positive)
@@ -167,29 +167,29 @@ func (p *PeerScoreParams) validate() error {
 	}
 
 	// check the IP colocation factor
-	if p.IPColocationFactorWeight > 0 {
-		return fmt.Errorf("invalid IPColocationFactorWeight; must be negative (or 0 to disable)")
+	if p.IPColocationFactorWeight > 0 || isInvalidNumber(p.IPColocationFactorWeight) {
+		return fmt.Errorf("invalid IPColocationFactorWeight; must be negative (or 0 to disable) and a valid number")
 	}
 	if p.IPColocationFactorWeight != 0 && p.IPColocationFactorThreshold < 1 {
 		return fmt.Errorf("invalid IPColocationFactorThreshold; must be at least 1")
 	}
 
 	// check the behaviour penalty
-	if p.BehaviourPenaltyWeight > 0 {
-		return fmt.Errorf("invalid BehaviourPenaltyWeight; must be negative (or 0 to disable)")
+	if p.BehaviourPenaltyWeight > 0 || isInvalidNumber(p.BehaviourPenaltyWeight) {
+		return fmt.Errorf("invalid BehaviourPenaltyWeight; must be negative (or 0 to disable) and a valid number")
 	}
-	if p.BehaviourPenaltyWeight != 0 && (p.BehaviourPenaltyDecay <= 0 || p.BehaviourPenaltyDecay >= 1) {
+	if p.BehaviourPenaltyWeight != 0 && (p.BehaviourPenaltyDecay <= 0 || p.BehaviourPenaltyDecay >= 1 || isInvalidNumber(p.BehaviourPenaltyDecay)) {
 		return fmt.Errorf("invalid BehaviourPenaltyDecay; must be between 0 and 1")
 	}
-	if p.BehaviourPenaltyThreshold < 0 {
-		return fmt.Errorf("invalid BehaviourPenaltyThreshold; must be >= 0")
+	if p.BehaviourPenaltyThreshold < 0 || isInvalidNumber(p.BehaviourPenaltyThreshold) {
+		return fmt.Errorf("invalid BehaviourPenaltyThreshold; must be >= 0 and a valid number")
 	}
 
 	// check the decay parameters
 	if p.DecayInterval < time.Second {
 		return fmt.Errorf("invalid DecayInterval; must be at least 1s")
 	}
-	if p.DecayToZero <= 0 || p.DecayToZero >= 1 {
+	if p.DecayToZero <= 0 || p.DecayToZero >= 1 || isInvalidNumber(p.DecayToZero) {
 		return fmt.Errorf("invalid DecayToZero; must be between 0 and 1")
 	}
 
