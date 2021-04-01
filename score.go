@@ -973,6 +973,11 @@ func (ps *peerScore) getIPs(p peer.ID) []string {
 	conns := ps.host.Network().ConnsToPeer(p)
 	res := make([]string, 0, 1)
 	for _, c := range conns {
+		if c.Stat().Transient {
+			// ignore transient
+			continue
+		}
+
 		remote := c.RemoteMultiaddr()
 		ip, err := manet.ToIP(remote)
 		if err != nil {
