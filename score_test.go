@@ -7,7 +7,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/libp2p/go-libp2p-core/crypto"
+	"github.com/libp2p/go-libp2p-core/network"
 	"github.com/libp2p/go-libp2p-core/peer"
+	"github.com/libp2p/go-libp2p-core/protocol"
+
+	ma "github.com/multiformats/go-multiaddr"
 )
 
 func TestScoreTimeInMesh(t *testing.T) {
@@ -1078,3 +1083,65 @@ func setIPsForPeer(t *testing.T, ps *peerScore, p peer.ID, ips ...string) {
 	}
 	pstats.ips = ips
 }
+
+func TestScoreHasPubsubStream(t *testing.T) {
+	params := &PeerScoreParams{
+		AppSpecificScore:  func(peer.ID) float64 { return 0 },
+		AppSpecificWeight: 0,
+	}
+
+	ps := newPeerScore(params)
+
+	c1 := &phonyConn{FloodSubID}
+	c2 := &phonyConn{GossipSubID_v10}
+	c3 := &phonyConn{GossipSubID_v11}
+	c4 := &phonyConn{"/bogus/1.0.0"}
+
+	if !ps.hasPubsubStream(c1) {
+		t.Fatal("expected pubsub stream")
+	}
+	if !ps.hasPubsubStream(c2) {
+		t.Fatal("expected pubsub stream")
+	}
+	if !ps.hasPubsubStream(c3) {
+		t.Fatal("expected pubsub stream")
+	}
+	if ps.hasPubsubStream(c4) {
+		t.Fatal("expected no pubsub stream")
+	}
+}
+
+type phonyConn struct {
+	proto protocol.ID
+}
+
+func (pc *phonyConn) Close() error                       { return nil }
+func (pc *phonyConn) LocalPeer() peer.ID                 { return "" }
+func (pc *phonyConn) LocalPrivateKey() crypto.PrivKey    { return nil }
+func (pc *phonyConn) RemotePeer() peer.ID                { return "" }
+func (pc *phonyConn) RemotePublicKey() crypto.PubKey     { return nil }
+func (pc *phonyConn) LocalMultiaddr() ma.Multiaddr       { return nil }
+func (pc *phonyConn) RemoteMultiaddr() ma.Multiaddr      { return nil }
+func (pc *phonyConn) NewStream() (network.Stream, error) { return nil, nil }
+func (pc *phonyConn) Stat() network.Stat                 { return network.Stat{} }
+
+func (pc *phonyConn) GetStreams() []network.Stream {
+	return []network.Stream{&phonyStream{pc.proto}}
+}
+
+type phonyStream struct {
+	proto protocol.ID
+}
+
+func (ps *phonyStream) Read([]byte) (int, error)         { return 0, nil }
+func (ps *phonyStream) Write([]byte) (int, error)        { return 0, nil }
+func (ps *phonyStream) Close() error                     { return nil }
+func (ps *phonyStream) Reset() error                     { return nil }
+func (ps *phonyStream) SetDeadline(time.Time) error      { return nil }
+func (ps *phonyStream) SetReadDeadline(time.Time) error  { return nil }
+func (ps *phonyStream) SetWriteDeadline(time.Time) error { return nil }
+func (ps *phonyStream) SetProtocol(protocol.ID)          {}
+func (ps *phonyStream) Stat() network.Stat               { return network.Stat{} }
+func (ps *phonyStream) Conn() network.Conn               { return nil }
+
+func (ps *phonyStream) Protocol() protocol.ID { return ps.proto }
