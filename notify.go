@@ -2,6 +2,7 @@ package pubsub
 
 import (
 	"github.com/libp2p/go-libp2p-core/network"
+	"github.com/libp2p/go-libp2p-core/peer"
 	ma "github.com/multiformats/go-multiaddr"
 )
 
@@ -16,6 +17,10 @@ func (p *PubSubNotif) ClosedStream(n network.Network, s network.Stream) {
 }
 
 func (p *PubSubNotif) Connected(n network.Network, c network.Conn) {
+	// ignore transient connections
+	if c.Stat().Transient {
+		return
+	}
 	go func() {
 		select {
 		case p.newPeers <- c.RemotePeer():
@@ -34,9 +39,22 @@ func (p *PubSubNotif) ListenClose(n network.Network, _ ma.Multiaddr) {
 }
 
 func (p *PubSubNotif) Initialize() {
-	for _, pr := range p.host.Network().Peers() {
+	isTransient := func(pid peer.ID) bool {
+		for _, c := range p.host.Network().ConnsToPeer(pid) {
+			if !c.Stat().Transient {
+				return false
+			}
+		}
+
+		return true
+	}
+
+	for _, pid := range p.host.Network().Peers() {
+		if isTransient(pid) {
+			continue
+		}
 		select {
-		case p.newPeers <- pr:
+		case p.newPeers <- pid:
 		case <-p.ctx.Done():
 		}
 	}
