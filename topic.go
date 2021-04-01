@@ -241,13 +241,7 @@ func (t *Topic) Publish(ctx context.Context, data []byte, opts ...PubOpt) error 
 		t.p.disc.Bootstrap(ctx, t.topic, pub.ready)
 	}
 
-	select {
-	case t.p.publish <- &Message{m, t.p.host.ID(), nil}:
-	case <-t.p.ctx.Done():
-		return t.p.ctx.Err()
-	}
-
-	return nil
+	return t.p.val.PushLocal(&Message{m, t.p.host.ID(), nil})
 }
 
 // WithReadiness returns a publishing option for only publishing when the router is ready.

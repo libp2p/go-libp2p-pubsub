@@ -66,6 +66,7 @@ func TestTagTracerDirectPeerTags(t *testing.T) {
 }
 
 func TestTagTracerDeliveryTags(t *testing.T) {
+	t.Skip("flaky test temporarily disabled; TODO: fixme")
 	// test decaying delivery tags
 
 	// use fake time to test the tag decay

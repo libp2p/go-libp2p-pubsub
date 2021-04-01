@@ -65,9 +65,6 @@ type PubSub struct {
 	// incoming messages from other peers
 	incoming chan *RPC
 
-	// messages we are publishing out to our peers
-	publish chan *Message
-
 	// addSub is a control channel for us to add and remove subscriptions
 	addSub chan *addSubReq
 
@@ -234,7 +231,6 @@ func NewPubSub(ctx context.Context, h host.Host, rt PubSubRouter, opts ...Option
 		signKey:               nil,
 		signPolicy:            StrictSign,
 		incoming:              make(chan *RPC, 32),
-		publish:               make(chan *Message),
 		newPeers:              make(chan peer.ID),
 		newPeerStream:         make(chan network.Stream),
 		newPeerError:          make(chan peer.ID),
@@ -588,10 +584,6 @@ func (p *PubSub) processLoop(ctx context.Context) {
 			preq.resp <- peers
 		case rpc := <-p.incoming:
 			p.handleIncomingRPC(rpc)
-
-		case msg := <-p.publish:
-			p.tracer.PublishMessage(msg)
-			p.pushMsg(msg)
 
 		case msg := <-p.sendMsg:
 			p.publishMessage(msg)
@@ -999,35 +991,10 @@ func (p *PubSub) pushMsg(msg *Message) {
 		return
 	}
 
-	// reject unsigned messages when strict before we even process the id
-	if p.signPolicy.mustVerify() {
-		if p.signPolicy.mustSign() {
-			if msg.Signature == nil {
-				log.Debugf("dropping unsigned message from %s", src)
-				p.tracer.RejectMessage(msg, RejectMissingSignature)
-				return
-			}
-			// Actual signature verification happens in the validation pipeline,
-			// after checking if the message was already seen or not,
-			// to avoid unnecessary signature verification processing-cost.
-		} else {
-			if msg.Signature != nil {
-				log.Debugf("dropping message with unexpected signature from %s", src)
-				p.tracer.RejectMessage(msg, RejectUnexpectedSignature)
-				return
-			}
-			// If we are expecting signed messages, and not authoring messages,
-			// then do no accept seq numbers, from data, or key data.
-			// The default msgID function still relies on Seqno and From,
-			// but is not used if we are not authoring messages ourselves.
-			if p.signID == "" {
-				if msg.Seqno != nil || msg.From != nil || msg.Key != nil {
-					log.Debugf("dropping message with unexpected auth info from %s", src)
-					p.tracer.RejectMessage(msg, RejectUnexpectedAuthInfo)
-					return
-				}
-			}
-		}
+	err := p.checkSigningPolicy(msg)
+	if err != nil {
+		log.Debugf("dropping message from %s: %s", src, err)
+		return
 	}
 
 	// reject messages claiming to be from ourselves but not locally published
@@ -1052,6 +1019,38 @@ func (p *PubSub) pushMsg(msg *Message) {
 	if p.markSeen(id) {
 		p.publishMessage(msg)
 	}
+}
+
+func (p *PubSub) checkSigningPolicy(msg *Message) error {
+	// reject unsigned messages when strict before we even process the id
+	if p.signPolicy.mustVerify() {
+		if p.signPolicy.mustSign() {
+			if msg.Signature == nil {
+				p.tracer.RejectMessage(msg, RejectMissingSignature)
+				return ValidationError{Reason: RejectMissingSignature}
+			}
+			// Actual signature verification happens in the validation pipeline,
+			// after checking if the message was already seen or not,
+			// to avoid unnecessary signature verification processing-cost.
+		} else {
+			if msg.Signature != nil {
+				p.tracer.RejectMessage(msg, RejectUnexpectedSignature)
+				return ValidationError{Reason: RejectUnexpectedSignature}
+			}
+			// If we are expecting signed messages, and not authoring messages,
+			// then do no accept seq numbers, from data, or key data.
+			// The default msgID function still relies on Seqno and From,
+			// but is not used if we are not authoring messages ourselves.
+			if p.signID == "" {
+				if msg.Seqno != nil || msg.From != nil || msg.Key != nil {
+					p.tracer.RejectMessage(msg, RejectUnexpectedAuthInfo)
+					return ValidationError{Reason: RejectUnexpectedAuthInfo}
+				}
+			}
+		}
+	}
+
+	return nil
 }
 
 func (p *PubSub) publishMessage(msg *Message) {
