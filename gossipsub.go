@@ -449,7 +449,13 @@ func (gs *GossipSubRouter) AddPeer(p peer.ID, proto protocol.ID) {
 	conns := gs.p.host.Network().ConnsToPeer(p)
 loop:
 	for _, c := range conns {
-		if c.Stat().Direction == network.DirOutbound {
+		stat := c.Stat()
+
+		if stat.Transient {
+			continue
+		}
+
+		if stat.Direction == network.DirOutbound {
 			// only count the connection if it has a pubsub stream
 			for _, s := range c.GetStreams() {
 				if s.Protocol() == proto {
