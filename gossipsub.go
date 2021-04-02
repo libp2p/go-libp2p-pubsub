@@ -179,6 +179,9 @@ func NewGossipSub(ctx context.Context, h host.Host, opts ...Option) (*PubSub, er
 		connect:  make(chan connectInfo, GossipSubMaxPendingConnections),
 		mcache:   NewMessageCache(GossipSubHistoryGossip, GossipSubHistoryLength),
 
+		protos:  GossipSubDefaultProtocols,
+		feature: GossipSubDefaultFeatures,
+
 		// these are configured per router to allow variation in tests
 		D:      GossipSubD,
 		Dlo:    GossipSubDlo,
@@ -342,6 +345,9 @@ type GossipSubRouter struct {
 	backoff  map[string]map[peer.ID]time.Time // prune backoff
 	connect  chan connectInfo                 // px connection requests
 
+	protos  []protocol.ID
+	feature GossipSubFeatureTest
+
 	mcache       *MessageCache
 	tracer       *pubsubTracer
 	score        *peerScore
@@ -399,7 +405,7 @@ type connectInfo struct {
 }
 
 func (gs *GossipSubRouter) Protocols() []protocol.ID {
-	return []protocol.ID{GossipSubID_v11, GossipSubID_v10, FloodSubID}
+	return gs.protos
 }
 
 func (gs *GossipSubRouter) Attach(p *PubSub) {
@@ -493,7 +499,7 @@ func (gs *GossipSubRouter) EnoughPeers(topic string, suggested int) bool {
 	fsPeers, gsPeers := 0, 0
 	// floodsub peers
 	for p := range tmap {
-		if gs.peers[p] == FloodSubID {
+		if !gs.feature(GossipSubFeatureMesh, gs.peers[p]) {
 			fsPeers++
 		}
 	}
@@ -905,7 +911,7 @@ func (gs *GossipSubRouter) Publish(msg *Message) {
 
 		// floodsub peers
 		for p := range tmap {
-			if gs.peers[p] == FloodSubID && gs.score.Score(p) >= gs.publishThreshold {
+			if !gs.feature(GossipSubFeatureMesh, gs.peers[p]) && gs.score.Score(p) >= gs.publishThreshold {
 				tosend[p] = struct{}{}
 			}
 		}
@@ -1615,7 +1621,7 @@ func (gs *GossipSubRouter) emitGossip(topic string, exclude map[peer.ID]struct{}
 	for p := range gs.p.topics[topic] {
 		_, inExclude := exclude[p]
 		_, direct := gs.direct[p]
-		if !inExclude && !direct && (gs.peers[p] == GossipSubID_v10 || gs.peers[p] == GossipSubID_v11) && gs.score.Score(p) >= gs.gossipThreshold {
+		if !inExclude && !direct && gs.feature(GossipSubFeatureMesh, gs.peers[p]) && gs.score.Score(p) >= gs.gossipThreshold {
 			peers = append(peers, p)
 		}
 	}
@@ -1738,7 +1744,7 @@ func (gs *GossipSubRouter) piggybackControl(p peer.ID, out *RPC, ctl *pb.Control
 }
 
 func (gs *GossipSubRouter) makePrune(p peer.ID, topic string, doPX bool) *pb.ControlPrune {
-	if gs.peers[p] == GossipSubID_v10 {
+	if !gs.feature(GossipSubFeaturePX, gs.peers[p]) {
 		// GossipSub v1.0 -- no peer exchange, the peer won't be able to parse it anyway
 		return &pb.ControlPrune{TopicID: &topic}
 	}
@@ -1783,7 +1789,7 @@ func (gs *GossipSubRouter) getPeers(topic string, count int, filter func(peer.ID
 
 	peers := make([]peer.ID, 0, len(tmap))
 	for p := range tmap {
-		if (gs.peers[p] == GossipSubID_v10 || gs.peers[p] == GossipSubID_v11) && filter(p) {
+		if gs.feature(GossipSubFeatureMesh, gs.peers[p]) && filter(p) {
 			peers = append(peers, p)
 		}
 	}
