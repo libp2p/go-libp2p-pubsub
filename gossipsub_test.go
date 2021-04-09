@@ -1126,8 +1126,8 @@ func TestGossipsubDirectPeers(t *testing.T) {
 	h := getNetHosts(t, ctx, 3)
 	psubs := []*PubSub{
 		getGossipsub(ctx, h[0], WithDirectConnectTicks(2)),
-		getGossipsub(ctx, h[1], WithDirectPeers([]peer.AddrInfo{peer.AddrInfo{h[2].ID(), h[2].Addrs()}}), WithDirectConnectTicks(2)),
-		getGossipsub(ctx, h[2], WithDirectPeers([]peer.AddrInfo{peer.AddrInfo{h[1].ID(), h[1].Addrs()}}), WithDirectConnectTicks(2)),
+		getGossipsub(ctx, h[1], WithDirectPeers([]peer.AddrInfo{{h[2].ID(), h[2].Addrs()}}), WithDirectConnectTicks(2)),
+		getGossipsub(ctx, h[2], WithDirectPeers([]peer.AddrInfo{{h[1].ID(), h[1].Addrs()}}), WithDirectConnectTicks(2)),
 	}
 
 	connect(t, h[0], h[1])
@@ -1191,8 +1191,8 @@ func TestGossipsubDirectPeersFanout(t *testing.T) {
 	h := getNetHosts(t, ctx, 3)
 	psubs := []*PubSub{
 		getGossipsub(ctx, h[0]),
-		getGossipsub(ctx, h[1], WithDirectPeers([]peer.AddrInfo{peer.AddrInfo{h[2].ID(), h[2].Addrs()}})),
-		getGossipsub(ctx, h[2], WithDirectPeers([]peer.AddrInfo{peer.AddrInfo{h[1].ID(), h[1].Addrs()}})),
+		getGossipsub(ctx, h[1], WithDirectPeers([]peer.AddrInfo{{h[2].ID(), h[2].Addrs()}})),
+		getGossipsub(ctx, h[2], WithDirectPeers([]peer.AddrInfo{{h[1].ID(), h[1].Addrs()}})),
 	}
 
 	connect(t, h[0], h[1])
@@ -1443,7 +1443,7 @@ func TestGossipsubScoreValidatorEx(t *testing.T) {
 				DecayInterval:    time.Second,
 				DecayToZero:      0.01,
 				Topics: map[string]*TopicScoreParams{
-					"test": &TopicScoreParams{
+					"test": {
 						TopicWeight:                    1,
 						TimeInMeshQuantum:              time.Second,
 						InvalidMessageDeliveriesWeight: -1,
@@ -1540,8 +1540,8 @@ func TestGossipsubPiggybackControl(t *testing.T) {
 
 		rpc := &RPC{RPC: pb.RPC{}}
 		gs.piggybackControl(blah, rpc, &pb.ControlMessage{
-			Graft: []*pb.ControlGraft{&pb.ControlGraft{TopicID: &test1}, &pb.ControlGraft{TopicID: &test2}, &pb.ControlGraft{TopicID: &test3}},
-			Prune: []*pb.ControlPrune{&pb.ControlPrune{TopicID: &test1}, &pb.ControlPrune{TopicID: &test2}, &pb.ControlPrune{TopicID: &test3}},
+			Graft: []*pb.ControlGraft{{TopicID: &test1}, {TopicID: &test2}, {TopicID: &test3}},
+			Prune: []*pb.ControlPrune{{TopicID: &test1}, {TopicID: &test2}, {TopicID: &test3}},
 		})
 		res <- rpc
 	}
@@ -1603,7 +1603,7 @@ func TestGossipsubMultipleGraftTopics(t *testing.T) {
 	// Send multiple GRAFT messages to second peer from
 	// 1st peer
 	p1Router.sendGraftPrune(map[peer.ID][]string{
-		secondPeer: []string{firstTopic, secondTopic, thirdTopic},
+		secondPeer: {firstTopic, secondTopic, thirdTopic},
 	}, map[peer.ID][]string{}, map[peer.ID]bool{})
 
 	time.Sleep(time.Second * 1)
@@ -1650,7 +1650,7 @@ func TestGossipsubOpportunisticGrafting(t *testing.T) {
 				DecayInterval:     time.Second,
 				DecayToZero:       0.01,
 				Topics: map[string]*TopicScoreParams{
-					"test": &TopicScoreParams{
+					"test": {
 						TopicWeight:                   1,
 						TimeInMeshWeight:              0.0002777,
 						TimeInMeshQuantum:             time.Second,
@@ -1757,7 +1757,7 @@ func (sq *sybilSquatter) handleStream(s network.Stream) {
 	w := protoio.NewDelimitedWriter(os)
 	truth := true
 	topic := "test"
-	err = w.WriteMsg(&pb.RPC{Subscriptions: []*pb.RPC_SubOpts{&pb.RPC_SubOpts{Subscribe: &truth, Topicid: &topic}}})
+	err = w.WriteMsg(&pb.RPC{Subscriptions: []*pb.RPC_SubOpts{{Subscribe: &truth, Topicid: &topic}}})
 	if err != nil {
 		panic(err)
 	}
@@ -1787,7 +1787,7 @@ func TestGossipsubPeerScoreInspect(t *testing.T) {
 		WithPeerScore(
 			&PeerScoreParams{
 				Topics: map[string]*TopicScoreParams{
-					"test": &TopicScoreParams{
+					"test": {
 						TopicWeight:                    1,
 						TimeInMeshQuantum:              time.Second,
 						FirstMessageDeliveriesWeight:   1,
@@ -1848,7 +1848,7 @@ func TestGossipsubPeerScoreResetTopicParams(t *testing.T) {
 		WithPeerScore(
 			&PeerScoreParams{
 				Topics: map[string]*TopicScoreParams{
-					"test": &TopicScoreParams{
+					"test": {
 						TopicWeight:                    1,
 						TimeInMeshQuantum:              time.Second,
 						FirstMessageDeliveriesWeight:   1,
@@ -1989,7 +1989,7 @@ func (iwe *iwantEverything) handleStream(s network.Stream) {
 	w := protoio.NewDelimitedWriter(os)
 	truth := true
 	topic := "test"
-	err = w.WriteMsg(&pb.RPC{Subscriptions: []*pb.RPC_SubOpts{&pb.RPC_SubOpts{Subscribe: &truth, Topicid: &topic}}})
+	err = w.WriteMsg(&pb.RPC{Subscriptions: []*pb.RPC_SubOpts{{Subscribe: &truth, Topicid: &topic}}})
 
 	var rpc pb.RPC
 	for {

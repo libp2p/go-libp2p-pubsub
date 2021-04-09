@@ -213,7 +213,7 @@ func TestPeerScoreParamsValidation(t *testing.T) {
 		IPColocationFactorWeight:    -1,
 		IPColocationFactorThreshold: 1,
 		Topics: map[string]*TopicScoreParams{
-			"test": &TopicScoreParams{
+			"test": {
 				TopicWeight:                     1,
 				TimeInMeshWeight:                0.01,
 				TimeInMeshQuantum:               time.Second,
@@ -246,7 +246,7 @@ func TestPeerScoreParamsValidation(t *testing.T) {
 		IPColocationFactorWeight:    -1,
 		IPColocationFactorThreshold: 1,
 		Topics: map[string]*TopicScoreParams{
-			"test": &TopicScoreParams{
+			"test": {
 				TopicWeight:                     -1,
 				TimeInMeshWeight:                0.01,
 				TimeInMeshQuantum:               time.Second,
@@ -294,7 +294,7 @@ func TestPeerScoreParamsValidation(t *testing.T) {
 		IPColocationFactorWeight:    -1,
 		IPColocationFactorThreshold: 1,
 		Topics: map[string]*TopicScoreParams{
-			"test": &TopicScoreParams{
+			"test": {
 				TopicWeight:                     math.Inf(0),
 				TimeInMeshWeight:                math.NaN(),
 				TimeInMeshQuantum:               time.Second,
