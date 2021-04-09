@@ -88,8 +88,8 @@ func TestGossipsubAttackSpamIWANT(t *testing.T) {
 			if sub.GetSubscribe() {
 				// Reply by subcribing to the topic and grafting to the peer
 				writeMsg(&pb.RPC{
-					Subscriptions: []*pb.RPC_SubOpts{&pb.RPC_SubOpts{Subscribe: sub.Subscribe, Topicid: sub.Topicid}},
-					Control:       &pb.ControlMessage{Graft: []*pb.ControlGraft{&pb.ControlGraft{TopicID: sub.Topicid}}},
+					Subscriptions: []*pb.RPC_SubOpts{{Subscribe: sub.Subscribe, Topicid: sub.Topicid}},
+					Control:       &pb.ControlMessage{Graft: []*pb.ControlGraft{{TopicID: sub.Topicid}}},
 				})
 
 				go func() {
@@ -120,7 +120,7 @@ func TestGossipsubAttackSpamIWANT(t *testing.T) {
 			// to send another message (until it cuts off the attacker for
 			// being spammy)
 			iwantlst := []string{DefaultMsgIdFn(msg)}
-			iwant := []*pb.ControlIWant{&pb.ControlIWant{MessageIDs: iwantlst}}
+			iwant := []*pb.ControlIWant{{MessageIDs: iwantlst}}
 			orpc := rpcWithControl(nil, nil, iwant, nil, nil)
 			writeMsg(&orpc.RPC)
 		}
@@ -192,8 +192,8 @@ func TestGossipsubAttackSpamIHAVE(t *testing.T) {
 			if sub.GetSubscribe() {
 				// Reply by subcribing to the topic and grafting to the peer
 				writeMsg(&pb.RPC{
-					Subscriptions: []*pb.RPC_SubOpts{&pb.RPC_SubOpts{Subscribe: sub.Subscribe, Topicid: sub.Topicid}},
-					Control:       &pb.ControlMessage{Graft: []*pb.ControlGraft{&pb.ControlGraft{TopicID: sub.Topicid}}},
+					Subscriptions: []*pb.RPC_SubOpts{{Subscribe: sub.Subscribe, Topicid: sub.Topicid}},
+					Control:       &pb.ControlMessage{Graft: []*pb.ControlGraft{{TopicID: sub.Topicid}}},
 				})
 
 				go func() {
@@ -206,7 +206,7 @@ func TestGossipsubAttackSpamIHAVE(t *testing.T) {
 					// Send a bunch of IHAVEs
 					for i := 0; i < 3*GossipSubMaxIHaveLength; i++ {
 						ihavelst := []string{"someid" + strconv.Itoa(i)}
-						ihave := []*pb.ControlIHave{&pb.ControlIHave{TopicID: sub.Topicid, MessageIDs: ihavelst}}
+						ihave := []*pb.ControlIHave{{TopicID: sub.Topicid, MessageIDs: ihavelst}}
 						orpc := rpcWithControl(nil, ihave, nil, nil, nil)
 						writeMsg(&orpc.RPC)
 					}
@@ -230,7 +230,7 @@ func TestGossipsubAttackSpamIHAVE(t *testing.T) {
 					// Send a bunch of IHAVEs
 					for i := 0; i < 3*GossipSubMaxIHaveLength; i++ {
 						ihavelst := []string{"someid" + strconv.Itoa(i+100)}
-						ihave := []*pb.ControlIHave{&pb.ControlIHave{TopicID: sub.Topicid, MessageIDs: ihavelst}}
+						ihave := []*pb.ControlIHave{{TopicID: sub.Topicid, MessageIDs: ihavelst}}
 						orpc := rpcWithControl(nil, ihave, nil, nil, nil)
 						writeMsg(&orpc.RPC)
 					}
@@ -309,14 +309,14 @@ func TestGossipsubAttackGRAFTNonExistentTopic(t *testing.T) {
 			if sub.GetSubscribe() {
 				// Reply by subcribing to the topic and grafting to the peer
 				writeMsg(&pb.RPC{
-					Subscriptions: []*pb.RPC_SubOpts{&pb.RPC_SubOpts{Subscribe: sub.Subscribe, Topicid: sub.Topicid}},
-					Control:       &pb.ControlMessage{Graft: []*pb.ControlGraft{&pb.ControlGraft{TopicID: sub.Topicid}}},
+					Subscriptions: []*pb.RPC_SubOpts{{Subscribe: sub.Subscribe, Topicid: sub.Topicid}},
+					Control:       &pb.ControlMessage{Graft: []*pb.ControlGraft{{TopicID: sub.Topicid}}},
 				})
 
 				// Graft to the peer on a non-existent topic
 				nonExistentTopic := "non-existent"
 				writeMsg(&pb.RPC{
-					Control: &pb.ControlMessage{Graft: []*pb.ControlGraft{&pb.ControlGraft{TopicID: &nonExistentTopic}}},
+					Control: &pb.ControlMessage{Graft: []*pb.ControlGraft{{TopicID: &nonExistentTopic}}},
 				})
 
 				go func() {
@@ -408,9 +408,9 @@ func TestGossipsubAttackGRAFTDuringBackoff(t *testing.T) {
 		for _, sub := range irpc.GetSubscriptions() {
 			if sub.GetSubscribe() {
 				// Reply by subcribing to the topic and grafting to the peer
-				graft := []*pb.ControlGraft{&pb.ControlGraft{TopicID: sub.Topicid}}
+				graft := []*pb.ControlGraft{{TopicID: sub.Topicid}}
 				writeMsg(&pb.RPC{
-					Subscriptions: []*pb.RPC_SubOpts{&pb.RPC_SubOpts{Subscribe: sub.Subscribe, Topicid: sub.Topicid}},
+					Subscriptions: []*pb.RPC_SubOpts{{Subscribe: sub.Subscribe, Topicid: sub.Topicid}},
 					Control:       &pb.ControlMessage{Graft: graft},
 				})
 
@@ -646,8 +646,8 @@ func TestGossipsubAttackInvalidMessageSpam(t *testing.T) {
 			if sub.GetSubscribe() {
 				// Reply by subcribing to the topic and grafting to the peer
 				writeMsg(&pb.RPC{
-					Subscriptions: []*pb.RPC_SubOpts{&pb.RPC_SubOpts{Subscribe: sub.Subscribe, Topicid: sub.Topicid}},
-					Control:       &pb.ControlMessage{Graft: []*pb.ControlGraft{&pb.ControlGraft{TopicID: sub.Topicid}}},
+					Subscriptions: []*pb.RPC_SubOpts{{Subscribe: sub.Subscribe, Topicid: sub.Topicid}},
+					Control:       &pb.ControlMessage{Graft: []*pb.ControlGraft{{TopicID: sub.Topicid}}},
 				})
 
 				go func() {
