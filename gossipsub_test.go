@@ -1126,8 +1126,8 @@ func TestGossipsubDirectPeers(t *testing.T) {
 	h := getNetHosts(t, ctx, 3)
 	psubs := []*PubSub{
 		getGossipsub(ctx, h[0], WithDirectConnectTicks(2)),
-		getGossipsub(ctx, h[1], WithDirectPeers([]peer.AddrInfo{{h[2].ID(), h[2].Addrs()}}), WithDirectConnectTicks(2)),
-		getGossipsub(ctx, h[2], WithDirectPeers([]peer.AddrInfo{{h[1].ID(), h[1].Addrs()}}), WithDirectConnectTicks(2)),
+		getGossipsub(ctx, h[1], WithDirectPeers([]peer.AddrInfo{{ID: h[2].ID(), Addrs: h[2].Addrs()}}), WithDirectConnectTicks(2)),
+		getGossipsub(ctx, h[2], WithDirectPeers([]peer.AddrInfo{{ID: h[1].ID(), Addrs: h[1].Addrs()}}), WithDirectConnectTicks(2)),
 	}
 
 	connect(t, h[0], h[1])
@@ -1191,8 +1191,8 @@ func TestGossipsubDirectPeersFanout(t *testing.T) {
 	h := getNetHosts(t, ctx, 3)
 	psubs := []*PubSub{
 		getGossipsub(ctx, h[0]),
-		getGossipsub(ctx, h[1], WithDirectPeers([]peer.AddrInfo{{h[2].ID(), h[2].Addrs()}})),
-		getGossipsub(ctx, h[2], WithDirectPeers([]peer.AddrInfo{{h[1].ID(), h[1].Addrs()}})),
+		getGossipsub(ctx, h[1], WithDirectPeers([]peer.AddrInfo{{ID: h[2].ID(), Addrs: h[2].Addrs()}})),
+		getGossipsub(ctx, h[2], WithDirectPeers([]peer.AddrInfo{{ID: h[1].ID(), Addrs: h[1].Addrs()}})),
 	}
 
 	connect(t, h[0], h[1])
