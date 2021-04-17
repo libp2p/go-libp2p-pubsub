@@ -543,6 +543,7 @@ func TestGossipsubAttackGRAFTDuringBackoff(t *testing.T) {
 					if inMesh {
 						errs <- fmt.Errorf("Expected to not be in the mesh of the legitimate host")
 					}
+					close(errs)
 				}()
 			}
 		}
@@ -703,6 +704,7 @@ func TestGossipsubAttackInvalidMessageSpam(t *testing.T) {
 					if pc == 0 {
 						errs <- fmt.Errorf("Expected attacker node to be PRUNED when score drops low enough")
 					}
+					close(errs)
 				}()
 			}
 		}
