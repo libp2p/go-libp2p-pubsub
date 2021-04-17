@@ -134,6 +134,7 @@ func TestGossipsubAttackSpamIWANT(t *testing.T) {
 
 // Test that Gossipsub only responds to IHAVE with IWANT once per heartbeat
 func TestGossipsubAttackSpamIHAVE(t *testing.T) {
+	t.Skip()
 	originalGossipSubIWantFollowupTime := GossipSubIWantFollowupTime
 	GossipSubIWantFollowupTime = 10 * time.Second
 	defer func() {
