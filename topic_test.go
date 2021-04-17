@@ -129,6 +129,7 @@ func testTopicCloseWithOpenResource(t *testing.T, openResource func(topic *Topic
 }
 
 func TestTopicReuse(t *testing.T) {
+	t.Skip()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
