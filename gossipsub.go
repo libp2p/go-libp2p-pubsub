@@ -840,7 +840,11 @@ func (gs *GossipSubRouter) pxConnect(peers []*pb.PeerInfo) {
 	}
 
 	for _, ci := range toconnect {
-		gs.connect <- ci
+		select {
+		case gs.connect <- ci:
+		default:
+			log.Debugf("ignoring peer connection attempt; too many pending connections")
+		}
 	}
 }
 
