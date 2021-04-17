@@ -198,6 +198,7 @@ func TestGossipsubAttackSpamIHAVE(t *testing.T) {
 				})
 
 				go func() {
+					defer close(errs)
 					defer cancel()
 
 					// Wait for a short interval to make sure the legit host
@@ -219,6 +220,7 @@ func TestGossipsubAttackSpamIHAVE(t *testing.T) {
 					iwc := getIWantCount()
 					if iwc > GossipSubMaxIHaveLength {
 						errs <- fmt.Errorf("Expecting max %d IWANTs per heartbeat but received %d", GossipSubMaxIHaveLength, iwc)
+						return
 					}
 					firstBatchCount := iwc
 
@@ -226,6 +228,7 @@ func TestGossipsubAttackSpamIHAVE(t *testing.T) {
 					score := ps.rt.(*GossipSubRouter).score.Score(attacker.ID())
 					if score != 0 {
 						errs <- fmt.Errorf("Expected 0 score, but got %f", score)
+						return
 					}
 
 					// Send a bunch of IHAVEs
@@ -242,10 +245,12 @@ func TestGossipsubAttackSpamIHAVE(t *testing.T) {
 					iwc = getIWantCount()
 					if iwc == firstBatchCount {
 						errs <- fmt.Errorf("Expecting to receive more IWANTs after heartbeat but did not")
+						return
 					}
 					// Should not be more than the maximum per heartbeat
 					if iwc-firstBatchCount > GossipSubMaxIHaveLength {
 						errs <- fmt.Errorf("Expecting max %d IWANTs per heartbeat but received %d", GossipSubMaxIHaveLength, iwc-firstBatchCount)
+						return
 					}
 
 					time.Sleep(GossipSubIWantFollowupTime)
@@ -254,8 +259,8 @@ func TestGossipsubAttackSpamIHAVE(t *testing.T) {
 					score = ps.rt.(*GossipSubRouter).score.Score(attacker.ID())
 					if score >= 0 {
 						errs <- fmt.Errorf("Expected negative score, but got %f", score)
+						return
 					}
-					close(errs)
 				}()
 			}
 		}
@@ -422,6 +427,7 @@ func TestGossipsubAttackGRAFTDuringBackoff(t *testing.T) {
 				})
 
 				go func() {
+					defer close(errs)
 					defer cancel()
 
 					// Wait for a short interval to make sure the legit host
@@ -432,6 +438,7 @@ func TestGossipsubAttackGRAFTDuringBackoff(t *testing.T) {
 					pc := getPruneCount()
 					if pc != 0 {
 						errs <- fmt.Errorf("Expected %d PRUNE messages but got %d", 0, pc)
+						return
 					}
 
 					// Send a PRUNE to remove the attacker node from the legit
@@ -448,6 +455,7 @@ func TestGossipsubAttackGRAFTDuringBackoff(t *testing.T) {
 					pc = getPruneCount()
 					if pc != 0 {
 						errs <- fmt.Errorf("Expected %d PRUNE messages but got %d", 0, pc)
+						return
 					}
 
 					// wait for the GossipSubGraftFloodThreshold to pass before attempting another graft
@@ -466,11 +474,13 @@ func TestGossipsubAttackGRAFTDuringBackoff(t *testing.T) {
 					pc = getPruneCount()
 					if pc != 1 {
 						errs <- fmt.Errorf("Expected %d PRUNE messages but got %d", 1, pc)
+						return
 					}
 
 					score1 := ps.rt.(*GossipSubRouter).score.Score(attacker.ID())
 					if score1 >= 0 {
 						errs <- fmt.Errorf("Expected negative score, but got %f", score1)
+						return
 					}
 
 					// Send a GRAFT again to attempt to rejoin the mesh
@@ -485,11 +495,13 @@ func TestGossipsubAttackGRAFTDuringBackoff(t *testing.T) {
 					pc = getPruneCount()
 					if pc != 2 {
 						errs <- fmt.Errorf("Expected %d PRUNE messages but got %d", 2, pc)
+						return
 					}
 
 					score2 := ps.rt.(*GossipSubRouter).score.Score(attacker.ID())
 					if score2 >= score1 {
 						errs <- fmt.Errorf("Expected score below %f, but got %f", score1, score2)
+						return
 					}
 
 					// Send another GRAFT; this should get us a PRUNE, but penalize us below the graylist threshold
@@ -502,17 +514,17 @@ func TestGossipsubAttackGRAFTDuringBackoff(t *testing.T) {
 					pc = getPruneCount()
 					if pc != 3 {
 						errs <- fmt.Errorf("Expected %d PRUNE messages but got %d", 3, pc)
-						close(errs)
+						return
 					}
 
 					score3 := ps.rt.(*GossipSubRouter).score.Score(attacker.ID())
 					if score3 >= score2 {
 						errs <- fmt.Errorf("Expected score below %f, but got %f", score2, score3)
-						close(errs)
+						return
 					}
 					if score3 >= -1000 {
 						errs <- fmt.Errorf("Expected score below %f, but got %f", -1000.0, score3)
-						close(errs)
+						return
 					}
 
 					// Wait for the PRUNE backoff to expire and try again; this time we should fail
@@ -529,6 +541,7 @@ func TestGossipsubAttackGRAFTDuringBackoff(t *testing.T) {
 					pc = getPruneCount()
 					if pc != 3 {
 						errs <- fmt.Errorf("Expected %d PRUNE messages but got %d", 3, pc)
+						return
 					}
 
 					// make sure we are _not_ in the mesh
@@ -542,8 +555,8 @@ func TestGossipsubAttackGRAFTDuringBackoff(t *testing.T) {
 					inMesh := <-res
 					if inMesh {
 						errs <- fmt.Errorf("Expected to not be in the mesh of the legitimate host")
+						return
 					}
-					close(errs)
 				}()
 			}
 		}
@@ -667,11 +680,13 @@ func TestGossipsubAttackInvalidMessageSpam(t *testing.T) {
 				})
 
 				go func() {
+					defer close(errs)
 					defer cancel()
 
 					// Attacker score should start at zero
 					if attackerScore() != 0 {
 						errs <- fmt.Errorf("Expected attacker score to be zero but it's %f", attackerScore())
+						return
 					}
 
 					// Send a bunch of messages with no signature (these will
@@ -694,17 +709,19 @@ func TestGossipsubAttackInvalidMessageSpam(t *testing.T) {
 					// The attackers score should now have fallen below zero
 					if attackerScore() >= 0 {
 						errs <- fmt.Errorf("Expected attacker score to be less than zero but it's %f", attackerScore())
+						return
 					}
 					// There should be several rejected messages (because the signature was invalid)
 					if tracer.rejectCount == 0 {
 						errs <- fmt.Errorf("Expected message rejection but got none")
+						return
 					}
 					// The legit node should have sent a PRUNE message
 					pc := getPruneCount()
 					if pc == 0 {
 						errs <- fmt.Errorf("Expected attacker node to be PRUNED when score drops low enough")
+						return
 					}
-					close(errs)
 				}()
 			}
 		}
