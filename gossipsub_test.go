@@ -967,10 +967,10 @@ func TestGossipsubStarTopology(t *testing.T) {
 	// configure the center of the star with a very low D
 	psubs[0].eval <- func() {
 		gs := psubs[0].rt.(*GossipSubRouter)
-		gs.D = 0
-		gs.Dlo = 0
-		gs.Dhi = 0
-		gs.Dscore = 0
+		gs.params.D = 0
+		gs.params.Dlo = 0
+		gs.params.Dhi = 0
+		gs.params.Dscore = 0
 	}
 
 	// add all peer addresses to the peerstores
@@ -1051,10 +1051,10 @@ func TestGossipsubStarTopologyWithSignedPeerRecords(t *testing.T) {
 	// configure the center of the star with a very low D
 	psubs[0].eval <- func() {
 		gs := psubs[0].rt.(*GossipSubRouter)
-		gs.D = 0
-		gs.Dlo = 0
-		gs.Dhi = 0
-		gs.Dscore = 0
+		gs.params.D = 0
+		gs.params.Dlo = 0
+		gs.params.Dhi = 0
+		gs.params.Dscore = 0
 	}
 
 	// manually create signed peer records for each host and add them to the
@@ -1343,6 +1343,45 @@ func TestGossipsubEnoughPeers(t *testing.T) {
 	enough = <-res
 	if !enough {
 		t.Fatal("should have enough peers")
+	}
+}
+
+func TestGossipsubCustomParams(t *testing.T) {
+	// in this test we score sinkhole a peer to exercise code paths relative to negative scores
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	params := DefaultGossipSubParams()
+
+	wantedFollowTime := 1 * time.Second
+	params.IWantFollowupTime = wantedFollowTime
+
+	customGossipFactor := 0.12
+	params.GossipFactor = customGossipFactor
+
+	wantedMaxPendingConns := 23
+	params.MaxPendingConnections = wantedMaxPendingConns
+	hosts := getNetHosts(t, ctx, 1)
+	psubs := getGossipsubs(ctx, hosts,
+		WithGossipSubParams(params))
+
+	if len(psubs) != 1 {
+		t.Fatalf("incorrect number of pusbub objects received: wanted %d but got %d", 1, len(psubs))
+	}
+
+	rt, ok := psubs[0].rt.(*GossipSubRouter)
+	if !ok {
+		t.Fatal("Did not get gossip sub router from pub sub object")
+	}
+
+	if rt.params.IWantFollowupTime != wantedFollowTime {
+		t.Errorf("Wanted %d of param GossipSubIWantFollowupTime but got %d", wantedFollowTime, rt.params.IWantFollowupTime)
+	}
+	if rt.params.GossipFactor != customGossipFactor {
+		t.Errorf("Wanted %f of param GossipSubGossipFactor but got %f", customGossipFactor, rt.params.GossipFactor)
+	}
+	if rt.params.MaxPendingConnections != wantedMaxPendingConns {
+		t.Errorf("Wanted %d of param GossipSubMaxPendingConnections but got %d", wantedMaxPendingConns, rt.params.MaxPendingConnections)
 	}
 }
 

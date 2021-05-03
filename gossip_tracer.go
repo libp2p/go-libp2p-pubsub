@@ -17,6 +17,8 @@ type gossipTracer struct {
 
 	msgID MsgIdFunction
 
+	followUpTime time.Duration
+
 	// promises for messages by message ID; for each message tracked, we track the promise
 	// expiration time for each peer.
 	promises map[string]map[peer.ID]time.Time
@@ -39,6 +41,7 @@ func (gt *gossipTracer) Start(gs *GossipSubRouter) {
 	}
 
 	gt.msgID = gs.p.msgID
+	gt.followUpTime = gs.params.IWantFollowupTime
 }
 
 // track a promise to deliver a message from a list of msgIDs we are requesting
@@ -61,7 +64,7 @@ func (gt *gossipTracer) AddPromise(p peer.ID, msgIDs []string) {
 
 	_, ok = promises[p]
 	if !ok {
-		promises[p] = time.Now().Add(GossipSubIWantFollowupTime)
+		promises[p] = time.Now().Add(gt.followUpTime)
 		peerPromises, ok := gt.peerPromises[p]
 		if !ok {
 			peerPromises = make(map[string]struct{})

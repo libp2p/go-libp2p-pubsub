@@ -11,13 +11,8 @@ import (
 
 func TestBrokenPromises(t *testing.T) {
 	// tests that unfullfilled promises are tracked correctly
-	originalGossipSubIWantFollowupTime := GossipSubIWantFollowupTime
-	GossipSubIWantFollowupTime = 100 * time.Millisecond
-	defer func() {
-		GossipSubIWantFollowupTime = originalGossipSubIWantFollowupTime
-	}()
-
 	gt := newGossipTracer()
+	gt.followUpTime = 100 * time.Millisecond
 
 	peerA := peer.ID("A")
 	peerB := peer.ID("B")
