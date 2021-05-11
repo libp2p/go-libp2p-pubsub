@@ -15,7 +15,7 @@ func TestMultitopicMessageCompatibility(t *testing.T) {
 		From:      []byte("A"),
 		Data:      []byte("blah"),
 		Seqno:     []byte("123"),
-		Topic:     &topic1,
+		Topic:     topic1,
 		Signature: []byte("a-signature"),
 		Key:       []byte("a-key"),
 	}

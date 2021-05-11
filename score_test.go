@@ -109,7 +109,7 @@ func TestScoreFirstMessageDeliveries(t *testing.T) {
 	nMessages := 100
 	for i := 0; i < nMessages; i++ {
 		pbMsg := makeTestMessage(i)
-		pbMsg.Topic = &mytopic
+		pbMsg.Topic = mytopic
 		msg := Message{ReceivedFrom: peerA, Message: pbMsg}
 		ps.ValidateMessage(&msg)
 		ps.DeliverMessage(&msg)
@@ -149,7 +149,7 @@ func TestScoreFirstMessageDeliveriesCap(t *testing.T) {
 	nMessages := 100
 	for i := 0; i < nMessages; i++ {
 		pbMsg := makeTestMessage(i)
-		pbMsg.Topic = &mytopic
+		pbMsg.Topic = mytopic
 		msg := Message{ReceivedFrom: peerA, Message: pbMsg}
 		ps.ValidateMessage(&msg)
 		ps.DeliverMessage(&msg)
@@ -189,7 +189,7 @@ func TestScoreFirstMessageDeliveriesDecay(t *testing.T) {
 	nMessages := 100
 	for i := 0; i < nMessages; i++ {
 		pbMsg := makeTestMessage(i)
-		pbMsg.Topic = &mytopic
+		pbMsg.Topic = mytopic
 		msg := Message{ReceivedFrom: peerA, Message: pbMsg}
 		ps.ValidateMessage(&msg)
 		ps.DeliverMessage(&msg)
@@ -269,7 +269,7 @@ func TestScoreMeshMessageDeliveries(t *testing.T) {
 	wg := sync.WaitGroup{}
 	for i := 0; i < nMessages; i++ {
 		pbMsg := makeTestMessage(i)
-		pbMsg.Topic = &mytopic
+		pbMsg.Topic = mytopic
 		msg := Message{ReceivedFrom: peerA, Message: pbMsg}
 		ps.ValidateMessage(&msg)
 		ps.DeliverMessage(&msg)
@@ -339,7 +339,7 @@ func TestScoreMeshMessageDeliveriesDecay(t *testing.T) {
 	nMessages := 40
 	for i := 0; i < nMessages; i++ {
 		pbMsg := makeTestMessage(i)
-		pbMsg.Topic = &mytopic
+		pbMsg.Topic = mytopic
 		msg := Message{ReceivedFrom: peerA, Message: pbMsg}
 		ps.ValidateMessage(&msg)
 		ps.DeliverMessage(&msg)
@@ -413,7 +413,7 @@ func TestScoreMeshFailurePenalty(t *testing.T) {
 	nMessages := 100
 	for i := 0; i < nMessages; i++ {
 		pbMsg := makeTestMessage(i)
-		pbMsg.Topic = &mytopic
+		pbMsg.Topic = mytopic
 		msg := Message{ReceivedFrom: peerA, Message: pbMsg}
 		ps.ValidateMessage(&msg)
 		ps.DeliverMessage(&msg)
@@ -473,7 +473,7 @@ func TestScoreInvalidMessageDeliveries(t *testing.T) {
 	nMessages := 100
 	for i := 0; i < nMessages; i++ {
 		pbMsg := makeTestMessage(i)
-		pbMsg.Topic = &mytopic
+		pbMsg.Topic = mytopic
 		msg := Message{ReceivedFrom: peerA, Message: pbMsg}
 		ps.RejectMessage(&msg, RejectInvalidSignature)
 	}
@@ -510,7 +510,7 @@ func TestScoreInvalidMessageDeliveriesDecay(t *testing.T) {
 	nMessages := 100
 	for i := 0; i < nMessages; i++ {
 		pbMsg := makeTestMessage(i)
-		pbMsg.Topic = &mytopic
+		pbMsg.Topic = mytopic
 		msg := Message{ReceivedFrom: peerA, Message: pbMsg}
 		ps.RejectMessage(&msg, RejectInvalidSignature)
 	}
@@ -556,7 +556,7 @@ func TestScoreRejectMessageDeliveries(t *testing.T) {
 	ps.AddPeer(peerB, "myproto")
 
 	pbMsg := makeTestMessage(0)
-	pbMsg.Topic = &mytopic
+	pbMsg.Topic = mytopic
 	msg := Message{ReceivedFrom: peerA, Message: pbMsg}
 	msg2 := Message{ReceivedFrom: peerB, Message: pbMsg}
 
@@ -947,7 +947,7 @@ func TestScoreRecapTopicParams(t *testing.T) {
 	nMessages := 100
 	for i := 0; i < nMessages; i++ {
 		pbMsg := makeTestMessage(i)
-		pbMsg.Topic = &mytopic
+		pbMsg.Topic = mytopic
 		msg := Message{ReceivedFrom: peerA, Message: pbMsg}
 		ps.ValidateMessage(&msg)
 		ps.DeliverMessage(&msg)
@@ -1029,7 +1029,7 @@ func TestScoreResetTopicParams(t *testing.T) {
 	nMessages := 100
 	for i := 0; i < nMessages; i++ {
 		pbMsg := makeTestMessage(i)
-		pbMsg.Topic = &mytopic
+		pbMsg.Topic = mytopic
 		msg := Message{ReceivedFrom: peerA, Message: pbMsg}
 		ps.ValidateMessage(&msg)
 		ps.RejectMessage(&msg, RejectValidationFailed)

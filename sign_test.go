@@ -31,7 +31,7 @@ func testSignVerify(t *testing.T, privk crypto.PrivKey) {
 	topic := "foo"
 	m := pb.Message{
 		Data:  []byte("abc"),
-		Topic: &topic,
+		Topic: topic,
 		From:  []byte(id),
 		Seqno: []byte("123"),
 	}

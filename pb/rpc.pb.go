@@ -109,12 +109,9 @@ func (TopicDescriptor_EncOpts_EncMode) EnumDescriptor() ([]byte, []int) {
 }
 
 type RPC struct {
-	Subscriptions        []*RPC_SubOpts  `protobuf:"bytes,1,rep,name=subscriptions" json:"subscriptions,omitempty"`
-	Publish              []*Message      `protobuf:"bytes,2,rep,name=publish" json:"publish,omitempty"`
-	Control              *ControlMessage `protobuf:"bytes,3,opt,name=control" json:"control,omitempty"`
-	XXX_NoUnkeyedLiteral struct{}        `json:"-"`
-	XXX_unrecognized     []byte          `json:"-"`
-	XXX_sizecache        int32           `json:"-"`
+	Subscriptions []*RPC_SubOpts  `protobuf:"bytes,1,rep,name=subscriptions" json:"subscriptions,omitempty"`
+	Publish       []*Message      `protobuf:"bytes,2,rep,name=publish" json:"publish,omitempty"`
+	Control       *ControlMessage `protobuf:"bytes,3,opt,name=control" json:"control,omitempty"`
 }
 
 func (m *RPC) Reset()         { *m = RPC{} }
@@ -172,11 +169,8 @@ func (m *RPC) GetControl() *ControlMessage {
 }
 
 type RPC_SubOpts struct {
-	Subscribe            *bool    `protobuf:"varint,1,opt,name=subscribe" json:"subscribe,omitempty"`
-	Topicid              *string  `protobuf:"bytes,2,opt,name=topicid" json:"topicid,omitempty"`
-	XXX_NoUnkeyedLiteral struct{} `json:"-"`
-	XXX_unrecognized     []byte   `json:"-"`
-	XXX_sizecache        int32    `json:"-"`
+	Subscribe bool   `protobuf:"varint,1,opt,name=subscribe" json:"subscribe"`
+	Topicid   string `protobuf:"bytes,2,opt,name=topicid" json:"topicid"`
 }
 
 func (m *RPC_SubOpts) Reset()         { *m = RPC_SubOpts{} }
@@ -213,29 +207,26 @@ func (m *RPC_SubOpts) XXX_DiscardUnknown() {
 var xxx_messageInfo_RPC_SubOpts proto.InternalMessageInfo
 
 func (m *RPC_SubOpts) GetSubscribe() bool {
-	if m != nil && m.Subscribe != nil {
-		return *m.Subscribe
+	if m != nil {
+		return m.Subscribe
 	}
 	return false
 }
 
 func (m *RPC_SubOpts) GetTopicid() string {
-	if m != nil && m.Topicid != nil {
-		return *m.Topicid
+	if m != nil {
+		return m.Topicid
 	}
 	return ""
 }
 
 type Message struct {
-	From                 []byte   `protobuf:"bytes,1,opt,name=from" json:"from,omitempty"`
-	Data                 []byte   `protobuf:"bytes,2,opt,name=data" json:"data,omitempty"`
-	Seqno                []byte   `protobuf:"bytes,3,opt,name=seqno" json:"seqno,omitempty"`
-	Topic                *string  `protobuf:"bytes,4,opt,name=topic" json:"topic,omitempty"`
-	Signature            []byte   `protobuf:"bytes,5,opt,name=signature" json:"signature,omitempty"`
-	Key                  []byte   `protobuf:"bytes,6,opt,name=key" json:"key,omitempty"`
-	XXX_NoUnkeyedLiteral struct{} `json:"-"`
-	XXX_unrecognized     []byte   `json:"-"`
-	XXX_sizecache        int32    `json:"-"`
+	From      []byte `protobuf:"bytes,1,opt,name=from" json:"from"`
+	Data      []byte `protobuf:"bytes,2,opt,name=data" json:"data"`
+	Seqno     []byte `protobuf:"bytes,3,opt,name=seqno" json:"seqno"`
+	Topic     string `protobuf:"bytes,4,opt,name=topic" json:"topic"`
+	Signature []byte `protobuf:"bytes,5,opt,name=signature" json:"signature"`
+	Key       []byte `protobuf:"bytes,6,opt,name=key" json:"key"`
 }
 
 func (m *Message) Reset()         { *m = Message{} }
@@ -293,8 +284,8 @@ func (m *Message) GetSeqno() []byte {
 }
 
 func (m *Message) GetTopic() string {
-	if m != nil && m.Topic != nil {
-		return *m.Topic
+	if m != nil {
+		return m.Topic
 	}
 	return ""
 }
@@ -314,13 +305,10 @@ func (m *Message) GetKey() []byte {
 }
 
 type ControlMessage struct {
-	Ihave                []*ControlIHave `protobuf:"bytes,1,rep,name=ihave" json:"ihave,omitempty"`
-	Iwant                []*ControlIWant `protobuf:"bytes,2,rep,name=iwant" json:"iwant,omitempty"`
-	Graft                []*ControlGraft `protobuf:"bytes,3,rep,name=graft" json:"graft,omitempty"`
-	Prune                []*ControlPrune `protobuf:"bytes,4,rep,name=prune" json:"prune,omitempty"`
-	XXX_NoUnkeyedLiteral struct{}        `json:"-"`
-	XXX_unrecognized     []byte          `json:"-"`
-	XXX_sizecache        int32           `json:"-"`
+	Ihave []*ControlIHave `protobuf:"bytes,1,rep,name=ihave" json:"ihave,omitempty"`
+	Iwant []*ControlIWant `protobuf:"bytes,2,rep,name=iwant" json:"iwant,omitempty"`
+	Graft []*ControlGraft `protobuf:"bytes,3,rep,name=graft" json:"graft,omitempty"`
+	Prune []*ControlPrune `protobuf:"bytes,4,rep,name=prune" json:"prune,omitempty"`
 }
 
 func (m *ControlMessage) Reset()         { *m = ControlMessage{} }
@@ -385,12 +373,9 @@ func (m *ControlMessage) GetPrune() []*ControlPrune {
 }
 
 type ControlIHave struct {
-	TopicID *string `protobuf:"bytes,1,opt,name=topicID" json:"topicID,omitempty"`
+	TopicID string `protobuf:"bytes,1,opt,name=topicID" json:"topicID"`
 	// implementors from other languages should use bytes here - go protobuf emits invalid utf8 strings
-	MessageIDs           []string `protobuf:"bytes,2,rep,name=messageIDs" json:"messageIDs,omitempty"`
-	XXX_NoUnkeyedLiteral struct{} `json:"-"`
-	XXX_unrecognized     []byte   `json:"-"`
-	XXX_sizecache        int32    `json:"-"`
+	MessageIDs []string `protobuf:"bytes,2,rep,name=messageIDs" json:"messageIDs,omitempty"`
 }
 
 func (m *ControlIHave) Reset()         { *m = ControlIHave{} }
@@ -427,8 +412,8 @@ func (m *ControlIHave) XXX_DiscardUnknown() {
 var xxx_messageInfo_ControlIHave proto.InternalMessageInfo
 
 func (m *ControlIHave) GetTopicID() string {
-	if m != nil && m.TopicID != nil {
-		return *m.TopicID
+	if m != nil {
+		return m.TopicID
 	}
 	return ""
 }
@@ -442,10 +427,7 @@ func (m *ControlIHave) GetMessageIDs() []string {
 
 type ControlIWant struct {
 	// implementors from other languages should use bytes here - go protobuf emits invalid utf8 strings
-	MessageIDs           []string `protobuf:"bytes,1,rep,name=messageIDs" json:"messageIDs,omitempty"`
-	XXX_NoUnkeyedLiteral struct{} `json:"-"`
-	XXX_unrecognized     []byte   `json:"-"`
-	XXX_sizecache        int32    `json:"-"`
+	MessageIDs []string `protobuf:"bytes,1,rep,name=messageIDs" json:"messageIDs,omitempty"`
 }
 
 func (m *ControlIWant) Reset()         { *m = ControlIWant{} }
@@ -489,10 +471,7 @@ func (m *ControlIWant) GetMessageIDs() []string {
 }
 
 type ControlGraft struct {
-	TopicID              *string  `protobuf:"bytes,1,opt,name=topicID" json:"topicID,omitempty"`
-	XXX_NoUnkeyedLiteral struct{} `json:"-"`
-	XXX_unrecognized     []byte   `json:"-"`
-	XXX_sizecache        int32    `json:"-"`
+	TopicID string `protobuf:"bytes,1,opt,name=topicID" json:"topicID"`
 }
 
 func (m *ControlGraft) Reset()         { *m = ControlGraft{} }
@@ -529,19 +508,16 @@ func (m *ControlGraft) XXX_DiscardUnknown() {
 var xxx_messageInfo_ControlGraft proto.InternalMessageInfo
 
 func (m *ControlGraft) GetTopicID() string {
-	if m != nil && m.TopicID != nil {
-		return *m.TopicID
+	if m != nil {
+		return m.TopicID
 	}
 	return ""
 }
 
 type ControlPrune struct {
-	TopicID              *string     `protobuf:"bytes,1,opt,name=topicID" json:"topicID,omitempty"`
-	Peers                []*PeerInfo `protobuf:"bytes,2,rep,name=peers" json:"peers,omitempty"`
-	Backoff              *uint64     `protobuf:"varint,3,opt,name=backoff" json:"backoff,omitempty"`
-	XXX_NoUnkeyedLiteral struct{}    `json:"-"`
-	XXX_unrecognized     []byte      `json:"-"`
-	XXX_sizecache        int32       `json:"-"`
+	TopicID string      `protobuf:"bytes,1,opt,name=topicID" json:"topicID"`
+	Peers   []*PeerInfo `protobuf:"bytes,2,rep,name=peers" json:"peers,omitempty"`
+	Backoff uint64      `protobuf:"varint,3,opt,name=backoff" json:"backoff"`
 }
 
 func (m *ControlPrune) Reset()         { *m = ControlPrune{} }
@@ -578,8 +554,8 @@ func (m *ControlPrune) XXX_DiscardUnknown() {
 var xxx_messageInfo_ControlPrune proto.InternalMessageInfo
 
 func (m *ControlPrune) GetTopicID() string {
-	if m != nil && m.TopicID != nil {
-		return *m.TopicID
+	if m != nil {
+		return m.TopicID
 	}
 	return ""
 }
@@ -592,18 +568,15 @@ func (m *ControlPrune) GetPeers() []*PeerInfo {
 }
 
 func (m *ControlPrune) GetBackoff() uint64 {
-	if m != nil && m.Backoff != nil {
-		return *m.Backoff
+	if m != nil {
+		return m.Backoff
 	}
 	return 0
 }
 
 type PeerInfo struct {
-	PeerID               []byte   `protobuf:"bytes,1,opt,name=peerID" json:"peerID,omitempty"`
-	SignedPeerRecord     []byte   `protobuf:"bytes,2,opt,name=signedPeerRecord" json:"signedPeerRecord,omitempty"`
-	XXX_NoUnkeyedLiteral struct{} `json:"-"`
-	XXX_unrecognized     []byte   `json:"-"`
-	XXX_sizecache        int32    `json:"-"`
+	PeerID           []byte `protobuf:"bytes,1,opt,name=peerID" json:"peerID"`
+	SignedPeerRecord []byte `protobuf:"bytes,2,opt,name=signedPeerRecord" json:"signedPeerRecord"`
 }
 
 func (m *PeerInfo) Reset()         { *m = PeerInfo{} }
@@ -654,12 +627,9 @@ func (m *PeerInfo) GetSignedPeerRecord() []byte {
 }
 
 type TopicDescriptor struct {
-	Name                 *string                   `protobuf:"bytes,1,opt,name=name" json:"name,omitempty"`
-	Auth                 *TopicDescriptor_AuthOpts `protobuf:"bytes,2,opt,name=auth" json:"auth,omitempty"`
-	Enc                  *TopicDescriptor_EncOpts  `protobuf:"bytes,3,opt,name=enc" json:"enc,omitempty"`
-	XXX_NoUnkeyedLiteral struct{}                  `json:"-"`
-	XXX_unrecognized     []byte                    `json:"-"`
-	XXX_sizecache        int32                     `json:"-"`
+	Name string                    `protobuf:"bytes,1,opt,name=name" json:"name"`
+	Auth *TopicDescriptor_AuthOpts `protobuf:"bytes,2,opt,name=auth" json:"auth,omitempty"`
+	Enc  *TopicDescriptor_EncOpts  `protobuf:"bytes,3,opt,name=enc" json:"enc,omitempty"`
 }
 
 func (m *TopicDescriptor) Reset()         { *m = TopicDescriptor{} }
@@ -696,8 +666,8 @@ func (m *TopicDescriptor) XXX_DiscardUnknown() {
 var xxx_messageInfo_TopicDescriptor proto.InternalMessageInfo
 
 func (m *TopicDescriptor) GetName() string {
-	if m != nil && m.Name != nil {
-		return *m.Name
+	if m != nil {
+		return m.Name
 	}
 	return ""
 }
@@ -717,11 +687,8 @@ func (m *TopicDescriptor) GetEnc() *TopicDescriptor_EncOpts {
 }
 
 type TopicDescriptor_AuthOpts struct {
-	Mode                 *TopicDescriptor_AuthOpts_AuthMode `protobuf:"varint,1,opt,name=mode,enum=pubsub.pb.TopicDescriptor_AuthOpts_AuthMode" json:"mode,omitempty"`
-	Keys                 [][]byte                           `protobuf:"bytes,2,rep,name=keys" json:"keys,omitempty"`
-	XXX_NoUnkeyedLiteral struct{}                           `json:"-"`
-	XXX_unrecognized     []byte                             `json:"-"`
-	XXX_sizecache        int32                              `json:"-"`
+	Mode TopicDescriptor_AuthOpts_AuthMode `protobuf:"varint,1,opt,name=mode,enum=pubsub.pb.TopicDescriptor_AuthOpts_AuthMode" json:"mode"`
+	Keys [][]byte                          `protobuf:"bytes,2,rep,name=keys" json:"keys,omitempty"`
 }
 
 func (m *TopicDescriptor_AuthOpts) Reset()         { *m = TopicDescriptor_AuthOpts{} }
@@ -758,8 +725,8 @@ func (m *TopicDescriptor_AuthOpts) XXX_DiscardUnknown() {
 var xxx_messageInfo_TopicDescriptor_AuthOpts proto.InternalMessageInfo
 
 func (m *TopicDescriptor_AuthOpts) GetMode() TopicDescriptor_AuthOpts_AuthMode {
-	if m != nil && m.Mode != nil {
-		return *m.Mode
+	if m != nil {
+		return m.Mode
 	}
 	return TopicDescriptor_AuthOpts_NONE
 }
@@ -772,11 +739,8 @@ func (m *TopicDescriptor_AuthOpts) GetKeys() [][]byte {
 }
 
 type TopicDescriptor_EncOpts struct {
-	Mode                 *TopicDescriptor_EncOpts_EncMode `protobuf:"varint,1,opt,name=mode,enum=pubsub.pb.TopicDescriptor_EncOpts_EncMode" json:"mode,omitempty"`
-	KeyHashes            [][]byte                         `protobuf:"bytes,2,rep,name=keyHashes" json:"keyHashes,omitempty"`
-	XXX_NoUnkeyedLiteral struct{}                         `json:"-"`
-	XXX_unrecognized     []byte                           `json:"-"`
-	XXX_sizecache        int32                            `json:"-"`
+	Mode      TopicDescriptor_EncOpts_EncMode `protobuf:"varint,1,opt,name=mode,enum=pubsub.pb.TopicDescriptor_EncOpts_EncMode" json:"mode"`
+	KeyHashes [][]byte                        `protobuf:"bytes,2,rep,name=keyHashes" json:"keyHashes,omitempty"`
 }
 
 func (m *TopicDescriptor_EncOpts) Reset()         { *m = TopicDescriptor_EncOpts{} }
@@ -813,8 +777,8 @@ func (m *TopicDescriptor_EncOpts) XXX_DiscardUnknown() {
 var xxx_messageInfo_TopicDescriptor_EncOpts proto.InternalMessageInfo
 
 func (m *TopicDescriptor_EncOpts) GetMode() TopicDescriptor_EncOpts_EncMode {
-	if m != nil && m.Mode != nil {
-		return *m.Mode
+	if m != nil {
+		return m.Mode
 	}
 	return TopicDescriptor_EncOpts_NONE
 }
@@ -846,49 +810,51 @@ func init() {
 func init() { proto.RegisterFile("rpc.proto", fileDescriptor_77a6da22d6a3feb1) }
 
 var fileDescriptor_77a6da22d6a3feb1 = []byte{
-	// 662 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x8c, 0x93, 0xcf, 0x6e, 0xd3, 0x4a,
-	0x14, 0xc6, 0xef, 0xd4, 0x4e, 0x1d, 0x9f, 0xba, 0xbd, 0xd1, 0xdc, 0xab, 0x62, 0xaa, 0x2a, 0x8a,
-	0x8c, 0x84, 0x42, 0x29, 0x5e, 0x04, 0x24, 0x36, 0x08, 0x51, 0x9a, 0x88, 0x44, 0xa8, 0x6d, 0x34,
-	0xad, 0x54, 0xb1, 0xb4, 0x9d, 0x49, 0x63, 0xa5, 0xf1, 0x18, 0xff, 0x29, 0xea, 0x1b, 0xb0, 0x61,
-	0xc7, 0xb3, 0xf0, 0x0c, 0x2c, 0x58, 0xf0, 0x08, 0xa8, 0x3b, 0xde, 0x02, 0xcd, 0xf1, 0x38, 0x71,
-	0x5a, 0x5a, 0x58, 0xf9, 0xcc, 0x99, 0xdf, 0x77, 0xce, 0x37, 0xc7, 0x33, 0x60, 0x26, 0x71, 0xe0,
-	0xc6, 0x89, 0xc8, 0x04, 0x35, 0xe3, 0xdc, 0x4f, 0x73, 0xdf, 0x8d, 0x7d, 0xe7, 0x27, 0x01, 0x8d,
-	0x0d, 0xf7, 0xe9, 0x0b, 0x58, 0x4f, 0x73, 0x3f, 0x0d, 0x92, 0x30, 0xce, 0x42, 0x11, 0xa5, 0x36,
-	0x69, 0x69, 0xed, 0xb5, 0xce, 0xa6, 0x3b, 0x47, 0x5d, 0x36, 0xdc, 0x77, 0x8f, 0x73, 0xff, 0x28,
-	0xce, 0x52, 0xb6, 0x0c, 0xd3, 0x5d, 0x30, 0xe2, 0xdc, 0x3f, 0x0f, 0xd3, 0x89, 0xbd, 0x82, 0x3a,
-	0x5a, 0xd1, 0x1d, 0xf0, 0x34, 0xf5, 0xce, 0x38, 0x2b, 0x11, 0xfa, 0x14, 0x8c, 0x40, 0x44, 0x59,
-	0x22, 0xce, 0x6d, 0xad, 0x45, 0xda, 0x6b, 0x9d, 0xfb, 0x15, 0x7a, 0xbf, 0xd8, 0x99, 0x8b, 0x14,
-	0xb9, 0xb5, 0x07, 0x86, 0x6a, 0x4e, 0xb7, 0xc1, 0x54, 0xed, 0x7d, 0x6e, 0x93, 0x16, 0x69, 0xd7,
-	0xd9, 0x22, 0x41, 0x6d, 0x30, 0x32, 0x11, 0x87, 0x41, 0x38, 0xb2, 0x57, 0x5a, 0xa4, 0x6d, 0xb2,
-	0x72, 0xe9, 0x7c, 0x22, 0x60, 0xa8, 0xba, 0x94, 0x82, 0x3e, 0x4e, 0xc4, 0x0c, 0xe5, 0x16, 0xc3,
-	0x58, 0xe6, 0x46, 0x5e, 0xe6, 0xa1, 0xcc, 0x62, 0x18, 0xd3, 0xff, 0xa1, 0x96, 0xf2, 0xf7, 0x91,
-	0x40, 0xa7, 0x16, 0x2b, 0x16, 0x32, 0x8b, 0x45, 0x6d, 0x1d, 0x3b, 0x14, 0x0b, 0xf4, 0x15, 0x9e,
-	0x45, 0x5e, 0x96, 0x27, 0xdc, 0xae, 0x21, 0xbf, 0x48, 0xd0, 0x06, 0x68, 0x53, 0x7e, 0x69, 0xaf,
-	0x62, 0x5e, 0x86, 0xce, 0x37, 0x02, 0x1b, 0xcb, 0xc7, 0xa5, 0x4f, 0xa0, 0x16, 0x4e, 0xbc, 0x0b,
-	0xae, 0xc6, 0x7f, 0xef, 0xe6, 0x60, 0x06, 0x7d, 0xef, 0x82, 0xb3, 0x82, 0x42, 0xfc, 0x83, 0x17,
-	0x65, 0x6a, 0xea, 0xbf, 0xc3, 0x4f, 0xbd, 0x28, 0x63, 0x05, 0x25, 0xf1, 0xb3, 0xc4, 0x1b, 0x67,
-	0xb6, 0x76, 0x1b, 0xfe, 0x46, 0x6e, 0xb3, 0x82, 0x92, 0x78, 0x9c, 0xe4, 0x11, 0xb7, 0xf5, 0xdb,
-	0xf0, 0xa1, 0xdc, 0x66, 0x05, 0xe5, 0xf4, 0xc1, 0xaa, 0x7a, 0x9c, 0xff, 0x88, 0x41, 0x17, 0xa7,
-	0x5c, 0xfe, 0x88, 0x41, 0x97, 0x36, 0x01, 0x66, 0xc5, 0x81, 0x07, 0xdd, 0x14, 0xbd, 0x9b, 0xac,
-	0x92, 0x71, 0xdc, 0x45, 0x25, 0x69, 0xff, 0x1a, 0x4f, 0x6e, 0xf0, 0xed, 0x39, 0x8f, 0xfe, 0x6f,
-	0xef, 0xec, 0xcc, 0xe6, 0x24, 0x5a, 0xbf, 0xc3, 0xe3, 0x23, 0xa8, 0xc5, 0x9c, 0x27, 0xa9, 0x1a,
-	0xed, 0x7f, 0x95, 0xc3, 0x0f, 0x39, 0x4f, 0x06, 0xd1, 0x58, 0xb0, 0x82, 0x90, 0x45, 0x7c, 0x2f,
-	0x98, 0x8a, 0xf1, 0x18, 0x6f, 0x89, 0xce, 0xca, 0xa5, 0x73, 0x08, 0xf5, 0x12, 0xa6, 0x9b, 0xb0,
-	0x2a, 0x71, 0xd5, 0xc9, 0x62, 0x6a, 0x45, 0x77, 0xa0, 0x21, 0x2f, 0x09, 0x1f, 0x49, 0x92, 0xf1,
-	0x40, 0x24, 0x23, 0x75, 0x03, 0x6f, 0xe4, 0x9d, 0x2f, 0x1a, 0xfc, 0x7b, 0x22, 0x0d, 0x76, 0x79,
-	0xf1, 0xfa, 0x44, 0x22, 0x6f, 0x6d, 0xe4, 0xcd, 0xb8, 0xf2, 0x8f, 0x31, 0x7d, 0x0e, 0xba, 0x97,
-	0x67, 0x13, 0xac, 0xb3, 0xd6, 0x79, 0x50, 0xf1, 0x7e, 0x4d, 0xed, 0xee, 0xe5, 0xd9, 0x04, 0x5f,
-	0x34, 0x0a, 0xe8, 0x33, 0xd0, 0x78, 0x14, 0xa8, 0x67, 0xe9, 0xdc, 0xa1, 0xeb, 0x45, 0x01, 0xca,
-	0x24, 0xbe, 0xf5, 0x91, 0x40, 0xbd, 0x2c, 0x44, 0x5f, 0x81, 0x3e, 0x13, 0xa3, 0xc2, 0xcf, 0x46,
-	0x67, 0xf7, 0x2f, 0x7a, 0x63, 0x70, 0x20, 0x46, 0x9c, 0xa1, 0x52, 0x9e, 0x68, 0xca, 0x2f, 0x8b,
-	0xc9, 0x5b, 0x0c, 0x63, 0xe7, 0x61, 0xd1, 0x41, 0x52, 0xb4, 0x0e, 0xfa, 0xe1, 0xd1, 0x61, 0xaf,
-	0xf1, 0x0f, 0x35, 0x40, 0x7b, 0xdb, 0x7b, 0xd7, 0x20, 0x32, 0x38, 0x3d, 0x3a, 0x69, 0xac, 0x6c,
-	0x7d, 0x26, 0x60, 0x28, 0x6f, 0xf4, 0xe5, 0x92, 0x93, 0x9d, 0x3f, 0x9f, 0x46, 0x7e, 0x2b, 0x3e,
-	0xb6, 0xc1, 0x9c, 0xf2, 0xcb, 0xbe, 0x97, 0x4e, 0x78, 0x69, 0x66, 0x91, 0x70, 0x1e, 0x63, 0xa3,
-	0x6b, 0x86, 0xd6, 0xc1, 0x3c, 0xee, 0xef, 0xb1, 0x5e, 0x77, 0xd9, 0xd6, 0x6b, 0xeb, 0xeb, 0x55,
-	0x93, 0x7c, 0xbf, 0x6a, 0x92, 0x1f, 0x57, 0x4d, 0xf2, 0x2b, 0x00, 0x00, 0xff, 0xff, 0xfc, 0x52,
-	0x7a, 0xa2, 0x8b, 0x05, 0x00, 0x00,
+	// 690 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x8c, 0x94, 0xcf, 0x6e, 0xd3, 0x4e,
+	0x10, 0xc7, 0xb3, 0xb5, 0x53, 0xc7, 0xd3, 0x3f, 0xbf, 0x68, 0x7f, 0x52, 0x31, 0x51, 0x65, 0x22,
+	0x23, 0xa1, 0x00, 0xc5, 0x42, 0x01, 0x89, 0x0b, 0x97, 0xb6, 0x09, 0x34, 0x42, 0x6d, 0xa3, 0x6d,
+	0xa5, 0x0a, 0x6e, 0xb6, 0xb3, 0x69, 0xac, 0x34, 0x5e, 0xe3, 0x3f, 0x45, 0x79, 0x09, 0xc4, 0x99,
+	0xb7, 0xe0, 0x2d, 0x7a, 0xe0, 0xd0, 0x23, 0x27, 0x84, 0xda, 0x67, 0xe0, 0x8e, 0x76, 0xbd, 0x4e,
+	0xec, 0x96, 0xb6, 0x9c, 0xb2, 0xfa, 0xce, 0x67, 0x66, 0xbe, 0xb3, 0xb3, 0x0e, 0xe8, 0x51, 0xe8,
+	0xd9, 0x61, 0xc4, 0x12, 0x86, 0xf5, 0x30, 0x75, 0xe3, 0xd4, 0xb5, 0x43, 0xd7, 0xfa, 0x8d, 0x40,
+	0x21, 0xfd, 0x6d, 0xfc, 0x1a, 0x56, 0xe2, 0xd4, 0x8d, 0xbd, 0xc8, 0x0f, 0x13, 0x9f, 0x05, 0xb1,
+	0x81, 0x9a, 0x4a, 0x6b, 0xa9, 0xbd, 0x66, 0xcf, 0x50, 0x9b, 0xf4, 0xb7, 0xed, 0x83, 0xd4, 0xdd,
+	0x0f, 0x93, 0x98, 0x94, 0x61, 0xbc, 0x01, 0x5a, 0x98, 0xba, 0x27, 0x7e, 0x3c, 0x32, 0x16, 0x44,
+	0x1e, 0x2e, 0xe4, 0xed, 0xd2, 0x38, 0x76, 0x8e, 0x29, 0xc9, 0x11, 0xfc, 0x02, 0x34, 0x8f, 0x05,
+	0x49, 0xc4, 0x4e, 0x0c, 0xa5, 0x89, 0x5a, 0x4b, 0xed, 0xfb, 0x05, 0x7a, 0x3b, 0x8b, 0xcc, 0x92,
+	0x24, 0xd9, 0xd8, 0x05, 0x4d, 0x36, 0xc7, 0x16, 0xe8, 0xb2, 0xbd, 0x4b, 0x0d, 0xd4, 0x44, 0xad,
+	0xda, 0x96, 0x7a, 0xf6, 0xf3, 0x41, 0x85, 0xcc, 0x65, 0x6c, 0x82, 0x96, 0xb0, 0xd0, 0xf7, 0xfc,
+	0x81, 0xb1, 0xd0, 0x44, 0x2d, 0x5d, 0x12, 0xb9, 0x68, 0x7d, 0x43, 0xa0, 0xc9, 0x1e, 0xd8, 0x00,
+	0x75, 0x18, 0xb1, 0x89, 0x28, 0xb5, 0x2c, 0x41, 0xa1, 0xf0, 0xc8, 0xc0, 0x49, 0x1c, 0x51, 0x62,
+	0x16, 0xe1, 0x0a, 0x6e, 0x40, 0x35, 0xa6, 0x1f, 0x03, 0x26, 0x26, 0xc8, 0x43, 0x99, 0xc4, 0x63,
+	0xa2, 0x8d, 0xa1, 0x16, 0x3a, 0x67, 0x92, 0xf0, 0xee, 0x1f, 0x07, 0x4e, 0x92, 0x46, 0xd4, 0xa8,
+	0x16, 0x72, 0xe7, 0x32, 0x5e, 0x03, 0x65, 0x4c, 0xa7, 0xc6, 0x62, 0x21, 0xca, 0x05, 0xeb, 0x3b,
+	0x82, 0xd5, 0xf2, 0xf5, 0xe0, 0x67, 0x50, 0xf5, 0x47, 0xce, 0x29, 0x95, 0xeb, 0xba, 0x77, 0xfd,
+	0x22, 0x7b, 0x3b, 0xce, 0x29, 0x25, 0x19, 0x25, 0xf0, 0x4f, 0x4e, 0x90, 0xc8, 0x2d, 0xfd, 0x0d,
+	0x3f, 0x72, 0x82, 0x84, 0x64, 0x14, 0xc7, 0x8f, 0x23, 0x67, 0x98, 0x18, 0xca, 0x4d, 0xf8, 0x5b,
+	0x1e, 0x26, 0x19, 0xc5, 0xf1, 0x30, 0x4a, 0x03, 0x6a, 0xa8, 0x37, 0xe1, 0x7d, 0x1e, 0x26, 0x19,
+	0x65, 0xed, 0xc1, 0x72, 0xd1, 0xe3, 0x6c, 0x65, 0xbd, 0x8e, 0xd8, 0x44, 0x79, 0x65, 0xbd, 0x0e,
+	0x36, 0x01, 0x26, 0xd9, 0xd8, 0xbd, 0x4e, 0x2c, 0x26, 0xd0, 0x49, 0x41, 0xb1, 0xec, 0x79, 0x3d,
+	0x3e, 0xc4, 0x15, 0x1e, 0xdd, 0xc2, 0x8b, 0x29, 0xee, 0xea, 0x6f, 0x4d, 0x67, 0xbc, 0x18, 0xe3,
+	0x4e, 0xbf, 0x8f, 0xa1, 0x1a, 0x52, 0x1a, 0xc5, 0xf2, 0xb2, 0xff, 0x2f, 0x5c, 0x47, 0x9f, 0xd2,
+	0xa8, 0x17, 0x0c, 0x19, 0xc9, 0x08, 0x5e, 0xca, 0x75, 0xbc, 0x31, 0x1b, 0x0e, 0xc5, 0x7b, 0x52,
+	0xf3, 0x52, 0x52, 0xb4, 0x3e, 0x40, 0x2d, 0x4f, 0xc1, 0xeb, 0xb0, 0xc8, 0x93, 0x64, 0xd7, 0xfc,
+	0x81, 0x48, 0x0d, 0x3f, 0x87, 0x3a, 0x7f, 0x48, 0x74, 0xc0, 0x79, 0x42, 0x3d, 0x16, 0x0d, 0x4a,
+	0xaf, 0xf7, 0x5a, 0xd4, 0x3a, 0x53, 0xe0, 0xbf, 0x43, 0x6e, 0xb9, 0x43, 0xb3, 0x2f, 0x9a, 0x45,
+	0xfc, 0xdd, 0x07, 0xce, 0x84, 0x96, 0xe6, 0x12, 0x0a, 0x7e, 0x05, 0xaa, 0x93, 0x26, 0x23, 0x51,
+	0x73, 0xa9, 0xfd, 0xb0, 0x30, 0xd3, 0x95, 0x1a, 0xf6, 0x66, 0x9a, 0x8c, 0xc4, 0x7f, 0x85, 0x48,
+	0xc0, 0x2f, 0x41, 0xa1, 0x81, 0x27, 0x3f, 0x78, 0xeb, 0x96, 0xbc, 0x6e, 0xe0, 0x89, 0x34, 0x8e,
+	0x37, 0x3e, 0x23, 0xa8, 0xe5, 0x85, 0xf0, 0x1b, 0x50, 0x27, 0x6c, 0x90, 0xb9, 0x5a, 0x6d, 0x6f,
+	0xfc, 0x43, 0x6f, 0x71, 0xd8, 0x65, 0x03, 0x9a, 0xcf, 0xc0, 0xf3, 0x31, 0x06, 0x75, 0x4c, 0xa7,
+	0xd9, 0x5e, 0x96, 0x89, 0x38, 0x5b, 0x8f, 0xb2, 0x3e, 0x9c, 0xc5, 0x35, 0x50, 0xf7, 0xf6, 0xf7,
+	0xba, 0xf5, 0x0a, 0xd6, 0x40, 0x79, 0xd7, 0x7d, 0x5f, 0x47, 0xfc, 0x70, 0xb4, 0x7f, 0x58, 0x5f,
+	0x68, 0x7c, 0x45, 0xa0, 0x49, 0x87, 0xb8, 0x53, 0xf2, 0xf3, 0xe4, 0xee, 0x99, 0xf8, 0xef, 0x35,
+	0x37, 0xeb, 0xa0, 0x8f, 0xe9, 0x74, 0xc7, 0x89, 0x47, 0x34, 0xb7, 0x34, 0x17, 0xac, 0xa7, 0xa2,
+	0xdd, 0x15, 0x5b, 0x2b, 0xa0, 0x1f, 0xec, 0x6c, 0x92, 0x6e, 0xa7, 0x6c, 0x6e, 0xcb, 0x38, 0xbb,
+	0x30, 0xd1, 0xf9, 0x85, 0x89, 0x7e, 0x5d, 0x98, 0xe8, 0xcb, 0xa5, 0x59, 0x39, 0xbf, 0x34, 0x2b,
+	0x3f, 0x2e, 0xcd, 0xca, 0x9f, 0x00, 0x00, 0x00, 0xff, 0xff, 0x6f, 0x68, 0x61, 0x87, 0xfd, 0x05,
+	0x00, 0x00,
 }
 
 func (m *RPC) Marshal() (dAtA []byte, err error) {
@@ -911,10 +877,6 @@ func (m *RPC) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
-	if m.XXX_unrecognized != nil {
-		i -= len(m.XXX_unrecognized)
-		copy(dAtA[i:], m.XXX_unrecognized)
-	}
 	if m.Control != nil {
 		{
 			size, err := m.Control.MarshalToSizedBuffer(dAtA[:i])
@@ -978,27 +940,19 @@ func (m *RPC_SubOpts) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
-	if m.XXX_unrecognized != nil {
-		i -= len(m.XXX_unrecognized)
-		copy(dAtA[i:], m.XXX_unrecognized)
+	i -= len(m.Topicid)
+	copy(dAtA[i:], m.Topicid)
+	i = encodeVarintRpc(dAtA, i, uint64(len(m.Topicid)))
+	i--
+	dAtA[i] = 0x12
+	i--
+	if m.Subscribe {
+		dAtA[i] = 1
+	} else {
+		dAtA[i] = 0
 	}
-	if m.Topicid != nil {
-		i -= len(*m.Topicid)
-		copy(dAtA[i:], *m.Topicid)
-		i = encodeVarintRpc(dAtA, i, uint64(len(*m.Topicid)))
-		i--
-		dAtA[i] = 0x12
-	}
-	if m.Subscribe != nil {
-		i--
-		if *m.Subscribe {
-			dAtA[i] = 1
-		} else {
-			dAtA[i] = 0
-		}
-		i--
-		dAtA[i] = 0x8
-	}
+	i--
+	dAtA[i] = 0x8
 	return len(dAtA) - i, nil
 }
 
@@ -1022,10 +976,6 @@ func (m *Message) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
-	if m.XXX_unrecognized != nil {
-		i -= len(m.XXX_unrecognized)
-		copy(dAtA[i:], m.XXX_unrecognized)
-	}
 	if m.Key != nil {
 		i -= len(m.Key)
 		copy(dAtA[i:], m.Key)
@@ -1040,13 +990,11 @@ func (m *Message) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 		i--
 		dAtA[i] = 0x2a
 	}
-	if m.Topic != nil {
-		i -= len(*m.Topic)
-		copy(dAtA[i:], *m.Topic)
-		i = encodeVarintRpc(dAtA, i, uint64(len(*m.Topic)))
-		i--
-		dAtA[i] = 0x22
-	}
+	i -= len(m.Topic)
+	copy(dAtA[i:], m.Topic)
+	i = encodeVarintRpc(dAtA, i, uint64(len(m.Topic)))
+	i--
+	dAtA[i] = 0x22
 	if m.Seqno != nil {
 		i -= len(m.Seqno)
 		copy(dAtA[i:], m.Seqno)
@@ -1091,10 +1039,6 @@ func (m *ControlMessage) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
-	if m.XXX_unrecognized != nil {
-		i -= len(m.XXX_unrecognized)
-		copy(dAtA[i:], m.XXX_unrecognized)
-	}
 	if len(m.Prune) > 0 {
 		for iNdEx := len(m.Prune) - 1; iNdEx >= 0; iNdEx-- {
 			{
@@ -1174,10 +1118,6 @@ func (m *ControlIHave) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
-	if m.XXX_unrecognized != nil {
-		i -= len(m.XXX_unrecognized)
-		copy(dAtA[i:], m.XXX_unrecognized)
-	}
 	if len(m.MessageIDs) > 0 {
 		for iNdEx := len(m.MessageIDs) - 1; iNdEx >= 0; iNdEx-- {
 			i -= len(m.MessageIDs[iNdEx])
@@ -1187,13 +1127,11 @@ func (m *ControlIHave) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 			dAtA[i] = 0x12
 		}
 	}
-	if m.TopicID != nil {
-		i -= len(*m.TopicID)
-		copy(dAtA[i:], *m.TopicID)
-		i = encodeVarintRpc(dAtA, i, uint64(len(*m.TopicID)))
-		i--
-		dAtA[i] = 0xa
-	}
+	i -= len(m.TopicID)
+	copy(dAtA[i:], m.TopicID)
+	i = encodeVarintRpc(dAtA, i, uint64(len(m.TopicID)))
+	i--
+	dAtA[i] = 0xa
 	return len(dAtA) - i, nil
 }
 
@@ -1217,10 +1155,6 @@ func (m *ControlIWant) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
-	if m.XXX_unrecognized != nil {
-		i -= len(m.XXX_unrecognized)
-		copy(dAtA[i:], m.XXX_unrecognized)
-	}
 	if len(m.MessageIDs) > 0 {
 		for iNdEx := len(m.MessageIDs) - 1; iNdEx >= 0; iNdEx-- {
 			i -= len(m.MessageIDs[iNdEx])
@@ -1253,17 +1187,11 @@ func (m *ControlGraft) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
-	if m.XXX_unrecognized != nil {
-		i -= len(m.XXX_unrecognized)
-		copy(dAtA[i:], m.XXX_unrecognized)
-	}
-	if m.TopicID != nil {
-		i -= len(*m.TopicID)
-		copy(dAtA[i:], *m.TopicID)
-		i = encodeVarintRpc(dAtA, i, uint64(len(*m.TopicID)))
-		i--
-		dAtA[i] = 0xa
-	}
+	i -= len(m.TopicID)
+	copy(dAtA[i:], m.TopicID)
+	i = encodeVarintRpc(dAtA, i, uint64(len(m.TopicID)))
+	i--
+	dAtA[i] = 0xa
 	return len(dAtA) - i, nil
 }
 
@@ -1287,15 +1215,9 @@ func (m *ControlPrune) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
-	if m.XXX_unrecognized != nil {
-		i -= len(m.XXX_unrecognized)
-		copy(dAtA[i:], m.XXX_unrecognized)
-	}
-	if m.Backoff != nil {
-		i = encodeVarintRpc(dAtA, i, uint64(*m.Backoff))
-		i--
-		dAtA[i] = 0x18
-	}
+	i = encodeVarintRpc(dAtA, i, uint64(m.Backoff))
+	i--
+	dAtA[i] = 0x18
 	if len(m.Peers) > 0 {
 		for iNdEx := len(m.Peers) - 1; iNdEx >= 0; iNdEx-- {
 			{
@@ -1310,13 +1232,11 @@ func (m *ControlPrune) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 			dAtA[i] = 0x12
 		}
 	}
-	if m.TopicID != nil {
-		i -= len(*m.TopicID)
-		copy(dAtA[i:], *m.TopicID)
-		i = encodeVarintRpc(dAtA, i, uint64(len(*m.TopicID)))
-		i--
-		dAtA[i] = 0xa
-	}
+	i -= len(m.TopicID)
+	copy(dAtA[i:], m.TopicID)
+	i = encodeVarintRpc(dAtA, i, uint64(len(m.TopicID)))
+	i--
+	dAtA[i] = 0xa
 	return len(dAtA) - i, nil
 }
 
@@ -1340,10 +1260,6 @@ func (m *PeerInfo) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
-	if m.XXX_unrecognized != nil {
-		i -= len(m.XXX_unrecognized)
-		copy(dAtA[i:], m.XXX_unrecognized)
-	}
 	if m.SignedPeerRecord != nil {
 		i -= len(m.SignedPeerRecord)
 		copy(dAtA[i:], m.SignedPeerRecord)
@@ -1381,10 +1297,6 @@ func (m *TopicDescriptor) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
-	if m.XXX_unrecognized != nil {
-		i -= len(m.XXX_unrecognized)
-		copy(dAtA[i:], m.XXX_unrecognized)
-	}
 	if m.Enc != nil {
 		{
 			size, err := m.Enc.MarshalToSizedBuffer(dAtA[:i])
@@ -1409,13 +1321,11 @@ func (m *TopicDescriptor) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 		i--
 		dAtA[i] = 0x12
 	}
-	if m.Name != nil {
-		i -= len(*m.Name)
-		copy(dAtA[i:], *m.Name)
-		i = encodeVarintRpc(dAtA, i, uint64(len(*m.Name)))
-		i--
-		dAtA[i] = 0xa
-	}
+	i -= len(m.Name)
+	copy(dAtA[i:], m.Name)
+	i = encodeVarintRpc(dAtA, i, uint64(len(m.Name)))
+	i--
+	dAtA[i] = 0xa
 	return len(dAtA) - i, nil
 }
 
@@ -1439,10 +1349,6 @@ func (m *TopicDescriptor_AuthOpts) MarshalToSizedBuffer(dAtA []byte) (int, error
 	_ = i
 	var l int
 	_ = l
-	if m.XXX_unrecognized != nil {
-		i -= len(m.XXX_unrecognized)
-		copy(dAtA[i:], m.XXX_unrecognized)
-	}
 	if len(m.Keys) > 0 {
 		for iNdEx := len(m.Keys) - 1; iNdEx >= 0; iNdEx-- {
 			i -= len(m.Keys[iNdEx])
@@ -1452,11 +1358,9 @@ func (m *TopicDescriptor_AuthOpts) MarshalToSizedBuffer(dAtA []byte) (int, error
 			dAtA[i] = 0x12
 		}
 	}
-	if m.Mode != nil {
-		i = encodeVarintRpc(dAtA, i, uint64(*m.Mode))
-		i--
-		dAtA[i] = 0x8
-	}
+	i = encodeVarintRpc(dAtA, i, uint64(m.Mode))
+	i--
+	dAtA[i] = 0x8
 	return len(dAtA) - i, nil
 }
 
@@ -1480,10 +1384,6 @@ func (m *TopicDescriptor_EncOpts) MarshalToSizedBuffer(dAtA []byte) (int, error)
 	_ = i
 	var l int
 	_ = l
-	if m.XXX_unrecognized != nil {
-		i -= len(m.XXX_unrecognized)
-		copy(dAtA[i:], m.XXX_unrecognized)
-	}
 	if len(m.KeyHashes) > 0 {
 		for iNdEx := len(m.KeyHashes) - 1; iNdEx >= 0; iNdEx-- {
 			i -= len(m.KeyHashes[iNdEx])
@@ -1493,11 +1393,9 @@ func (m *TopicDescriptor_EncOpts) MarshalToSizedBuffer(dAtA []byte) (int, error)
 			dAtA[i] = 0x12
 		}
 	}
-	if m.Mode != nil {
-		i = encodeVarintRpc(dAtA, i, uint64(*m.Mode))
-		i--
-		dAtA[i] = 0x8
-	}
+	i = encodeVarintRpc(dAtA, i, uint64(m.Mode))
+	i--
+	dAtA[i] = 0x8
 	return len(dAtA) - i, nil
 }
 
@@ -1534,9 +1432,6 @@ func (m *RPC) Size() (n int) {
 		l = m.Control.Size()
 		n += 1 + l + sovRpc(uint64(l))
 	}
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
 	return n
 }
 
@@ -1546,16 +1441,9 @@ func (m *RPC_SubOpts) Size() (n int) {
 	}
 	var l int
 	_ = l
-	if m.Subscribe != nil {
-		n += 2
-	}
-	if m.Topicid != nil {
-		l = len(*m.Topicid)
-		n += 1 + l + sovRpc(uint64(l))
-	}
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
+	n += 2
+	l = len(m.Topicid)
+	n += 1 + l + sovRpc(uint64(l))
 	return n
 }
 
@@ -1577,10 +1465,8 @@ func (m *Message) Size() (n int) {
 		l = len(m.Seqno)
 		n += 1 + l + sovRpc(uint64(l))
 	}
-	if m.Topic != nil {
-		l = len(*m.Topic)
-		n += 1 + l + sovRpc(uint64(l))
-	}
+	l = len(m.Topic)
+	n += 1 + l + sovRpc(uint64(l))
 	if m.Signature != nil {
 		l = len(m.Signature)
 		n += 1 + l + sovRpc(uint64(l))
@@ -1588,9 +1474,6 @@ func (m *Message) Size() (n int) {
 	if m.Key != nil {
 		l = len(m.Key)
 		n += 1 + l + sovRpc(uint64(l))
-	}
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
 	}
 	return n
 }
@@ -1625,9 +1508,6 @@ func (m *ControlMessage) Size() (n int) {
 			n += 1 + l + sovRpc(uint64(l))
 		}
 	}
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
 	return n
 }
 
@@ -1637,18 +1517,13 @@ func (m *ControlIHave) Size() (n int) {
 	}
 	var l int
 	_ = l
-	if m.TopicID != nil {
-		l = len(*m.TopicID)
-		n += 1 + l + sovRpc(uint64(l))
-	}
+	l = len(m.TopicID)
+	n += 1 + l + sovRpc(uint64(l))
 	if len(m.MessageIDs) > 0 {
 		for _, s := range m.MessageIDs {
 			l = len(s)
 			n += 1 + l + sovRpc(uint64(l))
 		}
-	}
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
 	}
 	return n
 }
@@ -1665,9 +1540,6 @@ func (m *ControlIWant) Size() (n int) {
 			n += 1 + l + sovRpc(uint64(l))
 		}
 	}
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
 	return n
 }
 
@@ -1677,13 +1549,8 @@ func (m *ControlGraft) Size() (n int) {
 	}
 	var l int
 	_ = l
-	if m.TopicID != nil {
-		l = len(*m.TopicID)
-		n += 1 + l + sovRpc(uint64(l))
-	}
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
+	l = len(m.TopicID)
+	n += 1 + l + sovRpc(uint64(l))
 	return n
 }
 
@@ -1693,22 +1560,15 @@ func (m *ControlPrune) Size() (n int) {
 	}
 	var l int
 	_ = l
-	if m.TopicID != nil {
-		l = len(*m.TopicID)
-		n += 1 + l + sovRpc(uint64(l))
-	}
+	l = len(m.TopicID)
+	n += 1 + l + sovRpc(uint64(l))
 	if len(m.Peers) > 0 {
 		for _, e := range m.Peers {
 			l = e.Size()
 			n += 1 + l + sovRpc(uint64(l))
 		}
 	}
-	if m.Backoff != nil {
-		n += 1 + sovRpc(uint64(*m.Backoff))
-	}
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
+	n += 1 + sovRpc(uint64(m.Backoff))
 	return n
 }
 
@@ -1726,9 +1586,6 @@ func (m *PeerInfo) Size() (n int) {
 		l = len(m.SignedPeerRecord)
 		n += 1 + l + sovRpc(uint64(l))
 	}
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
 	return n
 }
 
@@ -1738,10 +1595,8 @@ func (m *TopicDescriptor) Size() (n int) {
 	}
 	var l int
 	_ = l
-	if m.Name != nil {
-		l = len(*m.Name)
-		n += 1 + l + sovRpc(uint64(l))
-	}
+	l = len(m.Name)
+	n += 1 + l + sovRpc(uint64(l))
 	if m.Auth != nil {
 		l = m.Auth.Size()
 		n += 1 + l + sovRpc(uint64(l))
@@ -1749,9 +1604,6 @@ func (m *TopicDescriptor) Size() (n int) {
 	if m.Enc != nil {
 		l = m.Enc.Size()
 		n += 1 + l + sovRpc(uint64(l))
-	}
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
 	}
 	return n
 }
@@ -1762,17 +1614,12 @@ func (m *TopicDescriptor_AuthOpts) Size() (n int) {
 	}
 	var l int
 	_ = l
-	if m.Mode != nil {
-		n += 1 + sovRpc(uint64(*m.Mode))
-	}
+	n += 1 + sovRpc(uint64(m.Mode))
 	if len(m.Keys) > 0 {
 		for _, b := range m.Keys {
 			l = len(b)
 			n += 1 + l + sovRpc(uint64(l))
 		}
-	}
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
 	}
 	return n
 }
@@ -1783,17 +1630,12 @@ func (m *TopicDescriptor_EncOpts) Size() (n int) {
 	}
 	var l int
 	_ = l
-	if m.Mode != nil {
-		n += 1 + sovRpc(uint64(*m.Mode))
-	}
+	n += 1 + sovRpc(uint64(m.Mode))
 	if len(m.KeyHashes) > 0 {
 		for _, b := range m.KeyHashes {
 			l = len(b)
 			n += 1 + l + sovRpc(uint64(l))
 		}
-	}
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
 	}
 	return n
 }
@@ -1943,16 +1785,12 @@ func (m *RPC) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthRpc
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthRpc
 			}
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -2010,8 +1848,7 @@ func (m *RPC_SubOpts) Unmarshal(dAtA []byte) error {
 					break
 				}
 			}
-			b := bool(v != 0)
-			m.Subscribe = &b
+			m.Subscribe = bool(v != 0)
 		case 2:
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Topicid", wireType)
@@ -2042,8 +1879,7 @@ func (m *RPC_SubOpts) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			s := string(dAtA[iNdEx:postIndex])
-			m.Topicid = &s
+			m.Topicid = string(dAtA[iNdEx:postIndex])
 			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
@@ -2051,16 +1887,12 @@ func (m *RPC_SubOpts) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthRpc
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthRpc
 			}
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -2231,8 +2063,7 @@ func (m *Message) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			s := string(dAtA[iNdEx:postIndex])
-			m.Topic = &s
+			m.Topic = string(dAtA[iNdEx:postIndex])
 			iNdEx = postIndex
 		case 5:
 			if wireType != 2 {
@@ -2308,16 +2139,12 @@ func (m *Message) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthRpc
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthRpc
 			}
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -2498,16 +2325,12 @@ func (m *ControlMessage) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthRpc
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthRpc
 			}
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -2576,8 +2399,7 @@ func (m *ControlIHave) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			s := string(dAtA[iNdEx:postIndex])
-			m.TopicID = &s
+			m.TopicID = string(dAtA[iNdEx:postIndex])
 			iNdEx = postIndex
 		case 2:
 			if wireType != 2 {
@@ -2617,16 +2439,12 @@ func (m *ControlIHave) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthRpc
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthRpc
 			}
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -2703,16 +2521,12 @@ func (m *ControlIWant) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthRpc
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthRpc
 			}
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -2781,8 +2595,7 @@ func (m *ControlGraft) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			s := string(dAtA[iNdEx:postIndex])
-			m.TopicID = &s
+			m.TopicID = string(dAtA[iNdEx:postIndex])
 			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
@@ -2790,16 +2603,12 @@ func (m *ControlGraft) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthRpc
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthRpc
 			}
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -2868,8 +2677,7 @@ func (m *ControlPrune) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			s := string(dAtA[iNdEx:postIndex])
-			m.TopicID = &s
+			m.TopicID = string(dAtA[iNdEx:postIndex])
 			iNdEx = postIndex
 		case 2:
 			if wireType != 2 {
@@ -2909,7 +2717,7 @@ func (m *ControlPrune) Unmarshal(dAtA []byte) error {
 			if wireType != 0 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Backoff", wireType)
 			}
-			var v uint64
+			m.Backoff = 0
 			for shift := uint(0); ; shift += 7 {
 				if shift >= 64 {
 					return ErrIntOverflowRpc
@@ -2919,28 +2727,23 @@ func (m *ControlPrune) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				v |= uint64(b&0x7F) << shift
+				m.Backoff |= uint64(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
 			}
-			m.Backoff = &v
 		default:
 			iNdEx = preIndex
 			skippy, err := skipRpc(dAtA[iNdEx:])
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthRpc
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthRpc
 			}
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -3053,16 +2856,12 @@ func (m *PeerInfo) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthRpc
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthRpc
 			}
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -3131,8 +2930,7 @@ func (m *TopicDescriptor) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			s := string(dAtA[iNdEx:postIndex])
-			m.Name = &s
+			m.Name = string(dAtA[iNdEx:postIndex])
 			iNdEx = postIndex
 		case 2:
 			if wireType != 2 {
@@ -3212,16 +3010,12 @@ func (m *TopicDescriptor) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthRpc
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthRpc
 			}
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -3264,7 +3058,7 @@ func (m *TopicDescriptor_AuthOpts) Unmarshal(dAtA []byte) error {
 			if wireType != 0 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Mode", wireType)
 			}
-			var v TopicDescriptor_AuthOpts_AuthMode
+			m.Mode = 0
 			for shift := uint(0); ; shift += 7 {
 				if shift >= 64 {
 					return ErrIntOverflowRpc
@@ -3274,12 +3068,11 @@ func (m *TopicDescriptor_AuthOpts) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				v |= TopicDescriptor_AuthOpts_AuthMode(b&0x7F) << shift
+				m.Mode |= TopicDescriptor_AuthOpts_AuthMode(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
 			}
-			m.Mode = &v
 		case 2:
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Keys", wireType)
@@ -3318,16 +3111,12 @@ func (m *TopicDescriptor_AuthOpts) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthRpc
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthRpc
 			}
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -3370,7 +3159,7 @@ func (m *TopicDescriptor_EncOpts) Unmarshal(dAtA []byte) error {
 			if wireType != 0 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Mode", wireType)
 			}
-			var v TopicDescriptor_EncOpts_EncMode
+			m.Mode = 0
 			for shift := uint(0); ; shift += 7 {
 				if shift >= 64 {
 					return ErrIntOverflowRpc
@@ -3380,12 +3169,11 @@ func (m *TopicDescriptor_EncOpts) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				v |= TopicDescriptor_EncOpts_EncMode(b&0x7F) << shift
+				m.Mode |= TopicDescriptor_EncOpts_EncMode(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
 			}
-			m.Mode = &v
 		case 2:
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field KeyHashes", wireType)
@@ -3424,16 +3212,12 @@ func (m *TopicDescriptor_EncOpts) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthRpc
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthRpc
 			}
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}

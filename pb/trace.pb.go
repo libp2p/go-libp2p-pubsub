@@ -96,25 +96,22 @@ func (TraceEvent_Type) EnumDescriptor() ([]byte, []int) {
 }
 
 type TraceEvent struct {
-	Type                 *TraceEvent_Type             `protobuf:"varint,1,opt,name=type,enum=pubsub.pb.TraceEvent_Type" json:"type,omitempty"`
-	PeerID               []byte                       `protobuf:"bytes,2,opt,name=peerID" json:"peerID,omitempty"`
-	Timestamp            *int64                       `protobuf:"varint,3,opt,name=timestamp" json:"timestamp,omitempty"`
-	PublishMessage       *TraceEvent_PublishMessage   `protobuf:"bytes,4,opt,name=publishMessage" json:"publishMessage,omitempty"`
-	RejectMessage        *TraceEvent_RejectMessage    `protobuf:"bytes,5,opt,name=rejectMessage" json:"rejectMessage,omitempty"`
-	DuplicateMessage     *TraceEvent_DuplicateMessage `protobuf:"bytes,6,opt,name=duplicateMessage" json:"duplicateMessage,omitempty"`
-	DeliverMessage       *TraceEvent_DeliverMessage   `protobuf:"bytes,7,opt,name=deliverMessage" json:"deliverMessage,omitempty"`
-	AddPeer              *TraceEvent_AddPeer          `protobuf:"bytes,8,opt,name=addPeer" json:"addPeer,omitempty"`
-	RemovePeer           *TraceEvent_RemovePeer       `protobuf:"bytes,9,opt,name=removePeer" json:"removePeer,omitempty"`
-	RecvRPC              *TraceEvent_RecvRPC          `protobuf:"bytes,10,opt,name=recvRPC" json:"recvRPC,omitempty"`
-	SendRPC              *TraceEvent_SendRPC          `protobuf:"bytes,11,opt,name=sendRPC" json:"sendRPC,omitempty"`
-	DropRPC              *TraceEvent_DropRPC          `protobuf:"bytes,12,opt,name=dropRPC" json:"dropRPC,omitempty"`
-	Join                 *TraceEvent_Join             `protobuf:"bytes,13,opt,name=join" json:"join,omitempty"`
-	Leave                *TraceEvent_Leave            `protobuf:"bytes,14,opt,name=leave" json:"leave,omitempty"`
-	Graft                *TraceEvent_Graft            `protobuf:"bytes,15,opt,name=graft" json:"graft,omitempty"`
-	Prune                *TraceEvent_Prune            `protobuf:"bytes,16,opt,name=prune" json:"prune,omitempty"`
-	XXX_NoUnkeyedLiteral struct{}                     `json:"-"`
-	XXX_unrecognized     []byte                       `json:"-"`
-	XXX_sizecache        int32                        `json:"-"`
+	Type             TraceEvent_Type              `protobuf:"varint,1,opt,name=type,enum=pubsub.pb.TraceEvent_Type" json:"type"`
+	PeerID           []byte                       `protobuf:"bytes,2,opt,name=peerID" json:"peerID"`
+	Timestamp        int64                        `protobuf:"varint,3,opt,name=timestamp" json:"timestamp"`
+	PublishMessage   *TraceEvent_PublishMessage   `protobuf:"bytes,4,opt,name=publishMessage" json:"publishMessage,omitempty"`
+	RejectMessage    *TraceEvent_RejectMessage    `protobuf:"bytes,5,opt,name=rejectMessage" json:"rejectMessage,omitempty"`
+	DuplicateMessage *TraceEvent_DuplicateMessage `protobuf:"bytes,6,opt,name=duplicateMessage" json:"duplicateMessage,omitempty"`
+	DeliverMessage   *TraceEvent_DeliverMessage   `protobuf:"bytes,7,opt,name=deliverMessage" json:"deliverMessage,omitempty"`
+	AddPeer          *TraceEvent_AddPeer          `protobuf:"bytes,8,opt,name=addPeer" json:"addPeer,omitempty"`
+	RemovePeer       *TraceEvent_RemovePeer       `protobuf:"bytes,9,opt,name=removePeer" json:"removePeer,omitempty"`
+	RecvRPC          *TraceEvent_RecvRPC          `protobuf:"bytes,10,opt,name=recvRPC" json:"recvRPC,omitempty"`
+	SendRPC          *TraceEvent_SendRPC          `protobuf:"bytes,11,opt,name=sendRPC" json:"sendRPC,omitempty"`
+	DropRPC          *TraceEvent_DropRPC          `protobuf:"bytes,12,opt,name=dropRPC" json:"dropRPC,omitempty"`
+	Join             *TraceEvent_Join             `protobuf:"bytes,13,opt,name=join" json:"join,omitempty"`
+	Leave            *TraceEvent_Leave            `protobuf:"bytes,14,opt,name=leave" json:"leave,omitempty"`
+	Graft            *TraceEvent_Graft            `protobuf:"bytes,15,opt,name=graft" json:"graft,omitempty"`
+	Prune            *TraceEvent_Prune            `protobuf:"bytes,16,opt,name=prune" json:"prune,omitempty"`
 }
 
 func (m *TraceEvent) Reset()         { *m = TraceEvent{} }
@@ -151,8 +148,8 @@ func (m *TraceEvent) XXX_DiscardUnknown() {
 var xxx_messageInfo_TraceEvent proto.InternalMessageInfo
 
 func (m *TraceEvent) GetType() TraceEvent_Type {
-	if m != nil && m.Type != nil {
-		return *m.Type
+	if m != nil {
+		return m.Type
 	}
 	return TraceEvent_PUBLISH_MESSAGE
 }
@@ -165,8 +162,8 @@ func (m *TraceEvent) GetPeerID() []byte {
 }
 
 func (m *TraceEvent) GetTimestamp() int64 {
-	if m != nil && m.Timestamp != nil {
-		return *m.Timestamp
+	if m != nil {
+		return m.Timestamp
 	}
 	return 0
 }
@@ -263,11 +260,8 @@ func (m *TraceEvent) GetPrune() *TraceEvent_Prune {
 }
 
 type TraceEvent_PublishMessage struct {
-	MessageID            []byte   `protobuf:"bytes,1,opt,name=messageID" json:"messageID,omitempty"`
-	Topic                *string  `protobuf:"bytes,2,opt,name=topic" json:"topic,omitempty"`
-	XXX_NoUnkeyedLiteral struct{} `json:"-"`
-	XXX_unrecognized     []byte   `json:"-"`
-	XXX_sizecache        int32    `json:"-"`
+	MessageID []byte `protobuf:"bytes,1,opt,name=messageID" json:"messageID"`
+	Topic     string `protobuf:"bytes,2,opt,name=topic" json:"topic"`
 }
 
 func (m *TraceEvent_PublishMessage) Reset()         { *m = TraceEvent_PublishMessage{} }
@@ -311,20 +305,17 @@ func (m *TraceEvent_PublishMessage) GetMessageID() []byte {
 }
 
 func (m *TraceEvent_PublishMessage) GetTopic() string {
-	if m != nil && m.Topic != nil {
-		return *m.Topic
+	if m != nil {
+		return m.Topic
 	}
 	return ""
 }
 
 type TraceEvent_RejectMessage struct {
-	MessageID            []byte   `protobuf:"bytes,1,opt,name=messageID" json:"messageID,omitempty"`
-	ReceivedFrom         []byte   `protobuf:"bytes,2,opt,name=receivedFrom" json:"receivedFrom,omitempty"`
-	Reason               *string  `protobuf:"bytes,3,opt,name=reason" json:"reason,omitempty"`
-	Topic                *string  `protobuf:"bytes,4,opt,name=topic" json:"topic,omitempty"`
-	XXX_NoUnkeyedLiteral struct{} `json:"-"`
-	XXX_unrecognized     []byte   `json:"-"`
-	XXX_sizecache        int32    `json:"-"`
+	MessageID    []byte `protobuf:"bytes,1,opt,name=messageID" json:"messageID"`
+	ReceivedFrom []byte `protobuf:"bytes,2,opt,name=receivedFrom" json:"receivedFrom"`
+	Reason       string `protobuf:"bytes,3,opt,name=reason" json:"reason"`
+	Topic        string `protobuf:"bytes,4,opt,name=topic" json:"topic"`
 }
 
 func (m *TraceEvent_RejectMessage) Reset()         { *m = TraceEvent_RejectMessage{} }
@@ -375,26 +366,23 @@ func (m *TraceEvent_RejectMessage) GetReceivedFrom() []byte {
 }
 
 func (m *TraceEvent_RejectMessage) GetReason() string {
-	if m != nil && m.Reason != nil {
-		return *m.Reason
+	if m != nil {
+		return m.Reason
 	}
 	return ""
 }
 
 func (m *TraceEvent_RejectMessage) GetTopic() string {
-	if m != nil && m.Topic != nil {
-		return *m.Topic
+	if m != nil {
+		return m.Topic
 	}
 	return ""
 }
 
 type TraceEvent_DuplicateMessage struct {
-	MessageID            []byte   `protobuf:"bytes,1,opt,name=messageID" json:"messageID,omitempty"`
-	ReceivedFrom         []byte   `protobuf:"bytes,2,opt,name=receivedFrom" json:"receivedFrom,omitempty"`
-	Topic                *string  `protobuf:"bytes,3,opt,name=topic" json:"topic,omitempty"`
-	XXX_NoUnkeyedLiteral struct{} `json:"-"`
-	XXX_unrecognized     []byte   `json:"-"`
-	XXX_sizecache        int32    `json:"-"`
+	MessageID    []byte `protobuf:"bytes,1,opt,name=messageID" json:"messageID"`
+	ReceivedFrom []byte `protobuf:"bytes,2,opt,name=receivedFrom" json:"receivedFrom"`
+	Topic        string `protobuf:"bytes,3,opt,name=topic" json:"topic"`
 }
 
 func (m *TraceEvent_DuplicateMessage) Reset()         { *m = TraceEvent_DuplicateMessage{} }
@@ -445,19 +433,16 @@ func (m *TraceEvent_DuplicateMessage) GetReceivedFrom() []byte {
 }
 
 func (m *TraceEvent_DuplicateMessage) GetTopic() string {
-	if m != nil && m.Topic != nil {
-		return *m.Topic
+	if m != nil {
+		return m.Topic
 	}
 	return ""
 }
 
 type TraceEvent_DeliverMessage struct {
-	MessageID            []byte   `protobuf:"bytes,1,opt,name=messageID" json:"messageID,omitempty"`
-	Topic                *string  `protobuf:"bytes,2,opt,name=topic" json:"topic,omitempty"`
-	ReceivedFrom         []byte   `protobuf:"bytes,3,opt,name=receivedFrom" json:"receivedFrom,omitempty"`
-	XXX_NoUnkeyedLiteral struct{} `json:"-"`
-	XXX_unrecognized     []byte   `json:"-"`
-	XXX_sizecache        int32    `json:"-"`
+	MessageID    []byte `protobuf:"bytes,1,opt,name=messageID" json:"messageID"`
+	Topic        string `protobuf:"bytes,2,opt,name=topic" json:"topic"`
+	ReceivedFrom []byte `protobuf:"bytes,3,opt,name=receivedFrom" json:"receivedFrom"`
 }
 
 func (m *TraceEvent_DeliverMessage) Reset()         { *m = TraceEvent_DeliverMessage{} }
@@ -501,8 +486,8 @@ func (m *TraceEvent_DeliverMessage) GetMessageID() []byte {
 }
 
 func (m *TraceEvent_DeliverMessage) GetTopic() string {
-	if m != nil && m.Topic != nil {
-		return *m.Topic
+	if m != nil {
+		return m.Topic
 	}
 	return ""
 }
@@ -515,11 +500,8 @@ func (m *TraceEvent_DeliverMessage) GetReceivedFrom() []byte {
 }
 
 type TraceEvent_AddPeer struct {
-	PeerID               []byte   `protobuf:"bytes,1,opt,name=peerID" json:"peerID,omitempty"`
-	Proto                *string  `protobuf:"bytes,2,opt,name=proto" json:"proto,omitempty"`
-	XXX_NoUnkeyedLiteral struct{} `json:"-"`
-	XXX_unrecognized     []byte   `json:"-"`
-	XXX_sizecache        int32    `json:"-"`
+	PeerID []byte `protobuf:"bytes,1,opt,name=peerID" json:"peerID"`
+	Proto  string `protobuf:"bytes,2,opt,name=proto" json:"proto"`
 }
 
 func (m *TraceEvent_AddPeer) Reset()         { *m = TraceEvent_AddPeer{} }
@@ -563,17 +545,14 @@ func (m *TraceEvent_AddPeer) GetPeerID() []byte {
 }
 
 func (m *TraceEvent_AddPeer) GetProto() string {
-	if m != nil && m.Proto != nil {
-		return *m.Proto
+	if m != nil {
+		return m.Proto
 	}
 	return ""
 }
 
 type TraceEvent_RemovePeer struct {
-	PeerID               []byte   `protobuf:"bytes,1,opt,name=peerID" json:"peerID,omitempty"`
-	XXX_NoUnkeyedLiteral struct{} `json:"-"`
-	XXX_unrecognized     []byte   `json:"-"`
-	XXX_sizecache        int32    `json:"-"`
+	PeerID []byte `protobuf:"bytes,1,opt,name=peerID" json:"peerID"`
 }
 
 func (m *TraceEvent_RemovePeer) Reset()         { *m = TraceEvent_RemovePeer{} }
@@ -617,11 +596,8 @@ func (m *TraceEvent_RemovePeer) GetPeerID() []byte {
 }
 
 type TraceEvent_RecvRPC struct {
-	ReceivedFrom         []byte              `protobuf:"bytes,1,opt,name=receivedFrom" json:"receivedFrom,omitempty"`
-	Meta                 *TraceEvent_RPCMeta `protobuf:"bytes,2,opt,name=meta" json:"meta,omitempty"`
-	XXX_NoUnkeyedLiteral struct{}            `json:"-"`
-	XXX_unrecognized     []byte              `json:"-"`
-	XXX_sizecache        int32               `json:"-"`
+	ReceivedFrom []byte              `protobuf:"bytes,1,opt,name=receivedFrom" json:"receivedFrom"`
+	Meta         *TraceEvent_RPCMeta `protobuf:"bytes,2,opt,name=meta" json:"meta,omitempty"`
 }
 
 func (m *TraceEvent_RecvRPC) Reset()         { *m = TraceEvent_RecvRPC{} }
@@ -672,11 +648,8 @@ func (m *TraceEvent_RecvRPC) GetMeta() *TraceEvent_RPCMeta {
 }
 
 type TraceEvent_SendRPC struct {
-	SendTo               []byte              `protobuf:"bytes,1,opt,name=sendTo" json:"sendTo,omitempty"`
-	Meta                 *TraceEvent_RPCMeta `protobuf:"bytes,2,opt,name=meta" json:"meta,omitempty"`
-	XXX_NoUnkeyedLiteral struct{}            `json:"-"`
-	XXX_unrecognized     []byte              `json:"-"`
-	XXX_sizecache        int32               `json:"-"`
+	SendTo []byte              `protobuf:"bytes,1,opt,name=sendTo" json:"sendTo"`
+	Meta   *TraceEvent_RPCMeta `protobuf:"bytes,2,opt,name=meta" json:"meta,omitempty"`
 }
 
 func (m *TraceEvent_SendRPC) Reset()         { *m = TraceEvent_SendRPC{} }
@@ -727,11 +700,8 @@ func (m *TraceEvent_SendRPC) GetMeta() *TraceEvent_RPCMeta {
 }
 
 type TraceEvent_DropRPC struct {
-	SendTo               []byte              `protobuf:"bytes,1,opt,name=sendTo" json:"sendTo,omitempty"`
-	Meta                 *TraceEvent_RPCMeta `protobuf:"bytes,2,opt,name=meta" json:"meta,omitempty"`
-	XXX_NoUnkeyedLiteral struct{}            `json:"-"`
-	XXX_unrecognized     []byte              `json:"-"`
-	XXX_sizecache        int32               `json:"-"`
+	SendTo []byte              `protobuf:"bytes,1,opt,name=sendTo" json:"sendTo"`
+	Meta   *TraceEvent_RPCMeta `protobuf:"bytes,2,opt,name=meta" json:"meta,omitempty"`
 }
 
 func (m *TraceEvent_DropRPC) Reset()         { *m = TraceEvent_DropRPC{} }
@@ -782,10 +752,7 @@ func (m *TraceEvent_DropRPC) GetMeta() *TraceEvent_RPCMeta {
 }
 
 type TraceEvent_Join struct {
-	Topic                *string  `protobuf:"bytes,1,opt,name=topic" json:"topic,omitempty"`
-	XXX_NoUnkeyedLiteral struct{} `json:"-"`
-	XXX_unrecognized     []byte   `json:"-"`
-	XXX_sizecache        int32    `json:"-"`
+	Topic string `protobuf:"bytes,1,opt,name=topic" json:"topic"`
 }
 
 func (m *TraceEvent_Join) Reset()         { *m = TraceEvent_Join{} }
@@ -822,17 +789,14 @@ func (m *TraceEvent_Join) XXX_DiscardUnknown() {
 var xxx_messageInfo_TraceEvent_Join proto.InternalMessageInfo
 
 func (m *TraceEvent_Join) GetTopic() string {
-	if m != nil && m.Topic != nil {
-		return *m.Topic
+	if m != nil {
+		return m.Topic
 	}
 	return ""
 }
 
 type TraceEvent_Leave struct {
-	Topic                *string  `protobuf:"bytes,2,opt,name=topic" json:"topic,omitempty"`
-	XXX_NoUnkeyedLiteral struct{} `json:"-"`
-	XXX_unrecognized     []byte   `json:"-"`
-	XXX_sizecache        int32    `json:"-"`
+	Topic string `protobuf:"bytes,2,opt,name=topic" json:"topic"`
 }
 
 func (m *TraceEvent_Leave) Reset()         { *m = TraceEvent_Leave{} }
@@ -869,18 +833,15 @@ func (m *TraceEvent_Leave) XXX_DiscardUnknown() {
 var xxx_messageInfo_TraceEvent_Leave proto.InternalMessageInfo
 
 func (m *TraceEvent_Leave) GetTopic() string {
-	if m != nil && m.Topic != nil {
-		return *m.Topic
+	if m != nil {
+		return m.Topic
 	}
 	return ""
 }
 
 type TraceEvent_Graft struct {
-	PeerID               []byte   `protobuf:"bytes,1,opt,name=peerID" json:"peerID,omitempty"`
-	Topic                *string  `protobuf:"bytes,2,opt,name=topic" json:"topic,omitempty"`
-	XXX_NoUnkeyedLiteral struct{} `json:"-"`
-	XXX_unrecognized     []byte   `json:"-"`
-	XXX_sizecache        int32    `json:"-"`
+	PeerID []byte `protobuf:"bytes,1,opt,name=peerID" json:"peerID"`
+	Topic  string `protobuf:"bytes,2,opt,name=topic" json:"topic"`
 }
 
 func (m *TraceEvent_Graft) Reset()         { *m = TraceEvent_Graft{} }
@@ -924,18 +885,15 @@ func (m *TraceEvent_Graft) GetPeerID() []byte {
 }
 
 func (m *TraceEvent_Graft) GetTopic() string {
-	if m != nil && m.Topic != nil {
-		return *m.Topic
+	if m != nil {
+		return m.Topic
 	}
 	return ""
 }
 
 type TraceEvent_Prune struct {
-	PeerID               []byte   `protobuf:"bytes,1,opt,name=peerID" json:"peerID,omitempty"`
-	Topic                *string  `protobuf:"bytes,2,opt,name=topic" json:"topic,omitempty"`
-	XXX_NoUnkeyedLiteral struct{} `json:"-"`
-	XXX_unrecognized     []byte   `json:"-"`
-	XXX_sizecache        int32    `json:"-"`
+	PeerID []byte `protobuf:"bytes,1,opt,name=peerID" json:"peerID"`
+	Topic  string `protobuf:"bytes,2,opt,name=topic" json:"topic"`
 }
 
 func (m *TraceEvent_Prune) Reset()         { *m = TraceEvent_Prune{} }
@@ -979,19 +937,16 @@ func (m *TraceEvent_Prune) GetPeerID() []byte {
 }
 
 func (m *TraceEvent_Prune) GetTopic() string {
-	if m != nil && m.Topic != nil {
-		return *m.Topic
+	if m != nil {
+		return m.Topic
 	}
 	return ""
 }
 
 type TraceEvent_RPCMeta struct {
-	Messages             []*TraceEvent_MessageMeta `protobuf:"bytes,1,rep,name=messages" json:"messages,omitempty"`
-	Subscription         []*TraceEvent_SubMeta     `protobuf:"bytes,2,rep,name=subscription" json:"subscription,omitempty"`
-	Control              *TraceEvent_ControlMeta   `protobuf:"bytes,3,opt,name=control" json:"control,omitempty"`
-	XXX_NoUnkeyedLiteral struct{}                  `json:"-"`
-	XXX_unrecognized     []byte                    `json:"-"`
-	XXX_sizecache        int32                     `json:"-"`
+	Messages     []*TraceEvent_MessageMeta `protobuf:"bytes,1,rep,name=messages" json:"messages,omitempty"`
+	Subscription []*TraceEvent_SubMeta     `protobuf:"bytes,2,rep,name=subscription" json:"subscription,omitempty"`
+	Control      *TraceEvent_ControlMeta   `protobuf:"bytes,3,opt,name=control" json:"control,omitempty"`
 }
 
 func (m *TraceEvent_RPCMeta) Reset()         { *m = TraceEvent_RPCMeta{} }
@@ -1049,11 +1004,8 @@ func (m *TraceEvent_RPCMeta) GetControl() *TraceEvent_ControlMeta {
 }
 
 type TraceEvent_MessageMeta struct {
-	MessageID            []byte   `protobuf:"bytes,1,opt,name=messageID" json:"messageID,omitempty"`
-	Topic                *string  `protobuf:"bytes,2,opt,name=topic" json:"topic,omitempty"`
-	XXX_NoUnkeyedLiteral struct{} `json:"-"`
-	XXX_unrecognized     []byte   `json:"-"`
-	XXX_sizecache        int32    `json:"-"`
+	MessageID []byte `protobuf:"bytes,1,opt,name=messageID" json:"messageID"`
+	Topic     string `protobuf:"bytes,2,opt,name=topic" json:"topic"`
 }
 
 func (m *TraceEvent_MessageMeta) Reset()         { *m = TraceEvent_MessageMeta{} }
@@ -1097,18 +1049,15 @@ func (m *TraceEvent_MessageMeta) GetMessageID() []byte {
 }
 
 func (m *TraceEvent_MessageMeta) GetTopic() string {
-	if m != nil && m.Topic != nil {
-		return *m.Topic
+	if m != nil {
+		return m.Topic
 	}
 	return ""
 }
 
 type TraceEvent_SubMeta struct {
-	Subscribe            *bool    `protobuf:"varint,1,opt,name=subscribe" json:"subscribe,omitempty"`
-	Topic                *string  `protobuf:"bytes,2,opt,name=topic" json:"topic,omitempty"`
-	XXX_NoUnkeyedLiteral struct{} `json:"-"`
-	XXX_unrecognized     []byte   `json:"-"`
-	XXX_sizecache        int32    `json:"-"`
+	Subscribe bool   `protobuf:"varint,1,opt,name=subscribe" json:"subscribe"`
+	Topic     string `protobuf:"bytes,2,opt,name=topic" json:"topic"`
 }
 
 func (m *TraceEvent_SubMeta) Reset()         { *m = TraceEvent_SubMeta{} }
@@ -1145,27 +1094,24 @@ func (m *TraceEvent_SubMeta) XXX_DiscardUnknown() {
 var xxx_messageInfo_TraceEvent_SubMeta proto.InternalMessageInfo
 
 func (m *TraceEvent_SubMeta) GetSubscribe() bool {
-	if m != nil && m.Subscribe != nil {
-		return *m.Subscribe
+	if m != nil {
+		return m.Subscribe
 	}
 	return false
 }
 
 func (m *TraceEvent_SubMeta) GetTopic() string {
-	if m != nil && m.Topic != nil {
-		return *m.Topic
+	if m != nil {
+		return m.Topic
 	}
 	return ""
 }
 
 type TraceEvent_ControlMeta struct {
-	Ihave                []*TraceEvent_ControlIHaveMeta `protobuf:"bytes,1,rep,name=ihave" json:"ihave,omitempty"`
-	Iwant                []*TraceEvent_ControlIWantMeta `protobuf:"bytes,2,rep,name=iwant" json:"iwant,omitempty"`
-	Graft                []*TraceEvent_ControlGraftMeta `protobuf:"bytes,3,rep,name=graft" json:"graft,omitempty"`
-	Prune                []*TraceEvent_ControlPruneMeta `protobuf:"bytes,4,rep,name=prune" json:"prune,omitempty"`
-	XXX_NoUnkeyedLiteral struct{}                       `json:"-"`
-	XXX_unrecognized     []byte                         `json:"-"`
-	XXX_sizecache        int32                          `json:"-"`
+	Ihave []*TraceEvent_ControlIHaveMeta `protobuf:"bytes,1,rep,name=ihave" json:"ihave,omitempty"`
+	Iwant []*TraceEvent_ControlIWantMeta `protobuf:"bytes,2,rep,name=iwant" json:"iwant,omitempty"`
+	Graft []*TraceEvent_ControlGraftMeta `protobuf:"bytes,3,rep,name=graft" json:"graft,omitempty"`
+	Prune []*TraceEvent_ControlPruneMeta `protobuf:"bytes,4,rep,name=prune" json:"prune,omitempty"`
 }
 
 func (m *TraceEvent_ControlMeta) Reset()         { *m = TraceEvent_ControlMeta{} }
@@ -1230,11 +1176,8 @@ func (m *TraceEvent_ControlMeta) GetPrune() []*TraceEvent_ControlPruneMeta {
 }
 
 type TraceEvent_ControlIHaveMeta struct {
-	Topic                *string  `protobuf:"bytes,1,opt,name=topic" json:"topic,omitempty"`
-	MessageIDs           [][]byte `protobuf:"bytes,2,rep,name=messageIDs" json:"messageIDs,omitempty"`
-	XXX_NoUnkeyedLiteral struct{} `json:"-"`
-	XXX_unrecognized     []byte   `json:"-"`
-	XXX_sizecache        int32    `json:"-"`
+	Topic      string   `protobuf:"bytes,1,opt,name=topic" json:"topic"`
+	MessageIDs [][]byte `protobuf:"bytes,2,rep,name=messageIDs" json:"messageIDs,omitempty"`
 }
 
 func (m *TraceEvent_ControlIHaveMeta) Reset()         { *m = TraceEvent_ControlIHaveMeta{} }
@@ -1271,8 +1214,8 @@ func (m *TraceEvent_ControlIHaveMeta) XXX_DiscardUnknown() {
 var xxx_messageInfo_TraceEvent_ControlIHaveMeta proto.InternalMessageInfo
 
 func (m *TraceEvent_ControlIHaveMeta) GetTopic() string {
-	if m != nil && m.Topic != nil {
-		return *m.Topic
+	if m != nil {
+		return m.Topic
 	}
 	return ""
 }
@@ -1285,10 +1228,7 @@ func (m *TraceEvent_ControlIHaveMeta) GetMessageIDs() [][]byte {
 }
 
 type TraceEvent_ControlIWantMeta struct {
-	MessageIDs           [][]byte `protobuf:"bytes,1,rep,name=messageIDs" json:"messageIDs,omitempty"`
-	XXX_NoUnkeyedLiteral struct{} `json:"-"`
-	XXX_unrecognized     []byte   `json:"-"`
-	XXX_sizecache        int32    `json:"-"`
+	MessageIDs [][]byte `protobuf:"bytes,1,rep,name=messageIDs" json:"messageIDs,omitempty"`
 }
 
 func (m *TraceEvent_ControlIWantMeta) Reset()         { *m = TraceEvent_ControlIWantMeta{} }
@@ -1332,10 +1272,7 @@ func (m *TraceEvent_ControlIWantMeta) GetMessageIDs() [][]byte {
 }
 
 type TraceEvent_ControlGraftMeta struct {
-	Topic                *string  `protobuf:"bytes,1,opt,name=topic" json:"topic,omitempty"`
-	XXX_NoUnkeyedLiteral struct{} `json:"-"`
-	XXX_unrecognized     []byte   `json:"-"`
-	XXX_sizecache        int32    `json:"-"`
+	Topic string `protobuf:"bytes,1,opt,name=topic" json:"topic"`
 }
 
 func (m *TraceEvent_ControlGraftMeta) Reset()         { *m = TraceEvent_ControlGraftMeta{} }
@@ -1372,18 +1309,15 @@ func (m *TraceEvent_ControlGraftMeta) XXX_DiscardUnknown() {
 var xxx_messageInfo_TraceEvent_ControlGraftMeta proto.InternalMessageInfo
 
 func (m *TraceEvent_ControlGraftMeta) GetTopic() string {
-	if m != nil && m.Topic != nil {
-		return *m.Topic
+	if m != nil {
+		return m.Topic
 	}
 	return ""
 }
 
 type TraceEvent_ControlPruneMeta struct {
-	Topic                *string  `protobuf:"bytes,1,opt,name=topic" json:"topic,omitempty"`
-	Peers                [][]byte `protobuf:"bytes,2,rep,name=peers" json:"peers,omitempty"`
-	XXX_NoUnkeyedLiteral struct{} `json:"-"`
-	XXX_unrecognized     []byte   `json:"-"`
-	XXX_sizecache        int32    `json:"-"`
+	Topic string   `protobuf:"bytes,1,opt,name=topic" json:"topic"`
+	Peers [][]byte `protobuf:"bytes,2,rep,name=peers" json:"peers,omitempty"`
 }
 
 func (m *TraceEvent_ControlPruneMeta) Reset()         { *m = TraceEvent_ControlPruneMeta{} }
@@ -1420,8 +1354,8 @@ func (m *TraceEvent_ControlPruneMeta) XXX_DiscardUnknown() {
 var xxx_messageInfo_TraceEvent_ControlPruneMeta proto.InternalMessageInfo
 
 func (m *TraceEvent_ControlPruneMeta) GetTopic() string {
-	if m != nil && m.Topic != nil {
-		return *m.Topic
+	if m != nil {
+		return m.Topic
 	}
 	return ""
 }
@@ -1434,10 +1368,7 @@ func (m *TraceEvent_ControlPruneMeta) GetPeers() [][]byte {
 }
 
 type TraceEventBatch struct {
-	Batch                []*TraceEvent `protobuf:"bytes,1,rep,name=batch" json:"batch,omitempty"`
-	XXX_NoUnkeyedLiteral struct{}      `json:"-"`
-	XXX_unrecognized     []byte        `json:"-"`
-	XXX_sizecache        int32         `json:"-"`
+	Batch []*TraceEvent `protobuf:"bytes,1,rep,name=batch" json:"batch,omitempty"`
 }
 
 func (m *TraceEventBatch) Reset()         { *m = TraceEventBatch{} }
@@ -1510,70 +1441,72 @@ func init() {
 func init() { proto.RegisterFile("trace.proto", fileDescriptor_0571941a1d628a80) }
 
 var fileDescriptor_0571941a1d628a80 = []byte{
-	// 999 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xac, 0x96, 0x51, 0x6f, 0xda, 0x56,
-	0x14, 0xc7, 0xe7, 0x00, 0x01, 0x0e, 0x84, 0x78, 0x77, 0x6d, 0x65, 0xb1, 0x36, 0x62, 0x59, 0x55,
-	0x21, 0x4d, 0x42, 0x6a, 0xa4, 0xa9, 0x0f, 0x6b, 0xab, 0x11, 0xec, 0x26, 0x44, 0x24, 0xb1, 0x0e,
-	0x24, 0x7b, 0xcc, 0x0c, 0xdc, 0x35, 0x8e, 0xc0, 0xb6, 0xec, 0x0b, 0x53, 0x9f, 0xf6, 0xb4, 0xef,
-	0xd6, 0xb7, 0xed, 0x23, 0x54, 0xf9, 0x24, 0xd3, 0xbd, 0xd7, 0x36, 0x36, 0xd8, 0xb4, 0x8b, 0xfa,
-	0xe6, 0x73, 0xf3, 0xff, 0x9d, 0x7b, 0xce, 0xbd, 0xe7, 0x7f, 0x03, 0xd4, 0x98, 0x6f, 0x4d, 0x68,
-	0xc7, 0xf3, 0x5d, 0xe6, 0x92, 0xaa, 0xb7, 0x18, 0x07, 0x8b, 0x71, 0xc7, 0x1b, 0x1f, 0x7e, 0x7a,
-	0x02, 0x30, 0xe2, 0x7f, 0x32, 0x96, 0xd4, 0x61, 0xa4, 0x03, 0x45, 0xf6, 0xc1, 0xa3, 0x9a, 0xd2,
-	0x52, 0xda, 0x8d, 0xa3, 0x66, 0x27, 0x16, 0x76, 0x56, 0xa2, 0xce, 0xe8, 0x83, 0x47, 0x51, 0xe8,
-	0xc8, 0x13, 0xd8, 0xf5, 0x28, 0xf5, 0xfb, 0xba, 0xb6, 0xd3, 0x52, 0xda, 0x75, 0x0c, 0x23, 0xf2,
-	0x14, 0xaa, 0xcc, 0x9e, 0xd3, 0x80, 0x59, 0x73, 0x4f, 0x2b, 0xb4, 0x94, 0x76, 0x01, 0x57, 0x0b,
-	0x64, 0x00, 0x0d, 0x6f, 0x31, 0x9e, 0xd9, 0xc1, 0xed, 0x39, 0x0d, 0x02, 0xeb, 0x3d, 0xd5, 0x8a,
-	0x2d, 0xa5, 0x5d, 0x3b, 0x7a, 0x9e, 0xbd, 0x9f, 0x99, 0xd2, 0xe2, 0x1a, 0x4b, 0xfa, 0xb0, 0xe7,
-	0xd3, 0x3b, 0x3a, 0x61, 0x51, 0xb2, 0x92, 0x48, 0xf6, 0x63, 0x76, 0x32, 0x4c, 0x4a, 0x31, 0x4d,
-	0x12, 0x04, 0x75, 0xba, 0xf0, 0x66, 0xf6, 0xc4, 0x62, 0x34, 0xca, 0xb6, 0x2b, 0xb2, 0xbd, 0xc8,
-	0xce, 0xa6, 0xaf, 0xa9, 0x71, 0x83, 0xe7, 0xcd, 0x4e, 0xe9, 0xcc, 0x5e, 0x52, 0x3f, 0xca, 0x58,
-	0xde, 0xd6, 0xac, 0x9e, 0xd2, 0xe2, 0x1a, 0x4b, 0x5e, 0x41, 0xd9, 0x9a, 0x4e, 0x4d, 0x4a, 0x7d,
-	0xad, 0x22, 0xd2, 0x3c, 0xcb, 0x4e, 0xd3, 0x95, 0x22, 0x8c, 0xd4, 0xe4, 0x57, 0x00, 0x9f, 0xce,
-	0xdd, 0x25, 0x15, 0x6c, 0x55, 0xb0, 0xad, 0xbc, 0x23, 0x8a, 0x74, 0x98, 0x60, 0xf8, 0xd6, 0x3e,
-	0x9d, 0x2c, 0xd1, 0xec, 0x69, 0xb0, 0x6d, 0x6b, 0x94, 0x22, 0x8c, 0xd4, 0x1c, 0x0c, 0xa8, 0x33,
-	0xe5, 0x60, 0x6d, 0x1b, 0x38, 0x94, 0x22, 0x8c, 0xd4, 0x1c, 0x9c, 0xfa, 0xae, 0xc7, 0xc1, 0xfa,
-	0x36, 0x50, 0x97, 0x22, 0x8c, 0xd4, 0x7c, 0x8c, 0xef, 0x5c, 0xdb, 0xd1, 0xf6, 0x04, 0x95, 0x33,
-	0xc6, 0x67, 0xae, 0xed, 0xa0, 0xd0, 0x91, 0x97, 0x50, 0x9a, 0x51, 0x6b, 0x49, 0xb5, 0x86, 0x00,
-	0xbe, 0xcf, 0x06, 0x06, 0x5c, 0x82, 0x52, 0xc9, 0x91, 0xf7, 0xbe, 0xf5, 0x07, 0xd3, 0xf6, 0xb7,
-	0x21, 0x27, 0x5c, 0x82, 0x52, 0xc9, 0x11, 0xcf, 0x5f, 0x38, 0x54, 0x53, 0xb7, 0x21, 0x26, 0x97,
-	0xa0, 0x54, 0x36, 0x75, 0x68, 0xa4, 0xa7, 0x9f, 0x3b, 0x6b, 0x2e, 0x3f, 0xfb, 0xba, 0xb0, 0x69,
-	0x1d, 0x57, 0x0b, 0xe4, 0x11, 0x94, 0x98, 0xeb, 0xd9, 0x13, 0x61, 0xc7, 0x2a, 0xca, 0xa0, 0xf9,
-	0x17, 0xec, 0xa5, 0xc6, 0xfe, 0x33, 0x49, 0x0e, 0xa1, 0xee, 0xd3, 0x09, 0xb5, 0x97, 0x74, 0xfa,
-	0xce, 0x77, 0xe7, 0xa1, 0xb5, 0x53, 0x6b, 0xdc, 0xf8, 0x3e, 0xb5, 0x02, 0xd7, 0x11, 0xee, 0xae,
-	0x62, 0x18, 0xad, 0x0a, 0x28, 0x26, 0x0b, 0xb8, 0x03, 0x75, 0xdd, 0x29, 0x5f, 0xa1, 0x86, 0x78,
-	0xaf, 0x42, 0x72, 0xaf, 0x5b, 0x68, 0xa4, 0x3d, 0xf4, 0x90, 0x23, 0xdb, 0xd8, 0xbf, 0xb0, 0xb9,
-	0x7f, 0xf3, 0x15, 0x94, 0x43, 0x9b, 0x25, 0xde, 0x41, 0x25, 0xf5, 0x0e, 0x3e, 0xe2, 0x57, 0xee,
-	0x32, 0x37, 0x4a, 0x2e, 0x82, 0xe6, 0x73, 0x80, 0x95, 0xc7, 0xf2, 0xd8, 0xe6, 0xef, 0x50, 0x0e,
-	0xad, 0xb4, 0x51, 0x8d, 0x92, 0x71, 0x1a, 0x2f, 0xa1, 0x38, 0xa7, 0xcc, 0x12, 0x3b, 0xe5, 0x7b,
-	0xd3, 0xec, 0x9d, 0x53, 0x66, 0xa1, 0x90, 0x36, 0x47, 0x50, 0x0e, 0x3d, 0xc7, 0x8b, 0xe0, 0xae,
-	0x1b, 0xb9, 0x51, 0x11, 0x32, 0x7a, 0x60, 0xd6, 0xd0, 0x90, 0x5f, 0x33, 0xeb, 0x53, 0x28, 0x72,
-	0xc3, 0xae, 0xae, 0x4b, 0x49, 0x5e, 0xfa, 0x33, 0x28, 0x09, 0x77, 0xe6, 0x18, 0xe0, 0x67, 0x28,
-	0x09, 0x27, 0x6e, 0xbb, 0xa7, 0x6c, 0x4c, 0xb8, 0xf1, 0x7f, 0x62, 0x1f, 0x15, 0x28, 0x87, 0xc5,
-	0x93, 0x37, 0x50, 0x09, 0x47, 0x2d, 0xd0, 0x94, 0x56, 0xa1, 0x5d, 0x3b, 0xfa, 0x21, 0xbb, 0xdb,
-	0x70, 0x58, 0x45, 0xc7, 0x31, 0x42, 0xba, 0x50, 0x0f, 0x16, 0xe3, 0x60, 0xe2, 0xdb, 0x1e, 0xb3,
-	0x5d, 0x47, 0xdb, 0x11, 0x29, 0xf2, 0xde, 0xcf, 0xc5, 0x58, 0xe0, 0x29, 0x84, 0xfc, 0x02, 0xe5,
-	0x89, 0xeb, 0x30, 0xdf, 0x9d, 0x89, 0x21, 0xce, 0x2d, 0xa0, 0x27, 0x45, 0x22, 0x43, 0x44, 0x34,
-	0xbb, 0x50, 0x4b, 0x14, 0xf6, 0xa0, 0xc7, 0xe7, 0x0d, 0x94, 0xc3, 0xc2, 0x38, 0x1e, 0x96, 0x36,
-	0x96, 0x3f, 0x31, 0x2a, 0xb8, 0x5a, 0xc8, 0xc1, 0xff, 0xde, 0x81, 0x5a, 0xa2, 0x34, 0xf2, 0x1a,
-	0x4a, 0xf6, 0x2d, 0x7f, 0xaa, 0xe5, 0x69, 0xbe, 0xd8, 0xda, 0x4c, 0xff, 0xd4, 0x5a, 0xca, 0x23,
-	0x95, 0x90, 0xa0, 0xff, 0xb4, 0x1c, 0x16, 0x1e, 0xe4, 0x67, 0xe8, 0xdf, 0x2c, 0x87, 0x85, 0x34,
-	0x87, 0x38, 0x2d, 0xdf, 0xfc, 0xc2, 0x17, 0xd0, 0x62, 0xe0, 0x24, 0x2d, 0x9f, 0xff, 0xd7, 0xd1,
-	0xf3, 0x5f, 0xfc, 0x02, 0x5a, 0xcc, 0x9d, 0xa4, 0xe5, 0x7f, 0x82, 0x53, 0x50, 0xd7, 0x9b, 0xca,
-	0xf6, 0x02, 0x39, 0x00, 0x88, 0xef, 0x24, 0x10, 0x8d, 0xd6, 0x31, 0xb1, 0xd2, 0x3c, 0x5a, 0x65,
-	0x8a, 0x1a, 0x5c, 0x63, 0x94, 0x0d, 0xa6, 0x1d, 0x33, 0x71, 0x5b, 0x39, 0x4e, 0x7c, 0x1b, 0x2b,
-	0xe3, 0x16, 0x72, 0xea, 0xe4, 0x6f, 0x23, 0xa5, 0x7e, 0x54, 0xa2, 0x0c, 0x0e, 0xff, 0x51, 0xa0,
-	0xc8, 0x7f, 0x60, 0x92, 0xef, 0x60, 0xdf, 0xbc, 0x3a, 0x1e, 0xf4, 0x87, 0xa7, 0x37, 0xe7, 0xc6,
-	0x70, 0xd8, 0x3d, 0x31, 0xd4, 0x6f, 0x08, 0x81, 0x06, 0x1a, 0x67, 0x46, 0x6f, 0x14, 0xaf, 0x29,
-	0xe4, 0x31, 0x7c, 0xab, 0x5f, 0x99, 0x83, 0x7e, 0xaf, 0x3b, 0x32, 0xe2, 0xe5, 0x1d, 0xce, 0xeb,
-	0xc6, 0xa0, 0x7f, 0x6d, 0x60, 0xbc, 0x58, 0x20, 0x75, 0xa8, 0x74, 0x75, 0xfd, 0xc6, 0x34, 0x0c,
-	0x54, 0x8b, 0x64, 0x1f, 0x6a, 0x68, 0x9c, 0x5f, 0x5e, 0x1b, 0x72, 0xa1, 0xc4, 0xff, 0x8c, 0x46,
-	0xef, 0xfa, 0x06, 0xcd, 0x9e, 0xba, 0xcb, 0xa3, 0xa1, 0x71, 0xa1, 0x8b, 0xa8, 0xcc, 0x23, 0x1d,
-	0x2f, 0x4d, 0x11, 0x55, 0x48, 0x05, 0x8a, 0x67, 0x97, 0xfd, 0x0b, 0xb5, 0x4a, 0xaa, 0x50, 0x1a,
-	0x18, 0xdd, 0x6b, 0x43, 0x05, 0xfe, 0x79, 0x82, 0xdd, 0x77, 0x23, 0xb5, 0xc6, 0x3f, 0x4d, 0xbc,
-	0xba, 0x30, 0xd4, 0xfa, 0xe1, 0x5b, 0xd8, 0x5f, 0xdd, 0xef, 0xb1, 0xc5, 0x26, 0xb7, 0xe4, 0x27,
-	0x28, 0x8d, 0xf9, 0x47, 0x38, 0xc4, 0x8f, 0x33, 0x47, 0x01, 0xa5, 0xe6, 0xb8, 0xfe, 0xf1, 0xfe,
-	0x40, 0xf9, 0xf7, 0xfe, 0x40, 0xf9, 0x74, 0x7f, 0xa0, 0xfc, 0x17, 0x00, 0x00, 0xff, 0xff, 0xdb,
-	0x3a, 0x1c, 0xe4, 0xc9, 0x0b, 0x00, 0x00,
+	// 1036 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xac, 0x96, 0x4f, 0x6f, 0xe3, 0x44,
+	0x18, 0xc6, 0xe3, 0xc6, 0x6e, 0x92, 0x37, 0x69, 0x6a, 0x06, 0x56, 0xb2, 0x0c, 0x84, 0x90, 0x45,
+	0xab, 0x08, 0xa4, 0x48, 0x5b, 0x21, 0x71, 0x60, 0x41, 0xa4, 0xb1, 0xb7, 0x9b, 0x2a, 0x69, 0xad,
+	0x49, 0x5a, 0x24, 0x2e, 0x95, 0x93, 0xcc, 0x6e, 0xbd, 0x4a, 0x6c, 0xcb, 0x9e, 0x04, 0x2d, 0xe2,
+	0xca, 0x9d, 0x1b, 0x9f, 0x82, 0xef, 0xd1, 0x1b, 0x7b, 0xe4, 0x84, 0x50, 0xfb, 0x45, 0xd0, 0xcc,
+	0xd8, 0x4e, 0x9c, 0x3f, 0xde, 0x8a, 0xee, 0xcd, 0x7e, 0xfd, 0xfc, 0x9e, 0x79, 0x67, 0x3c, 0xcf,
+	0xd8, 0x50, 0xa6, 0x81, 0x3d, 0x26, 0x2d, 0x3f, 0xf0, 0xa8, 0x87, 0x4a, 0xfe, 0x7c, 0x14, 0xce,
+	0x47, 0x2d, 0x7f, 0xd4, 0xf8, 0x53, 0x03, 0x18, 0xb2, 0x47, 0xe6, 0x82, 0xb8, 0x14, 0x7d, 0x0d,
+	0x32, 0x7d, 0xe3, 0x13, 0x4d, 0xaa, 0x4b, 0xcd, 0xea, 0x91, 0xde, 0x4a, 0x84, 0xad, 0xa5, 0xa8,
+	0x35, 0x7c, 0xe3, 0x93, 0x63, 0xf9, 0xe6, 0x9f, 0xcf, 0x72, 0x98, 0xab, 0xd1, 0x27, 0xb0, 0xef,
+	0x13, 0x12, 0x74, 0x0d, 0x6d, 0xaf, 0x2e, 0x35, 0x2b, 0xd1, 0xb3, 0xa8, 0x86, 0x1a, 0x50, 0xa2,
+	0xce, 0x8c, 0x84, 0xd4, 0x9e, 0xf9, 0x5a, 0xbe, 0x2e, 0x35, 0xf3, 0x91, 0x60, 0x59, 0x46, 0x3d,
+	0xa8, 0xfa, 0xf3, 0xd1, 0xd4, 0x09, 0xaf, 0xfb, 0x24, 0x0c, 0xed, 0x57, 0x44, 0x93, 0xeb, 0x52,
+	0xb3, 0x7c, 0xf4, 0xc5, 0xf6, 0x0e, 0xac, 0x94, 0x16, 0xaf, 0xb1, 0xa8, 0x0b, 0x07, 0x01, 0x79,
+	0x4d, 0xc6, 0x34, 0x36, 0x53, 0xb8, 0xd9, 0xe3, 0xed, 0x66, 0x78, 0x55, 0x8a, 0xd3, 0x24, 0xc2,
+	0xa0, 0x4e, 0xe6, 0xfe, 0xd4, 0x19, 0xdb, 0x94, 0xc4, 0x6e, 0xfb, 0xdc, 0xed, 0xc9, 0x76, 0x37,
+	0x63, 0x4d, 0x8d, 0x37, 0x78, 0x36, 0xd9, 0x09, 0x99, 0x3a, 0x0b, 0x12, 0xc4, 0x8e, 0x85, 0xac,
+	0xc9, 0x1a, 0x29, 0x2d, 0x5e, 0x63, 0xd1, 0x37, 0x50, 0xb0, 0x27, 0x13, 0x8b, 0x90, 0x40, 0x2b,
+	0x72, 0x9b, 0x4f, 0xb7, 0xdb, 0xb4, 0x85, 0x08, 0xc7, 0x6a, 0xf4, 0x03, 0x40, 0x40, 0x66, 0xde,
+	0x82, 0x70, 0xb6, 0xc4, 0xd9, 0xfa, 0xae, 0x25, 0x8a, 0x75, 0x78, 0x85, 0x61, 0x43, 0x07, 0x64,
+	0xbc, 0xc0, 0x56, 0x47, 0x83, 0xac, 0xa1, 0xb1, 0x10, 0xe1, 0x58, 0xcd, 0xc0, 0x90, 0xb8, 0x13,
+	0x06, 0x96, 0xb3, 0xc0, 0x81, 0x10, 0xe1, 0x58, 0xcd, 0xc0, 0x49, 0xe0, 0xf9, 0x0c, 0xac, 0x64,
+	0x81, 0x86, 0x10, 0xe1, 0x58, 0x8d, 0x5a, 0x20, 0xbf, 0xf6, 0x1c, 0x57, 0x3b, 0xe0, 0xd4, 0x8e,
+	0x8d, 0x7d, 0xea, 0x39, 0x2e, 0xe6, 0x3a, 0xf4, 0x14, 0x94, 0x29, 0xb1, 0x17, 0x44, 0xab, 0x72,
+	0xe0, 0xe3, 0xed, 0x40, 0x8f, 0x49, 0xb0, 0x50, 0x32, 0xe4, 0x55, 0x60, 0xbf, 0xa4, 0xda, 0x61,
+	0x16, 0x72, 0xc2, 0x24, 0x58, 0x28, 0x19, 0xe2, 0x07, 0x73, 0x97, 0x68, 0x6a, 0x16, 0x62, 0x31,
+	0x09, 0x16, 0x4a, 0xdd, 0x82, 0x6a, 0x7a, 0xf7, 0xb3, 0x7c, 0xcd, 0xc4, 0x65, 0xd7, 0xe0, 0xc1,
+	0x8d, 0x03, 0xb8, 0x2c, 0x23, 0x1d, 0x14, 0xea, 0xf9, 0xce, 0x98, 0x07, 0xb4, 0x14, 0x3d, 0x17,
+	0x25, 0xfd, 0x0f, 0x09, 0x0e, 0x52, 0x19, 0xb8, 0x97, 0x63, 0x13, 0x2a, 0x01, 0x19, 0x13, 0x67,
+	0x41, 0x26, 0xcf, 0x03, 0x6f, 0x96, 0x4a, 0x7e, 0xea, 0x09, 0x3b, 0x1d, 0x02, 0x62, 0x87, 0x9e,
+	0xcb, 0xc3, 0x1f, 0x0f, 0x1e, 0xd5, 0x96, 0x9d, 0xc9, 0x9b, 0x9d, 0xfd, 0x0a, 0xea, 0x7a, 0x9c,
+	0xde, 0x73, 0x6f, 0xc9, 0xe8, 0xf9, 0xcd, 0xd1, 0x7f, 0x81, 0x6a, 0x3a, 0x7a, 0x0f, 0x5d, 0xe9,
+	0x8d, 0xbe, 0xf2, 0xbb, 0xfa, 0xd2, 0x3b, 0x50, 0x88, 0xf2, 0xba, 0x72, 0xb8, 0x4a, 0x5b, 0x0e,
+	0x57, 0x9d, 0xed, 0x20, 0x8f, 0x7a, 0xe9, 0xe1, 0x78, 0x49, 0xff, 0x12, 0x60, 0x19, 0xdc, 0x6c,
+	0x1f, 0xfd, 0x25, 0x14, 0xa2, 0x94, 0x6e, 0x74, 0x29, 0xed, 0x5c, 0xbd, 0xa7, 0x20, 0xcf, 0x08,
+	0xb5, 0xf9, 0xd8, 0xbb, 0xc3, 0x6f, 0x75, 0xfa, 0x84, 0xda, 0x98, 0x4b, 0xf5, 0x9f, 0xa0, 0x10,
+	0x85, 0x9a, 0x35, 0xc4, 0x62, 0x3d, 0xf4, 0xd2, 0x0d, 0x89, 0xda, 0xff, 0xf4, 0x8e, 0x72, 0xff,
+	0xfe, 0xbd, 0x1b, 0x20, 0xb3, 0xd3, 0x61, 0xf9, 0x7a, 0xa5, 0xcd, 0x0d, 0xf3, 0x18, 0x14, 0x7e,
+	0x20, 0x64, 0xa6, 0xad, 0x0d, 0x0a, 0x3f, 0x02, 0xde, 0xfd, 0x5e, 0xb3, 0x2c, 0xf8, 0x91, 0xf0,
+	0x00, 0x8b, 0x1b, 0x09, 0x0a, 0xd1, 0x04, 0xd1, 0x77, 0x50, 0x8c, 0xb6, 0x6f, 0xa8, 0x49, 0xf5,
+	0x7c, 0xb3, 0x7c, 0xf4, 0xf9, 0xf6, 0x15, 0x89, 0x62, 0xc0, 0x57, 0x25, 0x41, 0x50, 0x1b, 0x2a,
+	0xe1, 0x7c, 0x14, 0x8e, 0x03, 0xc7, 0xa7, 0x8e, 0xe7, 0x6a, 0x7b, 0xdc, 0x62, 0xd7, 0x81, 0x3e,
+	0x1f, 0x71, 0x3c, 0x85, 0xa0, 0x6f, 0xa1, 0x30, 0xf6, 0x5c, 0x1a, 0x78, 0x53, 0x1e, 0x89, 0x9d,
+	0x0d, 0x74, 0x84, 0x88, 0x3b, 0xc4, 0x84, 0xde, 0x87, 0xf2, 0x4a, 0x63, 0x0f, 0x3e, 0x0d, 0xbb,
+	0x50, 0x88, 0x9a, 0x64, 0x56, 0x51, 0x9b, 0x23, 0xf1, 0x47, 0x54, 0x8c, 0xad, 0x92, 0x72, 0xa6,
+	0xd5, 0x6f, 0x7b, 0x50, 0x5e, 0x69, 0x19, 0x3d, 0x03, 0xc5, 0xb9, 0x66, 0xdf, 0x14, 0xb1, 0xca,
+	0x4f, 0x32, 0x27, 0xd9, 0x7d, 0x61, 0x2f, 0xc4, 0x52, 0x0b, 0x88, 0xd3, 0x3f, 0xdb, 0x2e, 0x8d,
+	0x16, 0xf8, 0x1d, 0xf4, 0x8f, 0xb6, 0x4b, 0x23, 0x9a, 0x41, 0x8c, 0x16, 0x1f, 0xa7, 0xfc, 0x3d,
+	0x68, 0xbe, 0x41, 0x05, 0x2d, 0xbe, 0x53, 0xcf, 0xe2, 0xef, 0x94, 0x7c, 0x0f, 0x9a, 0xef, 0x4d,
+	0x41, 0x8b, 0x4f, 0xd6, 0x19, 0xa8, 0xeb, 0x93, 0xca, 0xca, 0x11, 0xaa, 0x01, 0x24, 0xef, 0x2a,
+	0xe4, 0xd3, 0xad, 0xe0, 0x95, 0x8a, 0x7e, 0xb4, 0xf4, 0x8b, 0xa7, 0xb9, 0xc6, 0x48, 0x1b, 0x4c,
+	0x2b, 0x61, 0x92, 0xc9, 0x65, 0x66, 0xd9, 0x48, 0xf4, 0xc9, 0x74, 0x32, 0x7b, 0xfe, 0x08, 0x14,
+	0x16, 0xbb, 0xb8, 0x5d, 0x71, 0xd3, 0xf8, 0x4b, 0x02, 0x99, 0xfd, 0x2d, 0xa3, 0x0f, 0xe1, 0xd0,
+	0xba, 0x38, 0xee, 0x75, 0x07, 0x2f, 0xae, 0xfa, 0xe6, 0x60, 0xd0, 0x3e, 0x31, 0xd5, 0x1c, 0x42,
+	0x50, 0xc5, 0xe6, 0xa9, 0xd9, 0x19, 0x26, 0x35, 0x09, 0x3d, 0x82, 0x0f, 0x8c, 0x0b, 0xab, 0xd7,
+	0xed, 0xb4, 0x87, 0x66, 0x52, 0xde, 0x63, 0xbc, 0x61, 0xf6, 0xba, 0x97, 0x26, 0x4e, 0x8a, 0x79,
+	0x54, 0x81, 0x62, 0xdb, 0x30, 0xae, 0x2c, 0xd3, 0xc4, 0xaa, 0x8c, 0x0e, 0xa1, 0x8c, 0xcd, 0xfe,
+	0xf9, 0xa5, 0x29, 0x0a, 0x0a, 0x7b, 0x8c, 0xcd, 0xce, 0xe5, 0x15, 0xb6, 0x3a, 0xea, 0x3e, 0xbb,
+	0x1b, 0x98, 0x67, 0x06, 0xbf, 0x2b, 0xb0, 0x3b, 0x03, 0x9f, 0x5b, 0xfc, 0xae, 0x88, 0x8a, 0x20,
+	0x9f, 0x9e, 0x77, 0xcf, 0xd4, 0x12, 0x2a, 0x81, 0xd2, 0x33, 0xdb, 0x97, 0xa6, 0x0a, 0xec, 0xf2,
+	0x04, 0xb7, 0x9f, 0x0f, 0xd5, 0x32, 0xbb, 0xb4, 0xf0, 0xc5, 0x99, 0xa9, 0x56, 0x1a, 0xdf, 0xc3,
+	0xe1, 0xf2, 0x8d, 0x1f, 0xdb, 0x74, 0x7c, 0x8d, 0xbe, 0x02, 0x65, 0xc4, 0x2e, 0xa2, 0x6d, 0xfd,
+	0x68, 0xeb, 0xe6, 0xc0, 0x42, 0x73, 0xac, 0xdd, 0xdc, 0xd6, 0xa4, 0xb7, 0xb7, 0x35, 0xe9, 0xdf,
+	0xdb, 0x9a, 0xf4, 0xfb, 0x5d, 0x2d, 0xf7, 0xf6, 0xae, 0x96, 0xfb, 0xfb, 0xae, 0x96, 0xfb, 0x2f,
+	0x00, 0x00, 0xff, 0xff, 0x47, 0x99, 0x96, 0xf0, 0xa2, 0x0c, 0x00, 0x00,
 }
 
 func (m *TraceEvent) Marshal() (dAtA []byte, err error) {
@@ -1596,10 +1529,6 @@ func (m *TraceEvent) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
-	if m.XXX_unrecognized != nil {
-		i -= len(m.XXX_unrecognized)
-		copy(dAtA[i:], m.XXX_unrecognized)
-	}
 	if m.Prune != nil {
 		{
 			size, err := m.Prune.MarshalToSizedBuffer(dAtA[:i])
@@ -1758,11 +1687,9 @@ func (m *TraceEvent) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 		i--
 		dAtA[i] = 0x22
 	}
-	if m.Timestamp != nil {
-		i = encodeVarintTrace(dAtA, i, uint64(*m.Timestamp))
-		i--
-		dAtA[i] = 0x18
-	}
+	i = encodeVarintTrace(dAtA, i, uint64(m.Timestamp))
+	i--
+	dAtA[i] = 0x18
 	if m.PeerID != nil {
 		i -= len(m.PeerID)
 		copy(dAtA[i:], m.PeerID)
@@ -1770,11 +1697,9 @@ func (m *TraceEvent) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 		i--
 		dAtA[i] = 0x12
 	}
-	if m.Type != nil {
-		i = encodeVarintTrace(dAtA, i, uint64(*m.Type))
-		i--
-		dAtA[i] = 0x8
-	}
+	i = encodeVarintTrace(dAtA, i, uint64(m.Type))
+	i--
+	dAtA[i] = 0x8
 	return len(dAtA) - i, nil
 }
 
@@ -1798,17 +1723,11 @@ func (m *TraceEvent_PublishMessage) MarshalToSizedBuffer(dAtA []byte) (int, erro
 	_ = i
 	var l int
 	_ = l
-	if m.XXX_unrecognized != nil {
-		i -= len(m.XXX_unrecognized)
-		copy(dAtA[i:], m.XXX_unrecognized)
-	}
-	if m.Topic != nil {
-		i -= len(*m.Topic)
-		copy(dAtA[i:], *m.Topic)
-		i = encodeVarintTrace(dAtA, i, uint64(len(*m.Topic)))
-		i--
-		dAtA[i] = 0x12
-	}
+	i -= len(m.Topic)
+	copy(dAtA[i:], m.Topic)
+	i = encodeVarintTrace(dAtA, i, uint64(len(m.Topic)))
+	i--
+	dAtA[i] = 0x12
 	if m.MessageID != nil {
 		i -= len(m.MessageID)
 		copy(dAtA[i:], m.MessageID)
@@ -1839,24 +1758,16 @@ func (m *TraceEvent_RejectMessage) MarshalToSizedBuffer(dAtA []byte) (int, error
 	_ = i
 	var l int
 	_ = l
-	if m.XXX_unrecognized != nil {
-		i -= len(m.XXX_unrecognized)
-		copy(dAtA[i:], m.XXX_unrecognized)
-	}
-	if m.Topic != nil {
-		i -= len(*m.Topic)
-		copy(dAtA[i:], *m.Topic)
-		i = encodeVarintTrace(dAtA, i, uint64(len(*m.Topic)))
-		i--
-		dAtA[i] = 0x22
-	}
-	if m.Reason != nil {
-		i -= len(*m.Reason)
-		copy(dAtA[i:], *m.Reason)
-		i = encodeVarintTrace(dAtA, i, uint64(len(*m.Reason)))
-		i--
-		dAtA[i] = 0x1a
-	}
+	i -= len(m.Topic)
+	copy(dAtA[i:], m.Topic)
+	i = encodeVarintTrace(dAtA, i, uint64(len(m.Topic)))
+	i--
+	dAtA[i] = 0x22
+	i -= len(m.Reason)
+	copy(dAtA[i:], m.Reason)
+	i = encodeVarintTrace(dAtA, i, uint64(len(m.Reason)))
+	i--
+	dAtA[i] = 0x1a
 	if m.ReceivedFrom != nil {
 		i -= len(m.ReceivedFrom)
 		copy(dAtA[i:], m.ReceivedFrom)
@@ -1894,17 +1805,11 @@ func (m *TraceEvent_DuplicateMessage) MarshalToSizedBuffer(dAtA []byte) (int, er
 	_ = i
 	var l int
 	_ = l
-	if m.XXX_unrecognized != nil {
-		i -= len(m.XXX_unrecognized)
-		copy(dAtA[i:], m.XXX_unrecognized)
-	}
-	if m.Topic != nil {
-		i -= len(*m.Topic)
-		copy(dAtA[i:], *m.Topic)
-		i = encodeVarintTrace(dAtA, i, uint64(len(*m.Topic)))
-		i--
-		dAtA[i] = 0x1a
-	}
+	i -= len(m.Topic)
+	copy(dAtA[i:], m.Topic)
+	i = encodeVarintTrace(dAtA, i, uint64(len(m.Topic)))
+	i--
+	dAtA[i] = 0x1a
 	if m.ReceivedFrom != nil {
 		i -= len(m.ReceivedFrom)
 		copy(dAtA[i:], m.ReceivedFrom)
@@ -1942,10 +1847,6 @@ func (m *TraceEvent_DeliverMessage) MarshalToSizedBuffer(dAtA []byte) (int, erro
 	_ = i
 	var l int
 	_ = l
-	if m.XXX_unrecognized != nil {
-		i -= len(m.XXX_unrecognized)
-		copy(dAtA[i:], m.XXX_unrecognized)
-	}
 	if m.ReceivedFrom != nil {
 		i -= len(m.ReceivedFrom)
 		copy(dAtA[i:], m.ReceivedFrom)
@@ -1953,13 +1854,11 @@ func (m *TraceEvent_DeliverMessage) MarshalToSizedBuffer(dAtA []byte) (int, erro
 		i--
 		dAtA[i] = 0x1a
 	}
-	if m.Topic != nil {
-		i -= len(*m.Topic)
-		copy(dAtA[i:], *m.Topic)
-		i = encodeVarintTrace(dAtA, i, uint64(len(*m.Topic)))
-		i--
-		dAtA[i] = 0x12
-	}
+	i -= len(m.Topic)
+	copy(dAtA[i:], m.Topic)
+	i = encodeVarintTrace(dAtA, i, uint64(len(m.Topic)))
+	i--
+	dAtA[i] = 0x12
 	if m.MessageID != nil {
 		i -= len(m.MessageID)
 		copy(dAtA[i:], m.MessageID)
@@ -1990,17 +1889,11 @@ func (m *TraceEvent_AddPeer) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
-	if m.XXX_unrecognized != nil {
-		i -= len(m.XXX_unrecognized)
-		copy(dAtA[i:], m.XXX_unrecognized)
-	}
-	if m.Proto != nil {
-		i -= len(*m.Proto)
-		copy(dAtA[i:], *m.Proto)
-		i = encodeVarintTrace(dAtA, i, uint64(len(*m.Proto)))
-		i--
-		dAtA[i] = 0x12
-	}
+	i -= len(m.Proto)
+	copy(dAtA[i:], m.Proto)
+	i = encodeVarintTrace(dAtA, i, uint64(len(m.Proto)))
+	i--
+	dAtA[i] = 0x12
 	if m.PeerID != nil {
 		i -= len(m.PeerID)
 		copy(dAtA[i:], m.PeerID)
@@ -2031,10 +1924,6 @@ func (m *TraceEvent_RemovePeer) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
-	if m.XXX_unrecognized != nil {
-		i -= len(m.XXX_unrecognized)
-		copy(dAtA[i:], m.XXX_unrecognized)
-	}
 	if m.PeerID != nil {
 		i -= len(m.PeerID)
 		copy(dAtA[i:], m.PeerID)
@@ -2065,10 +1954,6 @@ func (m *TraceEvent_RecvRPC) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
-	if m.XXX_unrecognized != nil {
-		i -= len(m.XXX_unrecognized)
-		copy(dAtA[i:], m.XXX_unrecognized)
-	}
 	if m.Meta != nil {
 		{
 			size, err := m.Meta.MarshalToSizedBuffer(dAtA[:i])
@@ -2111,10 +1996,6 @@ func (m *TraceEvent_SendRPC) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
-	if m.XXX_unrecognized != nil {
-		i -= len(m.XXX_unrecognized)
-		copy(dAtA[i:], m.XXX_unrecognized)
-	}
 	if m.Meta != nil {
 		{
 			size, err := m.Meta.MarshalToSizedBuffer(dAtA[:i])
@@ -2157,10 +2038,6 @@ func (m *TraceEvent_DropRPC) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
-	if m.XXX_unrecognized != nil {
-		i -= len(m.XXX_unrecognized)
-		copy(dAtA[i:], m.XXX_unrecognized)
-	}
 	if m.Meta != nil {
 		{
 			size, err := m.Meta.MarshalToSizedBuffer(dAtA[:i])
@@ -2203,17 +2080,11 @@ func (m *TraceEvent_Join) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
-	if m.XXX_unrecognized != nil {
-		i -= len(m.XXX_unrecognized)
-		copy(dAtA[i:], m.XXX_unrecognized)
-	}
-	if m.Topic != nil {
-		i -= len(*m.Topic)
-		copy(dAtA[i:], *m.Topic)
-		i = encodeVarintTrace(dAtA, i, uint64(len(*m.Topic)))
-		i--
-		dAtA[i] = 0xa
-	}
+	i -= len(m.Topic)
+	copy(dAtA[i:], m.Topic)
+	i = encodeVarintTrace(dAtA, i, uint64(len(m.Topic)))
+	i--
+	dAtA[i] = 0xa
 	return len(dAtA) - i, nil
 }
 
@@ -2237,17 +2108,11 @@ func (m *TraceEvent_Leave) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
-	if m.XXX_unrecognized != nil {
-		i -= len(m.XXX_unrecognized)
-		copy(dAtA[i:], m.XXX_unrecognized)
-	}
-	if m.Topic != nil {
-		i -= len(*m.Topic)
-		copy(dAtA[i:], *m.Topic)
-		i = encodeVarintTrace(dAtA, i, uint64(len(*m.Topic)))
-		i--
-		dAtA[i] = 0x12
-	}
+	i -= len(m.Topic)
+	copy(dAtA[i:], m.Topic)
+	i = encodeVarintTrace(dAtA, i, uint64(len(m.Topic)))
+	i--
+	dAtA[i] = 0x12
 	return len(dAtA) - i, nil
 }
 
@@ -2271,17 +2136,11 @@ func (m *TraceEvent_Graft) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
-	if m.XXX_unrecognized != nil {
-		i -= len(m.XXX_unrecognized)
-		copy(dAtA[i:], m.XXX_unrecognized)
-	}
-	if m.Topic != nil {
-		i -= len(*m.Topic)
-		copy(dAtA[i:], *m.Topic)
-		i = encodeVarintTrace(dAtA, i, uint64(len(*m.Topic)))
-		i--
-		dAtA[i] = 0x12
-	}
+	i -= len(m.Topic)
+	copy(dAtA[i:], m.Topic)
+	i = encodeVarintTrace(dAtA, i, uint64(len(m.Topic)))
+	i--
+	dAtA[i] = 0x12
 	if m.PeerID != nil {
 		i -= len(m.PeerID)
 		copy(dAtA[i:], m.PeerID)
@@ -2312,17 +2171,11 @@ func (m *TraceEvent_Prune) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
-	if m.XXX_unrecognized != nil {
-		i -= len(m.XXX_unrecognized)
-		copy(dAtA[i:], m.XXX_unrecognized)
-	}
-	if m.Topic != nil {
-		i -= len(*m.Topic)
-		copy(dAtA[i:], *m.Topic)
-		i = encodeVarintTrace(dAtA, i, uint64(len(*m.Topic)))
-		i--
-		dAtA[i] = 0x12
-	}
+	i -= len(m.Topic)
+	copy(dAtA[i:], m.Topic)
+	i = encodeVarintTrace(dAtA, i, uint64(len(m.Topic)))
+	i--
+	dAtA[i] = 0x12
 	if m.PeerID != nil {
 		i -= len(m.PeerID)
 		copy(dAtA[i:], m.PeerID)
@@ -2353,10 +2206,6 @@ func (m *TraceEvent_RPCMeta) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
-	if m.XXX_unrecognized != nil {
-		i -= len(m.XXX_unrecognized)
-		copy(dAtA[i:], m.XXX_unrecognized)
-	}
 	if m.Control != nil {
 		{
 			size, err := m.Control.MarshalToSizedBuffer(dAtA[:i])
@@ -2420,17 +2269,11 @@ func (m *TraceEvent_MessageMeta) MarshalToSizedBuffer(dAtA []byte) (int, error) 
 	_ = i
 	var l int
 	_ = l
-	if m.XXX_unrecognized != nil {
-		i -= len(m.XXX_unrecognized)
-		copy(dAtA[i:], m.XXX_unrecognized)
-	}
-	if m.Topic != nil {
-		i -= len(*m.Topic)
-		copy(dAtA[i:], *m.Topic)
-		i = encodeVarintTrace(dAtA, i, uint64(len(*m.Topic)))
-		i--
-		dAtA[i] = 0x12
-	}
+	i -= len(m.Topic)
+	copy(dAtA[i:], m.Topic)
+	i = encodeVarintTrace(dAtA, i, uint64(len(m.Topic)))
+	i--
+	dAtA[i] = 0x12
 	if m.MessageID != nil {
 		i -= len(m.MessageID)
 		copy(dAtA[i:], m.MessageID)
@@ -2461,27 +2304,19 @@ func (m *TraceEvent_SubMeta) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
-	if m.XXX_unrecognized != nil {
-		i -= len(m.XXX_unrecognized)
-		copy(dAtA[i:], m.XXX_unrecognized)
+	i -= len(m.Topic)
+	copy(dAtA[i:], m.Topic)
+	i = encodeVarintTrace(dAtA, i, uint64(len(m.Topic)))
+	i--
+	dAtA[i] = 0x12
+	i--
+	if m.Subscribe {
+		dAtA[i] = 1
+	} else {
+		dAtA[i] = 0
 	}
-	if m.Topic != nil {
-		i -= len(*m.Topic)
-		copy(dAtA[i:], *m.Topic)
-		i = encodeVarintTrace(dAtA, i, uint64(len(*m.Topic)))
-		i--
-		dAtA[i] = 0x12
-	}
-	if m.Subscribe != nil {
-		i--
-		if *m.Subscribe {
-			dAtA[i] = 1
-		} else {
-			dAtA[i] = 0
-		}
-		i--
-		dAtA[i] = 0x8
-	}
+	i--
+	dAtA[i] = 0x8
 	return len(dAtA) - i, nil
 }
 
@@ -2505,10 +2340,6 @@ func (m *TraceEvent_ControlMeta) MarshalToSizedBuffer(dAtA []byte) (int, error) 
 	_ = i
 	var l int
 	_ = l
-	if m.XXX_unrecognized != nil {
-		i -= len(m.XXX_unrecognized)
-		copy(dAtA[i:], m.XXX_unrecognized)
-	}
 	if len(m.Prune) > 0 {
 		for iNdEx := len(m.Prune) - 1; iNdEx >= 0; iNdEx-- {
 			{
@@ -2588,10 +2419,6 @@ func (m *TraceEvent_ControlIHaveMeta) MarshalToSizedBuffer(dAtA []byte) (int, er
 	_ = i
 	var l int
 	_ = l
-	if m.XXX_unrecognized != nil {
-		i -= len(m.XXX_unrecognized)
-		copy(dAtA[i:], m.XXX_unrecognized)
-	}
 	if len(m.MessageIDs) > 0 {
 		for iNdEx := len(m.MessageIDs) - 1; iNdEx >= 0; iNdEx-- {
 			i -= len(m.MessageIDs[iNdEx])
@@ -2601,13 +2428,11 @@ func (m *TraceEvent_ControlIHaveMeta) MarshalToSizedBuffer(dAtA []byte) (int, er
 			dAtA[i] = 0x12
 		}
 	}
-	if m.Topic != nil {
-		i -= len(*m.Topic)
-		copy(dAtA[i:], *m.Topic)
-		i = encodeVarintTrace(dAtA, i, uint64(len(*m.Topic)))
-		i--
-		dAtA[i] = 0xa
-	}
+	i -= len(m.Topic)
+	copy(dAtA[i:], m.Topic)
+	i = encodeVarintTrace(dAtA, i, uint64(len(m.Topic)))
+	i--
+	dAtA[i] = 0xa
 	return len(dAtA) - i, nil
 }
 
@@ -2631,10 +2456,6 @@ func (m *TraceEvent_ControlIWantMeta) MarshalToSizedBuffer(dAtA []byte) (int, er
 	_ = i
 	var l int
 	_ = l
-	if m.XXX_unrecognized != nil {
-		i -= len(m.XXX_unrecognized)
-		copy(dAtA[i:], m.XXX_unrecognized)
-	}
 	if len(m.MessageIDs) > 0 {
 		for iNdEx := len(m.MessageIDs) - 1; iNdEx >= 0; iNdEx-- {
 			i -= len(m.MessageIDs[iNdEx])
@@ -2667,17 +2488,11 @@ func (m *TraceEvent_ControlGraftMeta) MarshalToSizedBuffer(dAtA []byte) (int, er
 	_ = i
 	var l int
 	_ = l
-	if m.XXX_unrecognized != nil {
-		i -= len(m.XXX_unrecognized)
-		copy(dAtA[i:], m.XXX_unrecognized)
-	}
-	if m.Topic != nil {
-		i -= len(*m.Topic)
-		copy(dAtA[i:], *m.Topic)
-		i = encodeVarintTrace(dAtA, i, uint64(len(*m.Topic)))
-		i--
-		dAtA[i] = 0xa
-	}
+	i -= len(m.Topic)
+	copy(dAtA[i:], m.Topic)
+	i = encodeVarintTrace(dAtA, i, uint64(len(m.Topic)))
+	i--
+	dAtA[i] = 0xa
 	return len(dAtA) - i, nil
 }
 
@@ -2701,10 +2516,6 @@ func (m *TraceEvent_ControlPruneMeta) MarshalToSizedBuffer(dAtA []byte) (int, er
 	_ = i
 	var l int
 	_ = l
-	if m.XXX_unrecognized != nil {
-		i -= len(m.XXX_unrecognized)
-		copy(dAtA[i:], m.XXX_unrecognized)
-	}
 	if len(m.Peers) > 0 {
 		for iNdEx := len(m.Peers) - 1; iNdEx >= 0; iNdEx-- {
 			i -= len(m.Peers[iNdEx])
@@ -2714,13 +2525,11 @@ func (m *TraceEvent_ControlPruneMeta) MarshalToSizedBuffer(dAtA []byte) (int, er
 			dAtA[i] = 0x12
 		}
 	}
-	if m.Topic != nil {
-		i -= len(*m.Topic)
-		copy(dAtA[i:], *m.Topic)
-		i = encodeVarintTrace(dAtA, i, uint64(len(*m.Topic)))
-		i--
-		dAtA[i] = 0xa
-	}
+	i -= len(m.Topic)
+	copy(dAtA[i:], m.Topic)
+	i = encodeVarintTrace(dAtA, i, uint64(len(m.Topic)))
+	i--
+	dAtA[i] = 0xa
 	return len(dAtA) - i, nil
 }
 
@@ -2744,10 +2553,6 @@ func (m *TraceEventBatch) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
-	if m.XXX_unrecognized != nil {
-		i -= len(m.XXX_unrecognized)
-		copy(dAtA[i:], m.XXX_unrecognized)
-	}
 	if len(m.Batch) > 0 {
 		for iNdEx := len(m.Batch) - 1; iNdEx >= 0; iNdEx-- {
 			{
@@ -2782,16 +2587,12 @@ func (m *TraceEvent) Size() (n int) {
 	}
 	var l int
 	_ = l
-	if m.Type != nil {
-		n += 1 + sovTrace(uint64(*m.Type))
-	}
+	n += 1 + sovTrace(uint64(m.Type))
 	if m.PeerID != nil {
 		l = len(m.PeerID)
 		n += 1 + l + sovTrace(uint64(l))
 	}
-	if m.Timestamp != nil {
-		n += 1 + sovTrace(uint64(*m.Timestamp))
-	}
+	n += 1 + sovTrace(uint64(m.Timestamp))
 	if m.PublishMessage != nil {
 		l = m.PublishMessage.Size()
 		n += 1 + l + sovTrace(uint64(l))
@@ -2844,9 +2645,6 @@ func (m *TraceEvent) Size() (n int) {
 		l = m.Prune.Size()
 		n += 2 + l + sovTrace(uint64(l))
 	}
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
 	return n
 }
 
@@ -2860,13 +2658,8 @@ func (m *TraceEvent_PublishMessage) Size() (n int) {
 		l = len(m.MessageID)
 		n += 1 + l + sovTrace(uint64(l))
 	}
-	if m.Topic != nil {
-		l = len(*m.Topic)
-		n += 1 + l + sovTrace(uint64(l))
-	}
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
+	l = len(m.Topic)
+	n += 1 + l + sovTrace(uint64(l))
 	return n
 }
 
@@ -2884,17 +2677,10 @@ func (m *TraceEvent_RejectMessage) Size() (n int) {
 		l = len(m.ReceivedFrom)
 		n += 1 + l + sovTrace(uint64(l))
 	}
-	if m.Reason != nil {
-		l = len(*m.Reason)
-		n += 1 + l + sovTrace(uint64(l))
-	}
-	if m.Topic != nil {
-		l = len(*m.Topic)
-		n += 1 + l + sovTrace(uint64(l))
-	}
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
+	l = len(m.Reason)
+	n += 1 + l + sovTrace(uint64(l))
+	l = len(m.Topic)
+	n += 1 + l + sovTrace(uint64(l))
 	return n
 }
 
@@ -2912,13 +2698,8 @@ func (m *TraceEvent_DuplicateMessage) Size() (n int) {
 		l = len(m.ReceivedFrom)
 		n += 1 + l + sovTrace(uint64(l))
 	}
-	if m.Topic != nil {
-		l = len(*m.Topic)
-		n += 1 + l + sovTrace(uint64(l))
-	}
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
+	l = len(m.Topic)
+	n += 1 + l + sovTrace(uint64(l))
 	return n
 }
 
@@ -2932,16 +2713,11 @@ func (m *TraceEvent_DeliverMessage) Size() (n int) {
 		l = len(m.MessageID)
 		n += 1 + l + sovTrace(uint64(l))
 	}
-	if m.Topic != nil {
-		l = len(*m.Topic)
-		n += 1 + l + sovTrace(uint64(l))
-	}
+	l = len(m.Topic)
+	n += 1 + l + sovTrace(uint64(l))
 	if m.ReceivedFrom != nil {
 		l = len(m.ReceivedFrom)
 		n += 1 + l + sovTrace(uint64(l))
-	}
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
 	}
 	return n
 }
@@ -2956,13 +2732,8 @@ func (m *TraceEvent_AddPeer) Size() (n int) {
 		l = len(m.PeerID)
 		n += 1 + l + sovTrace(uint64(l))
 	}
-	if m.Proto != nil {
-		l = len(*m.Proto)
-		n += 1 + l + sovTrace(uint64(l))
-	}
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
+	l = len(m.Proto)
+	n += 1 + l + sovTrace(uint64(l))
 	return n
 }
 
@@ -2975,9 +2746,6 @@ func (m *TraceEvent_RemovePeer) Size() (n int) {
 	if m.PeerID != nil {
 		l = len(m.PeerID)
 		n += 1 + l + sovTrace(uint64(l))
-	}
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
 	}
 	return n
 }
@@ -2996,9 +2764,6 @@ func (m *TraceEvent_RecvRPC) Size() (n int) {
 		l = m.Meta.Size()
 		n += 1 + l + sovTrace(uint64(l))
 	}
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
 	return n
 }
 
@@ -3015,9 +2780,6 @@ func (m *TraceEvent_SendRPC) Size() (n int) {
 	if m.Meta != nil {
 		l = m.Meta.Size()
 		n += 1 + l + sovTrace(uint64(l))
-	}
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
 	}
 	return n
 }
@@ -3036,9 +2798,6 @@ func (m *TraceEvent_DropRPC) Size() (n int) {
 		l = m.Meta.Size()
 		n += 1 + l + sovTrace(uint64(l))
 	}
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
 	return n
 }
 
@@ -3048,13 +2807,8 @@ func (m *TraceEvent_Join) Size() (n int) {
 	}
 	var l int
 	_ = l
-	if m.Topic != nil {
-		l = len(*m.Topic)
-		n += 1 + l + sovTrace(uint64(l))
-	}
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
+	l = len(m.Topic)
+	n += 1 + l + sovTrace(uint64(l))
 	return n
 }
 
@@ -3064,13 +2818,8 @@ func (m *TraceEvent_Leave) Size() (n int) {
 	}
 	var l int
 	_ = l
-	if m.Topic != nil {
-		l = len(*m.Topic)
-		n += 1 + l + sovTrace(uint64(l))
-	}
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
+	l = len(m.Topic)
+	n += 1 + l + sovTrace(uint64(l))
 	return n
 }
 
@@ -3084,13 +2833,8 @@ func (m *TraceEvent_Graft) Size() (n int) {
 		l = len(m.PeerID)
 		n += 1 + l + sovTrace(uint64(l))
 	}
-	if m.Topic != nil {
-		l = len(*m.Topic)
-		n += 1 + l + sovTrace(uint64(l))
-	}
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
+	l = len(m.Topic)
+	n += 1 + l + sovTrace(uint64(l))
 	return n
 }
 
@@ -3104,13 +2848,8 @@ func (m *TraceEvent_Prune) Size() (n int) {
 		l = len(m.PeerID)
 		n += 1 + l + sovTrace(uint64(l))
 	}
-	if m.Topic != nil {
-		l = len(*m.Topic)
-		n += 1 + l + sovTrace(uint64(l))
-	}
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
+	l = len(m.Topic)
+	n += 1 + l + sovTrace(uint64(l))
 	return n
 }
 
@@ -3136,9 +2875,6 @@ func (m *TraceEvent_RPCMeta) Size() (n int) {
 		l = m.Control.Size()
 		n += 1 + l + sovTrace(uint64(l))
 	}
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
 	return n
 }
 
@@ -3152,13 +2888,8 @@ func (m *TraceEvent_MessageMeta) Size() (n int) {
 		l = len(m.MessageID)
 		n += 1 + l + sovTrace(uint64(l))
 	}
-	if m.Topic != nil {
-		l = len(*m.Topic)
-		n += 1 + l + sovTrace(uint64(l))
-	}
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
+	l = len(m.Topic)
+	n += 1 + l + sovTrace(uint64(l))
 	return n
 }
 
@@ -3168,16 +2899,9 @@ func (m *TraceEvent_SubMeta) Size() (n int) {
 	}
 	var l int
 	_ = l
-	if m.Subscribe != nil {
-		n += 2
-	}
-	if m.Topic != nil {
-		l = len(*m.Topic)
-		n += 1 + l + sovTrace(uint64(l))
-	}
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
+	n += 2
+	l = len(m.Topic)
+	n += 1 + l + sovTrace(uint64(l))
 	return n
 }
 
@@ -3211,9 +2935,6 @@ func (m *TraceEvent_ControlMeta) Size() (n int) {
 			n += 1 + l + sovTrace(uint64(l))
 		}
 	}
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
 	return n
 }
 
@@ -3223,18 +2944,13 @@ func (m *TraceEvent_ControlIHaveMeta) Size() (n int) {
 	}
 	var l int
 	_ = l
-	if m.Topic != nil {
-		l = len(*m.Topic)
-		n += 1 + l + sovTrace(uint64(l))
-	}
+	l = len(m.Topic)
+	n += 1 + l + sovTrace(uint64(l))
 	if len(m.MessageIDs) > 0 {
 		for _, b := range m.MessageIDs {
 			l = len(b)
 			n += 1 + l + sovTrace(uint64(l))
 		}
-	}
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
 	}
 	return n
 }
@@ -3251,9 +2967,6 @@ func (m *TraceEvent_ControlIWantMeta) Size() (n int) {
 			n += 1 + l + sovTrace(uint64(l))
 		}
 	}
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
 	return n
 }
 
@@ -3263,13 +2976,8 @@ func (m *TraceEvent_ControlGraftMeta) Size() (n int) {
 	}
 	var l int
 	_ = l
-	if m.Topic != nil {
-		l = len(*m.Topic)
-		n += 1 + l + sovTrace(uint64(l))
-	}
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
+	l = len(m.Topic)
+	n += 1 + l + sovTrace(uint64(l))
 	return n
 }
 
@@ -3279,18 +2987,13 @@ func (m *TraceEvent_ControlPruneMeta) Size() (n int) {
 	}
 	var l int
 	_ = l
-	if m.Topic != nil {
-		l = len(*m.Topic)
-		n += 1 + l + sovTrace(uint64(l))
-	}
+	l = len(m.Topic)
+	n += 1 + l + sovTrace(uint64(l))
 	if len(m.Peers) > 0 {
 		for _, b := range m.Peers {
 			l = len(b)
 			n += 1 + l + sovTrace(uint64(l))
 		}
-	}
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
 	}
 	return n
 }
@@ -3306,9 +3009,6 @@ func (m *TraceEventBatch) Size() (n int) {
 			l = e.Size()
 			n += 1 + l + sovTrace(uint64(l))
 		}
-	}
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
 	}
 	return n
 }
@@ -3352,7 +3052,7 @@ func (m *TraceEvent) Unmarshal(dAtA []byte) error {
 			if wireType != 0 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Type", wireType)
 			}
-			var v TraceEvent_Type
+			m.Type = 0
 			for shift := uint(0); ; shift += 7 {
 				if shift >= 64 {
 					return ErrIntOverflowTrace
@@ -3362,12 +3062,11 @@ func (m *TraceEvent) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				v |= TraceEvent_Type(b&0x7F) << shift
+				m.Type |= TraceEvent_Type(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
 			}
-			m.Type = &v
 		case 2:
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field PeerID", wireType)
@@ -3406,7 +3105,7 @@ func (m *TraceEvent) Unmarshal(dAtA []byte) error {
 			if wireType != 0 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Timestamp", wireType)
 			}
-			var v int64
+			m.Timestamp = 0
 			for shift := uint(0); ; shift += 7 {
 				if shift >= 64 {
 					return ErrIntOverflowTrace
@@ -3416,12 +3115,11 @@ func (m *TraceEvent) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				v |= int64(b&0x7F) << shift
+				m.Timestamp |= int64(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
 			}
-			m.Timestamp = &v
 		case 4:
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field PublishMessage", wireType)
@@ -3896,16 +3594,12 @@ func (m *TraceEvent) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthTrace
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthTrace
 			}
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -4008,8 +3702,7 @@ func (m *TraceEvent_PublishMessage) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			s := string(dAtA[iNdEx:postIndex])
-			m.Topic = &s
+			m.Topic = string(dAtA[iNdEx:postIndex])
 			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
@@ -4017,16 +3710,12 @@ func (m *TraceEvent_PublishMessage) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthTrace
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthTrace
 			}
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -4163,8 +3852,7 @@ func (m *TraceEvent_RejectMessage) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			s := string(dAtA[iNdEx:postIndex])
-			m.Reason = &s
+			m.Reason = string(dAtA[iNdEx:postIndex])
 			iNdEx = postIndex
 		case 4:
 			if wireType != 2 {
@@ -4196,8 +3884,7 @@ func (m *TraceEvent_RejectMessage) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			s := string(dAtA[iNdEx:postIndex])
-			m.Topic = &s
+			m.Topic = string(dAtA[iNdEx:postIndex])
 			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
@@ -4205,16 +3892,12 @@ func (m *TraceEvent_RejectMessage) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthTrace
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthTrace
 			}
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -4351,8 +4034,7 @@ func (m *TraceEvent_DuplicateMessage) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			s := string(dAtA[iNdEx:postIndex])
-			m.Topic = &s
+			m.Topic = string(dAtA[iNdEx:postIndex])
 			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
@@ -4360,16 +4042,12 @@ func (m *TraceEvent_DuplicateMessage) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthTrace
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthTrace
 			}
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -4472,8 +4150,7 @@ func (m *TraceEvent_DeliverMessage) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			s := string(dAtA[iNdEx:postIndex])
-			m.Topic = &s
+			m.Topic = string(dAtA[iNdEx:postIndex])
 			iNdEx = postIndex
 		case 3:
 			if wireType != 2 {
@@ -4515,16 +4192,12 @@ func (m *TraceEvent_DeliverMessage) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthTrace
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthTrace
 			}
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -4627,8 +4300,7 @@ func (m *TraceEvent_AddPeer) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			s := string(dAtA[iNdEx:postIndex])
-			m.Proto = &s
+			m.Proto = string(dAtA[iNdEx:postIndex])
 			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
@@ -4636,16 +4308,12 @@ func (m *TraceEvent_AddPeer) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthTrace
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthTrace
 			}
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -4724,16 +4392,12 @@ func (m *TraceEvent_RemovePeer) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthTrace
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthTrace
 			}
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -4848,16 +4512,12 @@ func (m *TraceEvent_RecvRPC) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthTrace
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthTrace
 			}
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -4972,16 +4632,12 @@ func (m *TraceEvent_SendRPC) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthTrace
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthTrace
 			}
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -5096,16 +4752,12 @@ func (m *TraceEvent_DropRPC) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthTrace
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthTrace
 			}
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -5174,8 +4826,7 @@ func (m *TraceEvent_Join) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			s := string(dAtA[iNdEx:postIndex])
-			m.Topic = &s
+			m.Topic = string(dAtA[iNdEx:postIndex])
 			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
@@ -5183,16 +4834,12 @@ func (m *TraceEvent_Join) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthTrace
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthTrace
 			}
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -5261,8 +4908,7 @@ func (m *TraceEvent_Leave) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			s := string(dAtA[iNdEx:postIndex])
-			m.Topic = &s
+			m.Topic = string(dAtA[iNdEx:postIndex])
 			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
@@ -5270,16 +4916,12 @@ func (m *TraceEvent_Leave) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthTrace
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthTrace
 			}
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -5382,8 +5024,7 @@ func (m *TraceEvent_Graft) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			s := string(dAtA[iNdEx:postIndex])
-			m.Topic = &s
+			m.Topic = string(dAtA[iNdEx:postIndex])
 			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
@@ -5391,16 +5032,12 @@ func (m *TraceEvent_Graft) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthTrace
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthTrace
 			}
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -5503,8 +5140,7 @@ func (m *TraceEvent_Prune) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			s := string(dAtA[iNdEx:postIndex])
-			m.Topic = &s
+			m.Topic = string(dAtA[iNdEx:postIndex])
 			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
@@ -5512,16 +5148,12 @@ func (m *TraceEvent_Prune) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthTrace
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthTrace
 			}
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -5670,16 +5302,12 @@ func (m *TraceEvent_RPCMeta) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthTrace
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthTrace
 			}
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -5782,8 +5410,7 @@ func (m *TraceEvent_MessageMeta) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			s := string(dAtA[iNdEx:postIndex])
-			m.Topic = &s
+			m.Topic = string(dAtA[iNdEx:postIndex])
 			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
@@ -5791,16 +5418,12 @@ func (m *TraceEvent_MessageMeta) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthTrace
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthTrace
 			}
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -5858,8 +5481,7 @@ func (m *TraceEvent_SubMeta) Unmarshal(dAtA []byte) error {
 					break
 				}
 			}
-			b := bool(v != 0)
-			m.Subscribe = &b
+			m.Subscribe = bool(v != 0)
 		case 2:
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Topic", wireType)
@@ -5890,8 +5512,7 @@ func (m *TraceEvent_SubMeta) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			s := string(dAtA[iNdEx:postIndex])
-			m.Topic = &s
+			m.Topic = string(dAtA[iNdEx:postIndex])
 			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
@@ -5899,16 +5520,12 @@ func (m *TraceEvent_SubMeta) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthTrace
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthTrace
 			}
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -6089,16 +5706,12 @@ func (m *TraceEvent_ControlMeta) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthTrace
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthTrace
 			}
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -6167,8 +5780,7 @@ func (m *TraceEvent_ControlIHaveMeta) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			s := string(dAtA[iNdEx:postIndex])
-			m.Topic = &s
+			m.Topic = string(dAtA[iNdEx:postIndex])
 			iNdEx = postIndex
 		case 2:
 			if wireType != 2 {
@@ -6208,16 +5820,12 @@ func (m *TraceEvent_ControlIHaveMeta) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthTrace
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthTrace
 			}
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -6294,16 +5902,12 @@ func (m *TraceEvent_ControlIWantMeta) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthTrace
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthTrace
 			}
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -6372,8 +5976,7 @@ func (m *TraceEvent_ControlGraftMeta) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			s := string(dAtA[iNdEx:postIndex])
-			m.Topic = &s
+			m.Topic = string(dAtA[iNdEx:postIndex])
 			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
@@ -6381,16 +5984,12 @@ func (m *TraceEvent_ControlGraftMeta) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthTrace
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthTrace
 			}
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -6459,8 +6058,7 @@ func (m *TraceEvent_ControlPruneMeta) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			s := string(dAtA[iNdEx:postIndex])
-			m.Topic = &s
+			m.Topic = string(dAtA[iNdEx:postIndex])
 			iNdEx = postIndex
 		case 2:
 			if wireType != 2 {
@@ -6500,16 +6098,12 @@ func (m *TraceEvent_ControlPruneMeta) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthTrace
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthTrace
 			}
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -6588,16 +6182,12 @@ func (m *TraceEventBatch) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthTrace
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthTrace
 			}
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}

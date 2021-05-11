@@ -1579,8 +1579,8 @@ func TestGossipsubPiggybackControl(t *testing.T) {
 
 		rpc := &RPC{RPC: pb.RPC{}}
 		gs.piggybackControl(blah, rpc, &pb.ControlMessage{
-			Graft: []*pb.ControlGraft{&pb.ControlGraft{TopicID: &test1}, &pb.ControlGraft{TopicID: &test2}, &pb.ControlGraft{TopicID: &test3}},
-			Prune: []*pb.ControlPrune{&pb.ControlPrune{TopicID: &test1}, &pb.ControlPrune{TopicID: &test2}, &pb.ControlPrune{TopicID: &test3}},
+			Graft: []*pb.ControlGraft{&pb.ControlGraft{TopicID: test1}, &pb.ControlGraft{TopicID: test2}, &pb.ControlGraft{TopicID: test3}},
+			Prune: []*pb.ControlPrune{&pb.ControlPrune{TopicID: test1}, &pb.ControlPrune{TopicID: test2}, &pb.ControlPrune{TopicID: test3}},
 		})
 		res <- rpc
 	}
@@ -1796,7 +1796,7 @@ func (sq *sybilSquatter) handleStream(s network.Stream) {
 	w := protoio.NewDelimitedWriter(os)
 	truth := true
 	topic := "test"
-	err = w.WriteMsg(&pb.RPC{Subscriptions: []*pb.RPC_SubOpts{&pb.RPC_SubOpts{Subscribe: &truth, Topicid: &topic}}})
+	err = w.WriteMsg(&pb.RPC{Subscriptions: []*pb.RPC_SubOpts{&pb.RPC_SubOpts{Subscribe: truth, Topicid: topic}}})
 	if err != nil {
 		panic(err)
 	}
@@ -2028,7 +2028,7 @@ func (iwe *iwantEverything) handleStream(s network.Stream) {
 	w := protoio.NewDelimitedWriter(os)
 	truth := true
 	topic := "test"
-	err = w.WriteMsg(&pb.RPC{Subscriptions: []*pb.RPC_SubOpts{&pb.RPC_SubOpts{Subscribe: &truth, Topicid: &topic}}})
+	err = w.WriteMsg(&pb.RPC{Subscriptions: []*pb.RPC_SubOpts{&pb.RPC_SubOpts{Subscribe: truth, Topicid: topic}}})
 
 	var rpc pb.RPC
 	for {
@@ -2127,8 +2127,8 @@ func TestFragmentRPCFunction(t *testing.T) {
 	truth := true
 	rpc.Subscriptions = []*pb.RPC_SubOpts{
 		{
-			Subscribe: &truth,
-			Topicid:   &topic,
+			Subscribe: truth,
+			Topicid:   topic,
 		},
 	}
 	rpc.Publish = make([]*pb.Message, nMessages)
@@ -2162,8 +2162,8 @@ func TestFragmentRPCFunction(t *testing.T) {
 	// the control messages should be in a separate RPC at the end
 	// reuse RPC from prev test, but add a control message
 	rpc.Control = &pb.ControlMessage{
-		Graft: []*pb.ControlGraft{{TopicID: &topic}},
-		Prune: []*pb.ControlPrune{{TopicID: &topic}},
+		Graft: []*pb.ControlGraft{{TopicID: topic}},
+		Prune: []*pb.ControlPrune{{TopicID: topic}},
 		Ihave: []*pb.ControlIHave{{MessageIDs: []string{"foo"}}},
 		Iwant: []*pb.ControlIWant{{MessageIDs: []string{"bar"}}},
 	}

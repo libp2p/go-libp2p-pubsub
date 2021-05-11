@@ -316,7 +316,7 @@ func TestGossipsubAttackGRAFTNonExistentTopic(t *testing.T) {
 				// Graft to the peer on a non-existent topic
 				nonExistentTopic := "non-existent"
 				writeMsg(&pb.RPC{
-					Control: &pb.ControlMessage{Graft: []*pb.ControlGraft{&pb.ControlGraft{TopicID: &nonExistentTopic}}},
+					Control: &pb.ControlMessage{Graft: []*pb.ControlGraft{&pb.ControlGraft{TopicID: nonExistentTopic}}},
 				})
 
 				go func() {
@@ -663,7 +663,7 @@ func TestGossipsubAttackInvalidMessageSpam(t *testing.T) {
 					for i := 0; i < 100; i++ {
 						msg := &pb.Message{
 							Data:  []byte("some data" + strconv.Itoa(i)),
-							Topic: &mytopic,
+							Topic: mytopic,
 							From:  []byte(attacker.ID()),
 							Seqno: []byte{byte(i + 1)},
 						}

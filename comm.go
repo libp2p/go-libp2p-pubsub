@@ -32,8 +32,8 @@ func (p *PubSub) getHelloPacket() *RPC {
 
 	for t := range subscriptions {
 		as := &pb.RPC_SubOpts{
-			Topicid:   proto.String(t),
-			Subscribe: proto.Bool(true),
+			Topicid:   t,
+			Subscribe: true,
 		}
 		rpc.Subscriptions = append(rpc.Subscriptions, as)
 	}

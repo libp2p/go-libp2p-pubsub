@@ -213,7 +213,7 @@ func (t *Topic) Publish(ctx context.Context, data []byte, opts ...PubOpt) error 
 
 	m := &pb.Message{
 		Data:  data,
-		Topic: &t.topic,
+		Topic: t.topic,
 		From:  nil,
 		Seqno: nil,
 	}

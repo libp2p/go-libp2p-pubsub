@@ -210,8 +210,8 @@ func NewGossipSub(ctx context.Context, h host.Host, opts ...Option) (*PubSub, er
 		outbound:  make(map[peer.ID]bool),
 		connect:   make(chan connectInfo, params.MaxPendingConnections),
 		mcache:    NewMessageCache(params.HistoryGossip, params.HistoryLength),
-		protos:  GossipSubDefaultProtocols,
-		feature: GossipSubDefaultFeatures,
+		protos:    GossipSubDefaultProtocols,
+		feature:   GossipSubDefaultFeatures,
 		tagTracer: newTagTracer(h.ConnManager()),
 		params:    params,
 	}
@@ -1078,7 +1078,7 @@ func (gs *GossipSubRouter) Leave(topic string) {
 }
 
 func (gs *GossipSubRouter) sendGraft(p peer.ID, topic string) {
-	graft := []*pb.ControlGraft{&pb.ControlGraft{TopicID: &topic}}
+	graft := []*pb.ControlGraft{&pb.ControlGraft{TopicID: topic}}
 	out := rpcWithControl(nil, nil, nil, graft, nil)
 	gs.sendRPC(p, out)
 }
@@ -1619,12 +1619,7 @@ func (gs *GossipSubRouter) sendGraftPrune(tograft, toprune map[peer.ID][]string,
 	for p, topics := range tograft {
 		graft := make([]*pb.ControlGraft, 0, len(topics))
 		for _, topic := range topics {
-			// copy topic string here since
-			// the reference to the string
-			// topic here changes with every
-			// iteration of the slice.
-			copiedID := topic
-			graft = append(graft, &pb.ControlGraft{TopicID: &copiedID})
+			graft = append(graft, &pb.ControlGraft{TopicID: topic})
 		}
 
 		var prune []*pb.ControlPrune
@@ -1707,7 +1702,7 @@ func (gs *GossipSubRouter) emitGossip(topic string, exclude map[peer.ID]struct{}
 			shuffleStrings(mids)
 			copy(peerMids, mids)
 		}
-		gs.enqueueGossip(p, &pb.ControlIHave{TopicID: &topic, MessageIDs: peerMids})
+		gs.enqueueGossip(p, &pb.ControlIHave{TopicID: topic, MessageIDs: peerMids})
 	}
 }
 
@@ -1803,7 +1798,7 @@ func (gs *GossipSubRouter) piggybackControl(p peer.ID, out *RPC, ctl *pb.Control
 func (gs *GossipSubRouter) makePrune(p peer.ID, topic string, doPX bool) *pb.ControlPrune {
 	if !gs.feature(GossipSubFeaturePX, gs.peers[p]) {
 		// GossipSub v1.0 -- no peer exchange, the peer won't be able to parse it anyway
-		return &pb.ControlPrune{TopicID: &topic}
+		return &pb.ControlPrune{TopicID: topic}
 	}
 
 	backoff := uint64(gs.params.PruneBackoff / time.Second)
@@ -1835,7 +1830,7 @@ func (gs *GossipSubRouter) makePrune(p peer.ID, topic string, doPX bool) *pb.Con
 		}
 	}
 
-	return &pb.ControlPrune{TopicID: &topic, Peers: px, Backoff: &backoff}
+	return &pb.ControlPrune{TopicID: topic, Peers: px, Backoff: backoff}
 }
 
 func (gs *GossipSubRouter) getPeers(topic string, count int, filter func(peer.ID) bool) []peer.ID {

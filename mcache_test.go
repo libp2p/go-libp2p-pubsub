@@ -160,7 +160,7 @@ func makeTestMessage(n int) *pb.Message {
 	topic := "test"
 	return &pb.Message{
 		Data:  data,
-		Topic: &topic,
+		Topic: topic,
 		From:  []byte("test"),
 		Seqno: seqno,
 	}

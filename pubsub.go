@@ -774,8 +774,8 @@ func (p *PubSub) handleRemoveRelay(topic string) {
 // Only called from processLoop.
 func (p *PubSub) announce(topic string, sub bool) {
 	subopt := &pb.RPC_SubOpts{
-		Topicid:   &topic,
-		Subscribe: &sub,
+		Topicid:   topic,
+		Subscribe: sub,
 	}
 
 	out := rpcWithSubs(subopt)
@@ -818,8 +818,8 @@ func (p *PubSub) doAnnounceRetry(pid peer.ID, topic string, sub bool) {
 	}
 
 	subopt := &pb.RPC_SubOpts{
-		Topicid:   &topic,
-		Subscribe: &sub,
+		Topicid:   topic,
+		Subscribe: sub,
 	}
 
 	out := rpcWithSubs(subopt)
@@ -1141,7 +1141,7 @@ type SubOpt func(sub *Subscription) error
 //
 // Deprecated: use pubsub.Join() and topic.Subscribe() instead
 func (p *PubSub) Subscribe(topic string, opts ...SubOpt) (*Subscription, error) {
-	td := pb.TopicDescriptor{Name: &topic}
+	td := pb.TopicDescriptor{Name: topic}
 
 	return p.SubscribeByTopicDescriptor(&td, opts...)
 }
