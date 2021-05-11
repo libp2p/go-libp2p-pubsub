@@ -1141,30 +1141,13 @@ type SubOpt func(sub *Subscription) error
 //
 // Deprecated: use pubsub.Join() and topic.Subscribe() instead
 func (p *PubSub) Subscribe(topic string, opts ...SubOpt) (*Subscription, error) {
-	td := pb.TopicDescriptor{Name: &topic}
-
-	return p.SubscribeByTopicDescriptor(&td, opts...)
-}
-
-// SubscribeByTopicDescriptor lets you subscribe a topic using a pb.TopicDescriptor.
-//
-// Deprecated: use pubsub.Join() and topic.Subscribe() instead
-func (p *PubSub) SubscribeByTopicDescriptor(td *pb.TopicDescriptor, opts ...SubOpt) (*Subscription, error) {
-	if td.GetAuth().GetMode() != pb.TopicDescriptor_AuthOpts_NONE {
-		return nil, fmt.Errorf("auth mode not yet supported")
-	}
-
-	if td.GetEnc().GetMode() != pb.TopicDescriptor_EncOpts_NONE {
-		return nil, fmt.Errorf("encryption mode not yet supported")
-	}
-
 	// ignore whether the topic was newly created or not, since either way we have a valid topic to work with
-	topic, _, err := p.tryJoin(td.GetName())
+	topicHandle, _, err := p.tryJoin(topic)
 	if err != nil {
 		return nil, err
 	}
 
-	return topic.Subscribe(opts...)
+	return topicHandle.Subscribe(opts...)
 }
 
 type topicReq struct {
