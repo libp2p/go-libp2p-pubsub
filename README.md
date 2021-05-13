@@ -56,7 +56,7 @@ To be used for messaging in p2p instrastructure (as part of libp2p) such as IPFS
 
 ### Example
 
-https://github.com/libp2p/js-libp2p/tree/master/examples/pubsub
+https://github.com/libp2p/go-libp2p/tree/master/examples/pubsub
 
 ## Documentation
 
