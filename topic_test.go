@@ -679,6 +679,40 @@ func TestTopicRelayOnClosedTopic(t *testing.T) {
 	}
 }
 
+func TestProducePanic(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	const numHosts = 5
+	topicID := "foobar"
+	hosts := getNetHosts(t, ctx, numHosts)
+	ps := getPubsub(ctx, hosts[0])
+
+	// Create topic
+	topic, err := ps.Join(topicID)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Create subscription we're going to cancel
+	s, err := topic.Subscribe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Create second subscription to keep us alive on the subscription map
+	// after the first one is canceled
+	s2, err := topic.Subscribe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = s2
+
+	s.Cancel()
+	time.Sleep(time.Second)
+	s.Cancel()
+	time.Sleep(time.Second)
+}
+
 func notifSubThenUnSub(ctx context.Context, t *testing.T, topics []*Topic) {
 	primaryTopic := topics[0]
 	msgs := make([]*Subscription, len(topics))
