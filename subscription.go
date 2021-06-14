@@ -10,6 +10,7 @@ type Subscription struct {
 	topic    string
 	ch       chan *Message
 	cancelCh chan<- *Subscription
+	closed   bool
 	ctx      context.Context
 	err      error
 }
@@ -43,5 +44,8 @@ func (sub *Subscription) Cancel() {
 }
 
 func (sub *Subscription) close() {
-	close(sub.ch)
+	if !sub.closed {
+		close(sub.ch)
+		sub.closed = true
+	}
 }
