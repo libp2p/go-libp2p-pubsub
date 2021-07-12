@@ -16,8 +16,16 @@ func (p *PubSubNotif) ClosedStream(n network.Network, s network.Stream) {
 }
 
 func (p *PubSubNotif) Connected(n network.Network, c network.Conn) {
-	p.newPeersMx.Lock()
-	defer p.newPeersMx.Unlock()
+
+	select {
+	case <-p.newPeersSema:
+		defer func() {
+			p.newPeersSema <- struct{}{}
+		}()
+
+	case <-p.ctx.Done():
+		return
+	}
 
 	p.newPeersPend[c.RemotePeer()] = struct{}{}
 	select {
@@ -36,8 +44,15 @@ func (p *PubSubNotif) ListenClose(n network.Network, _ ma.Multiaddr) {
 }
 
 func (p *PubSubNotif) Initialize() {
-	p.newPeersMx.Lock()
-	defer p.newPeersMx.Unlock()
+	select {
+	case <-p.newPeersSema:
+		defer func() {
+			p.newPeersSema <- struct{}{}
+		}()
+
+	case <-p.ctx.Done():
+		return
+	}
 
 	for _, pid := range p.host.Network().Peers() {
 		p.newPeersPend[pid] = struct{}{}
