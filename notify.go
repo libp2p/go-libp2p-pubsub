@@ -22,8 +22,15 @@ func (p *PubSubNotif) Connected(n network.Network, c network.Conn) {
 		return
 	}
 
-	p.newPeersMx.Lock()
-	defer p.newPeersMx.Unlock()
+	select {
+	case <-p.newPeersSema:
+		defer func() {
+			p.newPeersSema <- struct{}{}
+		}()
+
+	case <-p.ctx.Done():
+		return
+	}
 
 	p.newPeersPend[c.RemotePeer()] = struct{}{}
 	select {
@@ -52,8 +59,15 @@ func (p *PubSubNotif) Initialize() {
 		return true
 	}
 
-	p.newPeersMx.Lock()
-	defer p.newPeersMx.Unlock()
+	select {
+	case <-p.newPeersSema:
+		defer func() {
+			p.newPeersSema <- struct{}{}
+		}()
+
+	case <-p.ctx.Done():
+		return
+	}
 
 	for _, pid := range p.host.Network().Peers() {
 		if isTransient(pid) {
