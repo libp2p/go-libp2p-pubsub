@@ -362,6 +362,9 @@ func (pg *peerGater) AcceptFrom(p peer.ID) AcceptStatus {
 	return AcceptControl
 }
 
+// -- RawTracer interface methods
+var _ RawTracer = (*peerGater)(nil)
+
 // tracer interface
 func (pg *peerGater) AddPeer(p peer.ID, proto protocol.ID) {
 	pg.Lock()
@@ -440,3 +443,9 @@ func (pg *peerGater) DuplicateMessage(msg *Message) {
 }
 
 func (pg *peerGater) ThrottlePeer(p peer.ID) {}
+
+func (pg *peerGater) RecvRPC(rpc *RPC) {}
+
+func (pg *peerGater) SendRPC(rpc *RPC, p peer.ID) {}
+
+func (pg *peerGater) DropRPC(rpc *RPC, p peer.ID) {}

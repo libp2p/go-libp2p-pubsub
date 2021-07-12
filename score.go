@@ -819,6 +819,12 @@ func (ps *peerScore) DuplicateMessage(msg *Message) {
 
 func (ps *peerScore) ThrottlePeer(p peer.ID) {}
 
+func (ps *peerScore) RecvRPC(rpc *RPC) {}
+
+func (ps *peerScore) SendRPC(rpc *RPC, p peer.ID) {}
+
+func (ps *peerScore) DropRPC(rpc *RPC, p peer.ID) {}
+
 // message delivery records
 func (d *messageDeliveries) getRecord(id string) *deliveryRecord {
 	rec, ok := d.records[id]
