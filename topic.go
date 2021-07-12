@@ -141,7 +141,6 @@ func (t *Topic) Subscribe(opts ...SubOpt) (*Subscription, error) {
 
 	sub := &Subscription{
 		topic: t.topic,
-		ch:    make(chan *Message, 32),
 		ctx:   t.p.ctx,
 	}
 
@@ -150,6 +149,11 @@ func (t *Topic) Subscribe(opts ...SubOpt) (*Subscription, error) {
 		if err != nil {
 			return nil, err
 		}
+	}
+
+	if sub.ch == nil {
+		// apply the default size
+		sub.ch = make(chan *Message, 32)
 	}
 
 	out := make(chan *Subscription, 1)

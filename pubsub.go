@@ -1150,6 +1150,16 @@ func (p *PubSub) Subscribe(topic string, opts ...SubOpt) (*Subscription, error) 
 	return topicHandle.Subscribe(opts...)
 }
 
+// WithBufferSize is a Subscribe option to customize the size of the subscribe output buffer.
+// The default length is 32 but it can be configured to avoid dropping messages if the consumer is not reading fast
+// enough.
+func WithBufferSize(size int) SubOpt {
+	return func(sub *Subscription) error {
+		sub.ch = make(chan *Message, size)
+		return nil
+	}
+}
+
 type topicReq struct {
 	resp chan []string
 }
