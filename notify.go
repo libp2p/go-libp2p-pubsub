@@ -21,12 +21,15 @@ func (p *PubSubNotif) Connected(n network.Network, c network.Conn) {
 	if c.Stat().Transient {
 		return
 	}
-	go func() {
-		select {
-		case p.newPeers <- c.RemotePeer():
-		case <-p.ctx.Done():
-		}
-	}()
+
+	p.newPeersMx.Lock()
+	defer p.newPeersMx.Unlock()
+
+	p.newPeersPend[c.RemotePeer()] = struct{}{}
+	select {
+	case p.newPeers <- struct{}{}:
+	default:
+	}
 }
 
 func (p *PubSubNotif) Disconnected(n network.Network, c network.Conn) {
@@ -49,13 +52,18 @@ func (p *PubSubNotif) Initialize() {
 		return true
 	}
 
+	p.newPeersMx.Lock()
+	defer p.newPeersMx.Unlock()
+
 	for _, pid := range p.host.Network().Peers() {
 		if isTransient(pid) {
 			continue
 		}
-		select {
-		case p.newPeers <- pid:
-		case <-p.ctx.Done():
-		}
+		p.newPeersPend[pid] = struct{}{}
+	}
+
+	select {
+	case p.newPeers <- struct{}{}:
+	default:
 	}
 }
