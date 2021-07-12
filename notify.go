@@ -16,12 +16,14 @@ func (p *PubSubNotif) ClosedStream(n network.Network, s network.Stream) {
 }
 
 func (p *PubSubNotif) Connected(n network.Network, c network.Conn) {
-	go func() {
-		select {
-		case p.newPeers <- c.RemotePeer():
-		case <-p.ctx.Done():
-		}
-	}()
+	p.newPeersMx.Lock()
+	defer p.newPeersMx.Unlock()
+
+	p.newPeersPend[c.RemotePeer()] = struct{}{}
+	select {
+	case p.newPeers <- struct{}{}:
+	default:
+	}
 }
 
 func (p *PubSubNotif) Disconnected(n network.Network, c network.Conn) {
@@ -34,10 +36,15 @@ func (p *PubSubNotif) ListenClose(n network.Network, _ ma.Multiaddr) {
 }
 
 func (p *PubSubNotif) Initialize() {
-	for _, pr := range p.host.Network().Peers() {
-		select {
-		case p.newPeers <- pr:
-		case <-p.ctx.Done():
-		}
+	p.newPeersMx.Lock()
+	defer p.newPeersMx.Unlock()
+
+	for _, pid := range p.host.Network().Peers() {
+		p.newPeersPend[pid] = struct{}{}
+	}
+
+	select {
+	case p.newPeers <- struct{}{}:
+	default:
 	}
 }

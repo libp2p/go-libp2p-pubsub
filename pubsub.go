@@ -92,8 +92,10 @@ type PubSub struct {
 	// removeTopic is a topic cancellation channel
 	rmTopic chan *rmTopicReq
 
-	// a notification channel for new peer connections
-	newPeers chan peer.ID
+	// a notification channel for new peer connections accumulated
+	newPeers     chan struct{}
+	newPeersMx   sync.Mutex
+	newPeersPend map[peer.ID]struct{}
 
 	// a notification channel for new outoging peer streams
 	newPeerStream chan network.Stream
@@ -235,7 +237,8 @@ func NewPubSub(ctx context.Context, h host.Host, rt PubSubRouter, opts ...Option
 		signPolicy:            StrictSign,
 		incoming:              make(chan *RPC, 32),
 		publish:               make(chan *Message),
-		newPeers:              make(chan peer.ID),
+		newPeers:              make(chan struct{}, 1),
+		newPeersPend:          make(map[peer.ID]struct{}),
 		newPeerStream:         make(chan network.Stream),
 		newPeerError:          make(chan peer.ID),
 		peerDead:              make(chan peer.ID),
@@ -483,21 +486,8 @@ func (p *PubSub) processLoop(ctx context.Context) {
 
 	for {
 		select {
-		case pid := <-p.newPeers:
-			if _, ok := p.peers[pid]; ok {
-				log.Debug("already have connection to peer: ", pid)
-				continue
-			}
-
-			if p.blacklist.Contains(pid) {
-				log.Warn("ignoring connection from blacklisted peer: ", pid)
-				continue
-			}
-
-			messages := make(chan *RPC, p.peerOutboundQueueSize)
-			messages <- p.getHelloPacket()
-			go p.handleNewPeer(ctx, pid, messages)
-			p.peers[pid] = messages
+		case <-p.newPeers:
+			p.handlePendingPeers()
 
 		case s := <-p.newPeerStream:
 			pid := s.Conn().RemotePeer()
@@ -625,6 +615,35 @@ func (p *PubSub) processLoop(ctx context.Context) {
 			log.Info("pubsub processloop shutting down")
 			return
 		}
+	}
+}
+
+func (p *PubSub) handlePendingPeers() {
+	p.newPeersMx.Lock()
+	defer p.newPeersMx.Unlock()
+
+	if len(p.newPeersPend) == 0 {
+		return
+	}
+
+	newPeers := p.newPeersPend
+	p.newPeersPend = make(map[peer.ID]struct{})
+
+	for pid := range newPeers {
+		if _, ok := p.peers[pid]; ok {
+			log.Debug("already have connection to peer: ", pid)
+			continue
+		}
+
+		if p.blacklist.Contains(pid) {
+			log.Warn("ignoring connection from blacklisted peer: ", pid)
+			continue
+		}
+
+		messages := make(chan *RPC, p.peerOutboundQueueSize)
+		messages <- p.getHelloPacket()
+		go p.handleNewPeer(p.ctx, pid, messages)
+		p.peers[pid] = messages
 	}
 }
 
