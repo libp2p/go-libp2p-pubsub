@@ -24,15 +24,13 @@ func (p *PubSubNotif) Connected(n network.Network, c network.Conn) {
 
 	select {
 	case <-p.newPeersSema:
-		defer func() {
-			p.newPeersSema <- struct{}{}
-		}()
-
 	case <-p.ctx.Done():
 		return
 	}
 
 	p.newPeersPend[c.RemotePeer()] = struct{}{}
+	p.newPeersSema <- struct{}{}
+
 	select {
 	case p.newPeers <- struct{}{}:
 	default:
@@ -61,10 +59,6 @@ func (p *PubSubNotif) Initialize() {
 
 	select {
 	case <-p.newPeersSema:
-		defer func() {
-			p.newPeersSema <- struct{}{}
-		}()
-
 	case <-p.ctx.Done():
 		return
 	}
@@ -75,6 +69,8 @@ func (p *PubSubNotif) Initialize() {
 		}
 		p.newPeersPend[pid] = struct{}{}
 	}
+
+	p.newPeersSema <- struct{}{}
 
 	select {
 	case p.newPeers <- struct{}{}:
