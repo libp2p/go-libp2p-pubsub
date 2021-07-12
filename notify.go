@@ -22,19 +22,21 @@ func (p *PubSubNotif) Connected(n network.Network, c network.Conn) {
 		return
 	}
 
-	select {
-	case <-p.newPeersSema:
-	case <-p.ctx.Done():
-		return
-	}
+	go func() {
+		select {
+		case <-p.newPeersSema:
+		case <-p.ctx.Done():
+			return
+		}
 
-	p.newPeersPend[c.RemotePeer()] = struct{}{}
-	p.newPeersSema <- struct{}{}
+		p.newPeersPend[c.RemotePeer()] = struct{}{}
+		p.newPeersSema <- struct{}{}
 
-	select {
-	case p.newPeers <- struct{}{}:
-	default:
-	}
+		select {
+		case p.newPeers <- struct{}{}:
+		default:
+		}
+	}()
 }
 
 func (p *PubSubNotif) Disconnected(n network.Network, c network.Conn) {
