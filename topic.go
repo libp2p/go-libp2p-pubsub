@@ -130,7 +130,7 @@ func (t *Topic) sendNotification(evt PeerEvent) {
 }
 
 // Subscribe returns a new Subscription for the topic.
-// Note that subscription is not an instanteneous operation. It may take some time
+// Note that subscription is not an instantaneous operation. It may take some time
 // before the subscription is processed by the pubsub main loop and propagated to our peers.
 func (t *Topic) Subscribe(opts ...SubOpt) (*Subscription, error) {
 	t.mux.RLock()

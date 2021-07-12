@@ -189,12 +189,12 @@ type PubSubRouter interface {
 type AcceptStatus int
 
 const (
-	// AcceptAll signals to accept the incoming RPC for full processing
+	// AcceptNone signals to drop the incoming RPC
 	AcceptNone AcceptStatus = iota
 	// AcceptControl signals to accept the incoming RPC only for control message processing by
 	// the router. Included payload messages will _not_ be pushed to the validation queue.
 	AcceptControl
-	// AcceptNone signals to drop the incoming RPC
+	// AcceptAll signals to accept the incoming RPC for full processing
 	AcceptAll
 )
 
@@ -1136,7 +1136,7 @@ type addSubReq struct {
 type SubOpt func(sub *Subscription) error
 
 // Subscribe returns a new Subscription for the given topic.
-// Note that subscription is not an instanteneous operation. It may take some time
+// Note that subscription is not an instantaneous operation. It may take some time
 // before the subscription is processed by the pubsub main loop and propagated to our peers.
 //
 // Deprecated: use pubsub.Join() and topic.Subscribe() instead
