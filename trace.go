@@ -16,7 +16,7 @@ type EventTracer interface {
 	Trace(evt *pb.TraceEvent)
 }
 
-// RawTracer is a low level tracing interace that allows an application to trace the internal
+// RawTracer is a low level tracing interface that allows an application to trace the internal
 // operation of the pubsub subsystem.
 //
 // Note that the tracers are invoked synchronously, which means that application tracers must
@@ -54,6 +54,9 @@ type RawTracer interface {
 	SendRPC(rpc *RPC, p peer.ID)
 	// DropRPC is invoked when an outbound RPC is dropped, typically because of a queue full.
 	DropRPC(rpc *RPC, p peer.ID)
+	// DroppedInSubscribe is invoked when the consumer of Subscribe is not reading messages fast enough and
+	// the pressure release mechanism trigger, dropping messages.
+	DroppedInSubscribe(msg *Message)
 }
 
 // pubsub tracer details
@@ -323,6 +326,16 @@ func (t *pubsubTracer) DropRPC(rpc *RPC, p peer.ID) {
 	}
 
 	t.tracer.Trace(evt)
+}
+
+func (t *pubsubTracer) DroppedInSubscribe(msg *Message) {
+	if t == nil {
+		return
+	}
+
+	for _, tr := range t.raw {
+		tr.DroppedInSubscribe(msg)
+	}
 }
 
 func (t *pubsubTracer) traceRPCMeta(rpc *RPC) *pb.TraceEvent_RPCMeta {

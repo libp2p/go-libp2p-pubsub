@@ -825,6 +825,8 @@ func (ps *peerScore) SendRPC(rpc *RPC, p peer.ID) {}
 
 func (ps *peerScore) DropRPC(rpc *RPC, p peer.ID) {}
 
+func (ps *peerScore) DroppedInSubscribe(msg *Message) {}
+
 // message delivery records
 func (d *messageDeliveries) getRecord(id string) *deliveryRecord {
 	rec, ok := d.records[id]
