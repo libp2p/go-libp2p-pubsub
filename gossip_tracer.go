@@ -162,7 +162,7 @@ func (gt *gossipTracer) DuplicateMessage(msg *Message)        {}
 func (gt *gossipTracer) RecvRPC(rpc *RPC)                     {}
 func (gt *gossipTracer) SendRPC(rpc *RPC, p peer.ID)          {}
 func (gt *gossipTracer) DropRPC(rpc *RPC, p peer.ID)          {}
-func (gt *gossipTracer) DroppedInSubscribe(msg *Message)      {}
+func (gt *gossipTracer) UndeliverableMessage(msg *Message)    {}
 
 func (gt *gossipTracer) ThrottlePeer(p peer.ID) {
 	gt.Lock()

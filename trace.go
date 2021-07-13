@@ -54,9 +54,9 @@ type RawTracer interface {
 	SendRPC(rpc *RPC, p peer.ID)
 	// DropRPC is invoked when an outbound RPC is dropped, typically because of a queue full.
 	DropRPC(rpc *RPC, p peer.ID)
-	// DroppedInSubscribe is invoked when the consumer of Subscribe is not reading messages fast enough and
+	// UndeliverableMessage is invoked when the consumer of Subscribe is not reading messages fast enough and
 	// the pressure release mechanism trigger, dropping messages.
-	DroppedInSubscribe(msg *Message)
+	UndeliverableMessage(msg *Message)
 }
 
 // pubsub tracer details
@@ -328,13 +328,13 @@ func (t *pubsubTracer) DropRPC(rpc *RPC, p peer.ID) {
 	t.tracer.Trace(evt)
 }
 
-func (t *pubsubTracer) DroppedInSubscribe(msg *Message) {
+func (t *pubsubTracer) UndeliverableMessage(msg *Message) {
 	if t == nil {
 		return
 	}
 
 	for _, tr := range t.raw {
-		tr.DroppedInSubscribe(msg)
+		tr.UndeliverableMessage(msg)
 	}
 }
 
