@@ -592,14 +592,15 @@ func (p *PubSub) processLoop(ctx context.Context) {
 
 func (p *PubSub) handlePendingPeers() {
 	p.newPeersPrioLk.Lock()
-	defer p.newPeersPrioLk.Unlock()
 
 	if len(p.newPeersPend) == 0 {
+		p.newPeersPrioLk.Unlock()
 		return
 	}
 
 	newPeers := p.newPeersPend
 	p.newPeersPend = make(map[peer.ID]struct{})
+	p.newPeersPrioLk.Unlock()
 
 	for pid := range newPeers {
 		if p.host.Network().Connectedness(pid) != network.Connected {
@@ -625,14 +626,15 @@ func (p *PubSub) handlePendingPeers() {
 
 func (p *PubSub) handleDeadPeers() {
 	p.peerDeadPrioLk.Lock()
-	defer p.peerDeadPrioLk.Unlock()
 
 	if len(p.peerDeadPend) == 0 {
+		p.peerDeadPrioLk.Unlock()
 		return
 	}
 
 	deadPeers := p.peerDeadPend
 	p.peerDeadPend = make(map[peer.ID]struct{})
+	p.peerDeadPrioLk.Unlock()
 
 	for pid := range deadPeers {
 		ch, ok := p.peers[pid]
