@@ -450,4 +450,4 @@ func (pg *peerGater) SendRPC(rpc *RPC, p peer.ID) {}
 
 func (pg *peerGater) DropRPC(rpc *RPC, p peer.ID) {}
 
-func (pg *peerGater) DroppedInSubscribe(msg *Message) {}
+func (pg *peerGater) UndeliverableMessage(msg *Message) {}
