@@ -842,6 +842,7 @@ func (p *PubSub) notifySubs(msg *Message) {
 		select {
 		case f.ch <- msg:
 		default:
+			p.tracer.DroppedInSubscribe(msg)
 			log.Infof("Can't deliver message to subscription for topic %s; subscriber too slow", topic)
 		}
 	}
