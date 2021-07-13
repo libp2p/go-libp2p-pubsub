@@ -13,7 +13,6 @@ import (
 	"github.com/libp2p/go-msgio/protoio"
 
 	"github.com/gogo/protobuf/proto"
-	ms "github.com/multiformats/go-multistream"
 )
 
 // get the initial RPC containing all of our subscriptions to send to new peers
@@ -106,14 +105,11 @@ func (p *PubSub) handleNewPeer(ctx context.Context, pid peer.ID, outgoing <-chan
 	if err != nil {
 		log.Debug("opening new stream to peer: ", err, pid)
 
-		if err == ms.ErrNotSupported {
-			select {
-			case p.newPeerError <- pid:
-			case <-ctx.Done():
-			}
-		} else {
-			p.notifyPeerDead(pid)
+		select {
+		case p.newPeerError <- pid:
+		case <-ctx.Done():
 		}
+
 		return
 	}
 
