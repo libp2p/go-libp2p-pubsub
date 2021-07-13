@@ -102,7 +102,10 @@ type PubSub struct {
 	newPeerError chan peer.ID
 
 	// a notification channel for when our peers die
-	peerDead chan peer.ID
+	peerDead       chan struct{}
+	peerDeadPrioLk sync.RWMutex
+	peerDeadMx     sync.Mutex
+	peerDeadPend   map[peer.ID]struct{}
 
 	// The set of topics we are subscribed to
 	mySubs map[string]map[*Subscription]struct{}
@@ -238,7 +241,8 @@ func NewPubSub(ctx context.Context, h host.Host, rt PubSubRouter, opts ...Option
 		newPeersPend:          make(map[peer.ID]struct{}),
 		newPeerStream:         make(chan network.Stream),
 		newPeerError:          make(chan peer.ID),
-		peerDead:              make(chan peer.ID),
+		peerDead:              make(chan struct{}, 1),
+		peerDeadPend:          make(map[peer.ID]struct{}),
 		cancelCh:              make(chan *Subscription),
 		getPeers:              make(chan *listPeerReq),
 		addSub:                make(chan *addSubReq),
@@ -509,34 +513,8 @@ func (p *PubSub) processLoop(ctx context.Context) {
 		case pid := <-p.newPeerError:
 			delete(p.peers, pid)
 
-		case pid := <-p.peerDead:
-			ch, ok := p.peers[pid]
-			if !ok {
-				continue
-			}
-
-			close(ch)
-
-			if p.host.Network().Connectedness(pid) == network.Connected {
-				// still connected, must be a duplicate connection being closed.
-				// we respawn the writer as we need to ensure there is a stream active
-				log.Debugf("peer declared dead but still connected; respawning writer: %s", pid)
-				messages := make(chan *RPC, p.peerOutboundQueueSize)
-				messages <- p.getHelloPacket()
-				go p.handleNewPeer(ctx, pid, messages)
-				p.peers[pid] = messages
-				continue
-			}
-
-			delete(p.peers, pid)
-			for t, tmap := range p.topics {
-				if _, ok := tmap[pid]; ok {
-					delete(tmap, pid)
-					p.notifyLeave(t, pid)
-				}
-			}
-
-			p.rt.RemovePeer(pid)
+		case <-p.peerDead:
+			p.handleDeadPeers()
 
 		case treq := <-p.getTopics:
 			var out []string
@@ -642,6 +620,48 @@ func (p *PubSub) handlePendingPeers() {
 		messages <- p.getHelloPacket()
 		go p.handleNewPeer(p.ctx, pid, messages)
 		p.peers[pid] = messages
+	}
+}
+
+func (p *PubSub) handleDeadPeers() {
+	p.peerDeadPrioLk.Lock()
+	defer p.peerDeadPrioLk.Unlock()
+
+	if len(p.peerDeadPend) == 0 {
+		return
+	}
+
+	deadPeers := p.peerDeadPend
+	p.peerDeadPend = make(map[peer.ID]struct{})
+
+	for pid := range deadPeers {
+		ch, ok := p.peers[pid]
+		if !ok {
+			continue
+		}
+
+		close(ch)
+
+		if p.host.Network().Connectedness(pid) == network.Connected {
+			// still connected, must be a duplicate connection being closed.
+			// we respawn the writer as we need to ensure there is a stream active
+			log.Debugf("peer declared dead but still connected; respawning writer: %s", pid)
+			messages := make(chan *RPC, p.peerOutboundQueueSize)
+			messages <- p.getHelloPacket()
+			go p.handleNewPeer(p.ctx, pid, messages)
+			p.peers[pid] = messages
+			continue
+		}
+
+		delete(p.peers, pid)
+		for t, tmap := range p.topics {
+			if _, ok := tmap[pid]; ok {
+				delete(tmap, pid)
+				p.notifyLeave(t, pid)
+			}
+		}
+
+		p.rt.RemovePeer(pid)
 	}
 }
 
