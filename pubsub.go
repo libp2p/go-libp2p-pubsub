@@ -493,8 +493,8 @@ func (p *PubSub) processLoop(ctx context.Context) {
 
 		case s := <-p.newPeerStream:
 			pid := s.Conn().RemotePeer()
-			ch, ok := p.peers[pid]
 
+			ch, ok := p.peers[pid]
 			if !ok {
 				log.Warn("new stream for unknown peer: ", pid)
 				s.Reset()

@@ -17,6 +17,7 @@ func TestMapBlacklist(t *testing.T) {
 	if !b.Contains(p) {
 		t.Fatal("peer not in the blacklist")
 	}
+
 }
 
 func TestTimeCachedBlacklist(t *testing.T) {
