@@ -210,7 +210,11 @@ func TestGossipsubAttackSpamIHAVE(t *testing.T) {
 						writeMsg(&orpc.RPC)
 					}
 
-					time.Sleep(GossipSubHeartbeatInterval)
+					select {
+					case <-ctx.Done():
+						return
+					case <-time.After(GossipSubHeartbeatInterval):
+					}
 
 					// Should have hit the maximum number of IWANTs per peer
 					// per heartbeat
@@ -236,7 +240,11 @@ func TestGossipsubAttackSpamIHAVE(t *testing.T) {
 						writeMsg(&orpc.RPC)
 					}
 
-					time.Sleep(GossipSubHeartbeatInterval)
+					select {
+					case <-ctx.Done():
+						return
+					case <-time.After(GossipSubHeartbeatInterval):
+					}
 
 					// Should have sent more IWANTs after the heartbeat
 					iwc = getIWantCount()
@@ -250,7 +258,11 @@ func TestGossipsubAttackSpamIHAVE(t *testing.T) {
 						return // cannot call t.Fatalf in a non-test goroutine
 					}
 
-					time.Sleep(GossipSubIWantFollowupTime)
+					select {
+					case <-ctx.Done():
+						return
+					case <-time.After(GossipSubIWantFollowupTime):
+					}
 
 					// The score should now be negative because of broken promises
 					score = ps.rt.(*GossipSubRouter).score.Score(attacker.ID())
@@ -440,7 +452,11 @@ func TestGossipsubAttackGRAFTDuringBackoff(t *testing.T) {
 						Control: &pb.ControlMessage{Prune: prune},
 					})
 
-					time.Sleep(20 * time.Millisecond)
+					select {
+					case <-ctx.Done():
+						return
+					case <-time.After(20 * time.Millisecond):
+					}
 
 					// No PRUNE should have been sent at this stage
 					pc = getPruneCount()
@@ -458,7 +474,11 @@ func TestGossipsubAttackGRAFTDuringBackoff(t *testing.T) {
 						Control: &pb.ControlMessage{Graft: graft},
 					})
 
-					time.Sleep(20 * time.Millisecond)
+					select {
+					case <-ctx.Done():
+						return
+					case <-time.After(20 * time.Millisecond):
+					}
 
 					// We should have been peanalized by the peer for sending before the backoff has expired
 					// but should still receive a PRUNE because we haven't dropped below GraylistThreshold
@@ -480,7 +500,11 @@ func TestGossipsubAttackGRAFTDuringBackoff(t *testing.T) {
 						Control: &pb.ControlMessage{Graft: graft},
 					})
 
-					time.Sleep(20 * time.Millisecond)
+					select {
+					case <-ctx.Done():
+						return
+					case <-time.After(20 * time.Millisecond):
+					}
 
 					// we are before the flood threshold so we should be penalized twice, but still get
 					// a PRUNE because we are before the flood threshold
@@ -501,7 +525,11 @@ func TestGossipsubAttackGRAFTDuringBackoff(t *testing.T) {
 						Control: &pb.ControlMessage{Graft: graft},
 					})
 
-					time.Sleep(20 * time.Millisecond)
+					select {
+					case <-ctx.Done():
+						return
+					case <-time.After(20 * time.Millisecond):
+					}
 
 					pc = getPruneCount()
 					if pc != 3 {
@@ -522,13 +550,21 @@ func TestGossipsubAttackGRAFTDuringBackoff(t *testing.T) {
 					// Wait for the PRUNE backoff to expire and try again; this time we should fail
 					// because we are below the graylist threshold, so our RPC should be ignored and
 					// we should get no PRUNE back
-					time.Sleep(GossipSubPruneBackoff + time.Millisecond)
+					select {
+					case <-ctx.Done():
+						return
+					case <-time.After(GossipSubPruneBackoff + time.Millisecond):
+					}
 
 					writeMsg(&pb.RPC{
 						Control: &pb.ControlMessage{Graft: graft},
 					})
 
-					time.Sleep(20 * time.Millisecond)
+					select {
+					case <-ctx.Done():
+						return
+					case <-time.After(20 * time.Millisecond):
+					}
 
 					pc = getPruneCount()
 					if pc != 3 {
@@ -690,7 +726,11 @@ func TestGossipsubAttackInvalidMessageSpam(t *testing.T) {
 					}
 
 					// Wait for the initial heartbeat, plus a bit of padding
-					time.Sleep(100*time.Millisecond + GossipSubHeartbeatInitialDelay)
+					select {
+					case <-ctx.Done():
+						return
+					case <-time.After(100*time.Millisecond + GossipSubHeartbeatInitialDelay):
+					}
 
 					// The attackers score should now have fallen below zero
 					if attackerScore() >= 0 {
