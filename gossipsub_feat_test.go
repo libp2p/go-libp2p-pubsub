@@ -37,11 +37,7 @@ func TestGossipSubCustomProtocols(t *testing.T) {
 	customsub := protocol.ID("customsub/1.0.0")
 	protos := []protocol.ID{customsub, FloodSubID}
 	features := func(feat GossipSubFeature, proto protocol.ID) bool {
-		if proto == customsub {
-			return true
-		}
-
-		return false
+		return proto == customsub
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())

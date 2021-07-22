@@ -210,8 +210,8 @@ func NewGossipSub(ctx context.Context, h host.Host, opts ...Option) (*PubSub, er
 		outbound:  make(map[peer.ID]bool),
 		connect:   make(chan connectInfo, params.MaxPendingConnections),
 		mcache:    NewMessageCache(params.HistoryGossip, params.HistoryLength),
-		protos:  GossipSubDefaultProtocols,
-		feature: GossipSubDefaultFeatures,
+		protos:    GossipSubDefaultProtocols,
+		feature:   GossipSubDefaultFeatures,
 		tagTracer: newTagTracer(h.ConnManager()),
 		params:    params,
 	}
@@ -668,7 +668,7 @@ func (gs *GossipSubRouter) handleIHave(p peer.ID, ctl *pb.ControlMessage) []*pb.
 
 	gs.gossipTracer.AddPromise(p, iwantlst)
 
-	return []*pb.ControlIWant{&pb.ControlIWant{MessageIDs: iwantlst}}
+	return []*pb.ControlIWant{{MessageIDs: iwantlst}}
 }
 
 func (gs *GossipSubRouter) handleIWant(p peer.ID, ctl *pb.ControlMessage) []*pb.Message {
@@ -901,7 +901,6 @@ func (gs *GossipSubRouter) pxConnect(peers []*pb.PeerInfo) {
 		case gs.connect <- ci:
 		default:
 			log.Debugf("ignoring peer connection attempt; too many pending connections")
-			break
 		}
 	}
 }
@@ -1078,7 +1077,7 @@ func (gs *GossipSubRouter) Leave(topic string) {
 }
 
 func (gs *GossipSubRouter) sendGraft(p peer.ID, topic string) {
-	graft := []*pb.ControlGraft{&pb.ControlGraft{TopicID: &topic}}
+	graft := []*pb.ControlGraft{{TopicID: &topic}}
 	out := rpcWithControl(nil, nil, nil, graft, nil)
 	gs.sendRPC(p, out)
 }
@@ -1297,7 +1296,7 @@ func (gs *GossipSubRouter) heartbeatTimer() {
 }
 
 func (gs *GossipSubRouter) heartbeat() {
-	defer log.EventBegin(gs.p.ctx, "heartbeat").Done()
+	defer log.Infow("heartbeat")
 
 	gs.heartbeatTicks++
 
@@ -1650,7 +1649,6 @@ func (gs *GossipSubRouter) sendGraftPrune(tograft, toprune map[peer.ID][]string,
 		out := rpcWithControl(nil, nil, nil, nil, prune)
 		gs.sendRPC(p, out)
 	}
-
 }
 
 // emitGossip emits IHAVE gossip advertising items in the message cache window

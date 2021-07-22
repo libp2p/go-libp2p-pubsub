@@ -167,7 +167,7 @@ func TestTopicReuse(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if bytes.Compare(msg.GetData(), firstMsg) != 0 {
+	if !bytes.Equal(msg.GetData(), firstMsg) {
 		t.Fatal("received incorrect message")
 	}
 
@@ -194,7 +194,7 @@ func TestTopicReuse(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if bytes.Compare(msg.GetData(), illegalSend) != 0 {
+		if !bytes.Equal(msg.GetData(), illegalSend) {
 			t.Fatal("received incorrect message from illegal topic")
 		}
 		t.Fatal("received message sent by illegal topic")
@@ -213,11 +213,11 @@ func TestTopicReuse(t *testing.T) {
 
 	timeoutCtx, timeoutCancel = context.WithTimeout(ctx, time.Second*2)
 	defer timeoutCancel()
-	msg, err = sub.Next(ctx)
+	msg, err = sub.Next(timeoutCtx)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if bytes.Compare(msg.GetData(), secondMsg) != 0 {
+	if !bytes.Equal(msg.GetData(), secondMsg) {
 		t.Fatal("received incorrect message")
 	}
 }

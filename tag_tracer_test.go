@@ -237,6 +237,7 @@ func getTagValue(mgr connmgri.ConnManager, p peer.ID, tag string) int {
 	return val
 }
 
+//lint:ignore U1000 used only by skipped tests at present
 func tagExists(mgr connmgri.ConnManager, p peer.ID, tag string) bool {
 	info := mgr.GetTagInfo(p)
 	if info == nil {

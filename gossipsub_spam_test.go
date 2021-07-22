@@ -15,7 +15,6 @@ import (
 
 	pb "github.com/libp2p/go-libp2p-pubsub/pb"
 
-	logging "github.com/ipfs/go-log"
 	"github.com/libp2p/go-msgio/protoio"
 )
 
@@ -88,8 +87,8 @@ func TestGossipsubAttackSpamIWANT(t *testing.T) {
 			if sub.GetSubscribe() {
 				// Reply by subcribing to the topic and grafting to the peer
 				writeMsg(&pb.RPC{
-					Subscriptions: []*pb.RPC_SubOpts{&pb.RPC_SubOpts{Subscribe: sub.Subscribe, Topicid: sub.Topicid}},
-					Control:       &pb.ControlMessage{Graft: []*pb.ControlGraft{&pb.ControlGraft{TopicID: sub.Topicid}}},
+					Subscriptions: []*pb.RPC_SubOpts{{Subscribe: sub.Subscribe, Topicid: sub.Topicid}},
+					Control:       &pb.ControlMessage{Graft: []*pb.ControlGraft{{TopicID: sub.Topicid}}},
 				})
 
 				go func() {
@@ -120,7 +119,7 @@ func TestGossipsubAttackSpamIWANT(t *testing.T) {
 			// to send another message (until it cuts off the attacker for
 			// being spammy)
 			iwantlst := []string{DefaultMsgIdFn(msg)}
-			iwant := []*pb.ControlIWant{&pb.ControlIWant{MessageIDs: iwantlst}}
+			iwant := []*pb.ControlIWant{{MessageIDs: iwantlst}}
 			orpc := rpcWithControl(nil, nil, iwant, nil, nil)
 			writeMsg(&orpc.RPC)
 		}
@@ -192,8 +191,8 @@ func TestGossipsubAttackSpamIHAVE(t *testing.T) {
 			if sub.GetSubscribe() {
 				// Reply by subcribing to the topic and grafting to the peer
 				writeMsg(&pb.RPC{
-					Subscriptions: []*pb.RPC_SubOpts{&pb.RPC_SubOpts{Subscribe: sub.Subscribe, Topicid: sub.Topicid}},
-					Control:       &pb.ControlMessage{Graft: []*pb.ControlGraft{&pb.ControlGraft{TopicID: sub.Topicid}}},
+					Subscriptions: []*pb.RPC_SubOpts{{Subscribe: sub.Subscribe, Topicid: sub.Topicid}},
+					Control:       &pb.ControlMessage{Graft: []*pb.ControlGraft{{TopicID: sub.Topicid}}},
 				})
 
 				go func() {
@@ -206,53 +205,70 @@ func TestGossipsubAttackSpamIHAVE(t *testing.T) {
 					// Send a bunch of IHAVEs
 					for i := 0; i < 3*GossipSubMaxIHaveLength; i++ {
 						ihavelst := []string{"someid" + strconv.Itoa(i)}
-						ihave := []*pb.ControlIHave{&pb.ControlIHave{TopicID: sub.Topicid, MessageIDs: ihavelst}}
+						ihave := []*pb.ControlIHave{{TopicID: sub.Topicid, MessageIDs: ihavelst}}
 						orpc := rpcWithControl(nil, ihave, nil, nil, nil)
 						writeMsg(&orpc.RPC)
 					}
 
-					time.Sleep(GossipSubHeartbeatInterval)
+					select {
+					case <-ctx.Done():
+						return
+					case <-time.After(GossipSubHeartbeatInterval):
+					}
 
 					// Should have hit the maximum number of IWANTs per peer
 					// per heartbeat
 					iwc := getIWantCount()
 					if iwc > GossipSubMaxIHaveLength {
-						t.Fatalf("Expecting max %d IWANTs per heartbeat but received %d", GossipSubMaxIHaveLength, iwc)
+						t.Errorf("Expecting max %d IWANTs per heartbeat but received %d", GossipSubMaxIHaveLength, iwc)
+						return // cannot call t.Fatalf in a non-test goroutine
 					}
 					firstBatchCount := iwc
 
 					// the score should still be 0 because we haven't broken any promises yet
 					score := ps.rt.(*GossipSubRouter).score.Score(attacker.ID())
 					if score != 0 {
-						t.Fatalf("Expected 0 score, but got %f", score)
+						t.Errorf("Expected 0 score, but got %f", score)
+						return // cannot call t.Fatalf in a non-test goroutine
 					}
 
 					// Send a bunch of IHAVEs
 					for i := 0; i < 3*GossipSubMaxIHaveLength; i++ {
 						ihavelst := []string{"someid" + strconv.Itoa(i+100)}
-						ihave := []*pb.ControlIHave{&pb.ControlIHave{TopicID: sub.Topicid, MessageIDs: ihavelst}}
+						ihave := []*pb.ControlIHave{{TopicID: sub.Topicid, MessageIDs: ihavelst}}
 						orpc := rpcWithControl(nil, ihave, nil, nil, nil)
 						writeMsg(&orpc.RPC)
 					}
 
-					time.Sleep(GossipSubHeartbeatInterval)
+					select {
+					case <-ctx.Done():
+						return
+					case <-time.After(GossipSubHeartbeatInterval):
+					}
 
 					// Should have sent more IWANTs after the heartbeat
 					iwc = getIWantCount()
 					if iwc == firstBatchCount {
-						t.Fatal("Expecting to receive more IWANTs after heartbeat but did not")
+						t.Error("Expecting to receive more IWANTs after heartbeat but did not")
+						return // cannot call t.Fatalf in a non-test goroutine
 					}
 					// Should not be more than the maximum per heartbeat
 					if iwc-firstBatchCount > GossipSubMaxIHaveLength {
-						t.Fatalf("Expecting max %d IWANTs per heartbeat but received %d", GossipSubMaxIHaveLength, iwc-firstBatchCount)
+						t.Errorf("Expecting max %d IWANTs per heartbeat but received %d", GossipSubMaxIHaveLength, iwc-firstBatchCount)
+						return // cannot call t.Fatalf in a non-test goroutine
 					}
 
-					time.Sleep(GossipSubIWantFollowupTime)
+					select {
+					case <-ctx.Done():
+						return
+					case <-time.After(GossipSubIWantFollowupTime):
+					}
 
 					// The score should now be negative because of broken promises
 					score = ps.rt.(*GossipSubRouter).score.Score(attacker.ID())
 					if score >= 0 {
-						t.Fatalf("Expected negative score, but got %f", score)
+						t.Errorf("Expected negative score, but got %f", score)
+						return // cannot call t.Fatalf in a non-test goroutine
 					}
 				}()
 			}
@@ -309,14 +325,14 @@ func TestGossipsubAttackGRAFTNonExistentTopic(t *testing.T) {
 			if sub.GetSubscribe() {
 				// Reply by subcribing to the topic and grafting to the peer
 				writeMsg(&pb.RPC{
-					Subscriptions: []*pb.RPC_SubOpts{&pb.RPC_SubOpts{Subscribe: sub.Subscribe, Topicid: sub.Topicid}},
-					Control:       &pb.ControlMessage{Graft: []*pb.ControlGraft{&pb.ControlGraft{TopicID: sub.Topicid}}},
+					Subscriptions: []*pb.RPC_SubOpts{{Subscribe: sub.Subscribe, Topicid: sub.Topicid}},
+					Control:       &pb.ControlMessage{Graft: []*pb.ControlGraft{{TopicID: sub.Topicid}}},
 				})
 
 				// Graft to the peer on a non-existent topic
 				nonExistentTopic := "non-existent"
 				writeMsg(&pb.RPC{
-					Control: &pb.ControlMessage{Graft: []*pb.ControlGraft{&pb.ControlGraft{TopicID: &nonExistentTopic}}},
+					Control: &pb.ControlMessage{Graft: []*pb.ControlGraft{{TopicID: &nonExistentTopic}}},
 				})
 
 				go func() {
@@ -408,9 +424,9 @@ func TestGossipsubAttackGRAFTDuringBackoff(t *testing.T) {
 		for _, sub := range irpc.GetSubscriptions() {
 			if sub.GetSubscribe() {
 				// Reply by subcribing to the topic and grafting to the peer
-				graft := []*pb.ControlGraft{&pb.ControlGraft{TopicID: sub.Topicid}}
+				graft := []*pb.ControlGraft{{TopicID: sub.Topicid}}
 				writeMsg(&pb.RPC{
-					Subscriptions: []*pb.RPC_SubOpts{&pb.RPC_SubOpts{Subscribe: sub.Subscribe, Topicid: sub.Topicid}},
+					Subscriptions: []*pb.RPC_SubOpts{{Subscribe: sub.Subscribe, Topicid: sub.Topicid}},
 					Control:       &pb.ControlMessage{Graft: graft},
 				})
 
@@ -424,7 +440,8 @@ func TestGossipsubAttackGRAFTDuringBackoff(t *testing.T) {
 					// No PRUNE should have been sent at this stage
 					pc := getPruneCount()
 					if pc != 0 {
-						t.Fatalf("Expected %d PRUNE messages but got %d", 0, pc)
+						t.Errorf("Expected %d PRUNE messages but got %d", 0, pc)
+						return // cannot call t.Fatalf in a non-test goroutine
 					}
 
 					// Send a PRUNE to remove the attacker node from the legit
@@ -435,12 +452,18 @@ func TestGossipsubAttackGRAFTDuringBackoff(t *testing.T) {
 						Control: &pb.ControlMessage{Prune: prune},
 					})
 
-					time.Sleep(20 * time.Millisecond)
+					select {
+					case <-ctx.Done():
+						return
+					case <-time.After(20 * time.Millisecond):
+					}
 
 					// No PRUNE should have been sent at this stage
 					pc = getPruneCount()
 					if pc != 0 {
-						t.Fatalf("Expected %d PRUNE messages but got %d", 0, pc)
+						t.Errorf("Expected %d PRUNE messages but got %d", 0, pc)
+						return // cannot call t.Fatalf in a non-test goroutine
+
 					}
 
 					// wait for the GossipSubGraftFloodThreshold to pass before attempting another graft
@@ -451,19 +474,25 @@ func TestGossipsubAttackGRAFTDuringBackoff(t *testing.T) {
 						Control: &pb.ControlMessage{Graft: graft},
 					})
 
-					time.Sleep(20 * time.Millisecond)
+					select {
+					case <-ctx.Done():
+						return
+					case <-time.After(20 * time.Millisecond):
+					}
 
 					// We should have been peanalized by the peer for sending before the backoff has expired
 					// but should still receive a PRUNE because we haven't dropped below GraylistThreshold
 					// yet.
 					pc = getPruneCount()
 					if pc != 1 {
-						t.Fatalf("Expected %d PRUNE messages but got %d", 1, pc)
+						t.Errorf("Expected %d PRUNE messages but got %d", 1, pc)
+						return // cannot call t.Fatalf in a non-test goroutine
 					}
 
 					score1 := ps.rt.(*GossipSubRouter).score.Score(attacker.ID())
 					if score1 >= 0 {
-						t.Fatalf("Expected negative score, but got %f", score1)
+						t.Errorf("Expected negative score, but got %f", score1)
+						return // cannot call t.Fatalf in a non-test goroutine
 					}
 
 					// Send a GRAFT again to attempt to rejoin the mesh
@@ -471,18 +500,24 @@ func TestGossipsubAttackGRAFTDuringBackoff(t *testing.T) {
 						Control: &pb.ControlMessage{Graft: graft},
 					})
 
-					time.Sleep(20 * time.Millisecond)
+					select {
+					case <-ctx.Done():
+						return
+					case <-time.After(20 * time.Millisecond):
+					}
 
 					// we are before the flood threshold so we should be penalized twice, but still get
 					// a PRUNE because we are before the flood threshold
 					pc = getPruneCount()
 					if pc != 2 {
-						t.Fatalf("Expected %d PRUNE messages but got %d", 2, pc)
+						t.Errorf("Expected %d PRUNE messages but got %d", 2, pc)
+						return // cannot call t.Fatalf in a non-test goroutine
 					}
 
 					score2 := ps.rt.(*GossipSubRouter).score.Score(attacker.ID())
 					if score2 >= score1 {
-						t.Fatalf("Expected score below %f, but got %f", score1, score2)
+						t.Errorf("Expected score below %f, but got %f", score1, score2)
+						return // cannot call t.Fatalf in a non-test goroutine
 					}
 
 					// Send another GRAFT; this should get us a PRUNE, but penalize us below the graylist threshold
@@ -490,35 +525,51 @@ func TestGossipsubAttackGRAFTDuringBackoff(t *testing.T) {
 						Control: &pb.ControlMessage{Graft: graft},
 					})
 
-					time.Sleep(20 * time.Millisecond)
+					select {
+					case <-ctx.Done():
+						return
+					case <-time.After(20 * time.Millisecond):
+					}
 
 					pc = getPruneCount()
 					if pc != 3 {
-						t.Fatalf("Expected %d PRUNE messages but got %d", 3, pc)
+						t.Errorf("Expected %d PRUNE messages but got %d", 3, pc)
+						return // cannot call t.Fatalf in a non-test goroutine
 					}
 
 					score3 := ps.rt.(*GossipSubRouter).score.Score(attacker.ID())
 					if score3 >= score2 {
-						t.Fatalf("Expected score below %f, but got %f", score2, score3)
+						t.Errorf("Expected score below %f, but got %f", score2, score3)
+						return // cannot call t.Fatalf in a non-test goroutine
 					}
 					if score3 >= -1000 {
-						t.Fatalf("Expected score below %f, but got %f", -1000.0, score3)
+						t.Errorf("Expected score below %f, but got %f", -1000.0, score3)
+						return // cannot call t.Fatalf in a non-test goroutine
 					}
 
 					// Wait for the PRUNE backoff to expire and try again; this time we should fail
 					// because we are below the graylist threshold, so our RPC should be ignored and
 					// we should get no PRUNE back
-					time.Sleep(GossipSubPruneBackoff + time.Millisecond)
+					select {
+					case <-ctx.Done():
+						return
+					case <-time.After(GossipSubPruneBackoff + time.Millisecond):
+					}
 
 					writeMsg(&pb.RPC{
 						Control: &pb.ControlMessage{Graft: graft},
 					})
 
-					time.Sleep(20 * time.Millisecond)
+					select {
+					case <-ctx.Done():
+						return
+					case <-time.After(20 * time.Millisecond):
+					}
 
 					pc = getPruneCount()
 					if pc != 3 {
-						t.Fatalf("Expected %d PRUNE messages but got %d", 3, pc)
+						t.Errorf("Expected %d PRUNE messages but got %d", 3, pc)
+						return // cannot call t.Fatalf in a non-test goroutine
 					}
 
 					// make sure we are _not_ in the mesh
@@ -531,7 +582,8 @@ func TestGossipsubAttackGRAFTDuringBackoff(t *testing.T) {
 
 					inMesh := <-res
 					if inMesh {
-						t.Fatal("Expected to not be in the mesh of the legitimate host")
+						t.Error("Expected to not be in the mesh of the legitimate host")
+						return // cannot call t.Fatal in a non-test goroutine
 					}
 				}()
 			}
@@ -646,8 +698,8 @@ func TestGossipsubAttackInvalidMessageSpam(t *testing.T) {
 			if sub.GetSubscribe() {
 				// Reply by subcribing to the topic and grafting to the peer
 				writeMsg(&pb.RPC{
-					Subscriptions: []*pb.RPC_SubOpts{&pb.RPC_SubOpts{Subscribe: sub.Subscribe, Topicid: sub.Topicid}},
-					Control:       &pb.ControlMessage{Graft: []*pb.ControlGraft{&pb.ControlGraft{TopicID: sub.Topicid}}},
+					Subscriptions: []*pb.RPC_SubOpts{{Subscribe: sub.Subscribe, Topicid: sub.Topicid}},
+					Control:       &pb.ControlMessage{Graft: []*pb.ControlGraft{{TopicID: sub.Topicid}}},
 				})
 
 				go func() {
@@ -655,7 +707,8 @@ func TestGossipsubAttackInvalidMessageSpam(t *testing.T) {
 
 					// Attacker score should start at zero
 					if attackerScore() != 0 {
-						t.Fatalf("Expected attacker score to be zero but it's %f", attackerScore())
+						t.Errorf("Expected attacker score to be zero but it's %f", attackerScore())
+						return // cannot call t.Fatalf in a non-test goroutine
 					}
 
 					// Send a bunch of messages with no signature (these will
@@ -673,20 +726,27 @@ func TestGossipsubAttackInvalidMessageSpam(t *testing.T) {
 					}
 
 					// Wait for the initial heartbeat, plus a bit of padding
-					time.Sleep(100*time.Millisecond + GossipSubHeartbeatInitialDelay)
+					select {
+					case <-ctx.Done():
+						return
+					case <-time.After(100*time.Millisecond + GossipSubHeartbeatInitialDelay):
+					}
 
 					// The attackers score should now have fallen below zero
 					if attackerScore() >= 0 {
-						t.Fatalf("Expected attacker score to be less than zero but it's %f", attackerScore())
+						t.Errorf("Expected attacker score to be less than zero but it's %f", attackerScore())
+						return // cannot call t.Fatalf in a non-test goroutine
 					}
 					// There should be several rejected messages (because the signature was invalid)
 					if tracer.rejectCount == 0 {
-						t.Fatal("Expected message rejection but got none")
+						t.Error("Expected message rejection but got none")
+						return // cannot call t.Fatal in a non-test goroutine
 					}
 					// The legit node should have sent a PRUNE message
 					pc := getPruneCount()
 					if pc == 0 {
-						t.Fatal("Expected attacker node to be PRUNED when score drops low enough")
+						t.Error("Expected attacker node to be PRUNED when score drops low enough")
+						return // cannot call t.Fatal in a non-test goroutine
 					}
 				}()
 			}
@@ -700,10 +760,6 @@ func TestGossipsubAttackInvalidMessageSpam(t *testing.T) {
 	connect(t, hosts[0], hosts[1])
 
 	<-ctx.Done()
-}
-
-func turnOnPubsubDebug() {
-	logging.SetLogLevel("pubsub", "debug")
 }
 
 type mockGSOnRead func(writeMsg func(*pb.RPC), irpc *pb.RPC)
