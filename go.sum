@@ -338,8 +338,8 @@ github.com/libp2p/go-libp2p-pnet v0.2.0/go.mod h1:Qqvq6JH/oMZGwqs3N1Fqhv8NVhrdYc
 github.com/libp2p/go-libp2p-quic-transport v0.11.2 h1:p1YQDZRHH4Cv2LPtHubqlQ9ggz4CKng/REZuXZbZMhM=
 github.com/libp2p/go-libp2p-quic-transport v0.11.2/go.mod h1:wlanzKtIh6pHrq+0U3p3DY9PJfGqxMgPaGKaK5LifwQ=
 github.com/libp2p/go-libp2p-swarm v0.2.8/go.mod h1:JQKMGSth4SMqonruY0a8yjlPVIkb0mdNSwckW7OYziM=
-github.com/libp2p/go-libp2p-swarm v0.5.2 h1:nAc/ZCv5fvFh0+UbBk7VRvZ4xGrmAeKcZ0oIPdiiDtc=
-github.com/libp2p/go-libp2p-swarm v0.5.2/go.mod h1:rZotgsX00W5GNq2QkoB49Pi+98iDOIYJi/gYKFCNKXY=
+github.com/libp2p/go-libp2p-swarm v0.5.3 h1:hsYaD/y6+kZff1o1Mc56NcuwSg80lIphTS/zDk3mO4M=
+github.com/libp2p/go-libp2p-swarm v0.5.3/go.mod h1:NBn7eNW2lu568L7Ns9wdFrOhgRlkRnIDg0FLKbuu3i8=
 github.com/libp2p/go-libp2p-testing v0.0.3/go.mod h1:gvchhf3FQOtBdr+eFUABet5a4MBLK8jM3V4Zghvmi+E=
 github.com/libp2p/go-libp2p-testing v0.1.1/go.mod h1:xaZWMJrPUM5GlDBxCeGUi7kI4eqnjVyavGroI2nxEM0=
 github.com/libp2p/go-libp2p-testing v0.1.2-0.20200422005655-8775583591d8/go.mod h1:Qy8sAncLKpwXtS2dSnDOP8ktexIAHKu+J+pnZOFZLTc=
@@ -351,8 +351,8 @@ github.com/libp2p/go-libp2p-tls v0.1.3 h1:twKMhMu44jQO+HgQK9X8NHO5HkeJu2QbhLzLJp
 github.com/libp2p/go-libp2p-tls v0.1.3/go.mod h1:wZfuewxOndz5RTnCAxFliGjvYSDA40sKitV4c50uI1M=
 github.com/libp2p/go-libp2p-transport-upgrader v0.2.0/go.mod h1:mQcrHj4asu6ArfSoMuyojOdjx73Q47cYD7s5+gZOlns=
 github.com/libp2p/go-libp2p-transport-upgrader v0.3.0/go.mod h1:i+SKzbRnvXdVbU3D1dwydnTmKRPXiAR/fyvi1dXuL4o=
-github.com/libp2p/go-libp2p-transport-upgrader v0.4.5 h1:31pEpRKzDY1cID4mvRQE1u3dprgyDyfGyj1K0o7B4V8=
-github.com/libp2p/go-libp2p-transport-upgrader v0.4.5/go.mod h1:WljgGsLYfes5pIjRvk4+ONTJ1CWHIxHcE2CTHyRFlgY=
+github.com/libp2p/go-libp2p-transport-upgrader v0.4.6 h1:SHt3g0FslnqIkEWF25YOB8UCOCTpGAVvHRWQYJ+veiI=
+github.com/libp2p/go-libp2p-transport-upgrader v0.4.6/go.mod h1:JE0WQuQdy+uLZ5zOaI3Nw9dWGYJIA7mywEtP2lMvnyk=
 github.com/libp2p/go-libp2p-yamux v0.2.8/go.mod h1:/t6tDqeuZf0INZMTgd0WxIRbtK2EzI2h7HbFm9eAKI4=
 github.com/libp2p/go-libp2p-yamux v0.5.0 h1:ZzmUhbQE+X7NuYUT2naxN31JyebZfRmpZVhKtRP13ys=
 github.com/libp2p/go-libp2p-yamux v0.5.0/go.mod h1:AyR8k5EzyM2QN9Bbdg6X1SkVVuqLwTGf0L4DFq9g6po=
@@ -386,8 +386,8 @@ github.com/libp2p/go-sockaddr v0.1.0/go.mod h1:syPvOmNs24S3dFVGJA1/mrqdeijPxLV2L
 github.com/libp2p/go-stream-muxer-multistream v0.3.0 h1:TqnSHPJEIqDEO7h1wZZ0p3DXdvDSiLHQidKKUGZtiOY=
 github.com/libp2p/go-stream-muxer-multistream v0.3.0/go.mod h1:yDh8abSIzmZtqtOt64gFJUXEryejzNb0lisTt+fAMJA=
 github.com/libp2p/go-tcp-transport v0.2.0/go.mod h1:vX2U0CnWimU4h0SGSEsg++AzvBcroCGYw28kh94oLe0=
-github.com/libp2p/go-tcp-transport v0.2.6 h1:CZubZFXnGYNlbfGoTyp4Ia4Q1GLaqDWqYfCouKobrAg=
-github.com/libp2p/go-tcp-transport v0.2.6/go.mod h1:iabuj64H4WX6WVQZQhTBYMvZFlMkQAhW7Ubpf6p8Aos=
+github.com/libp2p/go-tcp-transport v0.2.7 h1:Z8Kc/Kb8tD84WiaH55xAlaEnkqzrp88jSEySCKV4+gg=
+github.com/libp2p/go-tcp-transport v0.2.7/go.mod h1:lue9p1b3VmZj1MhhEGB/etmvF/nBQ0X9CW2DutBT3MM=
 github.com/libp2p/go-yamux v1.3.7/go.mod h1:fr7aVgmdNGJK+N1g+b6DW6VxzbRCjCOejR/hkmpooHE=
 github.com/libp2p/go-yamux v1.4.1 h1:P1Fe9vF4th5JOxxgQvfbOHkrGqIZniTLf+ddhZp8YTI=
 github.com/libp2p/go-yamux v1.4.1/go.mod h1:fr7aVgmdNGJK+N1g+b6DW6VxzbRCjCOejR/hkmpooHE=
@@ -467,9 +467,8 @@ github.com/multiformats/go-multiaddr v0.2.1/go.mod h1:s/Apk6IyxfvMjDafnhJgJ3/46z
 github.com/multiformats/go-multiaddr v0.2.2/go.mod h1:NtfXiOtHvghW9KojvtySjH5y0u0xW5UouOmQQrn6a3Y=
 github.com/multiformats/go-multiaddr v0.3.0/go.mod h1:dF9kph9wfJ+3VLAaeBqo9Of8x4fJxp6ggJGteB8HQTI=
 github.com/multiformats/go-multiaddr v0.3.1/go.mod h1:uPbspcUPd5AfaP6ql3ujFY+QWzmBD8uLLL4bXW0XfGc=
+github.com/multiformats/go-multiaddr v0.3.3 h1:vo2OTSAqnENB2rLk79pLtr+uhj+VAzSe3uef5q0lRSs=
 github.com/multiformats/go-multiaddr v0.3.3/go.mod h1:lCKNGP1EQ1eZ35Za2wlqnabm9xQkib3fyB+nZXHLag0=
-github.com/multiformats/go-multiaddr v0.4.0 h1:hL/K4ZJhJ5PTw3nwylq9lGU5yArzcAroZmex1ghSEkQ=
-github.com/multiformats/go-multiaddr v0.4.0/go.mod h1:YcpyLH8ZPudLxQlemYBPhSm0/oCXAT8Z4mzFpyoPyRc=
 github.com/multiformats/go-multiaddr-fmt v0.1.0 h1:WLEFClPycPkp4fnIzoFoV9FVd49/eQsuaL3/CWe167E=
 github.com/multiformats/go-multiaddr-fmt v0.1.0/go.mod h1:hGtDIW4PU4BqJ50gW2quDuPVjyWNZxToGUh/HwTZYJo=
 github.com/multiformats/go-multiaddr-net v0.1.2/go.mod h1:QsWt3XK/3hwvNxZJp92iMQKME1qHfpYmyIjFVsSOY6Y=
