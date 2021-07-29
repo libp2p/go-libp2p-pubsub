@@ -36,7 +36,7 @@ var (
 
 var log = logging.Logger("pubsub")
 
-type MatchingFunction func(string) func(string) bool
+type ProtocolMatchFn = func(string) func(string) bool
 
 // PubSub is the implementation of the pubsub system.
 type PubSub struct {
@@ -160,7 +160,7 @@ type PubSub struct {
 	subFilter SubscriptionFilter
 
 	// protoMatchFunc is a matching function for protocol selection.
-	protoMatchFunc *MatchingFunction
+	protoMatchFunc ProtocolMatchFn
 
 	ctx context.Context
 }
@@ -240,7 +240,6 @@ func NewPubSub(ctx context.Context, h host.Host, rt PubSubRouter, opts ...Option
 		peerOutboundQueueSize: 32,
 		signID:                h.ID(),
 		signKey:               nil,
-		protoMatchFunc:        nil,
 		signPolicy:            StrictSign,
 		incoming:              make(chan *RPC, 32),
 		newPeers:              make(chan struct{}, 1),
@@ -299,7 +298,7 @@ func NewPubSub(ctx context.Context, h host.Host, rt PubSubRouter, opts ...Option
 
 	for _, id := range rt.Protocols() {
 		if ps.protoMatchFunc != nil {
-			h.SetStreamHandlerMatch(id, (*ps.protoMatchFunc)(string(id)), ps.handleNewStream)
+			h.SetStreamHandlerMatch(id, ps.protoMatchFunc(string(id)), ps.handleNewStream)
 		} else {
 			h.SetStreamHandler(id, ps.handleNewStream)
 		}
@@ -485,11 +484,13 @@ func WithMaxMessageSize(maxMessageSize int) Option {
 	}
 }
 
-// WithProtocolMatchFunction sets a custom matching function for protocol
-// selection to be used by the protocol handler on the Host's Mux
-func WithProtocolMatchFunction(m MatchingFunction) Option {
+// WithProtocolMatchFn sets a custom matching function for protocol selection to
+// be used by the protocol handler on the Host's Mux. Should be combined with
+// WithGossipSubProtocols feature function for checking if certain protocol features
+// are supported
+func WithProtocolMatchFn(m ProtocolMatchFn) Option {
 	return func(ps *PubSub) error {
-		ps.protoMatchFunc = &m
+		ps.protoMatchFunc = m
 		return nil
 	}
 }
