@@ -130,6 +130,10 @@ type GossipSubParams struct {
 	// HeartbeatInterval controls the time between heartbeats.
 	HeartbeatInterval time.Duration
 
+	// SlowHeartbeatWarning is the duration threshold for heartbeat processing before emitting
+	// a warning; this would be indicative of an overloaded peer.
+	SlowHeartbeatWarning float64
+
 	// FanoutTTL controls how long we keep track of the fanout state. If it's been
 	// FanoutTTL since we've published to a topic that we're not subscribed to,
 	// we'll delete the fanout map for that topic.
@@ -251,6 +255,7 @@ func DefaultGossipSubParams() GossipSubParams {
 		MaxIHaveLength:            GossipSubMaxIHaveLength,
 		MaxIHaveMessages:          GossipSubMaxIHaveMessages,
 		IWantFollowupTime:         GossipSubIWantFollowupTime,
+		SlowHeartbeatWarning:      0.1,
 	}
 }
 
@@ -1298,8 +1303,11 @@ func (gs *GossipSubRouter) heartbeatTimer() {
 func (gs *GossipSubRouter) heartbeat() {
 	start := time.Now()
 	defer func() {
-		if dt := time.Since(start); dt > time.Millisecond {
-			log.Infow("heartbeat done", "took", dt)
+		if gs.params.SlowHeartbeatWarning > 0 {
+			slowWarning := time.Duration(gs.params.SlowHeartbeatWarning * float64(gs.params.HeartbeatInterval))
+			if dt := time.Since(start); dt > slowWarning {
+				log.Warnw("slow heartbeat", "took", dt)
+			}
 		}
 	}()
 
