@@ -1296,7 +1296,12 @@ func (gs *GossipSubRouter) heartbeatTimer() {
 }
 
 func (gs *GossipSubRouter) heartbeat() {
-	defer log.Infow("heartbeat")
+	start := time.Now()
+	defer func() {
+		if dt := time.Since(start); dt > time.Millisecond {
+			log.Infow("heartbeat done", "took", dt)
+		}
+	}()
 
 	gs.heartbeatTicks++
 
