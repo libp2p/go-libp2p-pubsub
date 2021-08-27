@@ -21,6 +21,7 @@ message Message {
 	optional string topic = 4;
 	optional bytes signature = 5;
 	optional bytes key = 6;
+	optional int32 hop = 7;
 }
 
 message ControlMessage {

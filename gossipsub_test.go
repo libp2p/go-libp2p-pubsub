@@ -3,9 +3,13 @@ package pubsub
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"math/rand"
+	"os"
+	"strconv"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -34,22 +38,105 @@ func getGossipsub(ctx context.Context, h host.Host, opts ...Option) *PubSub {
 
 func getGossipsubs(ctx context.Context, hs []host.Host, opts ...Option) []*PubSub {
 	var psubs []*PubSub
-	for _, h := range hs {
+	originOpts := opts
+	for i, h := range hs {
+		tracer, err := NewJSONTracer(fmt.Sprintf("./trace_out/tracer_%d.json", i))
+		if err != nil {
+			panic(err)
+		}
+		opts = append(opts, WithEventTracer(tracer))
 		psubs = append(psubs, getGossipsub(ctx, h, opts...))
+		opts = originOpts
 	}
 	return psubs
+}
+
+func printStat(psubs []*PubSub) {
+	var stats traceStats
+	var evt pb.TraceEvent
+
+	for i := 0; i < len(psubs); i++ {
+		f, err := os.Open(fmt.Sprintf("./trace_out/tracer_%d.json", i))
+		if err != nil {
+			panic(err)
+		}
+
+		dec := json.NewDecoder(f)
+		for {
+			evt.Reset()
+			err := dec.Decode(&evt)
+			if err != nil {
+				break
+			}
+
+			stats.process(&evt)
+		}
+
+		fmt.Println("peer", i, "statistics")
+		fmt.Println("publish cnt", stats.publish)
+		fmt.Println("reject cnt", stats.reject)
+		fmt.Println("duplicate cnt", stats.duplicate)
+		fmt.Println("deliver cnt", stats.deliver)
+		fmt.Println("add cnt", stats.add)
+		fmt.Println("remove cnt", stats.remove)
+		fmt.Println("recv cnt", stats.recv)
+		fmt.Println("send cnt", stats.send)
+		fmt.Println("drop cnt", stats.drop)
+		fmt.Println("join cnt", stats.join)
+		fmt.Println("leave cnt", stats.leave)
+		fmt.Println("graft cnt", stats.graft)
+		fmt.Println("prune cnt", stats.prune)
+		fmt.Println()
+
+		err = f.Close()
+		if err != nil {
+			return
+		}
+	}
+}
+
+func ElapsedTime(start time.Time, name string) {
+	elapsed := time.Since(start)
+	fmt.Printf("%s took %s\n", name, elapsed)
+}
+
+func hopChecker(psubs []*PubSub) {
+	if psubs == nil {
+		return
+	}
+
+	var hopCheckers []map[string]int
+
+	for i, ps := range psubs {
+		mhc := make(map[string]int)
+		mhc = map[string]int{}
+		hopCheckers = append(hopCheckers, mhc)
+
+		//fmt.Println(len(ps.rt.(*GossipSubRouter).mcache.msgs))
+		for _, v := range ps.rt.(*GossipSubRouter).mcache.msgs {
+			hopCheckers[i][strings.Split(string(v.Data), " ")[0]] = int(*v.Hop)
+		}
+
+		fmt.Printf("%d 's peer msg cache: ", i)
+		fmt.Println(hopCheckers[i])
+	}
+	fmt.Println()
 }
 
 func TestSparseGossipsub(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	hosts := getNetHosts(t, ctx, 20)
 
+	numOfHosts := 20
+	numOfMsgToPublish := 10
+
+	hosts := getNetHosts(t, ctx, numOfHosts)
 	psubs := getGossipsubs(ctx, hosts)
+	topics := getTopics(psubs, "foobar")
 
 	var msgs []*Subscription
-	for _, ps := range psubs {
-		subch, err := ps.Subscribe("foobar")
+	for _, tp := range topics {
+		subch, err := tp.Subscribe()
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -57,17 +144,29 @@ func TestSparseGossipsub(t *testing.T) {
 		msgs = append(msgs, subch)
 	}
 
-	sparseConnect(t, hosts)
+	// build random connect
+	sparseConnect(t, hosts) // connect to 3 random peers
+	//denseConnect(t, hosts) 		// connect to 10 random peers
+
+	// build centralized connect (like star shape)
+	//for i := 1; i < numOfHosts; i++ {
+	//	connect(t, hosts[0], hosts[i])
+	//}
 
 	// wait for heartbeats to build mesh
 	time.Sleep(time.Second * 2)
 
-	for i := 0; i < 100; i++ {
+	for i := 0; i < numOfMsgToPublish; i++ {
+		start := time.Now()
 		msg := []byte(fmt.Sprintf("%d it's not a floooooood %d", i, i))
 
 		owner := rand.Intn(len(psubs))
+		// owner := 0 	// publish only peer 0
 
-		psubs[owner].Publish("foobar", msg)
+		err := topics[owner].Publish(ctx, msg)
+		if err != nil {
+			t.Fatal(err)
+		}
 
 		for _, sub := range msgs {
 			got, err := sub.Next(ctx)
@@ -78,7 +177,12 @@ func TestSparseGossipsub(t *testing.T) {
 				t.Fatal("got wrong message!")
 			}
 		}
+		ElapsedTime(start, strconv.Itoa(i)+"'s publish")
 	}
+
+	// print some statistics
+	hopChecker(psubs)
+	printStat(psubs)
 }
 
 func TestDenseGossipsub(t *testing.T) {

@@ -346,6 +346,7 @@ func (t *pubsubTracer) traceRPCMeta(rpc *RPC) *pb.TraceEvent_RPCMeta {
 		msgs = append(msgs, &pb.TraceEvent_MessageMeta{
 			MessageID: []byte(t.msgID(m)),
 			Topic:     m.Topic,
+			Hop:       m.Hop,
 		})
 	}
 	rpcMeta.Messages = msgs

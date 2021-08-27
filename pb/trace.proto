@@ -112,6 +112,7 @@ message TraceEvent {
   message MessageMeta {
     optional bytes messageID = 1;
     optional string topic = 2;
+    optional int32 hop = 3;
   }
 
   message SubMeta {

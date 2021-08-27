@@ -351,12 +351,17 @@ loop:
 }
 
 func (v *validation) validateSignature(msg *Message) bool {
+	var zero int32 = 0
+	originHop := msg.GetHop()
+	msg.Hop = &zero
+
 	err := verifyMessageSignature(msg.Message)
 	if err != nil {
 		log.Debugf("signature verification error: %s", err.Error())
 		return false
 	}
 
+	msg.Hop = &originHop
 	return true
 }
 

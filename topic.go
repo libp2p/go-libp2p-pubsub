@@ -215,11 +215,13 @@ func (t *Topic) Publish(ctx context.Context, data []byte, opts ...PubOpt) error 
 		return ErrTopicClosed
 	}
 
+	var zero int32 = 0
 	m := &pb.Message{
 		Data:  data,
 		Topic: &t.topic,
 		From:  nil,
 		Seqno: nil,
+		Hop:   &zero,
 	}
 	if t.p.signID != "" {
 		m.From = []byte(t.p.signID)

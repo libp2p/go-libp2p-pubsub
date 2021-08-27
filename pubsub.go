@@ -1029,6 +1029,10 @@ func (p *PubSub) handleIncomingRPC(rpc *RPC) {
 				continue
 			}
 
+			hop := pmsg.GetHop()
+			hop++
+			pmsg.Hop = &hop
+
 			msg := &Message{pmsg, rpc.from, nil}
 			p.pushMsg(msg)
 		}
