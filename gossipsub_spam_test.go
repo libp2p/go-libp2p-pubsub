@@ -21,6 +21,8 @@ import (
 // Test that when Gossipsub receives too many IWANT messages from a peer
 // for the same message ID, it cuts off the peer
 func TestGossipsubAttackSpamIWANT(t *testing.T) {
+	tryParallel(t)
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -132,6 +134,8 @@ func TestGossipsubAttackSpamIWANT(t *testing.T) {
 
 // Test that Gossipsub only responds to IHAVE with IWANT once per heartbeat
 func TestGossipsubAttackSpamIHAVE(t *testing.T) {
+	tryParallel(t)
+
 	originalGossipSubIWantFollowupTime := GossipSubIWantFollowupTime
 	GossipSubIWantFollowupTime = 10 * time.Second
 	defer func() {
@@ -288,6 +292,8 @@ func TestGossipsubAttackSpamIHAVE(t *testing.T) {
 // Test that when Gossipsub receives GRAFT for an unknown topic, it ignores
 // the request
 func TestGossipsubAttackGRAFTNonExistentTopic(t *testing.T) {
+	tryParallel(t)
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -363,6 +369,8 @@ func TestGossipsubAttackGRAFTNonExistentTopic(t *testing.T) {
 // it penalizes through P7 and eventually graylists and ignores the requests if the
 // GRAFTs are coming too fast
 func TestGossipsubAttackGRAFTDuringBackoff(t *testing.T) {
+	tryParallel(t)
+
 	originalGossipSubPruneBackoff := GossipSubPruneBackoff
 	GossipSubPruneBackoff = 200 * time.Millisecond
 	originalGossipSubGraftFloodThreshold := GossipSubGraftFloodThreshold
@@ -613,6 +621,8 @@ func (t *gsAttackInvalidMsgTracer) Trace(evt *pb.TraceEvent) {
 // Test that when Gossipsub receives a lot of invalid messages from
 // a peer it should graylist the peer
 func TestGossipsubAttackInvalidMessageSpam(t *testing.T) {
+	tryParallel(t)
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 

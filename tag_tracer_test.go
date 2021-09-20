@@ -14,6 +14,8 @@ import (
 )
 
 func TestTagTracerMeshTags(t *testing.T) {
+	tryParallel(t)
+
 	// test that tags are applied when the tagTracer sees graft and prune events
 
 	cmgr := connmgr.NewConnManager(5, 10, time.Minute)
@@ -37,6 +39,8 @@ func TestTagTracerMeshTags(t *testing.T) {
 }
 
 func TestTagTracerDirectPeerTags(t *testing.T) {
+	tryParallel(t)
+
 	// test that we add a tag to direct peers
 	cmgr := connmgr.NewConnManager(5, 10, time.Minute)
 	tt := newTagTracer(cmgr)
@@ -66,6 +70,8 @@ func TestTagTracerDirectPeerTags(t *testing.T) {
 }
 
 func TestTagTracerDeliveryTags(t *testing.T) {
+	tryParallel(t)
+
 	t.Skip("flaky test temporarily disabled; TODO: fixme")
 	// test decaying delivery tags
 
@@ -157,6 +163,8 @@ func TestTagTracerDeliveryTags(t *testing.T) {
 }
 
 func TestTagTracerDeliveryTagsNearFirst(t *testing.T) {
+	tryParallel(t)
+
 	// use fake time to test the tag decay
 	clk := clock.NewMock()
 	decayCfg := &connmgr.DecayerCfg{

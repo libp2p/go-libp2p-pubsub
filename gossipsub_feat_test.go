@@ -12,6 +12,8 @@ import (
 )
 
 func TestDefaultGossipSubFeatures(t *testing.T) {
+	tryParallel(t)
+
 	if GossipSubDefaultFeatures(GossipSubFeatureMesh, FloodSubID) {
 		t.Fatal("floodsub should not support Mesh")
 	}
@@ -34,6 +36,8 @@ func TestDefaultGossipSubFeatures(t *testing.T) {
 }
 
 func TestGossipSubCustomProtocols(t *testing.T) {
+	tryParallel(t)
+
 	customsub := protocol.ID("customsub/1.0.0")
 	protos := []protocol.ID{customsub, FloodSubID}
 	features := func(feat GossipSubFeature, proto protocol.ID) bool {

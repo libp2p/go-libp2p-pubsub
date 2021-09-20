@@ -12,6 +12,8 @@ import (
 )
 
 func TestBasicSubscriptionFilter(t *testing.T) {
+	tryParallel(t)
+
 	peerA := peer.ID("A")
 
 	topic1 := "test1"
@@ -100,6 +102,8 @@ func TestBasicSubscriptionFilter(t *testing.T) {
 }
 
 func TestSubscriptionFilterDeduplication(t *testing.T) {
+	tryParallel(t)
+
 	peerA := peer.ID("A")
 
 	topic1 := "test1"
@@ -147,6 +151,8 @@ func TestSubscriptionFilterDeduplication(t *testing.T) {
 }
 
 func TestSubscriptionFilterRPC(t *testing.T) {
+	tryParallel(t)
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 

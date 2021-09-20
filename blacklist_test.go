@@ -9,6 +9,8 @@ import (
 )
 
 func TestMapBlacklist(t *testing.T) {
+	tryParallel(t)
+
 	b := NewMapBlacklist()
 
 	p := peer.ID("test")
@@ -21,6 +23,8 @@ func TestMapBlacklist(t *testing.T) {
 }
 
 func TestTimeCachedBlacklist(t *testing.T) {
+	tryParallel(t)
+
 	b, err := NewTimeCachedBlacklist(10 * time.Minute)
 	if err != nil {
 		t.Fatal(err)
@@ -35,6 +39,8 @@ func TestTimeCachedBlacklist(t *testing.T) {
 }
 
 func TestBlacklist(t *testing.T) {
+	tryParallel(t)
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -63,6 +69,8 @@ func TestBlacklist(t *testing.T) {
 }
 
 func TestBlacklist2(t *testing.T) {
+	tryParallel(t)
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -96,6 +104,8 @@ func TestBlacklist2(t *testing.T) {
 }
 
 func TestBlacklist3(t *testing.T) {
+	tryParallel(t)
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 

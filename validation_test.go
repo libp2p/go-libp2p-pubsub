@@ -12,6 +12,8 @@ import (
 )
 
 func TestRegisterUnregisterValidator(t *testing.T) {
+	tryParallel(t)
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -37,6 +39,8 @@ func TestRegisterUnregisterValidator(t *testing.T) {
 }
 
 func TestRegisterValidatorEx(t *testing.T) {
+	tryParallel(t)
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -66,6 +70,8 @@ func TestRegisterValidatorEx(t *testing.T) {
 }
 
 func TestValidate(t *testing.T) {
+	tryParallel(t)
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -120,6 +126,8 @@ func TestValidate(t *testing.T) {
 }
 
 func TestValidate2(t *testing.T) {
+	tryParallel(t)
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -160,6 +168,8 @@ func TestValidate2(t *testing.T) {
 }
 
 func TestValidateOverload(t *testing.T) {
+	tryParallel(t)
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -268,6 +278,8 @@ func TestValidateOverload(t *testing.T) {
 }
 
 func TestValidateAssortedOptions(t *testing.T) {
+	tryParallel(t)
+
 	// this test adds coverage for various options that are not covered in other tests
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

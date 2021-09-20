@@ -9,6 +9,8 @@ import (
 )
 
 func TestPeerGater(t *testing.T) {
+	tryParallel(t)
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 

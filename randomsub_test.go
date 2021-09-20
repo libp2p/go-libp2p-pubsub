@@ -37,6 +37,8 @@ func tryReceive(sub *Subscription) *Message {
 }
 
 func TestRandomsubSmall(t *testing.T) {
+	tryParallel(t)
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -74,6 +76,8 @@ func TestRandomsubSmall(t *testing.T) {
 }
 
 func TestRandomsubBig(t *testing.T) {
+	tryParallel(t)
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -111,6 +115,8 @@ func TestRandomsubBig(t *testing.T) {
 }
 
 func TestRandomsubMixed(t *testing.T) {
+	tryParallel(t)
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -150,6 +156,8 @@ func TestRandomsubMixed(t *testing.T) {
 }
 
 func TestRandomsubEnoughPeers(t *testing.T) {
+	tryParallel(t)
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 

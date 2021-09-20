@@ -193,6 +193,8 @@ func (ts *traceStats) check(t *testing.T) {
 }
 
 func TestJSONTracer(t *testing.T) {
+	tryParallel(t)
+
 	tracer, err := NewJSONTracer("/tmp/trace.out.json")
 	if err != nil {
 		t.Fatal(err)
@@ -226,6 +228,8 @@ func TestJSONTracer(t *testing.T) {
 }
 
 func TestPBTracer(t *testing.T) {
+	tryParallel(t)
+
 	tracer, err := NewPBTracer("/tmp/trace.out.pb")
 	if err != nil {
 		t.Fatal(err)
@@ -299,6 +303,8 @@ func (mrt *mockRemoteTracer) check(t *testing.T) {
 }
 
 func TestRemoteTracer(t *testing.T) {
+	tryParallel(t)
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 

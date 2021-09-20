@@ -8,6 +8,8 @@ import (
 )
 
 func TestMultitopicMessageCompatibility(t *testing.T) {
+	tryParallel(t)
+
 	topic1 := "topic1"
 	topic2 := "topic2"
 

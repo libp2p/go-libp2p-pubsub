@@ -41,6 +41,8 @@ func getTopicEvts(topics []*Topic, opts ...TopicEventHandlerOpt) []*TopicEventHa
 }
 
 func TestTopicCloseWithOpenSubscription(t *testing.T) {
+	tryParallel(t)
+
 	var sub *Subscription
 	var err error
 	testTopicCloseWithOpenResource(t,
@@ -57,6 +59,8 @@ func TestTopicCloseWithOpenSubscription(t *testing.T) {
 }
 
 func TestTopicCloseWithOpenEventHandler(t *testing.T) {
+	tryParallel(t)
+
 	var evts *TopicEventHandler
 	var err error
 	testTopicCloseWithOpenResource(t,
@@ -73,6 +77,8 @@ func TestTopicCloseWithOpenEventHandler(t *testing.T) {
 }
 
 func TestTopicCloseWithOpenRelay(t *testing.T) {
+	tryParallel(t)
+
 	var relayCancel RelayCancelFunc
 	var err error
 	testTopicCloseWithOpenResource(t,
@@ -129,6 +135,8 @@ func testTopicCloseWithOpenResource(t *testing.T, openResource func(topic *Topic
 }
 
 func TestTopicReuse(t *testing.T) {
+	tryParallel(t)
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -223,6 +231,8 @@ func TestTopicReuse(t *testing.T) {
 }
 
 func TestTopicEventHandlerCancel(t *testing.T) {
+	tryParallel(t)
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -255,6 +265,8 @@ func TestTopicEventHandlerCancel(t *testing.T) {
 }
 
 func TestSubscriptionJoinNotification(t *testing.T) {
+	tryParallel(t)
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -322,6 +334,8 @@ func TestSubscriptionJoinNotification(t *testing.T) {
 }
 
 func TestSubscriptionLeaveNotification(t *testing.T) {
+	tryParallel(t)
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -403,6 +417,8 @@ func TestSubscriptionLeaveNotification(t *testing.T) {
 }
 
 func TestSubscriptionManyNotifications(t *testing.T) {
+	tryParallel(t)
+
 	t.Skip("flaky test disabled")
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -509,6 +525,8 @@ func TestSubscriptionManyNotifications(t *testing.T) {
 }
 
 func TestSubscriptionNotificationSubUnSub(t *testing.T) {
+	tryParallel(t)
+
 	// Resubscribe and Unsubscribe a peers and check the state for consistency
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -528,6 +546,8 @@ func TestSubscriptionNotificationSubUnSub(t *testing.T) {
 }
 
 func TestTopicRelay(t *testing.T) {
+	tryParallel(t)
+
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
@@ -592,6 +612,8 @@ func TestTopicRelay(t *testing.T) {
 }
 
 func TestTopicRelayReuse(t *testing.T) {
+	tryParallel(t)
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -659,6 +681,8 @@ func TestTopicRelayReuse(t *testing.T) {
 }
 
 func TestTopicRelayOnClosedTopic(t *testing.T) {
+	tryParallel(t)
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -680,6 +704,8 @@ func TestTopicRelayOnClosedTopic(t *testing.T) {
 }
 
 func TestProducePanic(t *testing.T) {
+	tryParallel(t)
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 

@@ -124,6 +124,8 @@ func (d *dummyDiscovery) FindPeers(ctx context.Context, ns string, opts ...disco
 }
 
 func TestSimpleDiscovery(t *testing.T) {
+	tryParallel(t)
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -219,6 +221,8 @@ func TestSimpleDiscovery(t *testing.T) {
 }
 
 func TestGossipSubDiscoveryAfterBootstrap(t *testing.T) {
+	tryParallel(t)
+
 	t.Skip("flaky test disabled")
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

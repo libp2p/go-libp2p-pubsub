@@ -9,6 +9,8 @@ import (
 )
 
 func TestMessageCache(t *testing.T) {
+	tryParallel(t)
+
 	mcache := NewMessageCache(3, 5)
 	msgID := DefaultMsgIdFn
 

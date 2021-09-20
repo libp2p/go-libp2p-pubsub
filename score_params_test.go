@@ -9,6 +9,8 @@ import (
 )
 
 func TestPeerScoreThresholdsValidation(t *testing.T) {
+	tryParallel(t)
+
 	if (&PeerScoreThresholds{GossipThreshold: 1}).validate() == nil {
 		t.Fatal("expected validation error")
 	}
@@ -48,6 +50,8 @@ func TestPeerScoreThresholdsValidation(t *testing.T) {
 }
 
 func TestTopicScoreParamsValidation(t *testing.T) {
+	tryParallel(t)
+
 	if (&TopicScoreParams{}).validate() == nil {
 		t.Fatal("expected validation error")
 	}
@@ -146,6 +150,8 @@ func TestTopicScoreParamsValidation(t *testing.T) {
 }
 
 func TestPeerScoreParamsValidation(t *testing.T) {
+	tryParallel(t)
+
 	appScore := func(peer.ID) float64 { return 0 }
 
 	if (&PeerScoreParams{TopicScoreCap: -1, AppSpecificScore: appScore, DecayInterval: time.Second, DecayToZero: 0.01}).validate() == nil {
@@ -321,6 +327,8 @@ func TestPeerScoreParamsValidation(t *testing.T) {
 }
 
 func TestScoreParameterDecay(t *testing.T) {
+	tryParallel(t)
+
 	decay1hr := ScoreParameterDecay(time.Hour)
 	if decay1hr != .9987216039048303 {
 		t.Fatalf("expected .9987216039048303, got %f", decay1hr)

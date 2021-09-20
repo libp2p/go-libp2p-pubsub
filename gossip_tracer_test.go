@@ -10,6 +10,8 @@ import (
 )
 
 func TestBrokenPromises(t *testing.T) {
+	tryParallel(t)
+
 	// tests that unfullfilled promises are tracked correctly
 	gt := newGossipTracer()
 	gt.followUpTime = 100 * time.Millisecond
@@ -59,6 +61,8 @@ func TestBrokenPromises(t *testing.T) {
 }
 
 func TestNoBrokenPromises(t *testing.T) {
+	tryParallel(t)
+
 	// like above, but this time we deliver messages to fullfil the promises
 	originalGossipSubIWantFollowupTime := GossipSubIWantFollowupTime
 	GossipSubIWantFollowupTime = 100 * time.Millisecond

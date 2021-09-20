@@ -11,6 +11,8 @@ import (
 )
 
 func TestScoreTimeInMesh(t *testing.T) {
+	tryParallel(t)
+
 	// Create parameters with reasonable default values
 	mytopic := "mytopic"
 	params := &PeerScoreParams{
@@ -50,6 +52,8 @@ func TestScoreTimeInMesh(t *testing.T) {
 }
 
 func TestScoreTimeInMeshCap(t *testing.T) {
+	tryParallel(t)
+
 	// Create parameters with reasonable default values
 	mytopic := "mytopic"
 	params := &PeerScoreParams{
@@ -84,6 +88,8 @@ func TestScoreTimeInMeshCap(t *testing.T) {
 }
 
 func TestScoreFirstMessageDeliveries(t *testing.T) {
+	tryParallel(t)
+
 	// Create parameters with reasonable default values
 	mytopic := "mytopic"
 	params := &PeerScoreParams{
@@ -124,6 +130,8 @@ func TestScoreFirstMessageDeliveries(t *testing.T) {
 }
 
 func TestScoreFirstMessageDeliveriesCap(t *testing.T) {
+	tryParallel(t)
+
 	// Create parameters with reasonable default values
 	mytopic := "mytopic"
 	params := &PeerScoreParams{
@@ -164,6 +172,8 @@ func TestScoreFirstMessageDeliveriesCap(t *testing.T) {
 }
 
 func TestScoreFirstMessageDeliveriesDecay(t *testing.T) {
+	tryParallel(t)
+
 	// Create parameters with reasonable default values
 	mytopic := "mytopic"
 	params := &PeerScoreParams{
@@ -215,6 +225,8 @@ func TestScoreFirstMessageDeliveriesDecay(t *testing.T) {
 }
 
 func TestScoreMeshMessageDeliveries(t *testing.T) {
+	tryParallel(t)
+
 	// Create parameters with reasonable default values
 	mytopic := "mytopic"
 	params := &PeerScoreParams{
@@ -308,6 +320,8 @@ func TestScoreMeshMessageDeliveries(t *testing.T) {
 }
 
 func TestScoreMeshMessageDeliveriesDecay(t *testing.T) {
+	tryParallel(t)
+
 	// Create parameters with reasonable default values
 	mytopic := "mytopic"
 	params := &PeerScoreParams{
@@ -369,6 +383,8 @@ func TestScoreMeshMessageDeliveriesDecay(t *testing.T) {
 }
 
 func TestScoreMeshFailurePenalty(t *testing.T) {
+	tryParallel(t)
+
 	// Create parameters with reasonable default values
 	mytopic := "mytopic"
 	params := &PeerScoreParams{
@@ -450,6 +466,8 @@ func TestScoreMeshFailurePenalty(t *testing.T) {
 }
 
 func TestScoreInvalidMessageDeliveries(t *testing.T) {
+	tryParallel(t)
+
 	// Create parameters with reasonable default values
 	mytopic := "mytopic"
 	params := &PeerScoreParams{
@@ -487,6 +505,8 @@ func TestScoreInvalidMessageDeliveries(t *testing.T) {
 }
 
 func TestScoreInvalidMessageDeliveriesDecay(t *testing.T) {
+	tryParallel(t)
+
 	// Create parameters with reasonable default values
 	mytopic := "mytopic"
 	params := &PeerScoreParams{
@@ -534,6 +554,8 @@ func TestScoreInvalidMessageDeliveriesDecay(t *testing.T) {
 }
 
 func TestScoreRejectMessageDeliveries(t *testing.T) {
+	tryParallel(t)
+
 	// this tests adds coverage for the dark corners of rejection tracing
 	mytopic := "mytopic"
 	params := &PeerScoreParams{
@@ -666,6 +688,8 @@ func TestScoreRejectMessageDeliveries(t *testing.T) {
 }
 
 func TestScoreApplicationScore(t *testing.T) {
+	tryParallel(t)
+
 	// Create parameters with reasonable default values
 	mytopic := "mytopic"
 
@@ -694,6 +718,8 @@ func TestScoreApplicationScore(t *testing.T) {
 }
 
 func TestScoreIPColocation(t *testing.T) {
+	tryParallel(t)
+
 	// Create parameters with reasonable default values
 	mytopic := "mytopic"
 
@@ -744,6 +770,8 @@ func TestScoreIPColocation(t *testing.T) {
 }
 
 func TestScoreIPColocationWhitelist(t *testing.T) {
+	tryParallel(t)
+
 	// Create parameters with reasonable default values
 	mytopic := "mytopic"
 
@@ -803,6 +831,8 @@ func TestScoreIPColocationWhitelist(t *testing.T) {
 }
 
 func TestScoreBehaviourPenalty(t *testing.T) {
+	tryParallel(t)
+
 	params := &PeerScoreParams{
 		AppSpecificScore:       func(peer.ID) float64 { return 0 },
 		BehaviourPenaltyWeight: -1,
@@ -859,6 +889,8 @@ func TestScoreBehaviourPenalty(t *testing.T) {
 }
 
 func TestScoreRetention(t *testing.T) {
+	tryParallel(t)
+
 	// Create parameters with reasonable default values
 	mytopic := "mytopic"
 
@@ -903,6 +935,8 @@ func TestScoreRetention(t *testing.T) {
 }
 
 func TestScoreRecapTopicParams(t *testing.T) {
+	tryParallel(t)
+
 	// Create parameters with reasonable default values
 	mytopic := "mytopic"
 	params := &PeerScoreParams{
@@ -1000,6 +1034,8 @@ func TestScoreRecapTopicParams(t *testing.T) {
 }
 
 func TestScoreResetTopicParams(t *testing.T) {
+	tryParallel(t)
+
 	// Create parameters with reasonable default values
 	mytopic := "mytopic"
 	params := &PeerScoreParams{

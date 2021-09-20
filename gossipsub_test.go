@@ -41,6 +41,8 @@ func getGossipsubs(ctx context.Context, hs []host.Host, opts ...Option) []*PubSu
 }
 
 func TestSparseGossipsub(t *testing.T) {
+	tryParallel(t)
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	hosts := getNetHosts(t, ctx, 20)
@@ -82,6 +84,8 @@ func TestSparseGossipsub(t *testing.T) {
 }
 
 func TestDenseGossipsub(t *testing.T) {
+	tryParallel(t)
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	hosts := getNetHosts(t, ctx, 20)
@@ -123,6 +127,8 @@ func TestDenseGossipsub(t *testing.T) {
 }
 
 func TestGossipsubFanout(t *testing.T) {
+	tryParallel(t)
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	hosts := getNetHosts(t, ctx, 20)
@@ -192,6 +198,8 @@ func TestGossipsubFanout(t *testing.T) {
 }
 
 func TestGossipsubFanoutMaintenance(t *testing.T) {
+	tryParallel(t)
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	hosts := getNetHosts(t, ctx, 20)
@@ -272,6 +280,8 @@ func TestGossipsubFanoutMaintenance(t *testing.T) {
 }
 
 func TestGossipsubFanoutExpiry(t *testing.T) {
+	tryParallel(t)
+
 	GossipSubFanoutTTL = 1 * time.Second
 	defer func() {
 		GossipSubFanoutTTL = 60 * time.Second
@@ -336,6 +346,8 @@ func TestGossipsubFanoutExpiry(t *testing.T) {
 }
 
 func TestGossipsubGossip(t *testing.T) {
+	tryParallel(t)
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	hosts := getNetHosts(t, ctx, 20)
@@ -383,6 +395,8 @@ func TestGossipsubGossip(t *testing.T) {
 }
 
 func TestGossipsubGossipPiggyback(t *testing.T) {
+	tryParallel(t)
+
 	t.Skip("test no longer relevant; gossip propagation has become eager")
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -452,6 +466,8 @@ func TestGossipsubGossipPiggyback(t *testing.T) {
 }
 
 func TestGossipsubGossipPropagation(t *testing.T) {
+	tryParallel(t)
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -533,6 +549,8 @@ func TestGossipsubGossipPropagation(t *testing.T) {
 }
 
 func TestGossipsubPrune(t *testing.T) {
+	tryParallel(t)
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	hosts := getNetHosts(t, ctx, 20)
@@ -582,6 +600,8 @@ func TestGossipsubPrune(t *testing.T) {
 }
 
 func TestGossipsubGraft(t *testing.T) {
+	tryParallel(t)
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	hosts := getNetHosts(t, ctx, 20)
@@ -627,6 +647,8 @@ func TestGossipsubGraft(t *testing.T) {
 }
 
 func TestGossipsubRemovePeer(t *testing.T) {
+	tryParallel(t)
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	hosts := getNetHosts(t, ctx, 20)
@@ -676,6 +698,8 @@ func TestGossipsubRemovePeer(t *testing.T) {
 }
 
 func TestGossipsubGraftPruneRetry(t *testing.T) {
+	tryParallel(t)
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -724,6 +748,8 @@ func TestGossipsubGraftPruneRetry(t *testing.T) {
 }
 
 func TestGossipsubControlPiggyback(t *testing.T) {
+	tryParallel(t)
+
 	t.Skip("travis regularly fails on this test")
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -808,6 +834,8 @@ func TestGossipsubControlPiggyback(t *testing.T) {
 }
 
 func TestMixedGossipsub(t *testing.T) {
+	tryParallel(t)
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	hosts := getNetHosts(t, ctx, 30)
@@ -851,6 +879,8 @@ func TestMixedGossipsub(t *testing.T) {
 }
 
 func TestGossipsubMultihops(t *testing.T) {
+	tryParallel(t)
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -894,6 +924,8 @@ func TestGossipsubMultihops(t *testing.T) {
 }
 
 func TestGossipsubTreeTopology(t *testing.T) {
+	tryParallel(t)
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -943,6 +975,8 @@ func TestGossipsubTreeTopology(t *testing.T) {
 // this tests overlay bootstrapping through px in Gossipsub v1.1
 // we start with a star topology and rely on px through prune to build the mesh
 func TestGossipsubStarTopology(t *testing.T) {
+	tryParallel(t)
+
 	originalGossipSubD := GossipSubD
 	GossipSubD = 4
 	originalGossipSubDhi := GossipSubDhi
@@ -1027,6 +1061,8 @@ func TestGossipsubStarTopology(t *testing.T) {
 // exchanged in signed peer records.
 // we start with a star topology and rely on px through prune to build the mesh
 func TestGossipsubStarTopologyWithSignedPeerRecords(t *testing.T) {
+	tryParallel(t)
+
 	originalGossipSubD := GossipSubD
 	GossipSubD = 4
 	originalGossipSubDhi := GossipSubDhi
@@ -1120,6 +1156,8 @@ func TestGossipsubStarTopologyWithSignedPeerRecords(t *testing.T) {
 }
 
 func TestGossipsubDirectPeers(t *testing.T) {
+	tryParallel(t)
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -1184,6 +1222,8 @@ func TestGossipsubDirectPeers(t *testing.T) {
 }
 
 func TestGossipsubDirectPeersFanout(t *testing.T) {
+	tryParallel(t)
+
 	// regression test for #371
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -1270,6 +1310,8 @@ func TestGossipsubDirectPeersFanout(t *testing.T) {
 }
 
 func TestGossipsubFloodPublish(t *testing.T) {
+	tryParallel(t)
+
 	// uses a star topology without PX and publishes from the star to verify that all
 	// messages get received
 	ctx, cancel := context.WithCancel(context.Background())
@@ -1307,6 +1349,8 @@ func TestGossipsubFloodPublish(t *testing.T) {
 }
 
 func TestGossipsubEnoughPeers(t *testing.T) {
+	tryParallel(t)
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -1345,6 +1389,8 @@ func TestGossipsubEnoughPeers(t *testing.T) {
 }
 
 func TestGossipsubCustomParams(t *testing.T) {
+	tryParallel(t)
+
 	// in this test we score sinkhole a peer to exercise code paths relative to negative scores
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -1384,6 +1430,8 @@ func TestGossipsubCustomParams(t *testing.T) {
 }
 
 func TestGossipsubNegativeScore(t *testing.T) {
+	tryParallel(t)
+
 	// in this test we score sinkhole a peer to exercise code paths relative to negative scores
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -1468,6 +1516,8 @@ func TestGossipsubNegativeScore(t *testing.T) {
 }
 
 func TestGossipsubScoreValidatorEx(t *testing.T) {
+	tryParallel(t)
+
 	// this is a test that of the two message drop responses from a validator
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -1555,6 +1605,8 @@ func TestGossipsubScoreValidatorEx(t *testing.T) {
 }
 
 func TestGossipsubPiggybackControl(t *testing.T) {
+	tryParallel(t)
+
 	// this is a direct test of the piggybackControl function as we can't reliably
 	// trigger it on travis
 	ctx, cancel := context.WithCancel(context.Background())
@@ -1605,6 +1657,8 @@ func TestGossipsubPiggybackControl(t *testing.T) {
 }
 
 func TestGossipsubMultipleGraftTopics(t *testing.T) {
+	tryParallel(t)
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -1661,6 +1715,8 @@ func TestGossipsubMultipleGraftTopics(t *testing.T) {
 }
 
 func TestGossipsubOpportunisticGrafting(t *testing.T) {
+	tryParallel(t)
+
 	originalGossipSubPruneBackoff := GossipSubPruneBackoff
 	GossipSubPruneBackoff = 500 * time.Millisecond
 	originalGossipSubGraftFloodThreshold := GossipSubGraftFloodThreshold
@@ -1811,6 +1867,8 @@ func (sq *sybilSquatter) handleStream(s network.Stream) {
 }
 
 func TestGossipsubPeerScoreInspect(t *testing.T) {
+	tryParallel(t)
+
 	// this test exercises the code path sof peer score inspection
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -1871,6 +1929,8 @@ func TestGossipsubPeerScoreInspect(t *testing.T) {
 }
 
 func TestGossipsubPeerScoreResetTopicParams(t *testing.T) {
+	tryParallel(t)
+
 	// this test exercises the code path sof peer score inspection
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -1939,6 +1999,8 @@ func (ps *mockPeerScoreInspector) score(p peer.ID) float64 {
 }
 
 func TestGossipsubRPCFragmentation(t *testing.T) {
+	tryParallel(t)
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -2080,6 +2142,8 @@ func (iwe *iwantEverything) handleStream(s network.Stream) {
 }
 
 func TestFragmentRPCFunction(t *testing.T) {
+	tryParallel(t)
+
 	p := peer.ID("some-peer")
 	topic := "test"
 	rpc := &RPC{from: p}

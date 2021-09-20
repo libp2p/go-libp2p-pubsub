@@ -10,6 +10,8 @@ import (
 )
 
 func TestSigning(t *testing.T) {
+	tryParallel(t)
+
 	privk, _, err := crypto.GenerateKeyPair(crypto.RSA, 2048)
 	if err != nil {
 		t.Fatal(err)

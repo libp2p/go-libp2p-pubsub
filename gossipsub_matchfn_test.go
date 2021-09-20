@@ -10,6 +10,8 @@ import (
 )
 
 func TestGossipSubMatchingFn(t *testing.T) {
+	tryParallel(t)
+
 	customsubA100 := protocol.ID("/customsub_a/1.0.0")
 	customsubA101Beta := protocol.ID("/customsub_a/1.0.1-beta")
 	customsubB100 := protocol.ID("/customsub_b/1.0.0")

@@ -127,6 +127,8 @@ func assertReceive(t *testing.T, ch *Subscription, exp []byte) {
 }
 
 func TestBasicFloodsub(t *testing.T) {
+	tryParallel(t)
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	hosts := getNetHosts(t, ctx, 20)
@@ -169,6 +171,8 @@ func TestBasicFloodsub(t *testing.T) {
 }
 
 func TestMultihops(t *testing.T) {
+	tryParallel(t)
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -211,6 +215,8 @@ func TestMultihops(t *testing.T) {
 }
 
 func TestReconnects(t *testing.T) {
+	tryParallel(t)
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -285,6 +291,8 @@ func TestReconnects(t *testing.T) {
 
 // make sure messages arent routed between nodes who arent subscribed
 func TestNoConnection(t *testing.T) {
+	tryParallel(t)
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -310,6 +318,8 @@ func TestNoConnection(t *testing.T) {
 }
 
 func TestSelfReceive(t *testing.T) {
+	tryParallel(t)
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -344,6 +354,8 @@ func TestSelfReceive(t *testing.T) {
 }
 
 func TestOneToOne(t *testing.T) {
+	tryParallel(t)
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -377,6 +389,8 @@ func assertPeerLists(t *testing.T, hosts []host.Host, ps *PubSub, has ...int) {
 }
 
 func TestTreeTopology(t *testing.T) {
+	tryParallel(t)
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -439,6 +453,8 @@ func assertHasTopics(t *testing.T, ps *PubSub, exptopics ...string) {
 }
 
 func TestFloodSubPluggableProtocol(t *testing.T) {
+	tryParallel(t)
+
 	t.Run("multi-procol router acts like a hub", func(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
@@ -527,6 +543,8 @@ func mustSubscribe(t *testing.T, ps *PubSub, topic string) *Subscription {
 }
 
 func TestSubReporting(t *testing.T) {
+	tryParallel(t)
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -569,6 +587,8 @@ func TestSubReporting(t *testing.T) {
 }
 
 func TestPeerTopicReporting(t *testing.T) {
+	tryParallel(t)
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -626,6 +646,8 @@ func TestPeerTopicReporting(t *testing.T) {
 }
 
 func TestSubscribeMultipleTimes(t *testing.T) {
+	tryParallel(t)
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -671,6 +693,8 @@ func TestSubscribeMultipleTimes(t *testing.T) {
 }
 
 func TestPeerDisconnect(t *testing.T) {
+	tryParallel(t)
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -719,6 +743,8 @@ func assertPeerList(t *testing.T, peers []peer.ID, expected ...peer.ID) {
 }
 
 func TestWithNoSigning(t *testing.T) {
+	tryParallel(t)
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -764,6 +790,8 @@ func TestWithNoSigning(t *testing.T) {
 }
 
 func TestWithSigning(t *testing.T) {
+	tryParallel(t)
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -806,6 +834,8 @@ func TestWithSigning(t *testing.T) {
 }
 
 func TestImproperlySignedMessageRejected(t *testing.T) {
+	tryParallel(t)
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -922,6 +952,8 @@ func TestImproperlySignedMessageRejected(t *testing.T) {
 }
 
 func TestMessageSender(t *testing.T) {
+	tryParallel(t)
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -978,6 +1010,8 @@ func TestMessageSender(t *testing.T) {
 }
 
 func TestConfigurableMaxMessageSize(t *testing.T) {
+	tryParallel(t)
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -1021,6 +1055,8 @@ func TestConfigurableMaxMessageSize(t *testing.T) {
 }
 
 func TestAnnounceRetry(t *testing.T) {
+	tryParallel(t)
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -1087,6 +1123,8 @@ func (aw *announceWatcher) countSubs() int {
 }
 
 func TestPubsubWithAssortedOptions(t *testing.T) {
+	tryParallel(t)
+
 	// this test uses assorted options that are not covered in other tests
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -1127,6 +1165,8 @@ func TestPubsubWithAssortedOptions(t *testing.T) {
 }
 
 func TestWithInvalidMessageAuthor(t *testing.T) {
+	tryParallel(t)
+
 	// this test exercises the failure path in the WithMessageAuthor option
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -1139,6 +1179,8 @@ func TestWithInvalidMessageAuthor(t *testing.T) {
 }
 
 func TestPreconnectedNodes(t *testing.T) {
+	tryParallel(t)
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	// If this test fails it may hang so set a timeout
@@ -1202,6 +1244,8 @@ func TestPreconnectedNodes(t *testing.T) {
 }
 
 func TestDedupInboundStreams(t *testing.T) {
+	tryParallel(t)
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
