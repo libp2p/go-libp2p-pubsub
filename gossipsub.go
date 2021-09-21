@@ -640,6 +640,10 @@ func (gs *GossipSubRouter) handleIHave(p peer.ID, ctl *pb.ControlMessage) []*pb.
 			continue
 		}
 
+		if !gs.p.peerFilter(p, topic) {
+			continue
+		}
+
 		for _, mid := range ihave.GetMessageIDs() {
 			if gs.p.seenMessage(mid) {
 				continue
@@ -692,6 +696,10 @@ func (gs *GossipSubRouter) handleIWant(p peer.ID, ctl *pb.ControlMessage) []*pb.
 				continue
 			}
 
+			if !gs.p.peerFilter(p, msg.GetTopic()) {
+				continue
+			}
+
 			if count > gs.params.GossipRetransmission {
 				log.Debugf("IWANT: Peer %s has asked for message %s too many times; ignoring request", p, mid)
 				continue
@@ -724,6 +732,11 @@ func (gs *GossipSubRouter) handleGraft(p peer.ID, ctl *pb.ControlMessage) []*pb.
 
 	for _, graft := range ctl.GetGraft() {
 		topic := graft.GetTopicID()
+
+		if !gs.p.peerFilter(p, topic) {
+			continue
+		}
+
 		peers, ok := gs.mesh[topic]
 		if !ok {
 			// don't do PX when there is an unknown topic to avoid leaking our peers
@@ -1857,7 +1870,7 @@ func (gs *GossipSubRouter) getPeers(topic string, count int, filter func(peer.ID
 
 	peers := make([]peer.ID, 0, len(tmap))
 	for p := range tmap {
-		if gs.feature(GossipSubFeatureMesh, gs.peers[p]) && filter(p) {
+		if gs.feature(GossipSubFeatureMesh, gs.peers[p]) && filter(p) && gs.p.peerFilter(p, topic) {
 			peers = append(peers, p)
 		}
 	}

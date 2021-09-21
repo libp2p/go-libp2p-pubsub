@@ -126,6 +126,15 @@ func assertReceive(t *testing.T, ch *Subscription, exp []byte) {
 	}
 }
 
+func assertNeverReceives(t *testing.T, ch *Subscription, timeout time.Duration) {
+	select {
+	case msg := <-ch.ch:
+		t.Logf("%#v\n", ch)
+		t.Fatal("got unexpected message: ", string(msg.GetData()))
+	case <-time.After(timeout):
+	}
+}
+
 func TestBasicFloodsub(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
