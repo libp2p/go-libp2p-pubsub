@@ -57,6 +57,8 @@ type PubSub struct {
 
 	tracer *pubsubTracer
 
+	peerFilter PeerFilter
+
 	// maxMessageSize is the maximum message size; it applies globally to all
 	// topics.
 	maxMessageSize int
@@ -235,6 +237,7 @@ func NewPubSub(ctx context.Context, h host.Host, rt PubSubRouter, opts ...Option
 		ctx:                   ctx,
 		rt:                    rt,
 		val:                   newValidation(),
+		peerFilter:            DefaultPeerFilter,
 		disc:                  &discover{},
 		maxMessageSize:        DefaultMaxMessageSize,
 		peerOutboundQueueSize: 32,
@@ -328,6 +331,21 @@ func WithMessageIdFn(fn MsgIdFunction) Option {
 		if p.tracer != nil {
 			p.tracer.msgID = fn
 		}
+		return nil
+	}
+}
+
+// PeerFilter is used to filter pubsub peers. It should return true for peers that are accepted for
+// a given topic. PubSub can be customized to use any implementation of this function by configuring
+// it with the Option from WithPeerFilter.
+type PeerFilter func(pid peer.ID, topic string) bool
+
+// WithPeerFilter is an option to set a filter for pubsub peers.
+// The default peer filter is DefaultPeerFilter (which always returns true), but it can be customized
+// to any custom implementation.
+func WithPeerFilter(filter PeerFilter) Option {
+	return func(p *PubSub) error {
+		p.peerFilter = filter
 		return nil
 	}
 }
@@ -983,6 +1001,10 @@ func (p *PubSub) handleIncomingRPC(rpc *RPC) {
 	for _, subopt := range subs {
 		t := subopt.GetTopicid()
 
+		if !p.peerFilter(rpc.from, t) {
+			continue
+		}
+
 		if subopt.GetSubscribe() {
 			tmap, ok := p.topics[t]
 			if !ok {
@@ -1040,6 +1062,11 @@ func (p *PubSub) handleIncomingRPC(rpc *RPC) {
 // DefaultMsgIdFn returns a unique ID of the passed Message
 func DefaultMsgIdFn(pmsg *pb.Message) string {
 	return string(pmsg.GetFrom()) + string(pmsg.GetSeqno())
+}
+
+// DefaultPeerFilter accepts all peers on all topics
+func DefaultPeerFilter(pid peer.ID, topic string) bool {
+	return true
 }
 
 // pushMsg pushes a message performing validation as necessary

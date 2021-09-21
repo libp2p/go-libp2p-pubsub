@@ -1183,6 +1183,47 @@ func TestGossipsubDirectPeers(t *testing.T) {
 	}
 }
 
+func TestGossipSubPeerFilter(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	h := getNetHosts(t, ctx, 3)
+	psubs := []*PubSub{
+		getGossipsub(ctx, h[0], WithPeerFilter(func(pid peer.ID, topic string) bool {
+			return pid == h[1].ID()
+		})),
+		getGossipsub(ctx, h[1], WithPeerFilter(func(pid peer.ID, topic string) bool {
+			return pid == h[0].ID()
+		})),
+		getGossipsub(ctx, h[2]),
+	}
+
+	connect(t, h[0], h[1])
+	connect(t, h[0], h[2])
+
+	// Join all peers
+	var subs []*Subscription
+	for _, ps := range psubs {
+		sub, err := ps.Subscribe("test")
+		if err != nil {
+			t.Fatal(err)
+		}
+		subs = append(subs, sub)
+	}
+
+	time.Sleep(time.Second)
+
+	msg := []byte("message")
+
+	psubs[0].Publish("test", msg)
+	assertReceive(t, subs[1], msg)
+	assertNeverReceives(t, subs[2], time.Second)
+
+	psubs[1].Publish("test", msg)
+	assertReceive(t, subs[0], msg)
+	assertNeverReceives(t, subs[2], time.Second)
+}
+
 func TestGossipsubDirectPeersFanout(t *testing.T) {
 	// regression test for #371
 	ctx, cancel := context.WithCancel(context.Background())
