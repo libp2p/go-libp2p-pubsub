@@ -1,0 +1,92 @@
+version: 2.1
+orbs:
+  go: gotest/tools@0.0.13
+
+executors:
+  golang:
+    docker:
+      - image: circleci/golang:1.15.5
+    resource_class: 2xlarge
+  ubuntu:
+    docker:
+      - image: ubuntu:20.04
+
+commands:
+  prepare:
+    steps:
+     - checkout
+
+jobs:
+  build-all:
+    executor: golang
+    steps:
+      - prepare
+      - run:
+          name: go build
+          command: |
+             go build ./...
+  test:
+    parameters:
+      executor:
+        type: executor
+        default: golang
+      go-test-flags:
+        type: string
+        default: "-timeout 30m"
+        description: Flags passed to go test.
+      gotestsum-format:
+        type: string
+        default: testname
+        description: gotestsum format. https://github.com/gotestyourself/gotestsum#format
+      coverage:
+        type: string
+        default: -coverprofile=coverage.txt -coverpkg=github.com/libp2p/go-libp2p-pubsub
+        description: Coverage flag. Set to the empty string to disable.
+      codecov-upload:
+        type: boolean
+        default: false
+        description: |
+          Upload coverage report to https://codecov.io/. Requires the codecov API token to be
+          set as an environment variable for private projects.
+    executor: << parameters.executor >>
+    steps:
+      - prepare
+      - go/install-gotestsum:
+          gobin: $HOME/.local/bin
+          version: 0.5.2
+      - run:
+          name: go test
+          command: |
+            ulimit -n 2048
+            mkdir -p /tmp/test-reports
+            mkdir -p /tmp/test-artifacts
+            gotestsum \
+              --format << parameters.gotestsum-format >> \
+              --junitfile /tmp/test-reports/junit.xml \
+              --jsonfile /tmp/test-artifacts/output.json \
+              -- \
+              << parameters.coverage >> \
+              << parameters.go-test-flags >> \
+              github.com/libp2p/go-libp2p-pubsub
+          no_output_timeout: 30m
+      - store_test_results:
+          path: /tmp/test-reports
+      - store_artifacts:
+          path: /tmp/test-artifacts/output.json
+      - when:
+          condition: << parameters.codecov-upload >>
+          steps:
+            - go/install: {package: bash}
+            - go/install: {package: curl}
+            - run:
+                shell: /bin/bash -eo pipefail
+                command: |
+                  bash <(curl -s https://codecov.io/bash)
+
+workflows:
+  version: 2.1
+  ci:
+    jobs:
+      - build-all
+      - test:
+          codecov-upload: true

@@ -167,7 +167,7 @@ func TestTopicReuse(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if bytes.Compare(msg.GetData(), firstMsg) != 0 {
+	if !bytes.Equal(msg.GetData(), firstMsg) {
 		t.Fatal("received incorrect message")
 	}
 
@@ -194,7 +194,7 @@ func TestTopicReuse(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if bytes.Compare(msg.GetData(), illegalSend) != 0 {
+		if !bytes.Equal(msg.GetData(), illegalSend) {
 			t.Fatal("received incorrect message from illegal topic")
 		}
 		t.Fatal("received message sent by illegal topic")
@@ -213,11 +213,11 @@ func TestTopicReuse(t *testing.T) {
 
 	timeoutCtx, timeoutCancel = context.WithTimeout(ctx, time.Second*2)
 	defer timeoutCancel()
-	msg, err = sub.Next(ctx)
+	msg, err = sub.Next(timeoutCtx)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if bytes.Compare(msg.GetData(), secondMsg) != 0 {
+	if !bytes.Equal(msg.GetData(), secondMsg) {
 		t.Fatal("received incorrect message")
 	}
 }
@@ -677,6 +677,40 @@ func TestTopicRelayOnClosedTopic(t *testing.T) {
 	if err == nil {
 		t.Fatalf("error should be returned")
 	}
+}
+
+func TestProducePanic(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	const numHosts = 5
+	topicID := "foobar"
+	hosts := getNetHosts(t, ctx, numHosts)
+	ps := getPubsub(ctx, hosts[0])
+
+	// Create topic
+	topic, err := ps.Join(topicID)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Create subscription we're going to cancel
+	s, err := topic.Subscribe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Create second subscription to keep us alive on the subscription map
+	// after the first one is canceled
+	s2, err := topic.Subscribe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = s2
+
+	s.Cancel()
+	time.Sleep(time.Second)
+	s.Cancel()
+	time.Sleep(time.Second)
 }
 
 func notifSubThenUnSub(ctx context.Context, t *testing.T, topics []*Topic) {

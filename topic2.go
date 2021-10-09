@@ -8,7 +8,7 @@ import (
 	pb "github.com/libp2p/go-libp2p-pubsub/pb"
 )
 
-// Publish publishes data to topic.
+// PublishWithSk publishes data to topic.
 func (t *Topic) PublishWithSk(ctx context.Context, data []byte, signKey crypto.PrivKey, pid peer.ID, opts ...PubOpt) error {
 	t.mux.RLock()
 	defer t.mux.RUnlock()
@@ -46,11 +46,5 @@ func (t *Topic) PublishWithSk(ctx context.Context, data []byte, signKey crypto.P
 		t.p.disc.Bootstrap(ctx, t.topic, pub.ready)
 	}
 
-	select {
-	case t.p.publish <- &Message{m, pid, nil}:
-	case <-t.p.ctx.Done():
-		return t.p.ctx.Err()
-	}
-
-	return nil
+	return t.p.val.PushLocal(&Message{m, t.p.host.ID(), nil})
 }

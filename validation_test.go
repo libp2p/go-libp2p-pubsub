@@ -100,22 +100,60 @@ func TestValidate(t *testing.T) {
 	}
 
 	for _, tc := range msgs {
-		for _, p := range psubs {
-			err := p.Publish(topic, tc.msg)
+		err := psubs[0].Publish(topic, tc.msg)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		select {
+		case msg := <-sub.ch:
+			if !tc.validates {
+				t.Log(msg)
+				t.Error("expected message validation to filter out the message")
+			}
+		case <-time.After(333 * time.Millisecond):
+			if tc.validates {
+				t.Error("expected message validation to accept the message")
+			}
+		}
+	}
+}
+
+func TestValidate2(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	hosts := getNetHosts(t, ctx, 1)
+	psubs := getPubsubs(ctx, hosts)
+
+	topic := "foobar"
+
+	err := psubs[0].RegisterTopicValidator(topic, func(ctx context.Context, from peer.ID, msg *Message) bool {
+		return !bytes.Contains(msg.Data, []byte("illegal"))
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	msgs := []struct {
+		msg       []byte
+		validates bool
+	}{
+		{msg: []byte("this is a legal message"), validates: true},
+		{msg: []byte("there also is nothing controversial about this message"), validates: true},
+		{msg: []byte("openly illegal content will be censored"), validates: false},
+		{msg: []byte("but subversive actors will use leetspeek to spread 1ll3g4l content"), validates: true},
+	}
+
+	for _, tc := range msgs {
+		err := psubs[0].Publish(topic, tc.msg)
+		if tc.validates {
 			if err != nil {
 				t.Fatal(err)
 			}
-
-			select {
-			case msg := <-sub.ch:
-				if !tc.validates {
-					t.Log(msg)
-					t.Error("expected message validation to filter out the message")
-				}
-			case <-time.After(333 * time.Millisecond):
-				if tc.validates {
-					t.Error("expected message validation to accept the message")
-				}
+		} else {
+			if err == nil {
+				t.Fatal("expected validation to fail for this message")
 			}
 		}
 	}

@@ -1,6 +1,7 @@
 package pubsub
 
 import (
+	"math"
 	"testing"
 	"time"
 
@@ -28,6 +29,21 @@ func TestPeerScoreThresholdsValidation(t *testing.T) {
 	}
 	if (&PeerScoreThresholds{GossipThreshold: -1, PublishThreshold: -2, GraylistThreshold: -3, AcceptPXThreshold: 1, OpportunisticGraftThreshold: 2}).validate() != nil {
 		t.Fatal("expected validation success")
+	}
+	if (&PeerScoreThresholds{GossipThreshold: math.Inf(-1), PublishThreshold: -2, GraylistThreshold: -3, AcceptPXThreshold: 1, OpportunisticGraftThreshold: 2}).validate() == nil {
+		t.Fatal("expected validation error")
+	}
+	if (&PeerScoreThresholds{GossipThreshold: -1, PublishThreshold: math.Inf(-1), GraylistThreshold: -3, AcceptPXThreshold: 1, OpportunisticGraftThreshold: 2}).validate() == nil {
+		t.Fatal("expected validation error")
+	}
+	if (&PeerScoreThresholds{GossipThreshold: -1, PublishThreshold: -2, GraylistThreshold: math.Inf(-1), AcceptPXThreshold: 1, OpportunisticGraftThreshold: 2}).validate() == nil {
+		t.Fatal("expected validation error")
+	}
+	if (&PeerScoreThresholds{GossipThreshold: -1, PublishThreshold: -2, GraylistThreshold: -3, AcceptPXThreshold: math.NaN(), OpportunisticGraftThreshold: 2}).validate() == nil {
+		t.Fatal("expected validation error")
+	}
+	if (&PeerScoreThresholds{GossipThreshold: -1, PublishThreshold: -2, GraylistThreshold: -3, AcceptPXThreshold: 1, OpportunisticGraftThreshold: math.Inf(0)}).validate() == nil {
+		t.Fatal("expected validation error")
 	}
 }
 
@@ -248,6 +264,54 @@ func TestPeerScoreParamsValidation(t *testing.T) {
 				MeshFailurePenaltyDecay:         0.5,
 				InvalidMessageDeliveriesWeight:  -1,
 				InvalidMessageDeliveriesDecay:   0.5,
+			},
+		},
+	}).validate() == nil {
+		t.Fatal("expected validation failure")
+	}
+
+	// Checks the topic parameters for invalid values such as infinite and
+	// NaN numbers.
+
+	// Don't use these params in production!
+	if (&PeerScoreParams{
+		AppSpecificScore:            appScore,
+		DecayInterval:               time.Second,
+		DecayToZero:                 math.Inf(0),
+		IPColocationFactorWeight:    math.Inf(-1),
+		IPColocationFactorThreshold: 1,
+		BehaviourPenaltyWeight:      math.Inf(0),
+		BehaviourPenaltyDecay:       math.NaN(),
+	}).validate() == nil {
+		t.Fatal("expected validation failure")
+	}
+
+	if (&PeerScoreParams{
+		TopicScoreCap:               1,
+		AppSpecificScore:            appScore,
+		DecayInterval:               time.Second,
+		DecayToZero:                 0.01,
+		IPColocationFactorWeight:    -1,
+		IPColocationFactorThreshold: 1,
+		Topics: map[string]*TopicScoreParams{
+			"test": &TopicScoreParams{
+				TopicWeight:                     math.Inf(0),
+				TimeInMeshWeight:                math.NaN(),
+				TimeInMeshQuantum:               time.Second,
+				TimeInMeshCap:                   10,
+				FirstMessageDeliveriesWeight:    math.Inf(1),
+				FirstMessageDeliveriesDecay:     0.5,
+				FirstMessageDeliveriesCap:       10,
+				MeshMessageDeliveriesWeight:     math.Inf(-1),
+				MeshMessageDeliveriesDecay:      math.NaN(),
+				MeshMessageDeliveriesCap:        math.Inf(0),
+				MeshMessageDeliveriesThreshold:  5,
+				MeshMessageDeliveriesWindow:     time.Millisecond,
+				MeshMessageDeliveriesActivation: time.Second,
+				MeshFailurePenaltyWeight:        -1,
+				MeshFailurePenaltyDecay:         math.NaN(),
+				InvalidMessageDeliveriesWeight:  math.Inf(0),
+				InvalidMessageDeliveriesDecay:   math.NaN(),
 			},
 		},
 	}).validate() == nil {

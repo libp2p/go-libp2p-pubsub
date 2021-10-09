@@ -79,11 +79,9 @@ func TestGossipsubConnTagMessageDeliveries(t *testing.T) {
 
 	// sybil squatters to be connected later
 	sybilHosts := getNetHosts(t, ctx, nSquatter)
-	squatters := make([]*sybilSquatter, 0, nSquatter)
 	for _, h := range sybilHosts {
 		squatter := &sybilSquatter{h: h}
 		h.SetStreamHandler(GossipSubID_v10, squatter.handleStream)
-		squatters = append(squatters, squatter)
 	}
 
 	// connect the honest hosts
@@ -97,14 +95,11 @@ func TestGossipsubConnTagMessageDeliveries(t *testing.T) {
 
 	// subscribe everyone to the topic
 	topic := "test"
-	var msgs []*Subscription
 	for _, ps := range psubs {
-		subch, err := ps.Subscribe(topic)
+		_, err := ps.Subscribe(topic)
 		if err != nil {
 			t.Fatal(err)
 		}
-
-		msgs = append(msgs, subch)
 	}
 
 	// sleep to allow meshes to form
