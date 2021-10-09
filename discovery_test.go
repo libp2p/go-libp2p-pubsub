@@ -292,6 +292,7 @@ func TestGossipSubDiscoveryAfterBootstrap(t *testing.T) {
 	}
 }
 
+//lint:ignore U1000 used only by skipped tests at present
 func waitUntilGossipsubMeshCount(ps *PubSub, topic string, count int) {
 	done := false
 	doneCh := make(chan bool, 1)

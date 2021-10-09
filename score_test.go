@@ -2,6 +2,7 @@ package pubsub
 
 import (
 	"math"
+	"net"
 	"sync"
 	"testing"
 	"time"
@@ -474,7 +475,7 @@ func TestScoreInvalidMessageDeliveries(t *testing.T) {
 		pbMsg := makeTestMessage(i)
 		pbMsg.Topic = &mytopic
 		msg := Message{ReceivedFrom: peerA, Message: pbMsg}
-		ps.RejectMessage(&msg, rejectInvalidSignature)
+		ps.RejectMessage(&msg, RejectInvalidSignature)
 	}
 
 	ps.refreshScores()
@@ -511,7 +512,7 @@ func TestScoreInvalidMessageDeliveriesDecay(t *testing.T) {
 		pbMsg := makeTestMessage(i)
 		pbMsg.Topic = &mytopic
 		msg := Message{ReceivedFrom: peerA, Message: pbMsg}
-		ps.RejectMessage(&msg, rejectInvalidSignature)
+		ps.RejectMessage(&msg, RejectInvalidSignature)
 	}
 
 	ps.refreshScores()
@@ -560,9 +561,9 @@ func TestScoreRejectMessageDeliveries(t *testing.T) {
 	msg2 := Message{ReceivedFrom: peerB, Message: pbMsg}
 
 	// these should have no effect in the score
-	ps.RejectMessage(&msg, rejectBlacklstedPeer)
-	ps.RejectMessage(&msg, rejectBlacklistedSource)
-	ps.RejectMessage(&msg, rejectValidationQueueFull)
+	ps.RejectMessage(&msg, RejectBlacklstedPeer)
+	ps.RejectMessage(&msg, RejectBlacklistedSource)
+	ps.RejectMessage(&msg, RejectValidationQueueFull)
 
 	aScore := ps.Score(peerA)
 	expected := 0.0
@@ -575,7 +576,7 @@ func TestScoreRejectMessageDeliveries(t *testing.T) {
 
 	// this should have no effect in the score, and subsequent duplicate messages should have no
 	// effect either
-	ps.RejectMessage(&msg, rejectValidationThrottled)
+	ps.RejectMessage(&msg, RejectValidationThrottled)
 	ps.DuplicateMessage(&msg2)
 
 	aScore = ps.Score(peerA)
@@ -600,7 +601,7 @@ func TestScoreRejectMessageDeliveries(t *testing.T) {
 
 	// this should have no effect in the score, and subsequent duplicate messages should have no
 	// effect either
-	ps.RejectMessage(&msg, rejectValidationIgnored)
+	ps.RejectMessage(&msg, RejectValidationIgnored)
 	ps.DuplicateMessage(&msg2)
 
 	aScore = ps.Score(peerA)
@@ -624,7 +625,7 @@ func TestScoreRejectMessageDeliveries(t *testing.T) {
 	ps.ValidateMessage(&msg)
 
 	// and reject the message to make sure duplicates are also penalized
-	ps.RejectMessage(&msg, rejectValidationFailed)
+	ps.RejectMessage(&msg, RejectValidationFailed)
 	ps.DuplicateMessage(&msg2)
 
 	aScore = ps.Score(peerA)
@@ -649,7 +650,7 @@ func TestScoreRejectMessageDeliveries(t *testing.T) {
 
 	// and reject the message after a duplciate has arrived
 	ps.DuplicateMessage(&msg2)
-	ps.RejectMessage(&msg, rejectValidationFailed)
+	ps.RejectMessage(&msg, RejectValidationFailed)
 
 	aScore = ps.Score(peerA)
 	expected = -4.0
@@ -740,6 +741,65 @@ func TestScoreIPColocation(t *testing.T) {
 			t.Fatalf("Score: %f. Expected %f", score, expected)
 		}
 	}
+}
+
+func TestScoreIPColocationWhitelist(t *testing.T) {
+	// Create parameters with reasonable default values
+	mytopic := "mytopic"
+
+	_, ipNet, err := net.ParseCIDR("2.3.0.0/16")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	params := &PeerScoreParams{
+		AppSpecificScore:            func(peer.ID) float64 { return 0 },
+		IPColocationFactorThreshold: 1,
+		IPColocationFactorWeight:    -1,
+		IPColocationFactorWhitelist: []*net.IPNet{ipNet},
+		Topics:                      make(map[string]*TopicScoreParams),
+	}
+
+	peerA := peer.ID("A")
+	peerB := peer.ID("B")
+	peerC := peer.ID("C")
+	peerD := peer.ID("D")
+	peers := []peer.ID{peerA, peerB, peerC, peerD}
+
+	ps := newPeerScore(params)
+	for _, p := range peers {
+		ps.AddPeer(p, "myproto")
+		ps.Graft(p, mytopic)
+	}
+
+	// peerA should have no penalty, but B, C, and D should be penalized for sharing an IP
+	setIPsForPeer(t, ps, peerA, "1.2.3.4")
+	setIPsForPeer(t, ps, peerB, "2.3.4.5")
+	setIPsForPeer(t, ps, peerC, "2.3.4.5", "3.4.5.6")
+	setIPsForPeer(t, ps, peerD, "2.3.4.5")
+
+	ps.refreshScores()
+	aScore := ps.Score(peerA)
+	bScore := ps.Score(peerB)
+	cScore := ps.Score(peerC)
+	dScore := ps.Score(peerD)
+
+	if aScore != 0 {
+		t.Errorf("expected peer A to have score 0.0, got %f", aScore)
+	}
+
+	if bScore != 0 {
+		t.Errorf("expected peer B to have score 0.0, got %f", aScore)
+	}
+
+	if cScore != 0 {
+		t.Errorf("expected peer C to have score 0.0, got %f", aScore)
+	}
+
+	if dScore != 0 {
+		t.Errorf("expected peer D to have score 0.0, got %f", aScore)
+	}
+
 }
 
 func TestScoreBehaviourPenalty(t *testing.T) {
@@ -972,7 +1032,7 @@ func TestScoreResetTopicParams(t *testing.T) {
 		pbMsg.Topic = &mytopic
 		msg := Message{ReceivedFrom: peerA, Message: pbMsg}
 		ps.ValidateMessage(&msg)
-		ps.RejectMessage(&msg, rejectValidationFailed)
+		ps.RejectMessage(&msg, RejectValidationFailed)
 	}
 
 	// check the topic score
