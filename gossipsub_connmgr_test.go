@@ -66,7 +66,8 @@ func TestGossipsubConnTagMessageDeliveries(t *testing.T) {
 		connmgrs[i] = connmgr.NewConnManager(nHonest, connLimit, 0,
 			connmgr.DecayerConfig(&decayCfg))
 
-		netw := swarmt.GenSwarm(t, ctx)
+		netw := swarmt.GenSwarm(t)
+		defer netw.Close()
 		h := bhost.NewBlankHost(netw, bhost.WithConnectionManager(connmgrs[i]))
 		honestHosts[i] = h
 		honestPeers[h.ID()] = struct{}{}
