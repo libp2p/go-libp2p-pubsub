@@ -118,11 +118,19 @@ var _ RawTracer = (*gossipTracer)(nil)
 
 func (gt *gossipTracer) fulfillPromise(msg *Message) {
 	mid := gt.msgID(msg.Message)
+	p := msg.ReceivedFrom
 
 	gt.Lock()
 	defer gt.Unlock()
 
 	delete(gt.promises, mid)
+	peerPromises, ok := gt.peerPromises[p]
+	if ok {
+		delete(peerPromises, mid)
+		if len(peerPromises) == 0 {
+			delete(gt.peerPromises, p)
+		}
+	}
 }
 
 func (gt *gossipTracer) DeliverMessage(msg *Message) {
