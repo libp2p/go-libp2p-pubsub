@@ -199,71 +199,72 @@ func TestValidateOverload(t *testing.T) {
 		},
 	}
 
-	for _, tc := range tcs {
+	for tci, tc := range tcs {
+		t.Run(fmt.Sprintf("%d", tci), func(t *testing.T) {
+			hosts := getNetHosts(t, ctx, 2)
+			psubs := getPubsubs(ctx, hosts)
 
-		hosts := getNetHosts(t, ctx, 2)
-		psubs := getPubsubs(ctx, hosts)
+			connect(t, hosts[0], hosts[1])
+			topic := "foobar"
 
-		connect(t, hosts[0], hosts[1])
-		topic := "foobar"
+			block := make(chan struct{})
 
-		block := make(chan struct{})
+			err := psubs[1].RegisterTopicValidator(topic,
+				func(ctx context.Context, from peer.ID, msg *Message) bool {
+					<-block
+					return true
+				},
+				WithValidatorConcurrency(tc.maxConcurrency))
 
-		err := psubs[1].RegisterTopicValidator(topic,
-			func(ctx context.Context, from peer.ID, msg *Message) bool {
-				<-block
-				return true
-			},
-			WithValidatorConcurrency(tc.maxConcurrency))
-
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		sub, err := psubs[1].Subscribe(topic)
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		time.Sleep(time.Millisecond * 50)
-
-		if len(tc.msgs) != tc.maxConcurrency+1 {
-			t.Fatalf("expected number of messages sent to be maxConcurrency+1. Got %d, expected %d", len(tc.msgs), tc.maxConcurrency+1)
-		}
-
-		p := psubs[0]
-
-		var wg sync.WaitGroup
-		wg.Add(1)
-		go func() {
-			for _, tmsg := range tc.msgs {
-				select {
-				case msg := <-sub.ch:
-					if !tmsg.validates {
-						t.Log(msg)
-						t.Error("expected message validation to drop the message because all validator goroutines are taken")
-					}
-				case <-time.After(time.Second):
-					if tmsg.validates {
-						t.Error("expected message validation to accept the message")
-					}
-				}
-			}
-			wg.Done()
-		}()
-
-		for _, tmsg := range tc.msgs {
-			err := p.Publish(topic, tmsg.msg)
 			if err != nil {
 				t.Fatal(err)
 			}
-		}
 
-		// wait a bit before unblocking the validator goroutines
-		time.Sleep(500 * time.Millisecond)
-		close(block)
+			sub, err := psubs[1].Subscribe(topic)
+			if err != nil {
+				t.Fatal(err)
+			}
 
-		wg.Wait()
+			time.Sleep(time.Millisecond * 50)
+
+			if len(tc.msgs) != tc.maxConcurrency+1 {
+				t.Fatalf("expected number of messages sent to be maxConcurrency+1. Got %d, expected %d", len(tc.msgs), tc.maxConcurrency+1)
+			}
+
+			p := psubs[0]
+
+			var wg sync.WaitGroup
+			wg.Add(1)
+			go func() {
+				for _, tmsg := range tc.msgs {
+					select {
+					case msg := <-sub.ch:
+						if !tmsg.validates {
+							t.Log(msg)
+							t.Error("expected message validation to drop the message because all validator goroutines are taken")
+						}
+					case <-time.After(time.Second):
+						if tmsg.validates {
+							t.Error("expected message validation to accept the message")
+						}
+					}
+				}
+				wg.Done()
+			}()
+
+			for _, tmsg := range tc.msgs {
+				err := p.Publish(topic, tmsg.msg)
+				if err != nil {
+					t.Fatal(err)
+				}
+			}
+
+			// wait a bit before unblocking the validator goroutines
+			time.Sleep(500 * time.Millisecond)
+			close(block)
+
+			wg.Wait()
+		})
 	}
 }
 
