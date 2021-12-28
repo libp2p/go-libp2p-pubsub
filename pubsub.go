@@ -20,7 +20,7 @@ import (
 	"github.com/libp2p/go-libp2p-core/protocol"
 
 	logging "github.com/ipfs/go-log"
-	timecache "github.com/whyrusleeping/timecache"
+	"github.com/whyrusleeping/timecache"
 )
 
 // DefaultMaximumMessageSize is 1mb.
@@ -213,6 +213,7 @@ const (
 
 type Message struct {
 	*pb.Message
+	ID            string
 	ReceivedFrom  peer.ID
 	ValidatorData interface{}
 }
@@ -322,6 +323,7 @@ func NewPubSub(ctx context.Context, h host.Host, rt PubSubRouter, opts ...Option
 type MsgIdFunction func(pmsg *pb.Message) string
 
 // WithMessageIdFn is an option to customize the way a message ID is computed for a pubsub message.
+// The option applies customization globally for all topics. Per topic customization is available using topic options.
 // The default ID function is DefaultMsgIdFn (concatenate source and seq nr.),
 // but it can be customized to e.g. the hash of the message.
 func WithMessageIdFn(fn MsgIdFunction) Option {
@@ -953,7 +955,17 @@ func (p *PubSub) markSeen(id string) bool {
 	return true
 }
 
-// subscribedToMessage returns whether we are subscribed to one of the topics
+func (p *PubSub) incomingMsgID(msg *pb.Message) string {
+	t, ok := p.myTopics[msg.GetTopic()]
+	if !ok {
+		// this is an impossible case, but just in case fallback to global msgIDfunc
+		p.msgID(msg)
+	}
+
+	return t.msgId(msg)
+}
+
+// subscribedToMsg returns whether we are subscribed to one of the topics
 // of a given message
 func (p *PubSub) subscribedToMsg(msg *pb.Message) bool {
 	if len(p.mySubs) == 0 {
@@ -1047,7 +1059,7 @@ func (p *PubSub) handleIncomingRPC(rpc *RPC) {
 				continue
 			}
 
-			msg := &Message{pmsg, rpc.from, nil}
+			msg := &Message{pmsg, p.incomingMsgID(pmsg), rpc.from, nil}
 			p.pushMsg(msg)
 		}
 	}
@@ -1097,8 +1109,7 @@ func (p *PubSub) pushMsg(msg *Message) {
 	}
 
 	// have we already seen and validated this message?
-	id := p.msgID(msg.Message)
-	if p.seenMessage(id) {
+	if p.seenMessage(msg.ID) {
 		p.tracer.DuplicateMessage(msg)
 		return
 	}
@@ -1107,7 +1118,7 @@ func (p *PubSub) pushMsg(msg *Message) {
 		return
 	}
 
-	if p.markSeen(id) {
+	if p.markSeen(msg.ID) {
 		p.publishMessage(msg)
 	}
 }
@@ -1164,6 +1175,15 @@ type TopicOptions struct{}
 
 type TopicOpt func(t *Topic) error
 
+// WithCustomMessageIDFunc is an option to customize the way a message ID is computed for a pubsub message
+// within the Topic. By default, it uses global MsgIdFunction registered on a PubSub instance.
+func WithCustomMessageIDFunc(msgId MsgIdFunction) TopicOpt {
+	return func(t *Topic) error {
+		t.msgId = msgId
+		return nil
+	}
+}
+
 // Join joins the topic and returns a Topic handle. Only one Topic handle should exist per topic, and Join will error if
 // the Topic handle already exists.
 func (p *PubSub) Join(topic string, opts ...TopicOpt) (*Topic, error) {
@@ -1191,6 +1211,7 @@ func (p *PubSub) tryJoin(topic string, opts ...TopicOpt) (*Topic, bool, error) {
 	t := &Topic{
 		p:           p,
 		topic:       topic,
+		msgId:       p.msgID,
 		evtHandlers: make(map[*TopicEventHandler]struct{}),
 	}
 

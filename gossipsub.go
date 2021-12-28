@@ -483,9 +483,6 @@ func (gs *GossipSubRouter) Attach(p *PubSub) {
 	// and the tracer for connmgr tags
 	gs.tagTracer.Start(gs)
 
-	// start using the same msg ID function as PubSub for caching messages.
-	gs.mcache.SetMsgIdFn(p.msgID)
-
 	// start the heartbeat
 	go gs.heartbeatTimer()
 
@@ -954,7 +951,7 @@ func (gs *GossipSubRouter) connector() {
 }
 
 func (gs *GossipSubRouter) Publish(msg *Message) {
-	gs.mcache.Put(msg.Message)
+	gs.mcache.Put(msg.ID, msg.Message)
 
 	from := msg.ReceivedFrom
 	topic := msg.GetTopic()
