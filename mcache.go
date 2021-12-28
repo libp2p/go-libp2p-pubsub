@@ -31,7 +31,6 @@ func NewMessageCache(gossip, history int) *MessageCache {
 		peertx:  make(map[string]map[peer.ID]int),
 		history: make([][]CacheEntry, history),
 		gossip:  gossip,
-		msgID:   DefaultMsgIdFn,
 	}
 }
 
@@ -40,11 +39,6 @@ type MessageCache struct {
 	peertx  map[string]map[peer.ID]int
 	history [][]CacheEntry
 	gossip  int
-	msgID   MsgIdFunction
-}
-
-func (mc *MessageCache) SetMsgIdFn(msgID MsgIdFunction) {
-	mc.msgID = msgID
 }
 
 type CacheEntry struct {
@@ -52,8 +46,7 @@ type CacheEntry struct {
 	topic string
 }
 
-func (mc *MessageCache) Put(msg *pb.Message) {
-	mid := mc.msgID(msg)
+func (mc *MessageCache) Put(mid string, msg *pb.Message) {
 	mc.msgs[mid] = msg
 	mc.history[0] = append(mc.history[0], CacheEntry{mid: mid, topic: msg.GetTopic()})
 }

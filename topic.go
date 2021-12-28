@@ -20,6 +20,8 @@ type Topic struct {
 	p     *PubSub
 	topic string
 
+	msgId MsgIdFunction
+
 	evtHandlerMux sync.RWMutex
 	evtHandlers   map[*TopicEventHandler]struct{}
 
@@ -283,7 +285,7 @@ func (t *Topic) Publish(ctx context.Context, data []byte, opts ...PubOpt) error 
 		}
 	}
 
-	return t.p.val.PushLocal(&Message{m, t.p.host.ID(), nil})
+	return t.p.val.PushLocal(&Message{m, t.msgId(m), t.p.host.ID(), nil})
 }
 
 // WithReadiness returns a publishing option for only publishing when the router is ready.

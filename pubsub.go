@@ -213,6 +213,7 @@ const (
 
 type Message struct {
 	*pb.Message
+	ID            string
 	ReceivedFrom  peer.ID
 	ValidatorData interface{}
 }
@@ -953,7 +954,7 @@ func (p *PubSub) markSeen(id string) bool {
 	return true
 }
 
-// subscribedToMessage returns whether we are subscribed to one of the topics
+// subscribedToMsg returns whether we are subscribed to one of the topics
 // of a given message
 func (p *PubSub) subscribedToMsg(msg *pb.Message) bool {
 	if len(p.mySubs) == 0 {
@@ -1047,8 +1048,7 @@ func (p *PubSub) handleIncomingRPC(rpc *RPC) {
 				continue
 			}
 
-			msg := &Message{pmsg, rpc.from, nil}
-			p.pushMsg(msg)
+			p.pushMsg(&Message{pmsg, p.msgID(pmsg), rpc.from, nil})
 		}
 	}
 
@@ -1097,8 +1097,7 @@ func (p *PubSub) pushMsg(msg *Message) {
 	}
 
 	// have we already seen and validated this message?
-	id := p.msgID(msg.Message)
-	if p.seenMessage(id) {
+	if p.seenMessage(msg.ID) {
 		p.tracer.DuplicateMessage(msg)
 		return
 	}
@@ -1107,7 +1106,7 @@ func (p *PubSub) pushMsg(msg *Message) {
 		return
 	}
 
-	if p.markSeen(id) {
+	if p.markSeen(msg.ID) {
 		p.publishMessage(msg)
 	}
 }
@@ -1191,6 +1190,7 @@ func (p *PubSub) tryJoin(topic string, opts ...TopicOpt) (*Topic, bool, error) {
 	t := &Topic{
 		p:           p,
 		topic:       topic,
+		msgId:       p.msgID,
 		evtHandlers: make(map[*TopicEventHandler]struct{}),
 	}
 
