@@ -9,11 +9,11 @@ import (
 type msgIDGenerator struct {
 	Default MsgIdFunction
 
-	topicGens    map[string]MsgIdFunction
+	topicGens   map[string]MsgIdFunction
 	topicGensLk sync.RWMutex
 }
 
-func newMsgIdGenerator() *msgIDGenerator{
+func newMsgIdGenerator() *msgIDGenerator {
 	return &msgIDGenerator{
 		Default:   DefaultMsgIdFn,
 		topicGens: make(map[string]MsgIdFunction),
