@@ -76,7 +76,7 @@ type peerScore struct {
 	// message delivery tracking
 	deliveries *messageDeliveries
 
-	msgID MsgIdFunction
+	idGen *msgIDGenerator
 	host  host.Host
 
 	// debugging inspection
@@ -183,7 +183,7 @@ func newPeerScore(params *PeerScoreParams) *peerScore {
 		peerStats:  make(map[peer.ID]*peerStats),
 		peerIPs:    make(map[string]map[peer.ID]struct{}),
 		deliveries: &messageDeliveries{records: make(map[string]*deliveryRecord)},
-		msgID:      DefaultMsgIdFn,
+		idGen:      newMsgIdGenerator(),
 	}
 }
 
@@ -239,7 +239,7 @@ func (ps *peerScore) Start(gs *GossipSubRouter) {
 		return
 	}
 
-	ps.msgID = gs.p.msgID
+	ps.idGen = gs.p.idGen
 	ps.host = gs.p.host
 	go ps.background(gs.p.ctx)
 }
@@ -689,7 +689,7 @@ func (ps *peerScore) ValidateMessage(msg *Message) {
 
 	// the pubsub subsystem is beginning validation; create a record to track time in
 	// the validation pipeline with an accurate firstSeen time.
-	_ = ps.deliveries.getRecord(ps.msgID(msg.Message))
+	_ = ps.deliveries.getRecord(ps.idGen.ID(msg))
 }
 
 func (ps *peerScore) DeliverMessage(msg *Message) {
@@ -698,7 +698,7 @@ func (ps *peerScore) DeliverMessage(msg *Message) {
 
 	ps.markFirstMessageDelivery(msg.ReceivedFrom, msg)
 
-	drec := ps.deliveries.getRecord(ps.msgID(msg.Message))
+	drec := ps.deliveries.getRecord(ps.idGen.ID(msg))
 
 	// defensive check that this is the first delivery trace -- delivery status should be unknown
 	if drec.status != deliveryUnknown {
@@ -749,7 +749,7 @@ func (ps *peerScore) RejectMessage(msg *Message, reason string) {
 		return
 	}
 
-	drec := ps.deliveries.getRecord(ps.msgID(msg.Message))
+	drec := ps.deliveries.getRecord(ps.idGen.ID(msg))
 
 	// defensive check that this is the first rejection trace -- delivery status should be unknown
 	if drec.status != deliveryUnknown {
@@ -789,7 +789,7 @@ func (ps *peerScore) DuplicateMessage(msg *Message) {
 	ps.Lock()
 	defer ps.Unlock()
 
-	drec := ps.deliveries.getRecord(ps.msgID(msg.Message))
+	drec := ps.deliveries.getRecord(ps.idGen.ID(msg))
 
 	_, ok := drec.peers[msg.ReceivedFrom]
 	if ok {

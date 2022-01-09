@@ -1,21 +1,34 @@
 package pubsub
 
-import "sync"
+import (
+	"sync"
+)
 
+// msgIDGenerator handles computing IDs for msgs
+// It allows setting custom generators(MsgIdFunction) per topic
 type msgIDGenerator struct {
-	defGen MsgIdFunction
+	Default MsgIdFunction
 
 	topicGens    map[string]MsgIdFunction
 	topicGensLk sync.RWMutex
 }
 
-func (m *msgIDGenerator) Add(topic string, gen MsgIdFunction) {
+func newMsgIdGenerator() *msgIDGenerator{
+	return &msgIDGenerator{
+		Default:   DefaultMsgIdFn,
+		topicGens: make(map[string]MsgIdFunction),
+	}
+}
+
+// Set sets custom id generator(MsgIdFunction) for topic.
+func (m *msgIDGenerator) Set(topic string, gen MsgIdFunction) {
 	m.topicGensLk.Lock()
 	m.topicGens[topic] = gen
 	m.topicGensLk.Unlock()
 }
 
-func (m *msgIDGenerator) GenID(msg *Message) string {
+// ID computes ID for the msg or short-circuits with the cached value.
+func (m *msgIDGenerator) ID(msg *Message) string {
 	if msg.ID != "" {
 		return msg.ID
 	}
@@ -24,7 +37,7 @@ func (m *msgIDGenerator) GenID(msg *Message) string {
 	gen, ok := m.topicGens[msg.GetTopic()]
 	m.topicGensLk.RUnlock()
 	if !ok {
-		gen = m.defGen
+		gen = m.Default
 	}
 
 	msg.ID = gen(msg.Message)

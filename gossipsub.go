@@ -295,7 +295,7 @@ func WithPeerScore(params *PeerScoreParams, thresholds *PeerScoreThresholds) Opt
 			ps.tracer = &pubsubTracer{
 				raw:   []RawTracer{gs.score, gs.gossipTracer},
 				pid:   ps.host.ID(),
-				msgID: ps.msgID,
+				idGen: ps.idGen,
 			}
 		}
 
@@ -484,7 +484,7 @@ func (gs *GossipSubRouter) Attach(p *PubSub) {
 	gs.tagTracer.Start(gs)
 
 	// start using the same msg ID function as PubSub for caching messages.
-	gs.mcache.SetMsgIdFn(p.msgID)
+	gs.mcache.SetMsgIdFn(p.idGen.ID)
 
 	// start the heartbeat
 	go gs.heartbeatTimer()
@@ -705,7 +705,7 @@ func (gs *GossipSubRouter) handleIWant(p peer.ID, ctl *pb.ControlMessage) []*pb.
 				continue
 			}
 
-			ihave[mid] = msg
+			ihave[mid] = msg.Message
 		}
 	}
 
@@ -954,7 +954,7 @@ func (gs *GossipSubRouter) connector() {
 }
 
 func (gs *GossipSubRouter) Publish(msg *Message) {
-	gs.mcache.Put(msg.Message)
+	gs.mcache.Put(msg)
 
 	from := msg.ReceivedFrom
 	topic := msg.GetTopic()
