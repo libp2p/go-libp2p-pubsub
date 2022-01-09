@@ -20,7 +20,7 @@ import (
 	"github.com/libp2p/go-libp2p-core/protocol"
 
 	logging "github.com/ipfs/go-log"
-	timecache "github.com/whyrusleeping/timecache"
+	"github.com/whyrusleeping/timecache"
 )
 
 // DefaultMaximumMessageSize is 1mb.
@@ -147,8 +147,8 @@ type PubSub struct {
 	seenMessagesMx sync.Mutex
 	seenMessages   *timecache.TimeCache
 
-	// function used to compute the ID for a message
-	msgID MsgIdFunction
+	// generator used to compute the ID for a message
+	idGen *msgIDGenerator
 
 	// key for signing messages; nil when signing is disabled
 	signKey crypto.PrivKey
@@ -273,7 +273,7 @@ func NewPubSub(ctx context.Context, h host.Host, rt PubSubRouter, opts ...Option
 		blacklist:             NewMapBlacklist(),
 		blacklistPeer:         make(chan peer.ID),
 		seenMessages:          timecache.NewTimeCache(TimeCacheDuration),
-		msgID:                 DefaultMsgIdFn,
+		idGen:                 newMsgIdGenerator(),
 		counter:               uint64(time.Now().UnixNano()),
 	}
 
@@ -327,11 +327,7 @@ type MsgIdFunction func(pmsg *pb.Message) string
 // but it can be customized to e.g. the hash of the message.
 func WithMessageIdFn(fn MsgIdFunction) Option {
 	return func(p *PubSub) error {
-		p.msgID = fn
-		// the tracer Option may already be set. Update its message ID function to make options order-independent.
-		if p.tracer != nil {
-			p.tracer.msgID = fn
-		}
+		p.idGen.Default = fn
 		return nil
 	}
 }
@@ -456,7 +452,7 @@ func WithEventTracer(tracer EventTracer) Option {
 		if p.tracer != nil {
 			p.tracer.tracer = tracer
 		} else {
-			p.tracer = &pubsubTracer{tracer: tracer, pid: p.host.ID(), msgID: p.msgID}
+			p.tracer = &pubsubTracer{tracer: tracer, pid: p.host.ID(), idGen: p.idGen}
 		}
 		return nil
 	}
@@ -469,7 +465,7 @@ func WithRawTracer(tracer RawTracer) Option {
 		if p.tracer != nil {
 			p.tracer.raw = append(p.tracer.raw, tracer)
 		} else {
-			p.tracer = &pubsubTracer{raw: []RawTracer{tracer}, pid: p.host.ID(), msgID: p.msgID}
+			p.tracer = &pubsubTracer{raw: []RawTracer{tracer}, pid: p.host.ID(), idGen: p.idGen}
 		}
 		return nil
 	}
@@ -1097,7 +1093,7 @@ func (p *PubSub) pushMsg(msg *Message) {
 	}
 
 	// have we already seen and validated this message?
-	id := p.msgID(msg.Message)
+	id := p.idGen.ID(msg)
 	if p.seenMessage(id) {
 		p.tracer.DuplicateMessage(msg)
 		return
