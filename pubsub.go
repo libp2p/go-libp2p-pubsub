@@ -1160,6 +1160,14 @@ type TopicOptions struct{}
 
 type TopicOpt func(t *Topic) error
 
+// WithMsgIdFunction sets custom MsgIdFunction for a Topic, enabling topics to have own msg id generation rules.
+func (p *PubSub) WithMsgIdFunction(msgId MsgIdFunction) TopicOpt {
+	return func(t *Topic) error {
+		t.p.idGen.Set(t.topic, msgId)
+		return nil
+	}
+}
+
 // Join joins the topic and returns a Topic handle. Only one Topic handle should exist per topic, and Join will error if
 // the Topic handle already exists.
 func (p *PubSub) Join(topic string, opts ...TopicOpt) (*Topic, error) {
