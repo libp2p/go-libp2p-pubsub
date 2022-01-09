@@ -213,6 +213,7 @@ const (
 
 type Message struct {
 	*pb.Message
+	ID string
 	ReceivedFrom  peer.ID
 	ValidatorData interface{}
 }
@@ -1047,8 +1048,7 @@ func (p *PubSub) handleIncomingRPC(rpc *RPC) {
 				continue
 			}
 
-			msg := &Message{pmsg, rpc.from, nil}
-			p.pushMsg(msg)
+			p.pushMsg(&Message{pmsg, "", rpc.from, nil})
 		}
 	}
 
