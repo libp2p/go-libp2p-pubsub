@@ -20,7 +20,7 @@ import (
 	"github.com/libp2p/go-libp2p-core/protocol"
 
 	logging "github.com/ipfs/go-log"
-	"github.com/whyrusleeping/timecache"
+	timecache "github.com/whyrusleeping/timecache"
 )
 
 // DefaultMaximumMessageSize is 1mb.
@@ -213,7 +213,7 @@ const (
 
 type Message struct {
 	*pb.Message
-	ID string
+	ID            string
 	ReceivedFrom  peer.ID
 	ValidatorData interface{}
 }

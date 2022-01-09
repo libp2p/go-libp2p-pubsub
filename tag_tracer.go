@@ -44,9 +44,9 @@ var (
 type tagTracer struct {
 	sync.RWMutex
 
-	cmgr    connmgr.ConnManager
-	idGen   *msgIDGenerator
-	decayer connmgr.Decayer
+	cmgr     connmgr.ConnManager
+	idGen    *msgIDGenerator
+	decayer  connmgr.Decayer
 	decaying map[string]connmgr.DecayingTag
 	direct   map[peer.ID]struct{}
 
