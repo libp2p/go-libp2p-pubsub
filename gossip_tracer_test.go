@@ -40,7 +40,7 @@ func TestBrokenPromises(t *testing.T) {
 	gt.ThrottlePeer(peerC)
 
 	// make promises break
-	time.Sleep(GossipSubIWantFollowupTime + 10*time.Millisecond)
+	time.Sleep(gt.followUpTime + time.Millisecond)
 
 	brokenPromises = gt.GetBrokenPromises()
 	if len(brokenPromises) != 2 {
@@ -56,17 +56,17 @@ func TestBrokenPromises(t *testing.T) {
 	if brokenPromisesB != 1 {
 		t.Fatalf("expected 1 broken promise from A, got %d", brokenPromisesB)
 	}
+
+	// verify that the peerPromises map has been vacated
+	if len(gt.peerPromises) != 0 {
+		t.Fatal("expected empty peerPromises map")
+	}
 }
 
 func TestNoBrokenPromises(t *testing.T) {
 	// like above, but this time we deliver messages to fullfil the promises
-	originalGossipSubIWantFollowupTime := GossipSubIWantFollowupTime
-	GossipSubIWantFollowupTime = 100 * time.Millisecond
-	defer func() {
-		GossipSubIWantFollowupTime = originalGossipSubIWantFollowupTime
-	}()
-
 	gt := newGossipTracer()
+	gt.followUpTime = 100 * time.Millisecond
 
 	peerA := peer.ID("A")
 	peerB := peer.ID("B")
@@ -88,11 +88,16 @@ func TestNoBrokenPromises(t *testing.T) {
 		gt.DeliverMessage(&Message{Message: m})
 	}
 
-	time.Sleep(GossipSubIWantFollowupTime + 10*time.Millisecond)
+	time.Sleep(gt.followUpTime + time.Millisecond)
 
 	// there should be no broken promises
 	brokenPromises := gt.GetBrokenPromises()
 	if brokenPromises != nil {
 		t.Fatal("expected no broken promises")
+	}
+
+	// verify that the peerPromises map has been vacated
+	if len(gt.peerPromises) != 0 {
+		t.Fatal("expected empty peerPromises map")
 	}
 }
