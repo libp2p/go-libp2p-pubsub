@@ -9,8 +9,8 @@ import (
 type msgIDGenerator struct {
 	Default MsgIdFunction
 
-	topicGens   map[string]MsgIdFunction
 	topicGensLk sync.RWMutex
+	topicGens   map[string]MsgIdFunction
 }
 
 func newMsgIdGenerator() *msgIDGenerator {
