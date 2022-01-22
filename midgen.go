@@ -2,6 +2,8 @@ package pubsub
 
 import (
 	"sync"
+
+	pb "github.com/libp2p/go-libp2p-pubsub/pb"
 )
 
 // msgIDGenerator handles computing IDs for msgs
@@ -33,6 +35,12 @@ func (m *msgIDGenerator) ID(msg *Message) string {
 		return msg.ID
 	}
 
+	msg.ID = m.RawID(msg.Message)
+	return msg.ID
+}
+
+// RawID computes ID for the proto 'msg'.
+func (m *msgIDGenerator) RawID(msg *pb.Message) string {
 	m.topicGensLk.RLock()
 	gen, ok := m.topicGens[msg.GetTopic()]
 	m.topicGensLk.RUnlock()
@@ -40,6 +48,5 @@ func (m *msgIDGenerator) ID(msg *Message) string {
 		gen = m.Default
 	}
 
-	msg.ID = gen(msg.Message)
-	return msg.ID
+	return gen(msg)
 }
