@@ -20,7 +20,7 @@ import (
 	"github.com/libp2p/go-libp2p-core/protocol"
 
 	logging "github.com/ipfs/go-log"
-	timecache "github.com/whyrusleeping/timecache"
+	"github.com/whyrusleeping/timecache"
 )
 
 // DefaultMaximumMessageSize is 1mb.
@@ -1161,7 +1161,7 @@ type TopicOptions struct{}
 type TopicOpt func(t *Topic) error
 
 // WithMsgIdFunction sets custom MsgIdFunction for a Topic, enabling topics to have own msg id generation rules.
-func (p *PubSub) WithMsgIdFunction(msgId MsgIdFunction) TopicOpt {
+func WithMsgIdFunction(msgId MsgIdFunction) TopicOpt {
 	return func(t *Topic) error {
 		t.p.idGen.Set(t.topic, msgId)
 		return nil
