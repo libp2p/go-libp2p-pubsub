@@ -1160,8 +1160,8 @@ type TopicOptions struct{}
 
 type TopicOpt func(t *Topic) error
 
-// WithMsgIdFunction sets custom MsgIdFunction for a Topic, enabling topics to have own msg id generation rules.
-func WithMsgIdFunction(msgId MsgIdFunction) TopicOpt {
+// WithTopicMessageIdFn sets custom MsgIdFunction for a Topic, enabling topics to have own msg id generation rules.
+func WithTopicMessageIdFn(msgId MsgIdFunction) TopicOpt {
 	return func(t *Topic) error {
 		t.p.idGen.Set(t.topic, msgId)
 		return nil
