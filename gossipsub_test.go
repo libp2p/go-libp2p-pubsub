@@ -1815,6 +1815,52 @@ func TestGossipsubOpportunisticGrafting(t *testing.T) {
 		}
 	}
 }
+func TestGossipSubLeaveTopic(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	h := getNetHosts(t, ctx, 2)
+	psubs := []*PubSub{
+		getGossipsub(ctx, h[0]),
+		getGossipsub(ctx, h[1]),
+	}
+
+	connect(t, h[0], h[1])
+
+	// Join all peers
+	var subs []*Subscription
+	for _, ps := range psubs {
+		sub, err := ps.Subscribe("test")
+		if err != nil {
+			t.Fatal(err)
+		}
+		subs = append(subs, sub)
+	}
+
+	time.Sleep(time.Second)
+
+	psubs[0].rt.Leave("test")
+	time.Sleep(time.Second)
+	peerMap := psubs[0].rt.(*GossipSubRouter).backoff["test"]
+	if len(peerMap) != 1 {
+		t.Fatalf("No peer is populated in the backoff map for peer 0")
+	}
+	_, ok := peerMap[h[1].ID()]
+	if !ok {
+		t.Errorf("Expected peer does not exist in the backoff map")
+	}
+
+	// Ensure that remote peer 1 also applies the backoff appropriately
+	// for peer 0.
+	peerMap2 := psubs[1].rt.(*GossipSubRouter).backoff["test"]
+	if len(peerMap2) != 1 {
+		t.Fatalf("No peer is populated in the backoff map for peer 1")
+	}
+	_, ok = peerMap2[h[0].ID()]
+	if !ok {
+		t.Errorf("Expected peer does not exist in the backoff map")
+	}
+}
 
 type sybilSquatter struct {
 	h host.Host
