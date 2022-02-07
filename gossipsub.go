@@ -1091,6 +1091,10 @@ func (gs *GossipSubRouter) Leave(topic string) {
 		log.Debugf("LEAVE: Remove mesh link to %s in %s", p, topic)
 		gs.tracer.Prune(p, topic)
 		gs.sendPrune(p, topic)
+		// Add a backoff to this peer to prevent us from eagerly
+		// re-grafting this peer into our mesh if we rejoin this
+		// topic before the backoff period.
+		gs.addBackoff(p, topic)
 	}
 }
 
