@@ -1093,7 +1093,7 @@ func (gs *GossipSubRouter) Leave(topic string) {
 		gs.sendPrune(p, topic)
 		// Add a backoff to this peer to prevent us from eagerly
 		// re-grafting this peer into our mesh if we rejoin this
-		// topic before the backoff period.
+		// topic before the backoff period ends.
 		gs.addBackoff(p, topic)
 	}
 }
