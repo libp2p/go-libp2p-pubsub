@@ -1036,10 +1036,12 @@ func (gs *GossipSubRouter) Join(topic string) {
 
 	gmap, ok = gs.fanout[topic]
 	if ok {
+		backoff := gs.backoff[topic]
 		// these peers have a score above the publish threshold, which may be negative
 		// so drop the ones with a negative score
 		for p := range gmap {
-			if gs.score.Score(p) < 0 {
+			_, doBackOff := backoff[p]
+			if gs.score.Score(p) < 0 || doBackOff {
 				delete(gmap, p)
 			}
 		}
@@ -1047,10 +1049,12 @@ func (gs *GossipSubRouter) Join(topic string) {
 		if len(gmap) < gs.params.D {
 			// we need more peers; eager, as this would get fixed in the next heartbeat
 			more := gs.getPeers(topic, gs.params.D-len(gmap), func(p peer.ID) bool {
-				// filter our current peers, direct peers, and peers with negative scores
+				// filter our current peers, direct peers, peers we are backing off, and
+				// peers with negative scores
 				_, inMesh := gmap[p]
 				_, direct := gs.direct[p]
-				return !inMesh && !direct && gs.score.Score(p) >= 0
+				_, doBackOff := backoff[p]
+				return !inMesh && !direct && !doBackOff && gs.score.Score(p) >= 0
 			})
 			for _, p := range more {
 				gmap[p] = struct{}{}
@@ -1060,10 +1064,12 @@ func (gs *GossipSubRouter) Join(topic string) {
 		delete(gs.fanout, topic)
 		delete(gs.lastpub, topic)
 	} else {
+		backoff := gs.backoff[topic]
 		peers := gs.getPeers(topic, gs.params.D, func(p peer.ID) bool {
-			// filter direct peers and peers with negative score
+			// filter direct peers, peers we are backing off and peers with negative score
 			_, direct := gs.direct[p]
-			return !direct && gs.score.Score(p) >= 0
+			_, doBackOff := backoff[p]
+			return !direct && !doBackOff && gs.score.Score(p) >= 0
 		})
 		gmap = peerListToMap(peers)
 		gs.mesh[topic] = gmap
