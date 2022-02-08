@@ -1862,6 +1862,51 @@ func TestGossipSubLeaveTopic(t *testing.T) {
 	}
 }
 
+func TestGossipSubJoinTopic(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	h := getNetHosts(t, ctx, 3)
+	psubs := []*PubSub{
+		getGossipsub(ctx, h[0]),
+		getGossipsub(ctx, h[1]),
+		getGossipsub(ctx, h[2]),
+	}
+
+	connect(t, h[0], h[1])
+	connect(t, h[0], h[2])
+
+	router0 := psubs[0].rt.(*GossipSubRouter)
+
+	// Add in backoff for peer.
+	peerMap := make(map[peer.ID]time.Time)
+	peerMap[h[1].ID()] = time.Now().Add(router0.params.PruneBackoff)
+
+	router0.backoff["test"] = peerMap
+
+	// Join all peers
+	var subs []*Subscription
+	for _, ps := range psubs {
+		sub, err := ps.Subscribe("test")
+		if err != nil {
+			t.Fatal(err)
+		}
+		subs = append(subs, sub)
+	}
+
+	time.Sleep(time.Second)
+
+	meshMap := router0.mesh["test"]
+	if len(meshMap) != 1 {
+		t.Fatalf("Unexpect peer included in the mesh")
+	}
+
+	_, ok := meshMap[h[1].ID()]
+	if ok {
+		t.Fatalf("Peer that was to be backed off is included in the mesh")
+	}
+}
+
 type sybilSquatter struct {
 	h host.Host
 }
