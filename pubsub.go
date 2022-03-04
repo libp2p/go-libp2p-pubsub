@@ -23,8 +23,8 @@ import (
 	timecache "github.com/whyrusleeping/timecache"
 )
 
-// DefaultMaximumMessageSize is 1mb.
-const DefaultMaxMessageSize = 1 << 20
+// DefaultMaxMessageSize is 2MB
+const DefaultMaxMessageSize = 1 << 21
 
 var (
 	TimeCacheDuration = 120 * time.Second
