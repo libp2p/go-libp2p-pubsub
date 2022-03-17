@@ -11,6 +11,7 @@ import (
 	"time"
 
 	pb "github.com/libp2p/go-libp2p-pubsub/pb"
+	"google.golang.org/protobuf/proto"
 
 	"github.com/libp2p/go-libp2p-core/crypto"
 	"github.com/libp2p/go-libp2p-core/discovery"
@@ -163,6 +164,9 @@ type PubSub struct {
 
 	// protoMatchFunc is a matching function for protocol selection.
 	protoMatchFunc ProtocolMatchFn
+
+	// lazyHello is a flag to enable lazy hello.
+	lazyHello bool
 
 	ctx context.Context
 }
@@ -510,6 +514,13 @@ func WithProtocolMatchFn(m ProtocolMatchFn) Option {
 	}
 }
 
+func WithLazyHello(lazy bool) Option {
+	return func(ps *PubSub) error {
+		ps.lazyHello = lazy
+		return nil
+	}
+}
+
 // processLoop handles all inputs arriving on the channels
 func (p *PubSub) processLoop(ctx context.Context) {
 	defer func() {
@@ -654,7 +665,9 @@ func (p *PubSub) handlePendingPeers() {
 		}
 
 		messages := make(chan *RPC, p.peerOutboundQueueSize)
-		messages <- p.getHelloPacket()
+		if !p.lazyHello {
+			messages <- p.getHelloPacket()
+		}
 		go p.handleNewPeer(p.ctx, pid, messages)
 		p.peers[pid] = messages
 	}
@@ -685,7 +698,9 @@ func (p *PubSub) handleDeadPeers() {
 			// we respawn the writer as we need to ensure there is a stream active
 			log.Debugf("peer declared dead but still connected; respawning writer: %s", pid)
 			messages := make(chan *RPC, p.peerOutboundQueueSize)
-			messages <- p.getHelloPacket()
+			if !p.lazyHello {
+				messages <- p.getHelloPacket()
+			}
 			go p.handleNewPeer(p.ctx, pid, messages)
 			p.peers[pid] = messages
 			continue
@@ -986,6 +1001,13 @@ func (p *PubSub) handleIncomingRPC(rpc *RPC) {
 	p.tracer.RecvRPC(rpc)
 
 	subs := rpc.GetSubscriptions()
+	if rpc.Control != nil && rpc.Control.Graft != nil {
+		subs = append(subs, &pb.RPC_SubOpts{
+			Topicid:   proto.String(rpc.Control.Graft[0].GetTopicID()),
+			Subscribe: proto.Bool(true),
+		})
+	}
+
 	if len(subs) != 0 && p.subFilter != nil {
 		var err error
 		subs, err = p.subFilter.FilterIncomingSubscriptions(rpc.from, subs)
