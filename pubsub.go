@@ -475,7 +475,7 @@ func WithRawTracer(tracer RawTracer) Option {
 }
 
 // WithMaxMessageSize sets the global maximum message size for pubsub wire
-// messages. The default value is 1MiB (DefaultMaxMessageSize).
+// messages. The default value is 2MiB (DefaultMaxMessageSize).
 //
 // Observe the following warnings when setting this option.
 //
