@@ -33,7 +33,9 @@ func (t *Topic) PublishWithSk(ctx context.Context, data []byte, signKey crypto.P
 		From:  nil,
 		Seqno: nil,
 	}
-	m.Seqno = t.p.nextSeqno()
+	if t.p.signID != "" {
+		m.Seqno = t.p.nextSeqno()
+	}
 	m.From = []byte(pid)
 	err := signMessage(pid, signKey, m)
 	if err != nil {
