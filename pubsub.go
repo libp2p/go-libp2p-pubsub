@@ -23,8 +23,8 @@ import (
 	timecache "github.com/whyrusleeping/timecache"
 )
 
-// DefaultMaximumMessageSize is 1mb.
-const DefaultMaxMessageSize = 1 << 20
+// DefaultMaxMessageSize is 2MB
+const DefaultMaxMessageSize = 1 << 21
 
 var (
 	TimeCacheDuration = 120 * time.Second
@@ -475,7 +475,7 @@ func WithRawTracer(tracer RawTracer) Option {
 }
 
 // WithMaxMessageSize sets the global maximum message size for pubsub wire
-// messages. The default value is 1MiB (DefaultMaxMessageSize).
+// messages. The default value is 2MiB (DefaultMaxMessageSize).
 //
 // Observe the following warnings when setting this option.
 //

@@ -2059,7 +2059,7 @@ func (iwe *iwantEverything) handleStream(s network.Stream) {
 	gossipMsgIdsReceived := make(map[string]struct{})
 
 	// send a subscription for test in the output stream to become candidate for gossip
-	r := protoio.NewDelimitedReader(s, 1<<20)
+	r := protoio.NewDelimitedReader(s, DefaultMaxMessageSize)
 	w := protoio.NewDelimitedWriter(os)
 	truth := true
 	topic := "test"
