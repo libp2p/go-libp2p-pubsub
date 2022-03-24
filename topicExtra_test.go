@@ -10,6 +10,33 @@ import (
 	tnet "github.com/libp2p/go-libp2p-testing/net"
 )
 
+func TestTopic_PublishWithSk(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	const topic = "foobar"
+	const numHosts = 5
+
+	virtualPeer := tnet.RandPeerNetParamsOrFatal(t)
+	hosts := getNetHosts(t, ctx, numHosts)
+	topics := getTopics(getPubsubs(ctx, hosts), topic)
+
+	t.Run("nil sign private key should error", func(t *testing.T) {
+		err := topics[0].PublishWithSk(ctx, []byte("buff"), nil, virtualPeer.ID)
+		if err != errNilSignKey {
+			t.Fatal("error should have been of type errNilSignKey")
+		}
+	})
+	t.Run("empty peer ID should error", func(t *testing.T) {
+		err := topics[0].PublishWithSk(ctx, []byte("buff"), virtualPeer.PrivKey, "")
+		if err != errEmptyPeerID {
+			t.Fatal("error should have been of type errEmptyPeerID")
+		}
+	})
+}
+
 func TestTopicRelay_PublishWithSk(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -34,16 +61,16 @@ func TestTopicRelay_PublishWithSk(t *testing.T) {
 
 	var subs []*Subscription
 
-	for i, topic := range topics {
+	for i, topicValue := range topics {
 		if i == 2 || i == 4 {
-			sub, err := topic.Subscribe()
+			sub, err := topicValue.Subscribe()
 			if err != nil {
 				t.Fatal(err)
 			}
 
 			subs = append(subs, sub)
 		} else {
-			_, err := topic.Relay()
+			_, err := topicValue.Relay()
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -63,9 +90,9 @@ func TestTopicRelay_PublishWithSk(t *testing.T) {
 		}
 
 		for _, sub := range subs {
-			received, err := sub.Next(ctx)
-			if err != nil {
-				t.Fatal(err)
+			received, errSub := sub.Next(ctx)
+			if errSub != nil {
+				t.Fatal(errSub)
 			}
 
 			if !bytes.Equal(msg, received.Data) {

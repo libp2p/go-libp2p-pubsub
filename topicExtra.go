@@ -2,14 +2,25 @@ package pubsub
 
 import (
 	"context"
+	"errors"
 
 	"github.com/libp2p/go-libp2p-core/crypto"
 	"github.com/libp2p/go-libp2p-core/peer"
 	pb "github.com/libp2p/go-libp2p-pubsub/pb"
 )
 
+var errNilSignKey = errors.New("nil sign key")
+var errEmptyPeerID = errors.New("empty peer ID")
+
 // PublishWithSk publishes data to topic.
 func (t *Topic) PublishWithSk(ctx context.Context, data []byte, signKey crypto.PrivKey, pid peer.ID, opts ...PubOpt) error {
+	if signKey == nil {
+		return errNilSignKey
+	}
+	if len(pid) == 0 {
+		return errEmptyPeerID
+	}
+
 	t.mux.RLock()
 	defer t.mux.RUnlock()
 	if t.closed {
@@ -22,23 +33,18 @@ func (t *Topic) PublishWithSk(ctx context.Context, data []byte, signKey crypto.P
 		From:  nil,
 		Seqno: nil,
 	}
-	if t.p.signID != "" {
-		m.From = []byte(t.p.signID)
-		m.Seqno = t.p.nextSeqno()
-	}
-	if signKey != nil {
-		m.From = []byte(pid)
-		err := signMessage(pid, signKey, m)
-		if err != nil {
-			return err
-		}
+	m.Seqno = t.p.nextSeqno()
+	m.From = []byte(pid)
+	err := signMessage(pid, signKey, m)
+	if err != nil {
+		return err
 	}
 
 	pub := &PublishOptions{}
 	for _, opt := range opts {
-		err := opt(pub)
-		if err != nil {
-			return err
+		errOpts := opt(pub)
+		if errOpts != nil {
+			return errOpts
 		}
 	}
 
