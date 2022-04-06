@@ -43,8 +43,6 @@ func (b *backoff) updateAndGet(id peer.ID) time.Duration {
 		h = &backoffHistory{
 			duration: time.Duration(0),
 		}
-	} else if time.Since(h.lastTried) > TimeToLive {
-		h.duration = time.Duration(0)
 	} else if h.duration < MinBackoffDelay {
 		h.duration = MinBackoffDelay
 	} else if h.duration < MaxBackoffDelay {
