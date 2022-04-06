@@ -254,7 +254,7 @@ func NewPubSub(ctx context.Context, h host.Host, rt PubSubRouter, opts ...Option
 		newPeerError:          make(chan peer.ID),
 		peerDead:              make(chan struct{}, 1),
 		peerDeadPend:          make(map[peer.ID]struct{}),
-		deadPeerBackoff:       newBackoff(),
+		deadPeerBackoff:       newBackoff(1000),
 		cancelCh:              make(chan *Subscription),
 		getPeers:              make(chan *listPeerReq),
 		addSub:                make(chan *addSubReq),
