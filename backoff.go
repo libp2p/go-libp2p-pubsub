@@ -25,30 +25,19 @@ func newBackoff() *backoff{
 	}
 }
 
-func (b *backoff) get(id peer.ID) time.Duration {
+func (b *backoff) updateAndGet(id peer.ID) time.Duration{
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
 	h, ok := b.info[id]
 	if !ok {
+		// first request goes immediately.
 		h = time.Duration(0)
 		b.info[id] = h
-	}
 
-	return h
-}
-
-func (b *backoff) update(id peer.ID) {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-
-	h := b.info[id]
-
-	if h < MinBackoffDelay {
+	} else if h < MinBackoffDelay {
 		h = MinBackoffDelay
-	} else if h == MaxBackoffDelay {
-		h = MaxBackoffDelay
-	} else {
+	} else if h < MaxBackoffDelay {
 		h = time.Duration(BackoffMultiplier * h)
 		if h > MaxBackoffDelay || h < 0 {
 			h = MaxBackoffDelay
@@ -56,4 +45,6 @@ func (b *backoff) update(id peer.ID) {
 	}
 
 	b.info[id] = h
+	
+	return h
 }
