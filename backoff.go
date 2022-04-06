@@ -33,8 +33,6 @@ func (b *backoff) updateAndGet(id peer.ID) time.Duration{
 	if !ok {
 		// first request goes immediately.
 		h = time.Duration(0)
-		b.info[id] = h
-
 	} else if h < MinBackoffDelay {
 		h = MinBackoffDelay
 	} else if h < MaxBackoffDelay {
@@ -45,6 +43,6 @@ func (b *backoff) updateAndGet(id peer.ID) time.Duration{
 	}
 
 	b.info[id] = h
-	
+
 	return h
 }

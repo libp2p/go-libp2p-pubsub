@@ -41,4 +41,8 @@ func TestBackoff(t *testing.T){
 	if got != MinBackoffDelay {
 		t.Fatalf("invalid backoff result, expected: %v, got: %v", MinBackoffDelay, got)
 	}
+
+	if len(b.info) != 2 {
+		t.Fatalf("info map size mismatch, expected: %d, got: %d", 2, len(b.info))
+	}
 }
