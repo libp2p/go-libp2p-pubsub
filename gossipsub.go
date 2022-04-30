@@ -235,7 +235,7 @@ func DefaultGossipSubParams() GossipSubParams {
 		Dscore:                    GossipSubDscore,
 		Dout:                      GossipSubDout,
 		HistoryLength:             GossipSubHistoryLength,
-		HistoryGossip:             GossipSubHistoryLength,
+		HistoryGossip:             GossipSubHistoryGossip,
 		Dlazy:                     GossipSubDlazy,
 		GossipFactor:              GossipSubGossipFactor,
 		GossipRetransmission:      GossipSubGossipRetransmission,

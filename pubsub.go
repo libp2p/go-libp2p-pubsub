@@ -27,6 +27,8 @@ import (
 const DefaultMaxMessageSize = 1 << 20
 
 var (
+	// TimeCacheDuration specifies how long a message ID will be remembered as seen.
+	// Use WithSeenMessagesTTL to configure this per pubsub instance, instead of overriding the global default.
 	TimeCacheDuration = 120 * time.Second
 
 	// ErrSubscriptionCancelled may be returned when a subscription Next() is called after the
@@ -146,6 +148,7 @@ type PubSub struct {
 
 	seenMessagesMx sync.Mutex
 	seenMessages   *timecache.TimeCache
+	seenMsgTTL     time.Duration
 
 	// generator used to compute the ID for a message
 	idGen *msgIDGenerator
@@ -272,7 +275,7 @@ func NewPubSub(ctx context.Context, h host.Host, rt PubSubRouter, opts ...Option
 		inboundStreams:        make(map[peer.ID]network.Stream),
 		blacklist:             NewMapBlacklist(),
 		blacklistPeer:         make(chan peer.ID),
-		seenMessages:          timecache.NewTimeCache(TimeCacheDuration),
+		seenMsgTTL:            TimeCacheDuration,
 		idGen:                 newMsgIdGenerator(),
 		counter:               uint64(time.Now().UnixNano()),
 	}
@@ -293,6 +296,8 @@ func NewPubSub(ctx context.Context, h host.Host, rt PubSubRouter, opts ...Option
 			return nil, fmt.Errorf("can't sign for peer %s: no private key", ps.signID)
 		}
 	}
+
+	ps.seenMessages = timecache.NewTimeCache(ps.seenMsgTTL)
 
 	if err := ps.disc.Start(ps); err != nil {
 		return nil, err
@@ -506,6 +511,14 @@ func WithMaxMessageSize(maxMessageSize int) Option {
 func WithProtocolMatchFn(m ProtocolMatchFn) Option {
 	return func(ps *PubSub) error {
 		ps.protoMatchFunc = m
+		return nil
+	}
+}
+
+// WithSeenMessagesTTL configures when a previously seen message ID can be forgotten about
+func WithSeenMessagesTTL(ttl time.Duration) Option {
+	return func(ps *PubSub) error {
+		ps.seenMsgTTL = ttl
 		return nil
 	}
 }

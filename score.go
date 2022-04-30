@@ -88,6 +88,8 @@ type peerScore struct {
 var _ RawTracer = (*peerScore)(nil)
 
 type messageDeliveries struct {
+	seenMsgTTL time.Duration
+
 	records map[string]*deliveryRecord
 
 	// queue for cleaning up old delivery records
@@ -178,11 +180,15 @@ func WithPeerScoreInspect(inspect interface{}, period time.Duration) Option {
 
 // implementation
 func newPeerScore(params *PeerScoreParams) *peerScore {
+	seenMsgTTL := params.SeenMsgTTL
+	if seenMsgTTL == 0 {
+		seenMsgTTL = TimeCacheDuration
+	}
 	return &peerScore{
 		params:     params,
 		peerStats:  make(map[peer.ID]*peerStats),
 		peerIPs:    make(map[string]map[peer.ID]struct{}),
-		deliveries: &messageDeliveries{records: make(map[string]*deliveryRecord)},
+		deliveries: &messageDeliveries{seenMsgTTL: seenMsgTTL, records: make(map[string]*deliveryRecord)},
 		idGen:      newMsgIdGenerator(),
 	}
 }
@@ -841,7 +847,7 @@ func (d *messageDeliveries) getRecord(id string) *deliveryRecord {
 	rec = &deliveryRecord{peers: make(map[peer.ID]struct{}), firstSeen: now}
 	d.records[id] = rec
 
-	entry := &deliveryEntry{id: id, expire: now.Add(TimeCacheDuration)}
+	entry := &deliveryEntry{id: id, expire: now.Add(d.seenMsgTTL)}
 	if d.tail != nil {
 		d.tail.next = entry
 		d.tail = entry
