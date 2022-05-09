@@ -68,7 +68,7 @@ func TestBackoff_Clean(t *testing.T){
 	defer cancel()
 
 	size := 10
-	cleanupInterval := 5 * time.Second
+	cleanupInterval := 2 * time.Second
 	b := newBackoff(ctx, size, cleanupInterval)
 
 	for i := 0; i < size; i++{
@@ -82,7 +82,7 @@ func TestBackoff_Clean(t *testing.T){
 	}
 
 	// waits for a cleanup loop to kick-in
-	time.Sleep(cleanupInterval)
+	time.Sleep(2 * cleanupInterval)
 
 	// next update should trigger cleanup
 	got := b.updateAndGet(peer.ID("some-new-peer"))
