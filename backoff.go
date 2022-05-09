@@ -1,6 +1,7 @@
 package pubsub
 
 import (
+	"context"
 	"sync"
 	"time"
 
@@ -10,8 +11,9 @@ import (
 const (
 	MinBackoffDelay   = 100 * time.Millisecond
 	MaxBackoffDelay   = 10 * time.Second
-	TimeToLive        = 10 * time.Minute
-	BackoffMultiplier = 2
+	TimeToLive             = 10 * time.Minute
+	BackoffCleanupInterval = 1 * time.Minute
+	BackoffMultiplier      = 2
 )
 
 type backoffHistory struct {
@@ -22,15 +24,21 @@ type backoffHistory struct {
 type backoff struct {
 	mu   sync.Mutex
 	info map[peer.ID]*backoffHistory
-	ct   int // size threshold that kicks off the cleaner
+	ct   int           // size threshold that kicks off the cleaner
+	ci   time.Duration // cleanup intervals
 }
 
-func newBackoff(sizeThreshold int) *backoff {
-	return &backoff{
+func newBackoff(ctx context.Context, sizeThreshold int, cleanupInterval time.Duration) *backoff {
+	b := &backoff{
 		mu:   sync.Mutex{},
 		ct:   sizeThreshold,
+		ci:   cleanupInterval,
 		info: make(map[peer.ID]*backoffHistory),
 	}
+
+	go b.cleanupLoop(ctx)
+
+	return b
 }
 
 func (b *backoff) updateAndGet(id peer.ID) time.Duration {
@@ -55,17 +63,27 @@ func (b *backoff) updateAndGet(id peer.ID) time.Duration {
 	h.lastTried = time.Now()
 	b.info[id] = h
 
-	if len(b.info) > b.ct {
-		b.cleanup()
-	}
-
 	return h.duration
 }
 
 func (b *backoff) cleanup() {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
 	for id, h := range b.info {
 		if time.Since(h.lastTried) > TimeToLive {
 			delete(b.info, id)
+		}
+	}
+}
+
+func (b *backoff) cleanupLoop(ctx context.Context) {
+	for {
+		select {
+		case <-ctx.Done():
+			return // pubsub shutting down
+		case <-time.Tick(b.ci):
+			b.cleanup()
 		}
 	}
 }

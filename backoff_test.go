@@ -1,6 +1,7 @@
 package pubsub
 
 import (
+	"context"
 	"fmt"
 	"math"
 	"testing"
@@ -12,7 +13,14 @@ import (
 func TestBackoff_Update(t *testing.T){
 	id1 := peer.ID("peer-1")
 	id2 := peer.ID("peer-2")
-	b := newBackoff(10)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	size := 10
+	cleanupInterval := 5 * time.Second
+
+	b := newBackoff(ctx, size, cleanupInterval)
 
 	if len(b.info) > 0 {
 		t.Fatal("non-empty info map for backoff")
@@ -56,8 +64,12 @@ func TestBackoff_Update(t *testing.T){
 }
 
 func TestBackoff_Clean(t *testing.T){
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	size := 10
-	b := newBackoff(size)
+	cleanupInterval := 5 * time.Second
+	b := newBackoff(ctx, size, cleanupInterval)
 
 	for i := 0; i < size; i++{
 		id := peer.ID(fmt.Sprintf("peer-%d", i))
@@ -68,6 +80,9 @@ func TestBackoff_Clean(t *testing.T){
 	if len(b.info) != size {
 		t.Fatalf("info map size mismatch, expected: %d, got: %d", size, len(b.info))
 	}
+
+	// waits for a cleanup loop to kick-in
+	time.Sleep(cleanupInterval)
 
 	// next update should trigger cleanup
 	got := b.updateAndGet(peer.ID("some-new-peer"))
