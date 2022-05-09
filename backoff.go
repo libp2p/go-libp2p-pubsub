@@ -2,6 +2,7 @@ package pubsub
 
 import (
 	"context"
+	"math/rand"
 	"sync"
 	"time"
 
@@ -9,11 +10,12 @@ import (
 )
 
 const (
-	MinBackoffDelay   = 100 * time.Millisecond
-	MaxBackoffDelay   = 10 * time.Second
+	MinBackoffDelay        = 100 * time.Millisecond
+	MaxBackoffDelay        = 10 * time.Second
 	TimeToLive             = 10 * time.Minute
 	BackoffCleanupInterval = 1 * time.Minute
 	BackoffMultiplier      = 2
+	MaxBackoffJitterCoff   = 1000
 )
 
 type backoffHistory struct {
@@ -36,6 +38,7 @@ func newBackoff(ctx context.Context, sizeThreshold int, cleanupInterval time.Dur
 		info: make(map[peer.ID]*backoffHistory),
 	}
 
+	rand.Seed(time.Now().UnixNano()) // used for jitter
 	go b.cleanupLoop(ctx)
 
 	return b
@@ -54,7 +57,8 @@ func (b *backoff) updateAndGet(id peer.ID) time.Duration {
 	} else if h.duration < MinBackoffDelay {
 		h.duration = MinBackoffDelay
 	} else if h.duration < MaxBackoffDelay {
-		h.duration = time.Duration(BackoffMultiplier * h.duration)
+		jitter := rand.Intn(MaxBackoffJitterCoff)
+		h.duration = (BackoffMultiplier * h.duration) + time.Duration(jitter) * time.Millisecond
 		if h.duration > MaxBackoffDelay || h.duration < 0 {
 			h.duration = MaxBackoffDelay
 		}
