@@ -15,7 +15,7 @@ const (
 	TimeToLive             = 10 * time.Minute
 	BackoffCleanupInterval = 1 * time.Minute
 	BackoffMultiplier      = 2
-	MaxBackoffJitterCoff   = 1000
+	MaxBackoffJitterCoff   = 100
 )
 
 type backoffHistory struct {
