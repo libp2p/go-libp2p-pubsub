@@ -36,12 +36,13 @@ func TestBackoff_Update(t *testing.T){
 	for i := 0; i < 10; i++{
 		got := b.updateAndGet(id1)
 
-		expected := time.Duration(math.Pow(BackoffMultiplier, float64(i)) * float64(MinBackoffDelay))
+		expected := time.Duration(math.Pow(BackoffMultiplier, float64(i)) *
+			float64(MinBackoffDelay + MaxBackoffJitterCoff * time.Millisecond))
 		if expected > MaxBackoffDelay {
 			expected = MaxBackoffDelay
 		}
 
-		if expected != got {
+		if expected < got { // considering jitter, expected backoff must always be greater than or equal to actual.
 			t.Fatalf("invalid backoff result, expected: %v, got: %v", expected, got)
 		}
 	}
