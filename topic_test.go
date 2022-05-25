@@ -922,7 +922,7 @@ func TestWithTopicMsgIdFunction(t *testing.T) {
 	}
 }
 
-func TestTopic_PublishWithSk(t *testing.T) {
+func TestTopic_PublishWithKeyInvalidParameters(t *testing.T) {
 	t.Parallel()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -1012,6 +1012,9 @@ func TestTopicRelay_PublishWithKey(t *testing.T) {
 
 			if !bytes.Equal(msg, received.Data) {
 				t.Fatal("received message is other than expected")
+			}
+			if string(received.From) != string(virtualPeer.ID) {
+				t.Fatal("received message is not from the virtual peer")
 			}
 		}
 	}
