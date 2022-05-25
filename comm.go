@@ -3,6 +3,7 @@ package pubsub
 import (
 	"bufio"
 	"context"
+	"fmt"
 	"io"
 	"time"
 
@@ -122,19 +123,20 @@ func (p *PubSub) handleNewPeer(ctx context.Context, pid peer.ID, outgoing <-chan
 	}
 }
 
-func (p *PubSub) handleNewPeerWithBackoff(ctx context.Context, pid peer.ID, outgoing <-chan *RPC) {
+func (p *PubSub) handleNewPeerWithBackoff(ctx context.Context, pid peer.ID, outgoing <-chan *RPC) error {
 	delay, valid := p.deadPeerBackoff.updateAndGet(pid)
 	if !valid {
-		log.Warnf("backoff attempts to %s expired after reaching maximum allowed", pid)
-		return
+		return fmt.Errorf("backoff attempts to %s expired after reaching maximum allowed", pid)
 	}
 
 	select {
 	case <-time.After(delay):
 		p.handleNewPeer(ctx, pid, outgoing)
 	case <-ctx.Done():
-		return
+		return fmt.Errorf("context cancelled")
 	}
+
+	return nil
 }
 
 func (p *PubSub) handlePeerEOF(ctx context.Context, s network.Stream) {
