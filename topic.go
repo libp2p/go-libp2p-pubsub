@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"sync"
 
+	"github.com/libp2p/go-libp2p-core/crypto"
 	pb "github.com/libp2p/go-libp2p-pubsub/pb"
 
 	"github.com/libp2p/go-libp2p-core/peer"
@@ -13,6 +14,12 @@ import (
 
 // ErrTopicClosed is returned if a Topic is utilized after it has been closed
 var ErrTopicClosed = errors.New("this Topic is closed, try opening a new one")
+
+// ErrNilSignKey is returned if a nil private key was provided
+var ErrNilSignKey = errors.New("nil sign key")
+
+// ErrEmptyPeerID is returned if an empty peer ID was provided
+var ErrEmptyPeerID = errors.New("empty peer ID")
 
 // Topic is the handle for a pubsub topic
 type Topic struct {
@@ -238,6 +245,54 @@ func (t *Topic) Publish(ctx context.Context, data []byte, opts ...PubOpt) error 
 		err := opt(pub)
 		if err != nil {
 			return err
+		}
+	}
+
+	if pub.ready != nil {
+		t.p.disc.Bootstrap(ctx, t.topic, pub.ready)
+	}
+
+	return t.p.val.PushLocal(&Message{m, t.p.host.ID(), nil})
+}
+
+// PublishWithSk publishes data to topic using the provided secret key and generated peer ID. Providing also the peer ID
+// (which can be cached) will improve the performance as it does not require the generation of the public key
+// and the resulting peer ID.
+// This method can be used as to be able to publish messages on the network without having a "real", connectable host.
+func (t *Topic) PublishWithSk(ctx context.Context, data []byte, signKey crypto.PrivKey, pid peer.ID, opts ...PubOpt) error {
+	if signKey == nil {
+		return ErrNilSignKey
+	}
+	if len(pid) == 0 {
+		return ErrEmptyPeerID
+	}
+
+	t.mux.RLock()
+	defer t.mux.RUnlock()
+	if t.closed {
+		return ErrTopicClosed
+	}
+
+	m := &pb.Message{
+		Data:  data,
+		Topic: &t.topic,
+		From:  nil,
+		Seqno: nil,
+	}
+	if t.p.signID != "" {
+		m.Seqno = t.p.nextSeqno()
+	}
+	m.From = []byte(pid)
+	err := signMessage(pid, signKey, m)
+	if err != nil {
+		return err
+	}
+
+	pub := &PublishOptions{}
+	for _, opt := range opts {
+		errOpts := opt(pub)
+		if errOpts != nil {
+			return errOpts
 		}
 	}
 
