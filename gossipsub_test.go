@@ -1601,7 +1601,8 @@ func TestGossipsubPiggybackControl(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	h := bhost.NewBlankHost(swarmt.GenSwarm(t, ctx))
+	h := bhost.NewBlankHost(swarmt.GenSwarm(t))
+	defer h.Close()
 	ps := getGossipsub(ctx, h)
 
 	blah := peer.ID("bogotr0n")
@@ -1812,6 +1813,97 @@ func TestGossipsubOpportunisticGrafting(t *testing.T) {
 		if count < 3 {
 			t.Fatalf("expected at least 3 honest peers, got %d", count)
 		}
+	}
+}
+func TestGossipSubLeaveTopic(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	h := getNetHosts(t, ctx, 2)
+	psubs := []*PubSub{
+		getGossipsub(ctx, h[0]),
+		getGossipsub(ctx, h[1]),
+	}
+
+	connect(t, h[0], h[1])
+
+	// Join all peers
+	var subs []*Subscription
+	for _, ps := range psubs {
+		sub, err := ps.Subscribe("test")
+		if err != nil {
+			t.Fatal(err)
+		}
+		subs = append(subs, sub)
+	}
+
+	time.Sleep(time.Second)
+
+	psubs[0].rt.Leave("test")
+	time.Sleep(time.Second)
+	peerMap := psubs[0].rt.(*GossipSubRouter).backoff["test"]
+	if len(peerMap) != 1 {
+		t.Fatalf("No peer is populated in the backoff map for peer 0")
+	}
+	_, ok := peerMap[h[1].ID()]
+	if !ok {
+		t.Errorf("Expected peer does not exist in the backoff map")
+	}
+
+	// Ensure that remote peer 1 also applies the backoff appropriately
+	// for peer 0.
+	peerMap2 := psubs[1].rt.(*GossipSubRouter).backoff["test"]
+	if len(peerMap2) != 1 {
+		t.Fatalf("No peer is populated in the backoff map for peer 1")
+	}
+	_, ok = peerMap2[h[0].ID()]
+	if !ok {
+		t.Errorf("Expected peer does not exist in the backoff map")
+	}
+}
+
+func TestGossipSubJoinTopic(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	h := getNetHosts(t, ctx, 3)
+	psubs := []*PubSub{
+		getGossipsub(ctx, h[0]),
+		getGossipsub(ctx, h[1]),
+		getGossipsub(ctx, h[2]),
+	}
+
+	connect(t, h[0], h[1])
+	connect(t, h[0], h[2])
+
+	router0 := psubs[0].rt.(*GossipSubRouter)
+
+	// Add in backoff for peer.
+	peerMap := make(map[peer.ID]time.Time)
+	peerMap[h[1].ID()] = time.Now().Add(router0.params.PruneBackoff)
+
+	router0.backoff["test"] = peerMap
+
+	// Join all peers
+	var subs []*Subscription
+	for _, ps := range psubs {
+		sub, err := ps.Subscribe("test")
+		if err != nil {
+			t.Fatal(err)
+		}
+		subs = append(subs, sub)
+	}
+
+	time.Sleep(time.Second)
+
+	meshMap := router0.mesh["test"]
+	if len(meshMap) != 1 {
+		t.Fatalf("Unexpect peer included in the mesh")
+	}
+
+	_, ok := meshMap[h[1].ID()]
+	if ok {
+		t.Fatalf("Peer that was to be backed off is included in the mesh")
 	}
 }
 

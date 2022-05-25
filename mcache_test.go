@@ -18,7 +18,7 @@ func TestMessageCache(t *testing.T) {
 	}
 
 	for i := 0; i < 10; i++ {
-		mcache.Put(msgs[i])
+		mcache.Put(&Message{Message: msgs[i]})
 	}
 
 	for i := 0; i < 10; i++ {
@@ -28,7 +28,7 @@ func TestMessageCache(t *testing.T) {
 			t.Fatalf("Message %d not in cache", i)
 		}
 
-		if m != msgs[i] {
+		if m.Message != msgs[i] {
 			t.Fatalf("Message %d does not match cache", i)
 		}
 	}
@@ -47,7 +47,7 @@ func TestMessageCache(t *testing.T) {
 
 	mcache.Shift()
 	for i := 10; i < 20; i++ {
-		mcache.Put(msgs[i])
+		mcache.Put(&Message{Message: msgs[i]})
 	}
 
 	for i := 0; i < 20; i++ {
@@ -57,7 +57,7 @@ func TestMessageCache(t *testing.T) {
 			t.Fatalf("Message %d not in cache", i)
 		}
 
-		if m != msgs[i] {
+		if m.Message != msgs[i] {
 			t.Fatalf("Message %d does not match cache", i)
 		}
 	}
@@ -83,22 +83,22 @@ func TestMessageCache(t *testing.T) {
 
 	mcache.Shift()
 	for i := 20; i < 30; i++ {
-		mcache.Put(msgs[i])
+		mcache.Put(&Message{Message: msgs[i]})
 	}
 
 	mcache.Shift()
 	for i := 30; i < 40; i++ {
-		mcache.Put(msgs[i])
+		mcache.Put(&Message{Message: msgs[i]})
 	}
 
 	mcache.Shift()
 	for i := 40; i < 50; i++ {
-		mcache.Put(msgs[i])
+		mcache.Put(&Message{Message: msgs[i]})
 	}
 
 	mcache.Shift()
 	for i := 50; i < 60; i++ {
-		mcache.Put(msgs[i])
+		mcache.Put(&Message{Message: msgs[i]})
 	}
 
 	if len(mcache.msgs) != 50 {
@@ -120,7 +120,7 @@ func TestMessageCache(t *testing.T) {
 			t.Fatalf("Message %d not in cache", i)
 		}
 
-		if m != msgs[i] {
+		if m.Message != msgs[i] {
 			t.Fatalf("Message %d does not match cache", i)
 		}
 	}

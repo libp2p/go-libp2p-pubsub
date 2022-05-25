@@ -3,6 +3,9 @@ package pubsub
 import (
 	"bytes"
 	"context"
+	"crypto/sha1"
+	"crypto/sha256"
+	"errors"
 	"fmt"
 	"math/rand"
 	"sync"
@@ -10,6 +13,7 @@ import (
 	"time"
 
 	"github.com/libp2p/go-libp2p-core/peer"
+	pb "github.com/libp2p/go-libp2p-pubsub/pb"
 	tnet "github.com/libp2p/go-libp2p-testing/net"
 )
 
@@ -780,6 +784,142 @@ func readAllQueuedEvents(ctx context.Context, t *testing.T, evt *TopicEventHandl
 		}
 	}
 	return peerState
+}
+
+func TestMinTopicSizeNoDiscovery(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	const numHosts = 3
+	topicID := "foobar"
+	hosts := getNetHosts(t, ctx, numHosts)
+
+	sender := getPubsub(ctx, hosts[0])
+	receiver1 := getPubsub(ctx, hosts[1])
+	receiver2 := getPubsub(ctx, hosts[2])
+
+	connectAll(t, hosts)
+
+	// Sender creates topic
+	sendTopic, err := sender.Join(topicID)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Receiver creates and subscribes to the topic
+	receiveTopic1, err := receiver1.Join(topicID)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	sub1, err := receiveTopic1.Subscribe()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	oneMsg := []byte("minimum one")
+	if err := sendTopic.Publish(ctx, oneMsg, WithReadiness(MinTopicSize(1))); err != nil {
+		t.Fatal(err)
+	}
+
+	if msg, err := sub1.Next(ctx); err != nil {
+		t.Fatal(err)
+	} else if !bytes.Equal(msg.GetData(), oneMsg) {
+		t.Fatal("received incorrect message")
+	}
+
+	twoMsg := []byte("minimum two")
+
+	// Attempting to publish with a minimum topic size of two should fail.
+	{
+		ctx, cancel := context.WithTimeout(ctx, time.Second)
+		defer cancel()
+		if err := sendTopic.Publish(ctx, twoMsg, WithReadiness(MinTopicSize(2))); !errors.Is(err, context.DeadlineExceeded) {
+			t.Fatal(err)
+		}
+	}
+
+	// Subscribe the second receiver; the publish should now work.
+	receiveTopic2, err := receiver2.Join(topicID)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	sub2, err := receiveTopic2.Subscribe()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	{
+		ctx, cancel := context.WithTimeout(ctx, time.Second)
+		defer cancel()
+		if err := sendTopic.Publish(ctx, twoMsg, WithReadiness(MinTopicSize(2))); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	if msg, err := sub2.Next(ctx); err != nil {
+		t.Fatal(err)
+	} else if !bytes.Equal(msg.GetData(), twoMsg) {
+		t.Fatal("received incorrect message")
+	}
+}
+
+func TestWithTopicMsgIdFunction(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	const topicA, topicB = "foobarA", "foobarB"
+	const numHosts = 2
+
+	hosts := getNetHosts(t, ctx, numHosts)
+	pubsubs := getPubsubs(ctx, hosts, WithMessageIdFn(func(pmsg *pb.Message) string {
+		hash := sha256.Sum256(pmsg.Data)
+		return string(hash[:])
+	}))
+	connectAll(t, hosts)
+
+	topicsA := getTopics(pubsubs, topicA) // uses global msgIdFn
+	topicsB := getTopics(pubsubs, topicB, WithTopicMessageIdFn(func(pmsg *pb.Message) string { // uses custom
+		hash := sha1.Sum(pmsg.Data)
+		return string(hash[:])
+	}))
+
+	payload := []byte("pubsub rocks")
+
+	subA, err := topicsA[0].Subscribe()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = topicsA[1].Publish(ctx, payload, WithReadiness(MinTopicSize(1)))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	msgA, err := subA.Next(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	subB, err := topicsB[0].Subscribe()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = topicsB[1].Publish(ctx, payload, WithReadiness(MinTopicSize(1)))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	msgB, err := subB.Next(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if msgA.ID == msgB.ID {
+		t.Fatal("msg ids are equal")
+	}
 }
 
 func TestTopic_PublishWithSk(t *testing.T) {

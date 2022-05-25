@@ -46,8 +46,9 @@ func getNetHosts(t *testing.T, ctx context.Context, n int) []host.Host {
 	var out []host.Host
 
 	for i := 0; i < n; i++ {
-		netw := swarmt.GenSwarm(t, ctx)
+		netw := swarmt.GenSwarm(t)
 		h := bhost.NewBlankHost(netw)
+		t.Cleanup(func() { h.Close() })
 		out = append(out, h)
 	}
 
@@ -1140,7 +1141,8 @@ func TestWithInvalidMessageAuthor(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	h := bhost.NewBlankHost(swarmt.GenSwarm(t, ctx))
+	h := bhost.NewBlankHost(swarmt.GenSwarm(t))
+	defer h.Close()
 	_, err := NewFloodSub(ctx, h, WithMessageAuthor("bogotr0n"))
 	if err == nil {
 		t.Fatal("expected error")
@@ -1155,8 +1157,10 @@ func TestPreconnectedNodes(t *testing.T) {
 	defer cancel()
 
 	// Create hosts
-	h1 := bhost.NewBlankHost(swarmt.GenSwarm(t, ctx))
-	h2 := bhost.NewBlankHost(swarmt.GenSwarm(t, ctx))
+	h1 := bhost.NewBlankHost(swarmt.GenSwarm(t))
+	h2 := bhost.NewBlankHost(swarmt.GenSwarm(t))
+	defer h1.Close()
+	defer h2.Close()
 
 	opts := []Option{WithDiscovery(&dummyDiscovery{})}
 	// Setup first PubSub
@@ -1214,8 +1218,10 @@ func TestDedupInboundStreams(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	h1 := bhost.NewBlankHost(swarmt.GenSwarm(t, ctx))
-	h2 := bhost.NewBlankHost(swarmt.GenSwarm(t, ctx))
+	h1 := bhost.NewBlankHost(swarmt.GenSwarm(t))
+	h2 := bhost.NewBlankHost(swarmt.GenSwarm(t))
+	defer h1.Close()
+	defer h2.Close()
 
 	_, err := NewFloodSub(ctx, h1)
 	if err != nil {
