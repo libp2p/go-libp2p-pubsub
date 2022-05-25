@@ -123,7 +123,12 @@ func (p *PubSub) handleNewPeer(ctx context.Context, pid peer.ID, outgoing <-chan
 }
 
 func (p *PubSub) handleNewPeerWithBackoff(ctx context.Context, pid peer.ID, outgoing <-chan *RPC) {
-	delay := p.deadPeerBackoff.updateAndGet(pid)
+	delay, valid := p.deadPeerBackoff.updateAndGet(pid)
+	if !valid {
+		log.Warnf("backoff attempts to %s expired after reaching maximum allowed", pid)
+		return
+	}
+
 	select {
 	case <-time.After(delay):
 		p.handleNewPeer(ctx, pid, outgoing)

@@ -16,26 +16,30 @@ const (
 	BackoffCleanupInterval = 1 * time.Minute
 	BackoffMultiplier      = 2
 	MaxBackoffJitterCoff   = 100
+	MaxBackoffAttempts     = 4
 )
 
 type backoffHistory struct {
 	duration  time.Duration
 	lastTried time.Time
+	attempts  int
 }
 
 type backoff struct {
-	mu   sync.Mutex
-	info map[peer.ID]*backoffHistory
-	ct   int           // size threshold that kicks off the cleaner
-	ci   time.Duration // cleanup intervals
+	mu          sync.Mutex
+	info        map[peer.ID]*backoffHistory
+	ct          int           // size threshold that kicks off the cleaner
+	ci          time.Duration // cleanup intervals
+	maxAttempts int           // maximum backoff attempts prior to ejection
 }
 
-func newBackoff(ctx context.Context, sizeThreshold int, cleanupInterval time.Duration) *backoff {
+func newBackoff(ctx context.Context, sizeThreshold int, cleanupInterval time.Duration, maxAttempts int) *backoff {
 	b := &backoff{
-		mu:   sync.Mutex{},
-		ct:   sizeThreshold,
-		ci:   cleanupInterval,
-		info: make(map[peer.ID]*backoffHistory),
+		mu:          sync.Mutex{},
+		ct:          sizeThreshold,
+		ci:          cleanupInterval,
+		maxAttempts: maxAttempts,
+		info:        make(map[peer.ID]*backoffHistory),
 	}
 
 	rand.Seed(time.Now().UnixNano()) // used for jitter
@@ -44,7 +48,7 @@ func newBackoff(ctx context.Context, sizeThreshold int, cleanupInterval time.Dur
 	return b
 }
 
-func (b *backoff) updateAndGet(id peer.ID) time.Duration {
+func (b *backoff) updateAndGet(id peer.ID) (time.Duration, bool) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
@@ -53,21 +57,27 @@ func (b *backoff) updateAndGet(id peer.ID) time.Duration {
 		// first request goes immediately.
 		h = &backoffHistory{
 			duration: time.Duration(0),
+			attempts: 0,
 		}
 	} else if h.duration < MinBackoffDelay {
 		h.duration = MinBackoffDelay
 	} else if h.duration < MaxBackoffDelay {
 		jitter := rand.Intn(MaxBackoffJitterCoff)
-		h.duration = (BackoffMultiplier * h.duration) + time.Duration(jitter) * time.Millisecond
+		h.duration = (BackoffMultiplier * h.duration) + time.Duration(jitter)*time.Millisecond
 		if h.duration > MaxBackoffDelay || h.duration < 0 {
 			h.duration = MaxBackoffDelay
 		}
 	}
 
 	h.lastTried = time.Now()
-	b.info[id] = h
+	h.attempts += 1
+	if h.attempts > b.maxAttempts {
+		delete(b.info, id)
+		return 0, false
+	}
 
-	return h.duration
+	b.info[id] = h
+	return h.duration, true
 }
 
 func (b *backoff) cleanup() {
