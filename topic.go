@@ -338,7 +338,7 @@ func (t *Topic) PublishWithSk(ctx context.Context, data []byte, signKey crypto.P
 		t.p.disc.Bootstrap(ctx, t.topic, pub.ready)
 	}
 
-	return t.p.val.PushLocal(&Message{m, t.p.host.ID(), nil})
+	return t.p.val.PushLocal(&Message{m, "", t.p.host.ID(), nil})
 }
 
 // WithReadiness returns a publishing option for only publishing when the router is ready.
