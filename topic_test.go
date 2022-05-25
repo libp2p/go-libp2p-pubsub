@@ -879,7 +879,7 @@ func TestWithTopicMsgIdFunction(t *testing.T) {
 	}))
 	connectAll(t, hosts)
 
-	topicsA := getTopics(pubsubs, topicA) // uses global msgIdFn
+	topicsA := getTopics(pubsubs, topicA)                                                      // uses global msgIdFn
 	topicsB := getTopics(pubsubs, topicB, WithTopicMessageIdFn(func(pmsg *pb.Message) string { // uses custom
 		hash := sha1.Sum(pmsg.Data)
 		return string(hash[:])
@@ -936,20 +936,22 @@ func TestTopic_PublishWithSk(t *testing.T) {
 	topics := getTopics(getPubsubs(ctx, hosts), topic)
 
 	t.Run("nil sign private key should error", func(t *testing.T) {
-		err := topics[0].PublishWithSk(ctx, []byte("buff"), nil, virtualPeer.ID)
+		withVirtualKey := WithSecretKeyAndPeerId(nil, virtualPeer.ID)
+		err := topics[0].Publish(ctx, []byte("buff"), withVirtualKey)
 		if err != ErrNilSignKey {
 			t.Fatal("error should have been of type errNilSignKey")
 		}
 	})
 	t.Run("empty peer ID should error", func(t *testing.T) {
-		err := topics[0].PublishWithSk(ctx, []byte("buff"), virtualPeer.PrivKey, "")
+		withVirtualKey := WithSecretKeyAndPeerId(virtualPeer.PrivKey, "")
+		err := topics[0].Publish(ctx, []byte("buff"), withVirtualKey)
 		if err != ErrEmptyPeerID {
 			t.Fatal("error should have been of type errEmptyPeerID")
 		}
 	})
 }
 
-func TestTopicRelay_PublishWithSk(t *testing.T) {
+func TestTopicRelay_PublishWithKey(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
@@ -996,7 +998,8 @@ func TestTopicRelay_PublishWithSk(t *testing.T) {
 
 		owner := rand.Intn(len(topics))
 
-		err := topics[owner].PublishWithSk(ctx, msg, virtualPeer.PrivKey, virtualPeer.ID)
+		withVirtualKey := WithSecretKeyAndPeerId(virtualPeer.PrivKey, virtualPeer.ID)
+		err := topics[owner].Publish(ctx, msg, withVirtualKey)
 		if err != nil {
 			t.Fatal(err)
 		}
