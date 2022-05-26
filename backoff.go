@@ -53,15 +53,18 @@ func (b *backoff) updateAndGet(id peer.ID) time.Duration {
 	defer b.mu.Unlock()
 
 	h, ok := b.info[id]
-	if !ok || time.Since(h.lastTried) > TimeToLive {
+	switch {
+	case !ok || time.Since(h.lastTried) > TimeToLive:
 		// first request goes immediately.
 		h = &backoffHistory{
 			duration: time.Duration(0),
 			attempts: 0,
 		}
-	} else if h.duration < MinBackoffDelay {
+
+	case h.duration < MinBackoffDelay:
 		h.duration = MinBackoffDelay
-	} else if h.duration < MaxBackoffDelay {
+
+	case h.duration < MaxBackoffDelay:
 		jitter := rand.Intn(MaxBackoffJitterCoff)
 		h.duration = (BackoffMultiplier * h.duration) + time.Duration(jitter)*time.Millisecond
 		if h.duration > MaxBackoffDelay || h.duration < 0 {
