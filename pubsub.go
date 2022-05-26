@@ -691,9 +691,7 @@ func (p *PubSub) handleDeadPeers() {
 			log.Debugf("peer declared dead but still connected; respawning writer: %s", pid)
 			messages := make(chan *RPC, p.peerOutboundQueueSize)
 			messages <- p.getHelloPacket()
-			go func() {
-				p.handleNewPeerWithBackoff(p.ctx, pid, messages)
-			}()
+			go p.handleNewPeerWithBackoff(p.ctx, pid, messages)
 			p.peers[pid] = messages
 			continue
 		}
