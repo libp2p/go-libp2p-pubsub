@@ -922,7 +922,7 @@ func TestWithTopicMsgIdFunction(t *testing.T) {
 	}
 }
 
-func TestTopic_PublishWithKeyInvalidParameters(t *testing.T) {
+func TestTopicPublishWithKeyInvalidParameters(t *testing.T) {
 	t.Parallel()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -951,7 +951,7 @@ func TestTopic_PublishWithKeyInvalidParameters(t *testing.T) {
 	})
 }
 
-func TestTopicRelay_PublishWithKey(t *testing.T) {
+func TestTopicRelayPublishWithKey(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
