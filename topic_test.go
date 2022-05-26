@@ -14,6 +14,7 @@ import (
 
 	"github.com/libp2p/go-libp2p-core/peer"
 	pb "github.com/libp2p/go-libp2p-pubsub/pb"
+	tnet "github.com/libp2p/go-libp2p-testing/net"
 )
 
 func getTopics(psubs []*PubSub, topicID string, opts ...TopicOpt) []*Topic {
@@ -381,7 +382,7 @@ func TestSubscriptionLeaveNotification(t *testing.T) {
 
 	// Test removing peers and verifying that they cause events
 	subs[1].Cancel()
-	hosts[2].Close()
+	_ = hosts[2].Close()
 	psubs[0].BlacklistPeer(hosts[3].ID())
 
 	leavingPeers := make(map[peer.ID]struct{})
@@ -878,7 +879,7 @@ func TestWithTopicMsgIdFunction(t *testing.T) {
 	}))
 	connectAll(t, hosts)
 
-	topicsA := getTopics(pubsubs, topicA) // uses global msgIdFn
+	topicsA := getTopics(pubsubs, topicA)                                                      // uses global msgIdFn
 	topicsB := getTopics(pubsubs, topicB, WithTopicMessageIdFn(func(pmsg *pb.Message) string { // uses custom
 		hash := sha1.Sum(pmsg.Data)
 		return string(hash[:])
@@ -918,5 +919,103 @@ func TestWithTopicMsgIdFunction(t *testing.T) {
 
 	if msgA.ID == msgB.ID {
 		t.Fatal("msg ids are equal")
+	}
+}
+
+func TestTopicPublishWithKeyInvalidParameters(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	const topic = "foobar"
+	const numHosts = 5
+
+	virtualPeer := tnet.RandPeerNetParamsOrFatal(t)
+	hosts := getNetHosts(t, ctx, numHosts)
+	topics := getTopics(getPubsubs(ctx, hosts), topic)
+
+	t.Run("nil sign private key should error", func(t *testing.T) {
+		withVirtualKey := WithSecretKeyAndPeerId(nil, virtualPeer.ID)
+		err := topics[0].Publish(ctx, []byte("buff"), withVirtualKey)
+		if err != ErrNilSignKey {
+			t.Fatal("error should have been of type errNilSignKey")
+		}
+	})
+	t.Run("empty peer ID should error", func(t *testing.T) {
+		withVirtualKey := WithSecretKeyAndPeerId(virtualPeer.PrivKey, "")
+		err := topics[0].Publish(ctx, []byte("buff"), withVirtualKey)
+		if err != ErrEmptyPeerID {
+			t.Fatal("error should have been of type errEmptyPeerID")
+		}
+	})
+}
+
+func TestTopicRelayPublishWithKey(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	const topic = "foobar"
+	const numHosts = 5
+
+	virtualPeer := tnet.RandPeerNetParamsOrFatal(t)
+	hosts := getNetHosts(t, ctx, numHosts)
+	topics := getTopics(getPubsubs(ctx, hosts), topic)
+
+	// [0.Rel] - [1.Rel] - [2.Sub]
+	//             |
+	//           [3.Rel] - [4.Sub]
+
+	connect(t, hosts[0], hosts[1])
+	connect(t, hosts[1], hosts[2])
+	connect(t, hosts[1], hosts[3])
+	connect(t, hosts[3], hosts[4])
+
+	time.Sleep(time.Millisecond * 100)
+
+	var subs []*Subscription
+
+	for i, topicValue := range topics {
+		if i == 2 || i == 4 {
+			sub, err := topicValue.Subscribe()
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			subs = append(subs, sub)
+		} else {
+			_, err := topicValue.Relay()
+			if err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+
+	time.Sleep(time.Millisecond * 100)
+
+	for i := 0; i < 100; i++ {
+		msg := []byte("message")
+
+		owner := rand.Intn(len(topics))
+
+		withVirtualKey := WithSecretKeyAndPeerId(virtualPeer.PrivKey, virtualPeer.ID)
+		err := topics[owner].Publish(ctx, msg, withVirtualKey)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		for _, sub := range subs {
+			received, errSub := sub.Next(ctx)
+			if errSub != nil {
+				t.Fatal(errSub)
+			}
+
+			if !bytes.Equal(msg, received.Data) {
+				t.Fatal("received message is other than expected")
+			}
+			if string(received.From) != string(virtualPeer.ID) {
+				t.Fatal("received message is not from the virtual peer")
+			}
+		}
 	}
 }
