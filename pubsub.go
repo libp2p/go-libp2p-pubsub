@@ -683,18 +683,16 @@ func (p *PubSub) handleDeadPeers() {
 
 		close(ch)
 
-		if p.host.Network().Connectedness(pid) == network.Connected {
+		if p.host.Network().Connectedness(pid) == network.Connected &&
+			!p.deadPeerBackoff.peerExceededBackoffThreshold(pid) {
+
 			// still connected, must be a duplicate connection being closed.
 			// we respawn the writer as we need to ensure there is a stream active
 			log.Debugf("peer declared dead but still connected; respawning writer: %s", pid)
 			messages := make(chan *RPC, p.peerOutboundQueueSize)
 			messages <- p.getHelloPacket()
 			go func() {
-				err := p.handleNewPeerWithBackoff(p.ctx, pid, messages)
-				if err != nil {
-					log.Warnf("could not handle backoff to new peer %s", err)
-					close(messages)
-				}
+				p.handleNewPeerWithBackoff(p.ctx, pid, messages)
 			}()
 			p.peers[pid] = messages
 			continue

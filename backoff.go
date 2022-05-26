@@ -48,7 +48,7 @@ func newBackoff(ctx context.Context, sizeThreshold int, cleanupInterval time.Dur
 	return b
 }
 
-func (b *backoff) updateAndGet(id peer.ID) (time.Duration, bool) {
+func (b *backoff) updateAndGet(id peer.ID) time.Duration {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
@@ -71,13 +71,20 @@ func (b *backoff) updateAndGet(id peer.ID) (time.Duration, bool) {
 
 	h.lastTried = time.Now()
 	h.attempts += 1
-	if h.attempts > b.maxAttempts {
-		delete(b.info, id)
-		return 0, false
-	}
 
 	b.info[id] = h
-	return h.duration, true
+	return h.duration
+}
+
+func (b *backoff) peerExceededBackoffThreshold(id peer.ID) bool {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
+	h, ok := b.info[id]
+	if !ok {
+		return false // no record of this peer is still there, hence fine.
+	}
+	return h.attempts > b.maxAttempts
 }
 
 func (b *backoff) cleanup() {
