@@ -254,11 +254,11 @@ func (t *Topic) Publish(ctx context.Context, data []byte, opts ...PubOpt) error 
 		From:  nil,
 		Seqno: nil,
 	}
-	if t.p.signID != "" {
+	if pid != "" {
 		m.From = []byte(pid)
 		m.Seqno = t.p.nextSeqno()
 	}
-	if t.p.signKey != nil {
+	if key != nil {
 		m.From = []byte(pid)
 		err := signMessage(pid, key, m)
 		if err != nil {
