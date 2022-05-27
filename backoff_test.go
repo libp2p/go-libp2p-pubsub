@@ -53,7 +53,7 @@ func TestBackoff_Update(t *testing.T) {
 
 	// trying once more beyond the threshold, hence expecting exceeding threshold
 	if _, err := b.updateAndGet(id1); err == nil {
-		t.Fatalf("expected an error for going beyond threshold but got a nil: %s", err)
+		t.Fatalf("expected an error for going beyond threshold but got nil")
 	}
 
 	got, err := b.updateAndGet(id2)
