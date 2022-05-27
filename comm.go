@@ -122,11 +122,9 @@ func (p *PubSub) handleNewPeer(ctx context.Context, pid peer.ID, outgoing <-chan
 	}
 }
 
-func (p *PubSub) handleNewPeerWithBackoff(ctx context.Context, pid peer.ID, outgoing <-chan *RPC) {
-	delay := p.deadPeerBackoff.updateAndGet(pid)
-
+func (p *PubSub) handleNewPeerWithBackoff(ctx context.Context, pid peer.ID, backoff time.Duration, outgoing <-chan *RPC) {
 	select {
-	case <-time.After(delay):
+	case <-time.After(backoff):
 		p.handleNewPeer(ctx, pid, outgoing)
 	case <-ctx.Done():
 		return

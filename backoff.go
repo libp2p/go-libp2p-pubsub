@@ -2,6 +2,7 @@ package pubsub
 
 import (
 	"context"
+	"fmt"
 	"math/rand"
 	"sync"
 	"time"
@@ -48,7 +49,7 @@ func newBackoff(ctx context.Context, sizeThreshold int, cleanupInterval time.Dur
 	return b
 }
 
-func (b *backoff) updateAndGet(id peer.ID) time.Duration {
+func (b *backoff) updateAndGet(id peer.ID) (time.Duration, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
@@ -60,6 +61,8 @@ func (b *backoff) updateAndGet(id peer.ID) time.Duration {
 			duration: time.Duration(0),
 			attempts: 0,
 		}
+	case h.attempts > b.maxAttempts:
+		return 0, fmt.Errorf("peer %s has reached its maximum backoff attempts", id)
 
 	case h.duration < MinBackoffDelay:
 		h.duration = MinBackoffDelay
@@ -72,22 +75,10 @@ func (b *backoff) updateAndGet(id peer.ID) time.Duration {
 		}
 	}
 
-	h.lastTried = time.Now()
 	h.attempts += 1
-
+	h.lastTried = time.Now()
 	b.info[id] = h
-	return h.duration
-}
-
-func (b *backoff) peerExceededBackoffThreshold(id peer.ID) bool {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-
-	h, ok := b.info[id]
-	if !ok {
-		return false // no record of this peer is still there, hence fine.
-	}
-	return h.attempts > b.maxAttempts
+	return h.duration, nil
 }
 
 func (b *backoff) cleanup() {

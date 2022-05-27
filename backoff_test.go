@@ -27,15 +27,18 @@ func TestBackoff_Update(t *testing.T) {
 		t.Fatal("non-empty info map for backoff")
 	}
 
-	if d := b.updateAndGet(id1); d != time.Duration(0) {
-		t.Fatalf("invalid initialization: %v", d)
+	if d, err := b.updateAndGet(id1); d != time.Duration(0) || err != nil {
+		t.Fatalf("invalid initialization: %v, \t, %s", d, err)
 	}
-	if d := b.updateAndGet(id2); d != time.Duration(0) {
-		t.Fatalf("invalid initialization: %v", d)
+	if d, err := b.updateAndGet(id2); d != time.Duration(0) || err != nil {
+		t.Fatalf("invalid initialization: %v, \t, %s", d, err)
 	}
 
 	for i := 0; i < maxBackoffAttempts-1; i++ {
-		got := b.updateAndGet(id1)
+		got, err := b.updateAndGet(id1)
+		if err != nil {
+			t.Fatalf("unexpected error post update: %s", err)
+		}
 
 		expected := time.Duration(math.Pow(BackoffMultiplier, float64(i)) *
 			float64(MinBackoffDelay+MaxBackoffJitterCoff*time.Millisecond))
@@ -46,34 +49,30 @@ func TestBackoff_Update(t *testing.T) {
 		if expected < got { // considering jitter, expected backoff must always be greater than or equal to actual.
 			t.Fatalf("invalid backoff result, expected: %v, got: %v", expected, got)
 		}
-
-		// update attempts on id1 are below threshold, hence peer should never go beyond backoff attempt threshold
-		if b.peerExceededBackoffThreshold(id1) {
-			t.Fatalf("invalid exceeding threshold status")
-		}
 	}
 
 	// trying once more beyond the threshold, hence expecting exceeding threshold
-	b.updateAndGet(id1)
-	if !b.peerExceededBackoffThreshold(id1) {
-		t.Fatal("update beyond max attempts does not reflect threshold")
+	if _, err := b.updateAndGet(id1); err != nil {
+		t.Fatalf("invalid exceeding threshold status: %s", err)
 	}
 
-	got := b.updateAndGet(id2)
+	got, err := b.updateAndGet(id2)
+	if err != nil {
+		t.Fatalf("unexpected error post update: %s", err)
+	}
 	if got != MinBackoffDelay {
 		t.Fatalf("invalid backoff result, expected: %v, got: %v", MinBackoffDelay, got)
 	}
 
 	// sets last tried of id2 to long ago that it resets back upon next try.
+	// update attempts on id2 are below threshold, hence peer should never go beyond backoff attempt threshold.
 	b.info[id2].lastTried = time.Now().Add(-TimeToLive)
-	got = b.updateAndGet(id2)
+	got, err = b.updateAndGet(id2)
+	if err != nil {
+		t.Fatalf("unexpected error post update: %s", err)
+	}
 	if got != time.Duration(0) {
 		t.Fatalf("invalid ttl expiration, expected: %v, got: %v", time.Duration(0), got)
-	}
-
-	// update attempts on id2 are below threshold, hence peer should never go beyond backoff attempt threshold
-	if b.peerExceededBackoffThreshold(id2) {
-		t.Fatalf("invalid exceeding threshold status")
 	}
 
 	if len(b.info) != 2 {
@@ -93,7 +92,10 @@ func TestBackoff_Clean(t *testing.T) {
 
 	for i := 0; i < size; i++ {
 		id := peer.ID(fmt.Sprintf("peer-%d", i))
-		b.updateAndGet(id)
+		_, err := b.updateAndGet(id)
+		if err != nil {
+			t.Fatalf("unexpected error post update: %s", err)
+		}
 		b.info[id].lastTried = time.Now().Add(-TimeToLive) // enforces expiry
 	}
 
@@ -105,7 +107,10 @@ func TestBackoff_Clean(t *testing.T) {
 	time.Sleep(2 * cleanupInterval)
 
 	// next update should trigger cleanup
-	got := b.updateAndGet(peer.ID("some-new-peer"))
+	got, err := b.updateAndGet(peer.ID("some-new-peer"))
+	if err != nil {
+		t.Fatalf("unexpected error post update: %s", err)
+	}
 	if got != time.Duration(0) {
 		t.Fatalf("invalid backoff result, expected: %v, got: %v", time.Duration(0), got)
 	}
