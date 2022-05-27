@@ -61,7 +61,7 @@ func (b *backoff) updateAndGet(id peer.ID) (time.Duration, error) {
 			duration: time.Duration(0),
 			attempts: 0,
 		}
-	case h.attempts > b.maxAttempts:
+	case h.attempts >= b.maxAttempts:
 		return 0, fmt.Errorf("peer %s has reached its maximum backoff attempts", id)
 
 	case h.duration < MinBackoffDelay:
