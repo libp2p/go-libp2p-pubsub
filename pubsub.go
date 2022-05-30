@@ -112,6 +112,8 @@ type PubSub struct {
 	peerDeadPrioLk sync.RWMutex
 	peerDeadMx     sync.Mutex
 	peerDeadPend   map[peer.ID]struct{}
+	// backoff for retrying new connections to dead peers
+	deadPeerBackoff *backoff
 
 	// The set of topics we are subscribed to
 	mySubs map[string]map[*Subscription]struct{}
@@ -255,6 +257,7 @@ func NewPubSub(ctx context.Context, h host.Host, rt PubSubRouter, opts ...Option
 		newPeerError:          make(chan peer.ID),
 		peerDead:              make(chan struct{}, 1),
 		peerDeadPend:          make(map[peer.ID]struct{}),
+		deadPeerBackoff:       newBackoff(ctx, 1000, BackoffCleanupInterval, MaxBackoffAttempts),
 		cancelCh:              make(chan *Subscription),
 		getPeers:              make(chan *listPeerReq),
 		addSub:                make(chan *addSubReq),
@@ -694,12 +697,18 @@ func (p *PubSub) handleDeadPeers() {
 		close(ch)
 
 		if p.host.Network().Connectedness(pid) == network.Connected {
+			backoffDelay, err := p.deadPeerBackoff.updateAndGet(pid)
+			if err != nil {
+				log.Debug(err)
+				continue
+			}
+
 			// still connected, must be a duplicate connection being closed.
 			// we respawn the writer as we need to ensure there is a stream active
 			log.Debugf("peer declared dead but still connected; respawning writer: %s", pid)
 			messages := make(chan *RPC, p.peerOutboundQueueSize)
 			messages <- p.getHelloPacket()
-			go p.handleNewPeer(p.ctx, pid, messages)
+			go p.handleNewPeerWithBackoff(p.ctx, pid, backoffDelay, messages)
 			p.peers[pid] = messages
 			continue
 		}
