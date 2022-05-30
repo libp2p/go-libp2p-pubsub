@@ -93,11 +93,14 @@ func (b *backoff) cleanup() {
 }
 
 func (b *backoff) cleanupLoop(ctx context.Context) {
+	ticker := time.NewTicker(b.ci)
+	defer ticker.Stop()
+
 	for {
 		select {
 		case <-ctx.Done():
 			return // pubsub shutting down
-		case <-time.Tick(b.ci):
+		case <-ticker.C:
 			b.cleanup()
 		}
 	}
