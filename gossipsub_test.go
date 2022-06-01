@@ -1926,38 +1926,50 @@ func TestGossipSubLeaveTopic(t *testing.T) {
 	time.Sleep(time.Second)
 
 	leaveTime := time.Now()
-	psubs[0].rt.Leave("test")
-	time.Sleep(time.Second)
-	peerMap := psubs[0].rt.(*GossipSubRouter).backoff["test"]
-	if len(peerMap) != 1 {
-		t.Fatalf("No peer is populated in the backoff map for peer 0")
-	}
-	_, ok := peerMap[h[1].ID()]
-	if !ok {
-		t.Errorf("Expected peer does not exist in the backoff map")
-	}
+	done := make(chan struct{})
 
+	psubs[0].rt.(*GossipSubRouter).p.eval <- func() {
+		defer close(done)
+		psubs[0].rt.Leave("test")
+		time.Sleep(time.Second)
+		peerMap := psubs[0].rt.(*GossipSubRouter).backoff["test"]
+		if len(peerMap) != 1 {
+			t.Fatalf("No peer is populated in the backoff map for peer 0")
+		}
+		_, ok := peerMap[h[1].ID()]
+		if !ok {
+			t.Errorf("Expected peer does not exist in the backoff map")
+		}
+
+		backoffTime := peerMap[h[1].ID()].Sub(leaveTime)
+		// Check that the backoff time is roughly the unsubscribebackoff time (with a slack of 1s)
+		if backoffTime-GossipSubUnsubscribeBackoff > time.Second {
+			t.Error("Backoff time should be set to GossipSubUnsubscribeBackoff.")
+		}
+	}
+	<-done
+
+	done = make(chan struct{})
 	// Ensure that remote peer 1 also applies the backoff appropriately
 	// for peer 0.
-	peerMap2 := psubs[1].rt.(*GossipSubRouter).backoff["test"]
-	if len(peerMap2) != 1 {
-		t.Fatalf("No peer is populated in the backoff map for peer 1")
-	}
-	_, ok = peerMap2[h[0].ID()]
-	if !ok {
-		t.Errorf("Expected peer does not exist in the backoff map")
-	}
+	psubs[1].rt.(*GossipSubRouter).p.eval <- func() {
+		defer close(done)
+		peerMap2 := psubs[1].rt.(*GossipSubRouter).backoff["test"]
+		if len(peerMap2) != 1 {
+			t.Fatalf("No peer is populated in the backoff map for peer 1")
+		}
+		_, ok := peerMap2[h[0].ID()]
+		if !ok {
+			t.Errorf("Expected peer does not exist in the backoff map")
+		}
 
-	backoffTime1 := peerMap[h[1].ID()].Sub(leaveTime)
-	backoffTime2 := peerMap2[h[0].ID()].Sub(leaveTime)
-
-	// Check that the backoff time is roughly the unsubscribebackoff time (with a slack of 1s)
-	if backoffTime1-GossipSubUnsubscribeBackoff > time.Second {
-		t.Error("Backoff time should be set to GossipSubUnsubscribeBackoff.")
+		backoffTime := peerMap2[h[0].ID()].Sub(leaveTime)
+		// Check that the backoff time is roughly the unsubscribebackoff time (with a slack of 1s)
+		if backoffTime-GossipSubUnsubscribeBackoff > time.Second {
+			t.Error("Backoff time should be set to GossipSubUnsubscribeBackoff.")
+		}
 	}
-	if backoffTime2-GossipSubUnsubscribeBackoff > time.Second {
-		t.Error("Backoff time should be set to GossipSubUnsubscribeBackoff.")
-	}
+	<-done
 }
 
 func TestGossipSubJoinTopic(t *testing.T) {
