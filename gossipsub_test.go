@@ -635,16 +635,29 @@ func TestGossipsubPruneBackoffTime(t *testing.T) {
 	// wait for heartbeats to run and prune
 	time.Sleep(time.Second)
 
+	wg := sync.WaitGroup{}
+	var missingBackoffs uint32 = 0
 	for i := 1; i < 10; i++ {
+		wg.Add(1)
 		// Copy i so this func keeps the correct value in the closure.
 		var idx = i
 		// Run this check in the eval thunk so that we don't step over the heartbeat goroutine and trigger a race.
 		psubs[idx].rt.(*GossipSubRouter).p.eval <- func() {
-			backoff := psubs[idx].rt.(*GossipSubRouter).backoff["foobar"][hosts[0].ID()]
-			if backoff.Sub(pruneTime)-params.PruneBackoff > time.Second {
-				t.Error("backoff time should be equal to prune backoff (with some slack)")
+			defer wg.Done()
+			backoff, ok := psubs[idx].rt.(*GossipSubRouter).backoff["foobar"][hosts[0].ID()]
+			if !ok {
+				atomic.AddUint32(&missingBackoffs, 1)
+			}
+			if ok && backoff.Sub(pruneTime)-params.PruneBackoff > time.Second {
+				t.Errorf("backoff time should be equal to prune backoff (with some slack) was %v", backoff.Sub(pruneTime)-params.PruneBackoff)
 			}
 		}
+	}
+	wg.Wait()
+
+	// Sometimes not all the peers will have updated their backoffs by this point. If the majority haven't we'll fail this test.
+	if missingBackoffs >= 5 {
+		t.Errorf("missing too many backoffs: %v", missingBackoffs)
 	}
 
 	for i := 0; i < 10; i++ {
