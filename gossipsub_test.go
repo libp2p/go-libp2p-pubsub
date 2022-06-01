@@ -1978,7 +1978,7 @@ func TestGossipSubJoinTopic(t *testing.T) {
 
 	// Add in backoff for peer.
 	peerMap := make(map[peer.ID]time.Time)
-	peerMap[h[1].ID()] = time.Now().Add(router0.params.PruneBackoff)
+	peerMap[h[1].ID()] = time.Now().Add(router0.params.UnsubscribeBackoff)
 
 	router0.backoff["test"] = peerMap
 
