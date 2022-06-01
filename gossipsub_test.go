@@ -1839,6 +1839,7 @@ func TestGossipSubLeaveTopic(t *testing.T) {
 
 	time.Sleep(time.Second)
 
+	leaveTime := time.Now()
 	psubs[0].rt.Leave("test")
 	time.Sleep(time.Second)
 	peerMap := psubs[0].rt.(*GossipSubRouter).backoff["test"]
@@ -1859,6 +1860,17 @@ func TestGossipSubLeaveTopic(t *testing.T) {
 	_, ok = peerMap2[h[0].ID()]
 	if !ok {
 		t.Errorf("Expected peer does not exist in the backoff map")
+	}
+
+	backoffTime1 := peerMap[h[1].ID()].Sub(leaveTime)
+	backoffTime2 := peerMap2[h[0].ID()].Sub(leaveTime)
+
+	// Check that the backoff time is roughly the unsubscribebackoff time (with a slack of 1s)
+	if backoffTime1-GossipSubUnsubscribeBackoff > time.Second {
+		t.Error("Backoff time should be set to GossipSubUnsubscribeBackoff.")
+	}
+	if backoffTime2-GossipSubUnsubscribeBackoff > time.Second {
+		t.Error("Backoff time should be set to GossipSubUnsubscribeBackoff.")
 	}
 }
 
