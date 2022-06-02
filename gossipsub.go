@@ -778,12 +778,6 @@ func (gs *GossipSubRouter) handleGraft(p peer.ID, ctl *pb.ControlMessage) []*pb.
 			// no PX
 			doPX = false
 			// check the flood cutoff -- is the GRAFT coming too fast?
-			// Open Question (@vyzo): I'll remove this comment after we chat about it.
-			// Should this be either the prune backoff or the unsubscribe
-			// backoff? (instead of always the prune backoff).  Aren't we trying
-			// to figure out the original prune time (expires - backoff), then
-			// figure out the flood cutoff ((expires - backoff) + floodThreshold)?
-			// Rust always uses PruneBackoff here. (and I'm not sure if nim handles this: https://github.com/status-im/nim-libp2p/blob/3fdbac49cc5a167673a2bc4b9e1c4b11ca307396/libp2p/protocols/pubsub/gossipsub/behavior.nim#L134
 			floodCutoff := expire.Add(gs.params.GraftFloodThreshold - gs.params.PruneBackoff)
 			if now.Before(floodCutoff) {
 				// extra penalty
