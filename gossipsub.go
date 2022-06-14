@@ -286,7 +286,11 @@ func WithPeerScore(params *PeerScoreParams, thresholds *PeerScoreThresholds) Opt
 			return err
 		}
 
+		if useTransient, _ := network.GetUseTransient(ps.ctx); useTransient {
+			params.EnableTransient = useTransient
+		}
 		gs.score = newPeerScore(params)
+
 		gs.gossipThreshold = thresholds.GossipThreshold
 		gs.publishThreshold = thresholds.PublishThreshold
 		gs.graylistThreshold = thresholds.GraylistThreshold
@@ -527,7 +531,9 @@ loop:
 		stat := c.Stat()
 
 		if stat.Transient {
-			continue
+			if useTransient, _ := network.GetUseTransient(gs.p.ctx); !useTransient {
+				continue
+			}
 		}
 
 		if stat.Direction == network.DirOutbound {

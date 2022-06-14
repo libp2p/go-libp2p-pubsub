@@ -52,6 +52,9 @@ type PeerGaterParams struct {
 
 	// priority topic delivery weights
 	TopicDeliveryWeights map[string]float64
+
+	// whether to use transient connections
+	EnableTransient bool
 }
 
 func (p *PeerGaterParams) validate() error {
@@ -171,6 +174,10 @@ func WithPeerGater(params *PeerGaterParams) Option {
 		err := params.validate()
 		if err != nil {
 			return err
+		}
+
+		if useTransient, _ := network.GetUseTransient(ps.ctx); useTransient {
+			params.EnableTransient = useTransient
 		}
 
 		gs.gate = newPeerGater(ps.ctx, ps.host, params)
@@ -303,7 +310,7 @@ func (pg *peerGater) getPeerIP(p peer.ID) string {
 		// most streams; it's a nightmare to track multiple IPs per peer, so pick the best one.
 		streams := make(map[string]int)
 		for _, c := range conns {
-			if c.Stat().Transient {
+			if c.Stat().Transient && !pg.params.EnableTransient {
 				// ignore transient
 				continue
 			}

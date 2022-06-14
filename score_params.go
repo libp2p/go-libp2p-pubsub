@@ -96,6 +96,9 @@ type PeerScoreParams struct {
 
 	// time to remember a message delivery for. Default to global TimeCacheDuration if 0.
 	SeenMsgTTL time.Duration
+
+	// whether to use transient connections
+	EnableTransient bool
 }
 
 type TopicScoreParams struct {

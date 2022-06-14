@@ -19,7 +19,9 @@ func (p *PubSubNotif) ClosedStream(n network.Network, s network.Stream) {
 func (p *PubSubNotif) Connected(n network.Network, c network.Conn) {
 	// ignore transient connections
 	if c.Stat().Transient {
-		return
+		if useTransient, _ := network.GetUseTransient(p.ctx); !useTransient {
+			return
+		}
 	}
 
 	go func() {
@@ -60,7 +62,9 @@ func (p *PubSubNotif) Initialize() {
 	p.newPeersMx.Lock()
 	for _, pid := range p.host.Network().Peers() {
 		if isTransient(pid) {
-			continue
+			if useTransient, _ := network.GetUseTransient(p.ctx); !useTransient {
+				continue
+			}
 		}
 
 		p.newPeersPend[pid] = struct{}{}
