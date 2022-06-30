@@ -19,8 +19,8 @@ import (
 	"github.com/libp2p/go-libp2p-core/peerstore"
 	"github.com/libp2p/go-libp2p-core/record"
 
-	bhost "github.com/libp2p/go-libp2p-blankhost"
-	swarmt "github.com/libp2p/go-libp2p-swarm/testing"
+	bhost "github.com/libp2p/go-libp2p/p2p/host/blank"
+	swarmt "github.com/libp2p/go-libp2p/p2p/net/swarm/testing"
 
 	"github.com/libp2p/go-msgio/protoio"
 )
