@@ -320,8 +320,11 @@ func WithReadiness(ready RouterReady) PubOpt {
 	}
 }
 
-// WithLocalPublication option tells Publish to *only* notify local subscribers about a message.
-// This option prevents messages publication to peers.
+// WithLocalPublication returns a publishing option to notify in-process subscribers only.
+// It prevents message publication to mesh peers.
+// Useful in edge cases where the msg needs to be only delivered to the in-process subscribers,
+// e.g. not to spam the network with outdated msgs.
+// Should not be used specifically for in-process pubsubing.
 func WithLocalPublication(local bool) PubOpt {
 	return func(pub *PublishOptions) error {
 		pub.local = local
