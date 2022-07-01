@@ -720,7 +720,6 @@ func (p *PubSub) handleDeadPeers() {
 			messages <- p.getHelloPacket()
 			p.peers[pid] = messages
 			go p.handleNewPeerWithBackoff(p.ctx, pid, backoffDelay, messages)
-			continue
 		}
 	}
 }
