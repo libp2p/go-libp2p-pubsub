@@ -1019,3 +1019,48 @@ func TestTopicRelayPublishWithKey(t *testing.T) {
 		}
 	}
 }
+
+func TestWithLocalPublication(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	const topic = "test"
+
+	hosts := getNetHosts(t, ctx, 2)
+	pubsubs := getPubsubs(ctx, hosts)
+	topics := getTopics(pubsubs, topic)
+	connectAll(t, hosts)
+
+	payload := []byte("pubsub smashes")
+
+	local, err := topics[0].Subscribe()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	remote, err := topics[1].Subscribe()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = topics[0].Publish(ctx, payload, WithLocalPublication(true))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	remoteCtx, cancel := context.WithTimeout(ctx, time.Millisecond*100)
+	defer cancel()
+
+	msg, err := remote.Next(remoteCtx)
+	if msg != nil || err == nil {
+		t.Fatal("unexpected msg")
+	}
+
+	msg, err = local.Next(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !msg.Local || !bytes.Equal(msg.Data, payload) {
+		t.Fatal("wrong message")
+	}
+}
