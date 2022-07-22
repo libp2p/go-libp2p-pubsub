@@ -221,7 +221,7 @@ type Message struct {
 	ID            string
 	ReceivedFrom  peer.ID
 	ValidatorData interface{}
-	Local bool
+	Local         bool
 }
 
 func (m *Message) GetFrom() peer.ID {
