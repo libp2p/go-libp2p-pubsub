@@ -6,12 +6,12 @@ import (
 	"time"
 
 	"github.com/benbjohnson/clock"
-	"github.com/libp2p/go-libp2p-core/host"
+	"github.com/libp2p/go-libp2p/core/host"
 	swarmt "github.com/libp2p/go-libp2p/p2p/net/swarm/testing"
 
-	connmgr "github.com/libp2p/go-libp2p-connmgr"
-	"github.com/libp2p/go-libp2p-core/peer"
+	"github.com/libp2p/go-libp2p/core/peer"
 	bhost "github.com/libp2p/go-libp2p/p2p/host/blank"
+	"github.com/libp2p/go-libp2p/p2p/net/connmgr"
 )
 
 func TestGossipsubConnTagMessageDeliveries(t *testing.T) {
@@ -24,8 +24,6 @@ func TestGossipsubConnTagMessageDeliveries(t *testing.T) {
 	oldGossipSubConnTagDecayInterval := GossipSubConnTagDecayInterval
 	oldGossipSubConnTagMessageDeliveryCap := GossipSubConnTagMessageDeliveryCap
 
-	oldSilencePeriod := connmgr.SilencePeriod
-
 	// set the gossipsub D parameters low, so that we have some peers outside the mesh
 	GossipSubDlo = 3
 	GossipSubD = 3
@@ -37,7 +35,6 @@ func TestGossipsubConnTagMessageDeliveries(t *testing.T) {
 	// will be forced out even if they end up in someone's mesh
 	GossipSubConnTagMessageDeliveryCap = 50
 
-	connmgr.SilencePeriod = time.Millisecond
 	// reset globals after test
 	defer func() {
 		GossipSubD = oldGossipSubD
@@ -45,7 +42,6 @@ func TestGossipsubConnTagMessageDeliveries(t *testing.T) {
 		GossipSubDhi = oldGossipSubDHi
 		GossipSubConnTagDecayInterval = oldGossipSubConnTagDecayInterval
 		GossipSubConnTagMessageDeliveryCap = oldGossipSubConnTagMessageDeliveryCap
-		connmgr.SilencePeriod = oldSilencePeriod
 	}()
 
 	decayClock := clock.NewMock()
@@ -63,8 +59,15 @@ func TestGossipsubConnTagMessageDeliveries(t *testing.T) {
 	honestPeers := make(map[peer.ID]struct{})
 
 	for i := 0; i < nHonest; i++ {
-		connmgrs[i] = connmgr.NewConnManager(nHonest, connLimit, 0,
-			connmgr.DecayerConfig(&decayCfg))
+		var err error
+		connmgrs[i], err = connmgr.NewConnManager(nHonest, connLimit,
+			connmgr.WithGracePeriod(0),
+			connmgr.WithSilencePeriod(time.Millisecond),
+			connmgr.DecayerConfig(&decayCfg),
+		)
+		if err != nil {
+			t.Fatal(err)
+		}
 
 		netw := swarmt.GenSwarm(t)
 		defer netw.Close()

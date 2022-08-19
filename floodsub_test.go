@@ -15,10 +15,10 @@ import (
 
 	pb "github.com/libp2p/go-libp2p-pubsub/pb"
 
-	"github.com/libp2p/go-libp2p-core/host"
-	"github.com/libp2p/go-libp2p-core/network"
-	"github.com/libp2p/go-libp2p-core/peer"
-	"github.com/libp2p/go-libp2p-core/protocol"
+	"github.com/libp2p/go-libp2p/core/host"
+	"github.com/libp2p/go-libp2p/core/network"
+	"github.com/libp2p/go-libp2p/core/peer"
+	"github.com/libp2p/go-libp2p/core/protocol"
 
 	bhost "github.com/libp2p/go-libp2p/p2p/host/blank"
 	swarmt "github.com/libp2p/go-libp2p/p2p/net/swarm/testing"
@@ -153,7 +153,7 @@ func TestBasicFloodsub(t *testing.T) {
 		msgs = append(msgs, subch)
 	}
 
-	//connectAll(t, hosts)
+	// connectAll(t, hosts)
 	sparseConnect(t, hosts)
 
 	time.Sleep(time.Millisecond * 100)
