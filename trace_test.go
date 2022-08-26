@@ -13,9 +13,9 @@ import (
 
 	pb "github.com/libp2p/go-libp2p-pubsub/pb"
 
-	"github.com/libp2p/go-libp2p-core/network"
-	"github.com/libp2p/go-libp2p-core/peer"
-	"github.com/libp2p/go-libp2p-core/peerstore"
+	"github.com/libp2p/go-libp2p/core/network"
+	"github.com/libp2p/go-libp2p/core/peer"
+	"github.com/libp2p/go-libp2p/core/peerstore"
 
 	bhost "github.com/libp2p/go-libp2p/p2p/host/blank"
 	swarmt "github.com/libp2p/go-libp2p/p2p/net/swarm/testing"
@@ -125,7 +125,7 @@ type traceStats struct {
 }
 
 func (t *traceStats) process(evt *pb.TraceEvent) {
-	//fmt.Printf("process event %s\n", evt.GetType())
+	// fmt.Printf("process event %s\n", evt.GetType())
 	switch evt.GetType() {
 	case pb.TraceEvent_PUBLISH_MESSAGE:
 		t.publish++
