@@ -51,6 +51,9 @@ func (p *PeerScoreThresholds) validate() error {
 }
 
 type PeerScoreParams struct {
+	// whether it is allowed to just set some params and not all of them.
+	SelectiveParams bool
+
 	// Score parameters per topic.
 	Topics map[string]*TopicScoreParams
 
@@ -99,6 +102,9 @@ type PeerScoreParams struct {
 }
 
 type TopicScoreParams struct {
+	// whether it is allowed to just set some params and not all of them.
+	SelectiveParams bool
+
 	// The weight of the topic.
 	TopicWeight float64
 
@@ -207,6 +213,33 @@ func (p *TopicScoreParams) validate() error {
 	}
 
 	// check P1
+	if err := p.validateTimeInMeshParams(); err != nil {
+		return err
+	}
+
+	// check P2
+	if err := p.validateMessageDeliveryParams(); err != nil {
+		return err
+	}
+	// check P3
+	if err := p.validateMeshMessageDeliveryParams(); err != nil {
+		return err
+	}
+
+	// check P3b
+	if err := p.validateMessageFailurePenaltyParams(); err != nil {
+		return err
+	}
+
+	// check P4
+	if err := p.validateInvalidMessageDeliveryParams(); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (p *TopicScoreParams) validateTimeInMeshParams() error {
 	if p.TimeInMeshQuantum == 0 {
 		return fmt.Errorf("invalid TimeInMeshQuantum; must be non zero")
 	}
@@ -220,7 +253,10 @@ func (p *TopicScoreParams) validate() error {
 		return fmt.Errorf("invalid TimeInMeshCap; must be positive and a valid number")
 	}
 
-	// check P2
+	return nil
+}
+
+func (p *TopicScoreParams) validateMessageDeliveryParams() error {
 	if p.FirstMessageDeliveriesWeight < 0 || isInvalidNumber(p.FirstMessageDeliveriesWeight) {
 		return fmt.Errorf("invallid FirstMessageDeliveriesWeight; must be positive (or 0 to disable) and a valid number")
 	}
@@ -231,7 +267,10 @@ func (p *TopicScoreParams) validate() error {
 		return fmt.Errorf("invalid FirstMessageDeliveriesCap; must be positive and a valid number")
 	}
 
-	// check P3
+	return nil
+}
+
+func (p *TopicScoreParams) validateMeshMessageDeliveryParams() error {
 	if p.MeshMessageDeliveriesWeight > 0 || isInvalidNumber(p.MeshMessageDeliveriesWeight) {
 		return fmt.Errorf("invalid MeshMessageDeliveriesWeight; must be negative (or 0 to disable) and a valid number")
 	}
@@ -251,7 +290,10 @@ func (p *TopicScoreParams) validate() error {
 		return fmt.Errorf("invalid MeshMessageDeliveriesActivation; must be at least 1s")
 	}
 
-	// check P3b
+	return nil
+}
+
+func (p *TopicScoreParams) validateMessageFailurePenaltyParams() error {
 	if p.MeshFailurePenaltyWeight > 0 || isInvalidNumber(p.MeshFailurePenaltyWeight) {
 		return fmt.Errorf("invalid MeshFailurePenaltyWeight; must be negative (or 0 to disable) and a valid number")
 	}
@@ -259,7 +301,10 @@ func (p *TopicScoreParams) validate() error {
 		return fmt.Errorf("invalid MeshFailurePenaltyDecay; must be between 0 and 1")
 	}
 
-	// check P4
+	return nil
+}
+
+func (p *TopicScoreParams) validateInvalidMessageDeliveryParams() error {
 	if p.InvalidMessageDeliveriesWeight > 0 || isInvalidNumber(p.InvalidMessageDeliveriesWeight) {
 		return fmt.Errorf("invalid InvalidMessageDeliveriesWeight; must be negative (or 0 to disable) and a valid number")
 	}
@@ -281,7 +326,7 @@ func ScoreParameterDecay(decay time.Duration) float64 {
 	return ScoreParameterDecayWithBase(decay, DefaultDecayInterval, DefaultDecayToZero)
 }
 
-// ScoreParameterDecay computes the decay factor for a parameter using base as the DecayInterval
+// ScoreParameterDecayWithBase computes the decay factor for a parameter using base as the DecayInterval
 func ScoreParameterDecayWithBase(decay time.Duration, base time.Duration, decayToZero float64) float64 {
 	// the decay is linear, so after n ticks the value is factor^n
 	// so factor^n = decayToZero => factor = decayToZero^(1/n)
