@@ -52,7 +52,7 @@ func (p *PeerScoreThresholds) validate() error {
 
 type PeerScoreParams struct {
 	// whether it is allowed to just set some params and not all of them.
-	SelectiveParams bool
+	SkipAtomicValidation bool
 
 	// Score parameters per topic.
 	Topics map[string]*TopicScoreParams
@@ -103,7 +103,7 @@ type PeerScoreParams struct {
 
 type TopicScoreParams struct {
 	// whether it is allowed to just set some params and not all of them.
-	SelectiveParams bool
+	SkipAtomicValidation bool
 
 	// The weight of the topic.
 	TopicWeight float64
@@ -240,6 +240,13 @@ func (p *TopicScoreParams) validate() error {
 }
 
 func (p *TopicScoreParams) validateTimeInMeshParams() error {
+	if p.SkipAtomicValidation {
+		// in selective mode, parameters at their zero values are dismissed from validation.
+		if p.TimeInMeshQuantum == 0 && p.TimeInMeshCap == 0 {
+			return nil
+		}
+	}
+
 	if p.TimeInMeshQuantum == 0 {
 		return fmt.Errorf("invalid TimeInMeshQuantum; must be non zero")
 	}
@@ -257,6 +264,13 @@ func (p *TopicScoreParams) validateTimeInMeshParams() error {
 }
 
 func (p *TopicScoreParams) validateMessageDeliveryParams() error {
+	if p.SkipAtomicValidation {
+		// in selective mode, parameters at their zero values are dismissed from validation.
+		if p.FirstMessageDeliveriesCap == 0 && p.MeshMessageDeliveriesDecay == 0 {
+			return nil
+		}
+	}
+
 	if p.FirstMessageDeliveriesWeight < 0 || isInvalidNumber(p.FirstMessageDeliveriesWeight) {
 		return fmt.Errorf("invallid FirstMessageDeliveriesWeight; must be positive (or 0 to disable) and a valid number")
 	}
@@ -271,6 +285,13 @@ func (p *TopicScoreParams) validateMessageDeliveryParams() error {
 }
 
 func (p *TopicScoreParams) validateMeshMessageDeliveryParams() error {
+	if p.SkipAtomicValidation {
+		// in selective mode, parameters at their zero values are dismissed from validation.
+		if p.FirstMessageDeliveriesCap == 0 && p.MeshMessageDeliveriesDecay == 0 {
+			return nil
+		}
+	}
+
 	if p.MeshMessageDeliveriesWeight > 0 || isInvalidNumber(p.MeshMessageDeliveriesWeight) {
 		return fmt.Errorf("invalid MeshMessageDeliveriesWeight; must be negative (or 0 to disable) and a valid number")
 	}
@@ -294,6 +315,13 @@ func (p *TopicScoreParams) validateMeshMessageDeliveryParams() error {
 }
 
 func (p *TopicScoreParams) validateMessageFailurePenaltyParams() error {
+	if p.SkipAtomicValidation {
+		// in selective mode, parameters at their zero values are dismissed from validation.
+		if p.MeshFailurePenaltyDecay == 0 {
+			return nil
+		}
+	}
+
 	if p.MeshFailurePenaltyWeight > 0 || isInvalidNumber(p.MeshFailurePenaltyWeight) {
 		return fmt.Errorf("invalid MeshFailurePenaltyWeight; must be negative (or 0 to disable) and a valid number")
 	}
@@ -305,6 +333,13 @@ func (p *TopicScoreParams) validateMessageFailurePenaltyParams() error {
 }
 
 func (p *TopicScoreParams) validateInvalidMessageDeliveryParams() error {
+	if p.SkipAtomicValidation {
+		// in selective mode, parameters at their zero values are dismissed from validation.
+		if p.InvalidMessageDeliveriesDecay == 0 {
+			return nil
+		}
+	}
+
 	if p.InvalidMessageDeliveriesWeight > 0 || isInvalidNumber(p.InvalidMessageDeliveriesWeight) {
 		return fmt.Errorf("invalid InvalidMessageDeliveriesWeight; must be negative (or 0 to disable) and a valid number")
 	}
