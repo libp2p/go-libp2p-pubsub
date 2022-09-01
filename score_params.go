@@ -109,8 +109,8 @@ type TopicScoreParams struct {
 	TopicWeight float64
 
 	// P1: time in the mesh
-	// This is the time the peer has ben grafted in the mesh.
-	// The value of of the parameter is the time/TimeInMeshQuantum, capped by TimeInMeshCap
+	// This is the time the peer has been grafted in the mesh.
+	// The value of the parameter is the time/TimeInMeshQuantum, capped by TimeInMeshCap.
 	// The weight of the parameter MUST be positive (or zero to disable).
 	TimeInMeshWeight  float64
 	TimeInMeshQuantum time.Duration
@@ -130,7 +130,7 @@ type TopicScoreParams struct {
 	// when validation succeeds.
 	// This window accounts for the minimum time before a hostile mesh peer trying to game the score
 	// could replay back a valid message we just sent them.
-	// It effectively tracks first and near-first deliveries, ie a message seen from a mesh peer
+	// It effectively tracks first and near-first deliveries, i.e., a message seen from a mesh peer
 	// before we have forwarded it to them.
 	// The parameter has an associated counter, decaying with MeshMessageDeliveriesDecay.
 	// If the counter exceeds the threshold, its value is 0.
@@ -241,11 +241,14 @@ func (p *TopicScoreParams) validate() error {
 
 func (p *TopicScoreParams) validateTimeInMeshParams() error {
 	if p.SkipAtomicValidation {
-		// in selective mode, parameters at their zero values are dismissed from validation.
-		if p.TimeInMeshQuantum == 0 && p.TimeInMeshCap == 0 {
+		// in non-atomic mode, parameters at their zero values are dismissed from validation.
+		if p.TimeInMeshWeight == 0 && p.TimeInMeshQuantum == 0 && p.TimeInMeshCap == 0 {
 			return nil
 		}
 	}
+
+	// either atomic validation mode, or some parameters have been set a value,
+	// hence, proceed with normal validation of all related parameters in this context.
 
 	if p.TimeInMeshQuantum == 0 {
 		return fmt.Errorf("invalid TimeInMeshQuantum; must be non zero")
@@ -265,11 +268,14 @@ func (p *TopicScoreParams) validateTimeInMeshParams() error {
 
 func (p *TopicScoreParams) validateMessageDeliveryParams() error {
 	if p.SkipAtomicValidation {
-		// in selective mode, parameters at their zero values are dismissed from validation.
-		if p.FirstMessageDeliveriesCap == 0 && p.MeshMessageDeliveriesDecay == 0 {
+		// in non-atomic mode, parameters at their zero values are dismissed from validation.
+		if p.FirstMessageDeliveriesWeight == 0 && p.FirstMessageDeliveriesCap == 0 && p.FirstMessageDeliveriesDecay == 0 {
 			return nil
 		}
 	}
+
+	// either atomic validation mode, or some parameters have been set a value,
+	// hence, proceed with normal validation of all related parameters in this context.
 
 	if p.FirstMessageDeliveriesWeight < 0 || isInvalidNumber(p.FirstMessageDeliveriesWeight) {
 		return fmt.Errorf("invallid FirstMessageDeliveriesWeight; must be positive (or 0 to disable) and a valid number")
@@ -286,11 +292,19 @@ func (p *TopicScoreParams) validateMessageDeliveryParams() error {
 
 func (p *TopicScoreParams) validateMeshMessageDeliveryParams() error {
 	if p.SkipAtomicValidation {
-		// in selective mode, parameters at their zero values are dismissed from validation.
-		if p.FirstMessageDeliveriesCap == 0 && p.MeshMessageDeliveriesDecay == 0 {
+		// in non-atomic mode, parameters at their zero values are dismissed from validation.
+		if p.MeshMessageDeliveriesWeight == 0 &&
+			p.MeshMessageDeliveriesCap == 0 &&
+			p.MeshMessageDeliveriesDecay == 0 &&
+			p.MeshMessageDeliveriesThreshold == 0 &&
+			p.MeshMessageDeliveriesWindow == 0 &&
+			p.MeshMessageDeliveriesActivation == 0 {
 			return nil
 		}
 	}
+
+	// either atomic validation mode, or some parameters have been set a value,
+	// hence, proceed with normal validation of all related parameters in this context.
 
 	if p.MeshMessageDeliveriesWeight > 0 || isInvalidNumber(p.MeshMessageDeliveriesWeight) {
 		return fmt.Errorf("invalid MeshMessageDeliveriesWeight; must be negative (or 0 to disable) and a valid number")
@@ -322,6 +336,9 @@ func (p *TopicScoreParams) validateMessageFailurePenaltyParams() error {
 		}
 	}
 
+	// either atomic validation mode, or some parameters have been set a value,
+	// hence, proceed with normal validation of all related parameters in this context.
+
 	if p.MeshFailurePenaltyWeight > 0 || isInvalidNumber(p.MeshFailurePenaltyWeight) {
 		return fmt.Errorf("invalid MeshFailurePenaltyWeight; must be negative (or 0 to disable) and a valid number")
 	}
@@ -339,6 +356,9 @@ func (p *TopicScoreParams) validateInvalidMessageDeliveryParams() error {
 			return nil
 		}
 	}
+
+	// either atomic validation mode, or some parameters have been set a value,
+	// hence, proceed with normal validation of all related parameters in this context.
 
 	if p.InvalidMessageDeliveriesWeight > 0 || isInvalidNumber(p.InvalidMessageDeliveriesWeight) {
 		return fmt.Errorf("invalid InvalidMessageDeliveriesWeight; must be negative (or 0 to disable) and a valid number")
