@@ -8,41 +8,112 @@ import (
 	"github.com/libp2p/go-libp2p/core/peer"
 )
 
-func TestPeerScoreThresholdsValidation(t *testing.T) {
-	if (&PeerScoreThresholds{GossipThreshold: 1}).validate() == nil {
+func TestPeerScoreThreshold_AtomicValidation(t *testing.T) {
+	testPeerScoreThresholdsValidation(t, false)
+}
+
+func TestPeerScoreThreshold_SkipAtomicValidation(t *testing.T) {
+	testPeerScoreThresholdsValidation(t, true)
+}
+
+func testPeerScoreThresholdsValidation(t *testing.T, skipAtomicValidation bool) {
+	if (&PeerScoreThresholds{
+		SkipAtomicValidation: skipAtomicValidation,
+		GossipThreshold:      1,
+	}).validate() == nil {
 		t.Fatal("expected validation error")
 	}
-	if (&PeerScoreThresholds{PublishThreshold: 1}).validate() == nil {
+	if (&PeerScoreThresholds{
+		SkipAtomicValidation: skipAtomicValidation,
+		PublishThreshold:     1,
+	}).validate() == nil {
 		t.Fatal("expected validation error")
 	}
-	if (&PeerScoreThresholds{GossipThreshold: -1, PublishThreshold: 0}).validate() == nil {
+
+	if (&PeerScoreThresholds{
+		SkipAtomicValidation: skipAtomicValidation,
+		GossipThreshold:      -1,
+		PublishThreshold:     0,
+	}).validate() == nil {
 		t.Fatal("expected validation error")
 	}
-	if (&PeerScoreThresholds{GossipThreshold: -1, PublishThreshold: -2, GraylistThreshold: 0}).validate() == nil {
+	if (&PeerScoreThresholds{
+		SkipAtomicValidation: skipAtomicValidation,
+		GossipThreshold:      -1,
+		PublishThreshold:     -2,
+		GraylistThreshold:    0,
+	}).validate() == nil {
 		t.Fatal("expected validation error")
 	}
-	if (&PeerScoreThresholds{AcceptPXThreshold: -1}).validate() == nil {
+	if (&PeerScoreThresholds{
+		SkipAtomicValidation: skipAtomicValidation,
+		AcceptPXThreshold:    -1,
+	}).validate() == nil {
 		t.Fatal("expected validation error")
 	}
-	if (&PeerScoreThresholds{OpportunisticGraftThreshold: -1}).validate() == nil {
+	if (&PeerScoreThresholds{
+		SkipAtomicValidation:        skipAtomicValidation,
+		OpportunisticGraftThreshold: -1,
+	}).validate() == nil {
 		t.Fatal("expected validation error")
 	}
-	if (&PeerScoreThresholds{GossipThreshold: -1, PublishThreshold: -2, GraylistThreshold: -3, AcceptPXThreshold: 1, OpportunisticGraftThreshold: 2}).validate() != nil {
+	if (&PeerScoreThresholds{
+		SkipAtomicValidation:        skipAtomicValidation,
+		GossipThreshold:             -1,
+		PublishThreshold:            -2,
+		GraylistThreshold:           -3,
+		AcceptPXThreshold:           1,
+		OpportunisticGraftThreshold: 2}).validate() != nil {
 		t.Fatal("expected validation success")
 	}
-	if (&PeerScoreThresholds{GossipThreshold: math.Inf(-1), PublishThreshold: -2, GraylistThreshold: -3, AcceptPXThreshold: 1, OpportunisticGraftThreshold: 2}).validate() == nil {
+	if (&PeerScoreThresholds{
+		SkipAtomicValidation:        skipAtomicValidation,
+		GossipThreshold:             math.Inf(-1),
+		PublishThreshold:            -2,
+		GraylistThreshold:           -3,
+		AcceptPXThreshold:           1,
+		OpportunisticGraftThreshold: 2,
+	}).validate() == nil {
 		t.Fatal("expected validation error")
 	}
-	if (&PeerScoreThresholds{GossipThreshold: -1, PublishThreshold: math.Inf(-1), GraylistThreshold: -3, AcceptPXThreshold: 1, OpportunisticGraftThreshold: 2}).validate() == nil {
+	if (&PeerScoreThresholds{
+		SkipAtomicValidation:        skipAtomicValidation,
+		GossipThreshold:             -1,
+		PublishThreshold:            math.Inf(-1),
+		GraylistThreshold:           -3,
+		AcceptPXThreshold:           1,
+		OpportunisticGraftThreshold: 2,
+	}).validate() == nil {
 		t.Fatal("expected validation error")
 	}
-	if (&PeerScoreThresholds{GossipThreshold: -1, PublishThreshold: -2, GraylistThreshold: math.Inf(-1), AcceptPXThreshold: 1, OpportunisticGraftThreshold: 2}).validate() == nil {
+	if (&PeerScoreThresholds{
+		SkipAtomicValidation:        skipAtomicValidation,
+		GossipThreshold:             -1,
+		PublishThreshold:            -2,
+		GraylistThreshold:           math.Inf(-1),
+		AcceptPXThreshold:           1,
+		OpportunisticGraftThreshold: 2,
+	}).validate() == nil {
 		t.Fatal("expected validation error")
 	}
-	if (&PeerScoreThresholds{GossipThreshold: -1, PublishThreshold: -2, GraylistThreshold: -3, AcceptPXThreshold: math.NaN(), OpportunisticGraftThreshold: 2}).validate() == nil {
+	if (&PeerScoreThresholds{
+		SkipAtomicValidation:        skipAtomicValidation,
+		GossipThreshold:             -1,
+		PublishThreshold:            -2,
+		GraylistThreshold:           -3,
+		AcceptPXThreshold:           math.NaN(),
+		OpportunisticGraftThreshold: 2,
+	}).validate() == nil {
 		t.Fatal("expected validation error")
 	}
-	if (&PeerScoreThresholds{GossipThreshold: -1, PublishThreshold: -2, GraylistThreshold: -3, AcceptPXThreshold: 1, OpportunisticGraftThreshold: math.Inf(0)}).validate() == nil {
+	if (&PeerScoreThresholds{
+		SkipAtomicValidation:        skipAtomicValidation,
+		GossipThreshold:             -1,
+		PublishThreshold:            -2,
+		GraylistThreshold:           -3,
+		AcceptPXThreshold:           1,
+		OpportunisticGraftThreshold: math.Inf(0),
+	}).validate() == nil {
 		t.Fatal("expected validation error")
 	}
 }

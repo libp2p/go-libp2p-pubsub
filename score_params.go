@@ -13,7 +13,7 @@ type PeerScoreThresholds struct {
 	// whether it is allowed to just set some params and not all of them.
 	SkipAtomicValidation bool
 
-	// GossipThreshold is the score threshold below which gossip propagation is supressed;
+	// GossipThreshold is the score threshold below which gossip propagation is suppressed;
 	// should be negative.
 	GossipThreshold float64
 
@@ -21,8 +21,8 @@ type PeerScoreThresholds struct {
 	// publishing (also applies to fanout and floodsub peers); should be negative and <= GossipThreshold.
 	PublishThreshold float64
 
-	// GraylistThreshold is the score threshold below which message processing is supressed altogether,
-	// implementing an effective graylist according to peer score; should be negative and <= PublisThreshold.
+	// GraylistThreshold is the score threshold below which message processing is suppressed altogether,
+	// implementing an effective gray list according to peer score; should be negative and <= PublishThreshold.
 	GraylistThreshold float64
 
 	// AcceptPXThreshold is the score threshold below which PX will be ignored; this should be positive
@@ -35,19 +35,14 @@ type PeerScoreThresholds struct {
 }
 
 func (p *PeerScoreThresholds) validate() error {
-	if !p.SkipAtomicValidation || p.GossipThreshold != 0 {
+
+	if !p.SkipAtomicValidation || p.PublishThreshold != 0 || p.GossipThreshold != 0 || p.GraylistThreshold != 0 {
 		if p.GossipThreshold > 0 || isInvalidNumber(p.GossipThreshold) {
 			return fmt.Errorf("invalid gossip threshold; it must be <= 0 and a valid number")
 		}
-	}
-
-	if !p.SkipAtomicValidation || p.PublishThreshold != 0 {
 		if p.PublishThreshold > 0 || p.PublishThreshold > p.GossipThreshold || isInvalidNumber(p.PublishThreshold) {
 			return fmt.Errorf("invalid publish threshold; it must be <= 0 and <= gossip threshold and a valid number")
 		}
-	}
-
-	if !p.SkipAtomicValidation || p.GraylistThreshold != 0 {
 		if p.GraylistThreshold > 0 || p.GraylistThreshold > p.PublishThreshold || isInvalidNumber(p.GraylistThreshold) {
 			return fmt.Errorf("invalid graylist threshold; it must be <= 0 and <= publish threshold and a valid number")
 		}
