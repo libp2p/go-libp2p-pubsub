@@ -47,7 +47,7 @@ func TestPeerScoreThresholdsValidation(t *testing.T) {
 	}
 }
 
-func TestTopicScoreParamsValidation(t *testing.T) {
+func TestTopicScoreParamsValidation_AtomicValidation(t *testing.T) {
 	if (&TopicScoreParams{}).validate() == nil {
 		t.Fatal("expected validation error")
 	}
@@ -145,6 +145,241 @@ func TestTopicScoreParamsValidation(t *testing.T) {
 	}
 }
 
+func TestTopicScoreParamsValidation_NonAtomicValidation(t *testing.T) {
+	if (&TopicScoreParams{SkipAtomicValidation: true}).validate() != nil {
+		t.Fatal("expected no validation error in non-atomic mode")
+	}
+
+	// Following tests evaluate that even when we skip atomic validation, those parameters that are set with a value are
+	// going through validation.
+	if (&TopicScoreParams{
+		SkipAtomicValidation: true,
+		TopicWeight:          -1,
+	}).
+		validate() == nil {
+		t.Fatalf("expected validation error")
+	}
+
+	if (&TopicScoreParams{
+		SkipAtomicValidation: true,
+		TimeInMeshWeight:     -1,
+		TimeInMeshQuantum:    time.Second,
+	}).validate() == nil {
+		t.Fatalf("expected validation error")
+	}
+
+	if (&TopicScoreParams{
+		SkipAtomicValidation: true,
+		TimeInMeshWeight:     1,
+		TimeInMeshQuantum:    time.Second,
+		TimeInMeshCap:        -1,
+	}).validate() == nil {
+		t.Fatal("expected validation error")
+	}
+
+	if (&TopicScoreParams{
+		SkipAtomicValidation:         true,
+		TimeInMeshQuantum:            time.Second,
+		FirstMessageDeliveriesWeight: -1,
+	}).validate() == nil {
+		t.Fatal("expected validation error")
+	}
+	if (&TopicScoreParams{
+		SkipAtomicValidation:         true,
+		TimeInMeshQuantum:            time.Second,
+		FirstMessageDeliveriesWeight: 1,
+		FirstMessageDeliveriesDecay:  -1,
+	}).validate() == nil {
+		t.Fatal("expected validation error")
+	}
+	if (&TopicScoreParams{
+		SkipAtomicValidation:         true,
+		TimeInMeshQuantum:            time.Second,
+		FirstMessageDeliveriesWeight: 1,
+		FirstMessageDeliveriesDecay:  2,
+	}).validate() == nil {
+		t.Fatal("expected validation error")
+	}
+	if (&TopicScoreParams{
+		SkipAtomicValidation:         true,
+		TimeInMeshQuantum:            time.Second,
+		FirstMessageDeliveriesWeight: 1,
+		FirstMessageDeliveriesDecay:  .5,
+		FirstMessageDeliveriesCap:    -1,
+	}).validate() == nil {
+		t.Fatal("expected validation error")
+	}
+
+	if (&TopicScoreParams{
+		SkipAtomicValidation:        true,
+		TimeInMeshQuantum:           time.Second,
+		MeshMessageDeliveriesWeight: 1,
+	}).validate() == nil {
+		t.Fatal("expected validation error")
+	}
+	if (&TopicScoreParams{SkipAtomicValidation: true,
+		TimeInMeshQuantum:           time.Second,
+		MeshMessageDeliveriesWeight: -1,
+		MeshMessageDeliveriesDecay:  -1,
+	}).validate() == nil {
+		t.Fatal("expected validation error")
+	}
+	if (&TopicScoreParams{
+		SkipAtomicValidation:        true,
+		TimeInMeshQuantum:           time.Second,
+		MeshMessageDeliveriesWeight: -1,
+		MeshMessageDeliveriesDecay:  2,
+	}).validate() == nil {
+		t.Fatal("expected validation error")
+	}
+	if (&TopicScoreParams{
+		SkipAtomicValidation:        true,
+		TimeInMeshQuantum:           time.Second,
+		MeshMessageDeliveriesWeight: -1,
+		MeshMessageDeliveriesDecay:  .5,
+		MeshMessageDeliveriesCap:    -1,
+	}).validate() == nil {
+		t.Fatal("expected validation error")
+	}
+	if (&TopicScoreParams{
+		SkipAtomicValidation:           true,
+		TimeInMeshQuantum:              time.Second,
+		MeshMessageDeliveriesWeight:    -1,
+		MeshMessageDeliveriesDecay:     .5,
+		MeshMessageDeliveriesCap:       5,
+		MeshMessageDeliveriesThreshold: -3,
+	}).validate() == nil {
+		t.Fatal("expected validation error")
+	}
+	if (&TopicScoreParams{
+		SkipAtomicValidation:           true,
+		TimeInMeshQuantum:              time.Second,
+		MeshMessageDeliveriesWeight:    -1,
+		MeshMessageDeliveriesDecay:     .5,
+		MeshMessageDeliveriesCap:       5,
+		MeshMessageDeliveriesThreshold: 3,
+		MeshMessageDeliveriesWindow:    -1,
+	}).validate() == nil {
+		t.Fatal("expected validation error")
+	}
+	if (&TopicScoreParams{
+		SkipAtomicValidation:            true,
+		TimeInMeshQuantum:               time.Second,
+		MeshMessageDeliveriesWeight:     -1,
+		MeshMessageDeliveriesDecay:      .5,
+		MeshMessageDeliveriesCap:        5,
+		MeshMessageDeliveriesThreshold:  3,
+		MeshMessageDeliveriesWindow:     time.Millisecond,
+		MeshMessageDeliveriesActivation: time.Millisecond,
+	}).validate() == nil {
+		t.Fatal("expected validation error")
+	}
+
+	if (&TopicScoreParams{
+		SkipAtomicValidation:     true,
+		TimeInMeshQuantum:        time.Second,
+		MeshFailurePenaltyWeight: 1,
+	}).validate() == nil {
+		t.Fatal("expected validation error")
+	}
+	if (&TopicScoreParams{
+		SkipAtomicValidation:     true,
+		TimeInMeshQuantum:        time.Second,
+		MeshFailurePenaltyWeight: -1,
+		MeshFailurePenaltyDecay:  -1,
+	}).validate() == nil {
+		t.Fatal("expected validation error")
+	}
+	if (&TopicScoreParams{
+		SkipAtomicValidation:     true,
+		TimeInMeshQuantum:        time.Second,
+		MeshFailurePenaltyWeight: -1,
+		MeshFailurePenaltyDecay:  2,
+	}).validate() == nil {
+		t.Fatal("expected validation error")
+	}
+
+	if (&TopicScoreParams{
+		SkipAtomicValidation:           true,
+		TimeInMeshQuantum:              time.Second,
+		InvalidMessageDeliveriesWeight: 1,
+	}).validate() == nil {
+		t.Fatal("expected validation error")
+	}
+	if (&TopicScoreParams{
+		SkipAtomicValidation:           true,
+		TimeInMeshQuantum:              time.Second,
+		InvalidMessageDeliveriesWeight: -1,
+		InvalidMessageDeliveriesDecay:  -1,
+	}).validate() == nil {
+		t.Fatal("expected validation error")
+	}
+	if (&TopicScoreParams{
+		SkipAtomicValidation:           true,
+		TimeInMeshQuantum:              time.Second,
+		InvalidMessageDeliveriesWeight: -1,
+		InvalidMessageDeliveriesDecay:  2,
+	}).validate() == nil {
+		t.Fatal("expected validation error")
+	}
+
+	// Don't use these params in production!
+	// In non-atomic (selective) validation mode, the subset of parameters passes
+	// validation if the individual parameters values pass validation.
+	p := TopicScoreParams{SkipAtomicValidation: true}
+
+	if err := p.validate(); err != nil {
+		t.Fatalf("expected validation success, got: %s", err)
+	}
+
+	// including topic weight
+	p.TopicWeight = 1
+	if err := p.validate(); err != nil {
+		t.Fatalf("expected validation success, got: %s", err)
+	}
+
+	// including time in mesh parameters
+	p.TimeInMeshWeight = 0.01
+	p.TimeInMeshQuantum = time.Second
+	p.TimeInMeshCap = 10
+	if err := p.validate(); err != nil {
+		t.Fatalf("expected validation success, got: %s", err)
+	}
+
+	// including first message delivery parameters
+	p.FirstMessageDeliveriesWeight = 1
+	p.FirstMessageDeliveriesDecay = 0.5
+	p.FirstMessageDeliveriesCap = 10
+	if err := p.validate(); err != nil {
+		t.Fatalf("expected validation success, got: %s", err)
+	}
+
+	// including mesh message delivery parameters
+	p.MeshMessageDeliveriesWeight = -1
+	p.MeshMessageDeliveriesDecay = 0.05
+	p.MeshMessageDeliveriesCap = 10
+	p.MeshMessageDeliveriesThreshold = 5
+	p.MeshMessageDeliveriesWindow = time.Millisecond
+	p.MeshMessageDeliveriesActivation = time.Second
+	if err := p.validate(); err != nil {
+		t.Fatalf("expected validation success, got: %s", err)
+	}
+
+	// including mesh failure penalty parameters
+	p.MeshFailurePenaltyWeight = -1
+	p.MeshFailurePenaltyDecay = 0.5
+	if err := p.validate(); err != nil {
+		t.Fatalf("expected validation success, got: %s", err)
+	}
+
+	// including invalid message delivery parameters
+	p.InvalidMessageDeliveriesWeight = -1
+	p.InvalidMessageDeliveriesDecay = 0.5
+	if err := p.validate(); err != nil {
+		t.Fatalf("expected validation success, got: %s", err)
+	}
+}
+
 func TestPeerScoreParamsValidation(t *testing.T) {
 	appScore := func(peer.ID) float64 { return 0 }
 
@@ -213,7 +448,7 @@ func TestPeerScoreParamsValidation(t *testing.T) {
 		IPColocationFactorWeight:    -1,
 		IPColocationFactorThreshold: 1,
 		Topics: map[string]*TopicScoreParams{
-			"test": &TopicScoreParams{
+			"test": {
 				TopicWeight:                     1,
 				TimeInMeshWeight:                0.01,
 				TimeInMeshQuantum:               time.Second,
@@ -246,7 +481,7 @@ func TestPeerScoreParamsValidation(t *testing.T) {
 		IPColocationFactorWeight:    -1,
 		IPColocationFactorThreshold: 1,
 		Topics: map[string]*TopicScoreParams{
-			"test": &TopicScoreParams{
+			"test": {
 				TopicWeight:                     -1,
 				TimeInMeshWeight:                0.01,
 				TimeInMeshQuantum:               time.Second,
@@ -294,7 +529,7 @@ func TestPeerScoreParamsValidation(t *testing.T) {
 		IPColocationFactorWeight:    -1,
 		IPColocationFactorThreshold: 1,
 		Topics: map[string]*TopicScoreParams{
-			"test": &TopicScoreParams{
+			"test": {
 				TopicWeight:                     math.Inf(0),
 				TimeInMeshWeight:                math.NaN(),
 				TimeInMeshQuantum:               time.Second,

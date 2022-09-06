@@ -363,7 +363,7 @@ func (p *TopicScoreParams) validateMeshMessageDeliveryParams() error {
 func (p *TopicScoreParams) validateMessageFailurePenaltyParams() error {
 	if p.SkipAtomicValidation {
 		// in selective mode, parameters at their zero values are dismissed from validation.
-		if p.MeshFailurePenaltyDecay == 0 {
+		if p.MeshFailurePenaltyDecay == 0 && p.MeshFailurePenaltyWeight == 0 {
 			return nil
 		}
 	}
@@ -384,7 +384,7 @@ func (p *TopicScoreParams) validateMessageFailurePenaltyParams() error {
 func (p *TopicScoreParams) validateInvalidMessageDeliveryParams() error {
 	if p.SkipAtomicValidation {
 		// in selective mode, parameters at their zero values are dismissed from validation.
-		if p.InvalidMessageDeliveriesDecay == 0 {
+		if p.InvalidMessageDeliveriesDecay == 0 && p.InvalidMessageDeliveriesWeight == 0 {
 			return nil
 		}
 	}
