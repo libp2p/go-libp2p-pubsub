@@ -5,10 +5,10 @@ import (
 	"math/rand"
 	"time"
 
-	"github.com/libp2p/go-libp2p/core/discovery"
-	"github.com/libp2p/go-libp2p/core/host"
-	"github.com/libp2p/go-libp2p/core/peer"
-	discimpl "github.com/libp2p/go-libp2p/p2p/discovery/backoff"
+	"github.com/libp2p/go-libp2p-core/discovery"
+	"github.com/libp2p/go-libp2p-core/host"
+	"github.com/libp2p/go-libp2p-core/peer"
+	discimpl "github.com/libp2p/go-libp2p-discovery"
 )
 
 var (

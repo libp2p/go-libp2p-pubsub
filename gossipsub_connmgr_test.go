@@ -6,16 +6,15 @@ import (
 	"time"
 
 	"github.com/benbjohnson/clock"
-	"github.com/libp2p/go-libp2p/core/host"
-	swarmt "github.com/libp2p/go-libp2p/p2p/net/swarm/testing"
+	"github.com/libp2p/go-libp2p-core/host"
+	swarmt "github.com/libp2p/go-libp2p-swarm/testing"
 
-	"github.com/libp2p/go-libp2p/core/peer"
-	bhost "github.com/libp2p/go-libp2p/p2p/host/blank"
-	"github.com/libp2p/go-libp2p/p2p/net/connmgr"
+	bhost "github.com/libp2p/go-libp2p-blankhost"
+	connmgr "github.com/libp2p/go-libp2p-connmgr"
+	"github.com/libp2p/go-libp2p-core/peer"
 )
 
 func TestGossipsubConnTagMessageDeliveries(t *testing.T) {
-	t.Skip("Test disabled with go-libp2p v0.22.0") // TODO: reenable test when updating to v0.23.0
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -24,6 +23,8 @@ func TestGossipsubConnTagMessageDeliveries(t *testing.T) {
 	oldGossipSubDHi := GossipSubDhi
 	oldGossipSubConnTagDecayInterval := GossipSubConnTagDecayInterval
 	oldGossipSubConnTagMessageDeliveryCap := GossipSubConnTagMessageDeliveryCap
+
+	oldSilencePeriod := connmgr.SilencePeriod
 
 	// set the gossipsub D parameters low, so that we have some peers outside the mesh
 	GossipSubDlo = 3
@@ -36,6 +37,7 @@ func TestGossipsubConnTagMessageDeliveries(t *testing.T) {
 	// will be forced out even if they end up in someone's mesh
 	GossipSubConnTagMessageDeliveryCap = 50
 
+	connmgr.SilencePeriod = time.Millisecond
 	// reset globals after test
 	defer func() {
 		GossipSubD = oldGossipSubD
@@ -43,6 +45,7 @@ func TestGossipsubConnTagMessageDeliveries(t *testing.T) {
 		GossipSubDhi = oldGossipSubDHi
 		GossipSubConnTagDecayInterval = oldGossipSubConnTagDecayInterval
 		GossipSubConnTagMessageDeliveryCap = oldGossipSubConnTagMessageDeliveryCap
+		connmgr.SilencePeriod = oldSilencePeriod
 	}()
 
 	decayClock := clock.NewMock()
@@ -60,15 +63,8 @@ func TestGossipsubConnTagMessageDeliveries(t *testing.T) {
 	honestPeers := make(map[peer.ID]struct{})
 
 	for i := 0; i < nHonest; i++ {
-		var err error
-		connmgrs[i], err = connmgr.NewConnManager(nHonest, connLimit,
-			connmgr.WithGracePeriod(0),
-			connmgr.WithSilencePeriod(time.Millisecond),
-			connmgr.DecayerConfig(&decayCfg),
-		)
-		if err != nil {
-			t.Fatal(err)
-		}
+		connmgrs[i] = connmgr.NewConnManager(nHonest, connLimit, 0,
+			connmgr.DecayerConfig(&decayCfg))
 
 		netw := swarmt.GenSwarm(t)
 		defer netw.Close()

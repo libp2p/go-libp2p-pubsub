@@ -9,9 +9,9 @@
 
 <p align="left">
   <a href="https://codecov.io/gh/libp2p/go-libp2p-pubsub"><img src="https://codecov.io/gh/libp2p/go-libp2p-pubsub/branch/master/graph/badge.svg"></a>
-  <a href="https://goreportcard.com/report/github.com/ME-MotherEarth/go-libp2p-pubsub"><img src="https://goreportcard.com/badge/github.com/ME-MotherEarth/go-libp2p-pubsub" /></a>
+  <a href="https://goreportcard.com/report/github.com/libp2p/go-libp2p-pubsub"><img src="https://goreportcard.com/badge/github.com/libp2p/go-libp2p-pubsub" /></a>
   <a href="https://github.com/RichardLitt/standard-readme"><img src="https://img.shields.io/badge/readme%20style-standard-brightgreen.svg?style=flat-square" /></a>
-  <a href="https://godoc.org/github.com/ME-MotherEarth/go-libp2p-pubsub"><img src="http://img.shields.io/badge/godoc-reference-5272B4.svg?style=flat-square" /></a>
+  <a href="https://godoc.org/github.com/libp2p/go-libp2p-pubsub"><img src="http://img.shields.io/badge/godoc-reference-5272B4.svg?style=flat-square" /></a>
   <a href=""><img src="https://img.shields.io/badge/golang-%3E%3D1.14.0-orange.svg?style=flat-square" /></a>
   <br>
 </p>
@@ -19,7 +19,7 @@
 This repo contains the canonical pubsub implementation for libp2p. We currently provide three message router options:
 - Floodsub, which is the baseline flooding protocol.
 - Randomsub, which is a simple probabilistic router that propagates to random subsets of peers.
-- Gossipsub, which is a more advanced router with mesh formation and gossip propagation. See [spec](https://github.com/libp2p/specs/tree/master/pubsub/gossipsub) and  [implementation](https://github.com/ME-MotherEarth/go-libp2p-pubsub/blob/master/gossipsub.go) for more details.
+- Gossipsub, which is a more advanced router with mesh formation and gossip propagation. See [spec](https://github.com/libp2p/specs/tree/master/pubsub/gossipsub) and  [implementation](https://github.com/libp2p/go-libp2p-pubsub/blob/master/gossipsub.go) for more details.
 
 
 ## Repo Lead Maintainer
@@ -35,7 +35,7 @@ This repo contains the canonical pubsub implementation for libp2p. We currently 
 
 - [Install](#install)
 - [Usage](#usage)
-- [Example](#example)
+- [Implementations](#implementations)
 - [Documentation](#documentation)
 - [Tracing](#tracing)
 - [Contribute](#contribute)
@@ -46,7 +46,7 @@ This repo contains the canonical pubsub implementation for libp2p. We currently 
 ## Install
 
 ```
-go get github.com/ME-MotherEarth/go-libp2p-pubsub
+go get github.com/libp2p/go-libp2p-pubsub
 ```
 
 ## Usage
@@ -59,7 +59,7 @@ https://github.com/libp2p/go-libp2p/tree/master/examples/pubsub
 
 ## Documentation
 
-See the [libp2p specs](https://github.com/libp2p/specs/tree/master/pubsub) for high level documentation and [godoc](https://godoc.org/github.com/ME-MotherEarth/go-libp2p-pubsub) for API documentation.
+See the [libp2p specs](https://github.com/libp2p/specs/tree/master/pubsub) for high level documentation and [godoc](https://godoc.org/github.com/libp2p/go-libp2p-pubsub) for API documentation.
 
 ### In this repo, you will find
 
@@ -101,7 +101,7 @@ See the [libp2p specs](https://github.com/libp2p/specs/tree/master/pubsub) for h
 The pubsub system supports _tracing_, which collects all events pertaining to the internals of the system. This allows you to recreate the complete message flow and state of the system for analysis purposes.
 
 To enable tracing, instantiate the pubsub system using the `WithEventTracer` option; the option accepts a tracer with three available implementations in-package (trace to json, pb, or a remote peer).
-If you want to trace using a remote peer, you can do so using the `traced` daemon from [go-libp2p-pubsub-tracer](https://github.com/ME-MotherEarth/go-libp2p-pubsub-tracer). The package also includes a utility program, `tracestat`, for analyzing the traces collected by the daemon.
+If you want to trace using a remote peer, you can do so using the `traced` daemon from [go-libp2p-pubsub-tracer](https://github.com/libp2p/go-libp2p-pubsub-tracer). The package also includes a utility program, `tracestat`, for analyzing the traces collected by the daemon.
 
 For instance, to capture the trace as a json file, you can use the following option:
 ```go
@@ -141,7 +141,7 @@ ps, err := pubsub.NewGossipSub(..., pubsub.WithEventTracer(tracer))
 
 ## Contribute
 
-Contributions welcome. Please check out [the issues](https://github.com/ME-MotherEarth/go-libp2p-pubsub/issues).
+Contributions welcome. Please check out [the issues](https://github.com/libp2p/go-libp2p-pubsub/issues).
 
 Check out our [contributing document](https://github.com/libp2p/community/blob/master/contributing.md) for more information on how we work, and about contributing in general. Please be aware that all interactions related to multiformats are subject to the IPFS [Code of Conduct](https://github.com/ipfs/community/blob/master/code-of-conduct.md).
 

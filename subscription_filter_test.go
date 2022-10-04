@@ -8,7 +8,7 @@ import (
 
 	pb "github.com/ME-MotherEarth/go-libp2p-pubsub/pb"
 
-	"github.com/libp2p/go-libp2p/core/peer"
+	"github.com/libp2p/go-libp2p-core/peer"
 )
 
 func TestBasicSubscriptionFilter(t *testing.T) {

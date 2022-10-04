@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/libp2p/go-libp2p/core/peer"
+	"github.com/libp2p/go-libp2p-core/peer"
 )
 
 const (
@@ -284,7 +284,7 @@ func (v *validation) validate(vals []*topicVal, src peer.ID, msg *Message, synch
 
 	// we can mark the message as seen now that we have verified the signature
 	// and avoid invoking user validators more than once
-	id := v.p.idGen.ID(msg)
+	id := v.p.msgID(msg.Message)
 	if !v.p.markSeen(id) {
 		v.tracer.DuplicateMessage(msg)
 		return nil
@@ -478,7 +478,7 @@ func (val *topicVal) validateMsg(ctx context.Context, src peer.ID, msg *Message)
 	}
 }
 
-// / Options
+/// Options
 
 // WithValidateQueueSize sets the buffer of validate queue. Defaults to 32.
 // When queue is full, validation is throttled and new messages are dropped.

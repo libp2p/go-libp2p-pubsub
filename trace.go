@@ -3,8 +3,8 @@ package pubsub
 import (
 	"time"
 
-	"github.com/libp2p/go-libp2p/core/peer"
-	"github.com/libp2p/go-libp2p/core/protocol"
+	"github.com/libp2p/go-libp2p-core/peer"
+	"github.com/libp2p/go-libp2p-core/protocol"
 
 	pb "github.com/ME-MotherEarth/go-libp2p-pubsub/pb"
 )
@@ -64,7 +64,7 @@ type pubsubTracer struct {
 	tracer EventTracer
 	raw    []RawTracer
 	pid    peer.ID
-	idGen  *msgIDGenerator
+	msgID  MsgIdFunction
 }
 
 func (t *pubsubTracer) PublishMessage(msg *Message) {
@@ -82,7 +82,7 @@ func (t *pubsubTracer) PublishMessage(msg *Message) {
 		PeerID:    []byte(t.pid),
 		Timestamp: &now,
 		PublishMessage: &pb.TraceEvent_PublishMessage{
-			MessageID: []byte(t.idGen.ID(msg)),
+			MessageID: []byte(t.msgID(msg.Message)),
 			Topic:     msg.Message.Topic,
 		},
 	}
@@ -123,7 +123,7 @@ func (t *pubsubTracer) RejectMessage(msg *Message, reason string) {
 		PeerID:    []byte(t.pid),
 		Timestamp: &now,
 		RejectMessage: &pb.TraceEvent_RejectMessage{
-			MessageID:    []byte(t.idGen.ID(msg)),
+			MessageID:    []byte(t.msgID(msg.Message)),
 			ReceivedFrom: []byte(msg.ReceivedFrom),
 			Reason:       &reason,
 			Topic:        msg.Topic,
@@ -154,7 +154,7 @@ func (t *pubsubTracer) DuplicateMessage(msg *Message) {
 		PeerID:    []byte(t.pid),
 		Timestamp: &now,
 		DuplicateMessage: &pb.TraceEvent_DuplicateMessage{
-			MessageID:    []byte(t.idGen.ID(msg)),
+			MessageID:    []byte(t.msgID(msg.Message)),
 			ReceivedFrom: []byte(msg.ReceivedFrom),
 			Topic:        msg.Topic,
 		},
@@ -184,7 +184,7 @@ func (t *pubsubTracer) DeliverMessage(msg *Message) {
 		PeerID:    []byte(t.pid),
 		Timestamp: &now,
 		DeliverMessage: &pb.TraceEvent_DeliverMessage{
-			MessageID:    []byte(t.idGen.ID(msg)),
+			MessageID:    []byte(t.msgID(msg.Message)),
 			Topic:        msg.Topic,
 			ReceivedFrom: []byte(msg.ReceivedFrom),
 		},
@@ -344,7 +344,7 @@ func (t *pubsubTracer) traceRPCMeta(rpc *RPC) *pb.TraceEvent_RPCMeta {
 	var msgs []*pb.TraceEvent_MessageMeta
 	for _, m := range rpc.Publish {
 		msgs = append(msgs, &pb.TraceEvent_MessageMeta{
-			MessageID: []byte(t.idGen.RawID(m)),
+			MessageID: []byte(t.msgID(m)),
 			Topic:     m.Topic,
 		})
 	}

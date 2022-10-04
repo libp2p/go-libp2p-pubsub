@@ -5,9 +5,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/libp2p/go-libp2p/core/connmgr"
-	"github.com/libp2p/go-libp2p/core/peer"
-	"github.com/libp2p/go-libp2p/core/protocol"
+	"github.com/libp2p/go-libp2p-core/connmgr"
+	"github.com/libp2p/go-libp2p-core/peer"
+	"github.com/libp2p/go-libp2p-core/protocol"
 )
 
 var (
@@ -34,18 +34,18 @@ var (
 // connections based on their behavior.
 //
 // We tag a peer's connections for the following reasons:
-//   - Directly connected peers are tagged with GossipSubConnTagValueDirectPeer (default 1000).
-//   - Mesh peers are tagged with a value of GossipSubConnTagValueMeshPeer (default 20).
-//     If a peer is in multiple topic meshes, they'll be tagged for each.
-//   - For each message that we receive, we bump a delivery tag for peer that delivered the message
-//     first.
-//     The delivery tags have a maximum value, GossipSubConnTagMessageDeliveryCap, and they decay at
-//     a rate of GossipSubConnTagDecayAmount / GossipSubConnTagDecayInterval.
+// - Directly connected peers are tagged with GossipSubConnTagValueDirectPeer (default 1000).
+// - Mesh peers are tagged with a value of GossipSubConnTagValueMeshPeer (default 20).
+//   If a peer is in multiple topic meshes, they'll be tagged for each.
+// - For each message that we receive, we bump a delivery tag for peer that delivered the message
+//   first.
+//   The delivery tags have a maximum value, GossipSubConnTagMessageDeliveryCap, and they decay at
+//   a rate of GossipSubConnTagDecayAmount / GossipSubConnTagDecayInterval.
 type tagTracer struct {
 	sync.RWMutex
 
 	cmgr     connmgr.ConnManager
-	idGen    *msgIDGenerator
+	msgID    MsgIdFunction
 	decayer  connmgr.Decayer
 	decaying map[string]connmgr.DecayingTag
 	direct   map[peer.ID]struct{}
@@ -62,7 +62,7 @@ func newTagTracer(cmgr connmgr.ConnManager) *tagTracer {
 	}
 	return &tagTracer{
 		cmgr:      cmgr,
-		idGen:     newMsgIdGenerator(),
+		msgID:     DefaultMsgIdFn,
 		decayer:   decayer,
 		decaying:  make(map[string]connmgr.DecayingTag),
 		nearFirst: make(map[string]map[peer.ID]struct{}),
@@ -74,7 +74,7 @@ func (t *tagTracer) Start(gs *GossipSubRouter) {
 		return
 	}
 
-	t.idGen = gs.p.idGen
+	t.msgID = gs.p.msgID
 	t.direct = gs.direct
 }
 
@@ -162,7 +162,7 @@ func (t *tagTracer) bumpTagsForMessage(p peer.ID, msg *Message) {
 func (t *tagTracer) nearFirstPeers(msg *Message) []peer.ID {
 	t.Lock()
 	defer t.Unlock()
-	peersMap, ok := t.nearFirst[t.idGen.ID(msg)]
+	peersMap, ok := t.nearFirst[t.msgID(msg.Message)]
 	if !ok {
 		return nil
 	}
@@ -194,7 +194,7 @@ func (t *tagTracer) DeliverMessage(msg *Message) {
 
 	// delete the delivery state for this message
 	t.Lock()
-	delete(t.nearFirst, t.idGen.ID(msg))
+	delete(t.nearFirst, t.msgID(msg.Message))
 	t.Unlock()
 }
 
@@ -215,7 +215,7 @@ func (t *tagTracer) ValidateMessage(msg *Message) {
 	defer t.Unlock()
 
 	// create map to start tracking the peers who deliver while we're validating
-	id := t.idGen.ID(msg)
+	id := t.msgID(msg.Message)
 	if _, exists := t.nearFirst[id]; exists {
 		return
 	}
@@ -226,7 +226,7 @@ func (t *tagTracer) DuplicateMessage(msg *Message) {
 	t.Lock()
 	defer t.Unlock()
 
-	id := t.idGen.ID(msg)
+	id := t.msgID(msg.Message)
 	peers, ok := t.nearFirst[id]
 	if !ok {
 		return
@@ -247,7 +247,7 @@ func (t *tagTracer) RejectMessage(msg *Message, reason string) {
 	case RejectValidationIgnored:
 		fallthrough
 	case RejectValidationFailed:
-		delete(t.nearFirst, t.idGen.ID(msg))
+		delete(t.nearFirst, t.msgID(msg.Message))
 	}
 }
 

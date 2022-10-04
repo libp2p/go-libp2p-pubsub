@@ -6,9 +6,9 @@ import (
 	"time"
 
 	"github.com/benbjohnson/clock"
-	connmgri "github.com/libp2p/go-libp2p/core/connmgr"
-	"github.com/libp2p/go-libp2p/core/peer"
-	"github.com/libp2p/go-libp2p/p2p/net/connmgr"
+	connmgr "github.com/libp2p/go-libp2p-connmgr"
+	connmgri "github.com/libp2p/go-libp2p-core/connmgr"
+	"github.com/libp2p/go-libp2p-core/peer"
 
 	pb "github.com/ME-MotherEarth/go-libp2p-pubsub/pb"
 )
@@ -16,10 +16,7 @@ import (
 func TestTagTracerMeshTags(t *testing.T) {
 	// test that tags are applied when the tagTracer sees graft and prune events
 
-	cmgr, err := connmgr.NewConnManager(5, 10, connmgr.WithGracePeriod(time.Minute))
-	if err != nil {
-		t.Fatal(err)
-	}
+	cmgr := connmgr.NewConnManager(5, 10, time.Minute)
 	tt := newTagTracer(cmgr)
 
 	p := peer.ID("a-peer")
@@ -41,10 +38,7 @@ func TestTagTracerMeshTags(t *testing.T) {
 
 func TestTagTracerDirectPeerTags(t *testing.T) {
 	// test that we add a tag to direct peers
-	cmgr, err := connmgr.NewConnManager(5, 10, connmgr.WithGracePeriod(time.Minute))
-	if err != nil {
-		t.Fatal(err)
-	}
+	cmgr := connmgr.NewConnManager(5, 10, time.Minute)
 	tt := newTagTracer(cmgr)
 
 	p1 := peer.ID("1")
@@ -81,10 +75,7 @@ func TestTagTracerDeliveryTags(t *testing.T) {
 		Clock:      clk,
 		Resolution: time.Minute,
 	}
-	cmgr, err := connmgr.NewConnManager(5, 10, connmgr.WithGracePeriod(time.Minute), connmgr.DecayerConfig(decayCfg))
-	if err != nil {
-		t.Fatal(err)
-	}
+	cmgr := connmgr.NewConnManager(5, 10, time.Minute, connmgr.DecayerConfig(decayCfg))
 
 	tt := newTagTracer(cmgr)
 
@@ -172,10 +163,7 @@ func TestTagTracerDeliveryTagsNearFirst(t *testing.T) {
 		Clock:      clk,
 		Resolution: time.Minute,
 	}
-	cmgr, err := connmgr.NewConnManager(5, 10, connmgr.WithGracePeriod(time.Minute), connmgr.DecayerConfig(decayCfg))
-	if err != nil {
-		t.Fatal(err)
-	}
+	cmgr := connmgr.NewConnManager(5, 10, time.Minute, connmgr.DecayerConfig(decayCfg))
 
 	tt := newTagTracer(cmgr)
 

@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/libp2p/go-libp2p/core/host"
+	"github.com/libp2p/go-libp2p-core/host"
 )
 
 func getRandomsub(ctx context.Context, h host.Host, size int, opts ...Option) *PubSub {

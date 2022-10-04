@@ -6,7 +6,7 @@ import (
 	"time"
 )
 
-// See https://github.com/ME-MotherEarth/go-libp2p-pubsub/issues/426
+// See https://github.com/libp2p/go-libp2p-pubsub/issues/426
 func TestPubSubRemovesBlacklistedPeer(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 

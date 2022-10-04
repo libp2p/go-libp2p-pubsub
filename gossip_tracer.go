@@ -5,8 +5,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/libp2p/go-libp2p/core/peer"
-	"github.com/libp2p/go-libp2p/core/protocol"
+	"github.com/libp2p/go-libp2p-core/peer"
+	"github.com/libp2p/go-libp2p-core/protocol"
 )
 
 // gossipTracer is an internal tracer that tracks IWANT requests in order to penalize
@@ -15,7 +15,7 @@ import (
 type gossipTracer struct {
 	sync.Mutex
 
-	idGen *msgIDGenerator
+	msgID MsgIdFunction
 
 	followUpTime time.Duration
 
@@ -29,7 +29,7 @@ type gossipTracer struct {
 
 func newGossipTracer() *gossipTracer {
 	return &gossipTracer{
-		idGen:        newMsgIdGenerator(),
+		msgID:        DefaultMsgIdFn,
 		promises:     make(map[string]map[peer.ID]time.Time),
 		peerPromises: make(map[peer.ID]map[string]struct{}),
 	}
@@ -40,7 +40,7 @@ func (gt *gossipTracer) Start(gs *GossipSubRouter) {
 		return
 	}
 
-	gt.idGen = gs.p.idGen
+	gt.msgID = gs.p.msgID
 	gt.followUpTime = gs.params.IWantFollowupTime
 }
 
@@ -117,7 +117,7 @@ func (gt *gossipTracer) GetBrokenPromises() map[peer.ID]int {
 var _ RawTracer = (*gossipTracer)(nil)
 
 func (gt *gossipTracer) fulfillPromise(msg *Message) {
-	mid := gt.idGen.ID(msg)
+	mid := gt.msgID(msg.Message)
 
 	gt.Lock()
 	defer gt.Unlock()

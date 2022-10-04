@@ -7,20 +7,19 @@ import (
 	"io"
 	"math/rand"
 	"sync"
-	"sync/atomic"
 	"testing"
 	"time"
 
 	pb "github.com/ME-MotherEarth/go-libp2p-pubsub/pb"
 
-	"github.com/libp2p/go-libp2p/core/host"
-	"github.com/libp2p/go-libp2p/core/network"
-	"github.com/libp2p/go-libp2p/core/peer"
-	"github.com/libp2p/go-libp2p/core/peerstore"
-	"github.com/libp2p/go-libp2p/core/record"
+	"github.com/libp2p/go-libp2p-core/host"
+	"github.com/libp2p/go-libp2p-core/network"
+	"github.com/libp2p/go-libp2p-core/peer"
+	"github.com/libp2p/go-libp2p-core/peerstore"
+	"github.com/libp2p/go-libp2p-core/record"
 
-	bhost "github.com/libp2p/go-libp2p/p2p/host/blank"
-	swarmt "github.com/libp2p/go-libp2p/p2p/net/swarm/testing"
+	bhost "github.com/libp2p/go-libp2p-blankhost"
+	swarmt "github.com/libp2p/go-libp2p-swarm/testing"
 
 	"github.com/libp2p/go-msgio/protoio"
 )
@@ -571,104 +570,6 @@ func TestGossipsubPrune(t *testing.T) {
 		psubs[owner].Publish("foobar", msg)
 
 		for _, sub := range msgs[5:] {
-			got, err := sub.Next(ctx)
-			if err != nil {
-				t.Fatal(sub.err)
-			}
-			if !bytes.Equal(msg, got.Data) {
-				t.Fatal("got wrong message!")
-			}
-		}
-	}
-}
-
-func TestGossipsubPruneBackoffTime(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	hosts := getNetHosts(t, ctx, 10)
-
-	// App specific score that we'll change later.
-	currentScoreForHost0 := int32(0)
-
-	params := DefaultGossipSubParams()
-	params.HeartbeatInitialDelay = time.Millisecond * 10
-	params.HeartbeatInterval = time.Millisecond * 100
-
-	psubs := getGossipsubs(ctx, hosts, WithGossipSubParams(params), WithPeerScore(
-		&PeerScoreParams{
-			AppSpecificScore: func(p peer.ID) float64 {
-				if p == hosts[0].ID() {
-					return float64(atomic.LoadInt32(&currentScoreForHost0))
-				} else {
-					return 0
-				}
-			},
-			AppSpecificWeight: 1,
-			DecayInterval:     time.Second,
-			DecayToZero:       0.01,
-		},
-		&PeerScoreThresholds{
-			GossipThreshold:   -1,
-			PublishThreshold:  -1,
-			GraylistThreshold: -1,
-		}))
-
-	var msgs []*Subscription
-	for _, ps := range psubs {
-		subch, err := ps.Subscribe("foobar")
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		msgs = append(msgs, subch)
-	}
-
-	connectAll(t, hosts)
-
-	// wait for heartbeats to build mesh
-	time.Sleep(time.Second)
-
-	pruneTime := time.Now()
-	// Flip the score. Host 0 should be pruned from everyone
-	atomic.StoreInt32(&currentScoreForHost0, -1000)
-
-	// wait for heartbeats to run and prune
-	time.Sleep(time.Second)
-
-	wg := sync.WaitGroup{}
-	var missingBackoffs uint32 = 0
-	for i := 1; i < 10; i++ {
-		wg.Add(1)
-		// Copy i so this func keeps the correct value in the closure.
-		var idx = i
-		// Run this check in the eval thunk so that we don't step over the heartbeat goroutine and trigger a race.
-		psubs[idx].rt.(*GossipSubRouter).p.eval <- func() {
-			defer wg.Done()
-			backoff, ok := psubs[idx].rt.(*GossipSubRouter).backoff["foobar"][hosts[0].ID()]
-			if !ok {
-				atomic.AddUint32(&missingBackoffs, 1)
-			}
-			if ok && backoff.Sub(pruneTime)-params.PruneBackoff > time.Second {
-				t.Errorf("backoff time should be equal to prune backoff (with some slack) was %v", backoff.Sub(pruneTime)-params.PruneBackoff)
-			}
-		}
-	}
-	wg.Wait()
-
-	// Sometimes not all the peers will have updated their backoffs by this point. If the majority haven't we'll fail this test.
-	if missingBackoffs >= 5 {
-		t.Errorf("missing too many backoffs: %v", missingBackoffs)
-	}
-
-	for i := 0; i < 10; i++ {
-		msg := []byte(fmt.Sprintf("%d it's not a floooooood %d", i, i))
-
-		// Don't publish from host 0, since everyone should have pruned it.
-		owner := rand.Intn(len(psubs)-1) + 1
-
-		psubs[owner].Publish("foobar", msg)
-
-		for _, sub := range msgs[1:] {
 			got, err := sub.Next(ctx)
 			if err != nil {
 				t.Fatal(sub.err)
@@ -1914,121 +1815,6 @@ func TestGossipsubOpportunisticGrafting(t *testing.T) {
 		}
 	}
 }
-func TestGossipSubLeaveTopic(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	h := getNetHosts(t, ctx, 2)
-	psubs := []*PubSub{
-		getGossipsub(ctx, h[0]),
-		getGossipsub(ctx, h[1]),
-	}
-
-	connect(t, h[0], h[1])
-
-	// Join all peers
-	var subs []*Subscription
-	for _, ps := range psubs {
-		sub, err := ps.Subscribe("test")
-		if err != nil {
-			t.Fatal(err)
-		}
-		subs = append(subs, sub)
-	}
-
-	time.Sleep(time.Second)
-
-	leaveTime := time.Now()
-	done := make(chan struct{})
-
-	psubs[0].rt.(*GossipSubRouter).p.eval <- func() {
-		defer close(done)
-		psubs[0].rt.Leave("test")
-		time.Sleep(time.Second)
-		peerMap := psubs[0].rt.(*GossipSubRouter).backoff["test"]
-		if len(peerMap) != 1 {
-			t.Fatalf("No peer is populated in the backoff map for peer 0")
-		}
-		_, ok := peerMap[h[1].ID()]
-		if !ok {
-			t.Errorf("Expected peer does not exist in the backoff map")
-		}
-
-		backoffTime := peerMap[h[1].ID()].Sub(leaveTime)
-		// Check that the backoff time is roughly the unsubscribebackoff time (with a slack of 1s)
-		if backoffTime-GossipSubUnsubscribeBackoff > time.Second {
-			t.Error("Backoff time should be set to GossipSubUnsubscribeBackoff.")
-		}
-	}
-	<-done
-
-	done = make(chan struct{})
-	// Ensure that remote peer 1 also applies the backoff appropriately
-	// for peer 0.
-	psubs[1].rt.(*GossipSubRouter).p.eval <- func() {
-		defer close(done)
-		peerMap2 := psubs[1].rt.(*GossipSubRouter).backoff["test"]
-		if len(peerMap2) != 1 {
-			t.Fatalf("No peer is populated in the backoff map for peer 1")
-		}
-		_, ok := peerMap2[h[0].ID()]
-		if !ok {
-			t.Errorf("Expected peer does not exist in the backoff map")
-		}
-
-		backoffTime := peerMap2[h[0].ID()].Sub(leaveTime)
-		// Check that the backoff time is roughly the unsubscribebackoff time (with a slack of 1s)
-		if backoffTime-GossipSubUnsubscribeBackoff > time.Second {
-			t.Error("Backoff time should be set to GossipSubUnsubscribeBackoff.")
-		}
-	}
-	<-done
-}
-
-func TestGossipSubJoinTopic(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	h := getNetHosts(t, ctx, 3)
-	psubs := []*PubSub{
-		getGossipsub(ctx, h[0]),
-		getGossipsub(ctx, h[1]),
-		getGossipsub(ctx, h[2]),
-	}
-
-	connect(t, h[0], h[1])
-	connect(t, h[0], h[2])
-
-	router0 := psubs[0].rt.(*GossipSubRouter)
-
-	// Add in backoff for peer.
-	peerMap := make(map[peer.ID]time.Time)
-	peerMap[h[1].ID()] = time.Now().Add(router0.params.UnsubscribeBackoff)
-
-	router0.backoff["test"] = peerMap
-
-	// Join all peers
-	var subs []*Subscription
-	for _, ps := range psubs {
-		sub, err := ps.Subscribe("test")
-		if err != nil {
-			t.Fatal(err)
-		}
-		subs = append(subs, sub)
-	}
-
-	time.Sleep(time.Second)
-
-	meshMap := router0.mesh["test"]
-	if len(meshMap) != 1 {
-		t.Fatalf("Unexpect peer included in the mesh")
-	}
-
-	_, ok := meshMap[h[1].ID()]
-	if ok {
-		t.Fatalf("Peer that was to be backed off is included in the mesh")
-	}
-}
 
 type sybilSquatter struct {
 	h host.Host
@@ -2274,7 +2060,7 @@ func (iwe *iwantEverything) handleStream(s network.Stream) {
 	gossipMsgIdsReceived := make(map[string]struct{})
 
 	// send a subscription for test in the output stream to become candidate for gossip
-	r := protoio.NewDelimitedReader(s, 1<<20)
+	r := protoio.NewDelimitedReader(s, DefaultMaxMessageSize)
 	w := protoio.NewDelimitedWriter(os)
 	truth := true
 	topic := "test"
