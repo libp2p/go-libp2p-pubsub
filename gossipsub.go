@@ -7,7 +7,7 @@ import (
 	"sort"
 	"time"
 
-	pb "github.com/libp2p/go-libp2p-pubsub/pb"
+	pb "github.com/ME-MotherEarth/go-libp2p-pubsub/pb"
 
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/network"
@@ -178,7 +178,7 @@ type GossipSubParams struct {
 	// OpportunisticGraftTicks is the number of heartbeat ticks for attempting to improve the mesh
 	// with opportunistic grafting. Every OpportunisticGraftTicks we will attempt to select some
 	// high-scoring mesh peers to replace lower-scoring ones, if the median score of our mesh peers falls
-	// below a threshold (see https://godoc.org/github.com/libp2p/go-libp2p-pubsub#PeerScoreThresholds).
+	// below a threshold (see https://godoc.org/github.com/ME-MotherEarth/go-libp2p-pubsub#PeerScoreThresholds).
 	OpportunisticGraftTicks uint64
 
 	// OpportunisticGraftPeers is the number of peers to opportunistically graft.

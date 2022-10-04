@@ -10,7 +10,7 @@ import (
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/p2p/net/connmgr"
 
-	pb "github.com/libp2p/go-libp2p-pubsub/pb"
+	pb "github.com/ME-MotherEarth/go-libp2p-pubsub/pb"
 )
 
 func TestTagTracerMeshTags(t *testing.T) {

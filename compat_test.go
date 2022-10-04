@@ -3,8 +3,8 @@ package pubsub
 import (
 	"testing"
 
-	compat_pb "github.com/libp2p/go-libp2p-pubsub/compat"
-	pb "github.com/libp2p/go-libp2p-pubsub/pb"
+	compat_pb "github.com/ME-MotherEarth/go-libp2p-pubsub/compat"
+	pb "github.com/ME-MotherEarth/go-libp2p-pubsub/pb"
 )
 
 func TestMultitopicMessageCompatibility(t *testing.T) {

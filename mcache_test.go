@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"testing"
 
-	pb "github.com/libp2p/go-libp2p-pubsub/pb"
+	pb "github.com/ME-MotherEarth/go-libp2p-pubsub/pb"
 )
 
 func TestMessageCache(t *testing.T) {

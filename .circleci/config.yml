@@ -40,7 +40,7 @@ jobs:
         description: gotestsum format. https://github.com/gotestyourself/gotestsum#format
       coverage:
         type: string
-        default: -coverprofile=coverage.txt -coverpkg=github.com/libp2p/go-libp2p-pubsub
+        default: -coverprofile=coverage.txt -coverpkg=github.com/ME-MotherEarth/go-libp2p-pubsub
         description: Coverage flag. Set to the empty string to disable.
       codecov-upload:
         type: boolean
@@ -67,7 +67,7 @@ jobs:
               -- \
               << parameters.coverage >> \
               << parameters.go-test-flags >> \
-              github.com/libp2p/go-libp2p-pubsub
+              github.com/ME-MotherEarth/go-libp2p-pubsub
           no_output_timeout: 30m
       - store_test_results:
           path: /tmp/test-reports
