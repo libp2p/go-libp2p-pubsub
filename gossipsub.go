@@ -204,10 +204,22 @@ type GossipSubParams struct {
 	IWantFollowupTime time.Duration
 }
 
-// NewGossipSub returns a new PubSub object using GossipSubRouter as the router.
+// NewGossipSub returns a new PubSub object using the default GossipSubRouter as the router.
 func NewGossipSub(ctx context.Context, h host.Host, opts ...Option) (*PubSub, error) {
+	rt := DefaultGossipSubRouter(h)
+	opts = append(opts, WithRawTracer(rt.tagTracer))
+	return NewGossipSubWithRouter(ctx, h, rt, opts...)
+}
+
+// NewGossipSubWithRouter returns a new PubSub object using the given router.
+func NewGossipSubWithRouter(ctx context.Context, h host.Host, rt PubSubRouter, opts ...Option) (*PubSub, error) {
+	return NewPubSub(ctx, h, rt, opts...)
+}
+
+// DefaultGossipSubRouter returns a new GossipSubRouter with default parameters.
+func DefaultGossipSubRouter(h host.Host) *GossipSubRouter {
 	params := DefaultGossipSubParams()
-	rt := &GossipSubRouter{
+	return &GossipSubRouter{
 		peers:     make(map[peer.ID]protocol.ID),
 		mesh:      make(map[string]map[peer.ID]struct{}),
 		fanout:    make(map[string]map[peer.ID]struct{}),
@@ -225,10 +237,6 @@ func NewGossipSub(ctx context.Context, h host.Host, opts ...Option) (*PubSub, er
 		tagTracer: newTagTracer(h.ConnManager()),
 		params:    params,
 	}
-
-	// hook the tag tracer
-	opts = append(opts, WithRawTracer(rt.tagTracer))
-	return NewPubSub(ctx, h, rt, opts...)
 }
 
 // DefaultGossipSubParams returns the default gossip sub parameters
@@ -1907,6 +1915,10 @@ func (gs *GossipSubRouter) getPeers(topic string, count int, filter func(peer.ID
 	}
 
 	return peers
+}
+
+func (gs *GossipSubRouter) WithTagTracerPubsubOption() Option {
+	return WithRawTracer(gs.tagTracer)
 }
 
 func peerListToMap(peers []peer.ID) map[peer.ID]struct{} {
