@@ -1917,7 +1917,11 @@ func (gs *GossipSubRouter) getPeers(topic string, count int, filter func(peer.ID
 	return peers
 }
 
-func (gs *GossipSubRouter) WithTagTracerPubsubOption() Option {
+// WithDefaultTagTracer returns the tag tracer of the GossipSubRouter as a PubSub option.
+// This is useful for cases where the GossipSubRouter is instantiated externally, and is
+// injected into the GossipSub constructor as a dependency. This allows the tag tracer to be
+// also injected into the GossipSub constructor as a PubSub option dependency.
+func (gs *GossipSubRouter) WithDefaultTagTracer() Option {
 	return WithRawTracer(gs.tagTracer)
 }
 
