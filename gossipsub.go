@@ -224,7 +224,7 @@ type GossipSubRouterOption func(*GossipSubRouter) error
 // DefaultGossipSubRouter returns a new GossipSubRouter with default parameters.
 func DefaultGossipSubRouter(h host.Host, opts ...GossipSubRouterOption) (*GossipSubRouter, error) {
 	params := DefaultGossipSubParams()
-	return &GossipSubRouter{
+	rt := &GossipSubRouter{
 		peers:     make(map[peer.ID]protocol.ID),
 		mesh:      make(map[string]map[peer.ID]struct{}),
 		fanout:    make(map[string]map[peer.ID]struct{}),
