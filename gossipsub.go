@@ -224,7 +224,7 @@ type GossipSubRouterOption func(*GossipSubRouter) error
 // DefaultGossipSubRouter returns a new GossipSubRouter with default parameters.
 func DefaultGossipSubRouter(h host.Host, opts ...GossipSubRouterOption) (*GossipSubRouter, error) {
 	params := DefaultGossipSubParams()
-	rt := &GossipSubRouter{
+	return &GossipSubRouter{
 		peers:     make(map[peer.ID]protocol.ID),
 		mesh:      make(map[string]map[peer.ID]struct{}),
 		fanout:    make(map[string]map[peer.ID]struct{}),
@@ -1927,10 +1927,6 @@ func (gs *GossipSubRouter) getPeers(topic string, count int, filter func(peer.ID
 	return peers
 }
 
-func (gs *GossipSubRouter) WithTagTracerPubsubOption() Option {
-	return WithRawTracer(gs.tagTracer)
-}
-
 func (gs *GossipSubRouter) SetPeerScore(score *PeerScore) {
 	gs.score = score
 }
@@ -1969,6 +1965,14 @@ func (gs *GossipSubRouter) SetPeerGater(gater *PeerGater) {
 
 func (gs *GossipSubRouter) GetPeerGater() *PeerGater {
 	return gs.gate
+}
+
+// WithDefaultTagTracer returns the tag tracer of the GossipSubRouter as a PubSub option.
+// This is useful for cases where the GossipSubRouter is instantiated externally, and is
+// injected into the GossipSub constructor as a dependency. This allows the tag tracer to be
+// also injected into the GossipSub constructor as a PubSub option dependency.
+func (gs *GossipSubRouter) WithDefaultTagTracer() Option {
+	return WithRawTracer(gs.tagTracer)
 }
 
 func peerListToMap(peers []peer.ID) map[peer.ID]struct{} {
