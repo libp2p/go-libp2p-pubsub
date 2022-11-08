@@ -149,26 +149,31 @@ type TopicScoreSnapshot struct {
 //     components for debugging peer scoring.
 //
 // This option must be passed _after_ the WithPeerScore option.
-func WithPeerScoreInspect(inspect interface{}, period time.Duration) GossipSubRouterOption {
-	return func(gs *GossipSubRouter) error {
-		if gs.score == nil {
+func WithPeerScoreInspect(inspect interface{}, period time.Duration) Option {
+	return func(ps *PubSub) error {
+		gs, ok := ps.rt.(GossipPubSubRouter)
+		if !ok {
+			return fmt.Errorf("pubsub router is not gossipsub")
+		}
+
+		if gs.GetPeerScore() == nil {
 			return fmt.Errorf("peer scoring is not enabled")
 		}
 
-		if gs.score.inspect != nil || gs.score.inspectEx != nil {
+		if gs.GetPeerScore().inspect != nil || gs.GetPeerScore().inspectEx != nil {
 			return fmt.Errorf("duplicate peer score inspector")
 		}
 
 		switch i := inspect.(type) {
 		case PeerScoreInspectFn:
-			gs.score.inspect = i
+			gs.GetPeerScore().inspect = i
 		case ExtendedPeerScoreInspectFn:
-			gs.score.inspectEx = i
+			gs.GetPeerScore().inspectEx = i
 		default:
 			return fmt.Errorf("unknown peer score insector type: %v", inspect)
 		}
 
-		gs.score.inspectPeriod = period
+		gs.GetPeerScore().inspectPeriod = period
 
 		return nil
 	}

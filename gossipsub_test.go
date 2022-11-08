@@ -2115,8 +2115,7 @@ func TestGossipsubPeerScoreInspect(t *testing.T) {
 
 	hosts := getNetHosts(t, ctx, 2)
 	inspector := &mockPeerScoreInspector{}
-	router1 := getGossipSubRouter(hosts[0], WithPeerScoreInspect(inspector.inspect, time.Second))
-	psub1 := getGossipSubWithRouter(ctx, hosts[0], router1,
+	psub1 := getGossipSub(ctx, hosts[0],
 		WithPeerScore(
 			&PeerScoreParams{
 				Topics: map[string]*TopicScoreParams{
@@ -2139,6 +2138,7 @@ func TestGossipsubPeerScoreInspect(t *testing.T) {
 				PublishThreshold:  -10,
 				GraylistThreshold: -1000,
 			}),
+		WithPeerScoreInspect(inspector.inspect, time.Second),
 	)
 	psub2 := getGossipSub(ctx, hosts[1])
 	psubs := []*PubSub{psub1, psub2}

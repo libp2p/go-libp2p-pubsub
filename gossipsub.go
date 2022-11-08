@@ -1936,10 +1936,10 @@ func (gs *GossipSubRouter) GetPeerScore() *PeerScore {
 }
 
 func (gs *GossipSubRouter) SetPeerScoreThresholds(thresholds *PeerScoreThresholds) {
+	gs.gossipThreshold = thresholds.GossipThreshold
 	gs.publishThreshold = thresholds.PublishThreshold
 	gs.graylistThreshold = thresholds.GraylistThreshold
 	gs.acceptPXThreshold = thresholds.AcceptPXThreshold
-	gs.gossipThreshold = thresholds.GossipThreshold
 	gs.opportunisticGraftThreshold = thresholds.OpportunisticGraftThreshold
 }
 
