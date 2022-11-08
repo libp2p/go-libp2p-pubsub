@@ -206,7 +206,10 @@ type GossipSubParams struct {
 
 // NewGossipSub returns a new PubSub object using the default GossipSubRouter as the router.
 func NewGossipSub(ctx context.Context, h host.Host, opts ...Option) (*PubSub, error) {
-	rt := DefaultGossipSubRouter(h)
+	rt, err := DefaultGossipSubRouter(h)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create default gossipsub router: %w", err)
+	}
 	opts = append(opts, WithRawTracer(rt.tagTracer))
 	return NewGossipSubWithRouter(ctx, h, rt, opts...)
 }
@@ -216,10 +219,12 @@ func NewGossipSubWithRouter(ctx context.Context, h host.Host, rt PubSubRouter, o
 	return NewPubSub(ctx, h, rt, opts...)
 }
 
+type GossipSubRouterOption func(*GossipSubRouter) error
+
 // DefaultGossipSubRouter returns a new GossipSubRouter with default parameters.
-func DefaultGossipSubRouter(h host.Host) *GossipSubRouter {
+func DefaultGossipSubRouter(h host.Host, opts ...GossipSubRouterOption) (*GossipSubRouter, error) {
 	params := DefaultGossipSubParams()
-	return &GossipSubRouter{
+	rt := &GossipSubRouter{
 		peers:     make(map[peer.ID]protocol.ID),
 		mesh:      make(map[string]map[peer.ID]struct{}),
 		fanout:    make(map[string]map[peer.ID]struct{}),
@@ -237,6 +242,14 @@ func DefaultGossipSubRouter(h host.Host) *GossipSubRouter {
 		tagTracer: newTagTracer(h.ConnManager()),
 		params:    params,
 	}
+
+	for _, opt := range opts {
+		if err := opt(rt); err != nil {
+			return nil, fmt.Errorf("failed to apply gossipsub router option: %w", err)
+		}
+	}
+
+	return rt, nil
 }
 
 // DefaultGossipSubParams returns the default gossip sub parameters
@@ -277,7 +290,7 @@ func DefaultGossipSubParams() GossipSubParams {
 // WithPeerScore is a gossipsub router option that enables peer scoring.
 func WithPeerScore(params *PeerScoreParams, thresholds *PeerScoreThresholds) Option {
 	return func(ps *PubSub) error {
-		gs, ok := ps.rt.(*GossipSubRouter)
+		gs, ok := ps.rt.(GossipPubSubRouter)
 		if !ok {
 			return fmt.Errorf("pubsub router is not gossipsub")
 		}
@@ -294,21 +307,17 @@ func WithPeerScore(params *PeerScoreParams, thresholds *PeerScoreThresholds) Opt
 			return err
 		}
 
-		gs.score = newPeerScore(params)
-		gs.gossipThreshold = thresholds.GossipThreshold
-		gs.publishThreshold = thresholds.PublishThreshold
-		gs.graylistThreshold = thresholds.GraylistThreshold
-		gs.acceptPXThreshold = thresholds.AcceptPXThreshold
-		gs.opportunisticGraftThreshold = thresholds.OpportunisticGraftThreshold
+		gs.SetPeerScore(newPeerScore(params))
+		gs.SetPeerScoreThresholds(thresholds)
 
-		gs.gossipTracer = newGossipTracer()
+		gs.SetGossipTracer(newGossipTracer())
 
 		// hook the tracer
 		if ps.tracer != nil {
-			ps.tracer.raw = append(ps.tracer.raw, gs.score, gs.gossipTracer)
+			ps.tracer.raw = append(ps.tracer.raw, gs.GetPeerScore(), gs.GetGossipTracer())
 		} else {
 			ps.tracer = &pubsubTracer{
-				raw:   []RawTracer{gs.score, gs.gossipTracer},
+				raw:   []RawTracer{gs.GetPeerScore(), gs.GetGossipTracer()},
 				pid:   ps.host.ID(),
 				idGen: ps.idGen,
 			}
@@ -321,15 +330,9 @@ func WithPeerScore(params *PeerScoreParams, thresholds *PeerScoreThresholds) Opt
 // WithFloodPublish is a gossipsub router option that enables flood publishing.
 // When this is enabled, published messages are forwarded to all peers with score >=
 // to publishThreshold
-func WithFloodPublish(floodPublish bool) Option {
-	return func(ps *PubSub) error {
-		gs, ok := ps.rt.(*GossipSubRouter)
-		if !ok {
-			return fmt.Errorf("pubsub router is not gossipsub")
-		}
-
+func WithFloodPublish(floodPublish bool) GossipSubRouterOption {
+	return func(gs *GossipSubRouter) error {
 		gs.floodPublish = floodPublish
-
 		return nil
 	}
 }
@@ -337,15 +340,9 @@ func WithFloodPublish(floodPublish bool) Option {
 // WithPeerExchange is a gossipsub router option that enables Peer eXchange on PRUNE.
 // This should generally be enabled in bootstrappers and well connected/trusted nodes
 // used for bootstrapping.
-func WithPeerExchange(doPX bool) Option {
-	return func(ps *PubSub) error {
-		gs, ok := ps.rt.(*GossipSubRouter)
-		if !ok {
-			return fmt.Errorf("pubsub router is not gossipsub")
-		}
-
+func WithPeerExchange(doPX bool) GossipSubRouterOption {
+	return func(gs *GossipSubRouter) error {
 		gs.doPX = doPX
-
 		return nil
 	}
 }
@@ -357,7 +354,7 @@ func WithPeerExchange(doPX bool) Option {
 // symmetrically configured at both ends.
 func WithDirectPeers(pis []peer.AddrInfo) Option {
 	return func(ps *PubSub) error {
-		gs, ok := ps.rt.(*GossipSubRouter)
+		gs, ok := ps.rt.(GossipPubSubRouter)
 		if !ok {
 			return fmt.Errorf("pubsub router is not gossipsub")
 		}
@@ -368,10 +365,10 @@ func WithDirectPeers(pis []peer.AddrInfo) Option {
 			ps.host.Peerstore().AddAddrs(pi.ID, pi.Addrs, peerstore.PermanentAddrTTL)
 		}
 
-		gs.direct = direct
+		gs.SetDirectPeers(direct)
 
-		if gs.tagTracer != nil {
-			gs.tagTracer.direct = direct
+		if gs.GetTagTracer() != nil {
+			gs.GetTagTracer().direct = direct
 		}
 
 		return nil
@@ -382,12 +379,8 @@ func WithDirectPeers(pis []peer.AddrInfo) Option {
 // heartbeat ticks between attempting to reconnect direct peers that are not
 // currently connected. A "tick" is based on the heartbeat interval, which is
 // 1s by default. The default value for direct connect ticks is 300.
-func WithDirectConnectTicks(t uint64) Option {
-	return func(ps *PubSub) error {
-		gs, ok := ps.rt.(*GossipSubRouter)
-		if !ok {
-			return fmt.Errorf("pubsub router is not gossipsub")
-		}
+func WithDirectConnectTicks(t uint64) GossipSubRouterOption {
+	return func(gs *GossipSubRouter) error {
 		gs.params.DirectConnectTicks = t
 		return nil
 	}
@@ -395,12 +388,8 @@ func WithDirectConnectTicks(t uint64) Option {
 
 // WithGossipSubParams is a gossip sub router option that allows a custom
 // config to be set when instantiating the gossipsub router.
-func WithGossipSubParams(cfg GossipSubParams) Option {
-	return func(ps *PubSub) error {
-		gs, ok := ps.rt.(*GossipSubRouter)
-		if !ok {
-			return fmt.Errorf("pubsub router is not gossipsub")
-		}
+func WithGossipSubParams(cfg GossipSubParams) GossipSubRouterOption {
+	return func(gs *GossipSubRouter) error {
 		// Overwrite current config and associated variables in the router.
 		gs.params = cfg
 		gs.connect = make(chan connectInfo, cfg.MaxPendingConnections)
@@ -408,6 +397,25 @@ func WithGossipSubParams(cfg GossipSubParams) Option {
 
 		return nil
 	}
+}
+
+type GossipPubSubRouter interface {
+	PubSubRouter
+
+	SetPeerScore(*PeerScore)
+	GetPeerScore() *PeerScore
+
+	SetPeerScoreThresholds(*PeerScoreThresholds)
+
+	SetGossipTracer(*GossipTracer)
+	GetGossipTracer() *GossipTracer
+
+	GetTagTracer() *TagTracer
+
+	SetDirectPeers(map[peer.ID]struct{})
+
+	SetPeerGater(*PeerGater)
+	GetPeerGater() *PeerGater
 }
 
 // GossipSubRouter is a router that implements the gossipsub protocol.
@@ -437,10 +445,10 @@ type GossipSubRouter struct {
 
 	mcache       *MessageCache
 	tracer       *pubsubTracer
-	score        *peerScore
-	gossipTracer *gossipTracer
-	tagTracer    *tagTracer
-	gate         *peerGater
+	score        *PeerScore
+	gossipTracer *GossipTracer
+	tagTracer    *TagTracer
+	gate         *PeerGater
 
 	// config for gossipsub parameters
 	params GossipSubParams
@@ -475,6 +483,8 @@ type GossipSubRouter struct {
 	// clean up -- eg backoff clean up.
 	heartbeatTicks uint64
 }
+
+var _ GossipPubSubRouter = (*GossipSubRouter)(nil)
 
 type connectInfo struct {
 	p   peer.ID
@@ -1919,6 +1929,46 @@ func (gs *GossipSubRouter) getPeers(topic string, count int, filter func(peer.ID
 
 func (gs *GossipSubRouter) WithTagTracerPubsubOption() Option {
 	return WithRawTracer(gs.tagTracer)
+}
+
+func (gs *GossipSubRouter) SetPeerScore(score *PeerScore) {
+	gs.score = score
+}
+
+func (gs *GossipSubRouter) GetPeerScore() *PeerScore {
+	return gs.score
+}
+
+func (gs *GossipSubRouter) SetPeerScoreThresholds(thresholds *PeerScoreThresholds) {
+	gs.publishThreshold = thresholds.PublishThreshold
+	gs.graylistThreshold = thresholds.GraylistThreshold
+	gs.acceptPXThreshold = thresholds.AcceptPXThreshold
+	gs.gossipThreshold = thresholds.GossipThreshold
+	gs.opportunisticGraftThreshold = thresholds.OpportunisticGraftThreshold
+}
+
+func (gs *GossipSubRouter) SetGossipTracer(tracer *GossipTracer) {
+	gs.gossipTracer = tracer
+}
+
+func (gs *GossipSubRouter) GetGossipTracer() *GossipTracer {
+	return gs.gossipTracer
+}
+
+func (gs *GossipSubRouter) GetTagTracer() *TagTracer {
+	return gs.tagTracer
+}
+
+func (gs *GossipSubRouter) SetDirectPeers(direct map[peer.ID]struct{}) {
+	gs.direct = direct
+}
+
+func (gs *GossipSubRouter) SetPeerGater(gater *PeerGater) {
+	gs.gate = gater
+}
+
+func (gs *GossipSubRouter) GetPeerGater() *PeerGater {
+	return gs.gate
 }
 
 func peerListToMap(peers []peer.ID) map[peer.ID]struct{} {

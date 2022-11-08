@@ -244,7 +244,7 @@ func TestGossipSubDiscoveryAfterBootstrap(t *testing.T) {
 			s = server2
 		}
 		disc := &mockDiscoveryClient{h, s}
-		ps := getGossipsub(ctx, h, WithDiscovery(disc, WithDiscoveryOpts(discOpts...)))
+		ps := getGossipSub(ctx, h, WithDiscovery(disc, WithDiscoveryOpts(discOpts...)))
 		psubs[i] = ps
 		topicHandlers[i], _ = ps.Join(topic)
 	}
