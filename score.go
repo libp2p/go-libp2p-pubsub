@@ -61,7 +61,7 @@ type topicStats struct {
 	invalidMessageDeliveries float64
 }
 
-type peerScore struct {
+type PeerScore struct {
 	sync.Mutex
 
 	// the score parameters
@@ -85,7 +85,7 @@ type peerScore struct {
 	inspectPeriod time.Duration
 }
 
-var _ RawTracer = (*peerScore)(nil)
+var _ RawTracer = (*PeerScore)(nil)
 
 type messageDeliveries struct {
 	seenMsgTTL time.Duration
@@ -151,41 +151,41 @@ type TopicScoreSnapshot struct {
 // This option must be passed _after_ the WithPeerScore option.
 func WithPeerScoreInspect(inspect interface{}, period time.Duration) Option {
 	return func(ps *PubSub) error {
-		gs, ok := ps.rt.(*GossipSubRouter)
+		gs, ok := ps.rt.(GossipPubSubRouter)
 		if !ok {
 			return fmt.Errorf("pubsub router is not gossipsub")
 		}
 
-		if gs.score == nil {
+		if gs.GetPeerScore() == nil {
 			return fmt.Errorf("peer scoring is not enabled")
 		}
 
-		if gs.score.inspect != nil || gs.score.inspectEx != nil {
+		if gs.GetPeerScore().inspect != nil || gs.GetPeerScore().inspectEx != nil {
 			return fmt.Errorf("duplicate peer score inspector")
 		}
 
 		switch i := inspect.(type) {
 		case PeerScoreInspectFn:
-			gs.score.inspect = i
+			gs.GetPeerScore().inspect = i
 		case ExtendedPeerScoreInspectFn:
-			gs.score.inspectEx = i
+			gs.GetPeerScore().inspectEx = i
 		default:
 			return fmt.Errorf("unknown peer score insector type: %v", inspect)
 		}
 
-		gs.score.inspectPeriod = period
+		gs.GetPeerScore().inspectPeriod = period
 
 		return nil
 	}
 }
 
 // implementation
-func newPeerScore(params *PeerScoreParams) *peerScore {
+func newPeerScore(params *PeerScoreParams) *PeerScore {
 	seenMsgTTL := params.SeenMsgTTL
 	if seenMsgTTL == 0 {
 		seenMsgTTL = TimeCacheDuration
 	}
-	return &peerScore{
+	return &PeerScore{
 		params:     params,
 		peerStats:  make(map[peer.ID]*peerStats),
 		peerIPs:    make(map[string]map[peer.ID]struct{}),
@@ -198,7 +198,7 @@ func newPeerScore(params *PeerScoreParams) *peerScore {
 // If the topic previously had parameters and the parameters are lowering delivery caps,
 // then the score counters are recapped appropriately.
 // Note: assumes that the topic score parameters have already been validated
-func (ps *peerScore) SetTopicScoreParams(topic string, p *TopicScoreParams) error {
+func (ps *PeerScore) SetTopicScoreParams(topic string, p *TopicScoreParams) error {
 	ps.Lock()
 	defer ps.Unlock()
 
@@ -241,7 +241,7 @@ func (ps *peerScore) SetTopicScoreParams(topic string, p *TopicScoreParams) erro
 }
 
 // router interface
-func (ps *peerScore) Start(gs *GossipSubRouter) {
+func (ps *PeerScore) Start(gs *GossipSubRouter) {
 	if ps == nil {
 		return
 	}
@@ -251,7 +251,7 @@ func (ps *peerScore) Start(gs *GossipSubRouter) {
 	go ps.background(gs.p.ctx)
 }
 
-func (ps *peerScore) Score(p peer.ID) float64 {
+func (ps *PeerScore) Score(p peer.ID) float64 {
 	if ps == nil {
 		return 0
 	}
@@ -262,7 +262,7 @@ func (ps *peerScore) Score(p peer.ID) float64 {
 	return ps.score(p)
 }
 
-func (ps *peerScore) score(p peer.ID) float64 {
+func (ps *PeerScore) score(p peer.ID) float64 {
 	pstats, ok := ps.peerStats[p]
 	if !ok {
 		return 0
@@ -341,7 +341,7 @@ func (ps *peerScore) score(p peer.ID) float64 {
 	return score
 }
 
-func (ps *peerScore) ipColocationFactor(p peer.ID) float64 {
+func (ps *PeerScore) ipColocationFactor(p peer.ID) float64 {
 	pstats, ok := ps.peerStats[p]
 	if !ok {
 		return 0
@@ -388,7 +388,7 @@ loop:
 }
 
 // behavioural pattern penalties
-func (ps *peerScore) AddPenalty(p peer.ID, count int) {
+func (ps *PeerScore) AddPenalty(p peer.ID, count int) {
 	if ps == nil {
 		return
 	}
@@ -405,7 +405,7 @@ func (ps *peerScore) AddPenalty(p peer.ID, count int) {
 }
 
 // periodic maintenance
-func (ps *peerScore) background(ctx context.Context) {
+func (ps *PeerScore) background(ctx context.Context) {
 	refreshScores := time.NewTicker(ps.params.DecayInterval)
 	defer refreshScores.Stop()
 
@@ -445,7 +445,7 @@ func (ps *peerScore) background(ctx context.Context) {
 }
 
 // inspectScores dumps all tracked scores into the inspect function.
-func (ps *peerScore) inspectScores() {
+func (ps *PeerScore) inspectScores() {
 	if ps.inspect != nil {
 		ps.inspectScoresSimple()
 	}
@@ -454,7 +454,7 @@ func (ps *peerScore) inspectScores() {
 	}
 }
 
-func (ps *peerScore) inspectScoresSimple() {
+func (ps *PeerScore) inspectScoresSimple() {
 	ps.Lock()
 	scores := make(map[peer.ID]float64, len(ps.peerStats))
 	for p := range ps.peerStats {
@@ -469,7 +469,7 @@ func (ps *peerScore) inspectScoresSimple() {
 	go ps.inspect(scores)
 }
 
-func (ps *peerScore) inspectScoresExtended() {
+func (ps *PeerScore) inspectScoresExtended() {
 	ps.Lock()
 	scores := make(map[peer.ID]*PeerScoreSnapshot, len(ps.peerStats))
 	for p, pstats := range ps.peerStats {
@@ -501,7 +501,7 @@ func (ps *peerScore) inspectScoresExtended() {
 
 // refreshScores decays scores, and purges score records for disconnected peers,
 // once their expiry has elapsed.
-func (ps *peerScore) refreshScores() {
+func (ps *PeerScore) refreshScores() {
 	ps.Lock()
 	defer ps.Unlock()
 
@@ -565,7 +565,7 @@ func (ps *peerScore) refreshScores() {
 }
 
 // refreshIPs refreshes IPs we know of peers we're tracking.
-func (ps *peerScore) refreshIPs() {
+func (ps *PeerScore) refreshIPs() {
 	ps.Lock()
 	defer ps.Unlock()
 
@@ -584,7 +584,7 @@ func (ps *peerScore) refreshIPs() {
 	}
 }
 
-func (ps *peerScore) gcDeliveryRecords() {
+func (ps *PeerScore) gcDeliveryRecords() {
 	ps.Lock()
 	defer ps.Unlock()
 
@@ -592,7 +592,7 @@ func (ps *peerScore) gcDeliveryRecords() {
 }
 
 // tracer interface
-func (ps *peerScore) AddPeer(p peer.ID, proto protocol.ID) {
+func (ps *PeerScore) AddPeer(p peer.ID, proto protocol.ID) {
 	ps.Lock()
 	defer ps.Unlock()
 
@@ -608,7 +608,7 @@ func (ps *peerScore) AddPeer(p peer.ID, proto protocol.ID) {
 	pstats.ips = ips
 }
 
-func (ps *peerScore) RemovePeer(p peer.ID) {
+func (ps *PeerScore) RemovePeer(p peer.ID) {
 	ps.Lock()
 	defer ps.Unlock()
 
@@ -643,10 +643,10 @@ func (ps *peerScore) RemovePeer(p peer.ID) {
 	pstats.expire = time.Now().Add(ps.params.RetainScore)
 }
 
-func (ps *peerScore) Join(topic string)  {}
-func (ps *peerScore) Leave(topic string) {}
+func (ps *PeerScore) Join(topic string)  {}
+func (ps *PeerScore) Leave(topic string) {}
 
-func (ps *peerScore) Graft(p peer.ID, topic string) {
+func (ps *PeerScore) Graft(p peer.ID, topic string) {
 	ps.Lock()
 	defer ps.Unlock()
 
@@ -666,7 +666,7 @@ func (ps *peerScore) Graft(p peer.ID, topic string) {
 	tstats.meshMessageDeliveriesActive = false
 }
 
-func (ps *peerScore) Prune(p peer.ID, topic string) {
+func (ps *PeerScore) Prune(p peer.ID, topic string) {
 	ps.Lock()
 	defer ps.Unlock()
 
@@ -690,7 +690,7 @@ func (ps *peerScore) Prune(p peer.ID, topic string) {
 	tstats.inMesh = false
 }
 
-func (ps *peerScore) ValidateMessage(msg *Message) {
+func (ps *PeerScore) ValidateMessage(msg *Message) {
 	ps.Lock()
 	defer ps.Unlock()
 
@@ -699,7 +699,7 @@ func (ps *peerScore) ValidateMessage(msg *Message) {
 	_ = ps.deliveries.getRecord(ps.idGen.ID(msg))
 }
 
-func (ps *peerScore) DeliverMessage(msg *Message) {
+func (ps *PeerScore) DeliverMessage(msg *Message) {
 	ps.Lock()
 	defer ps.Unlock()
 
@@ -725,7 +725,7 @@ func (ps *peerScore) DeliverMessage(msg *Message) {
 	}
 }
 
-func (ps *peerScore) RejectMessage(msg *Message, reason string) {
+func (ps *PeerScore) RejectMessage(msg *Message, reason string) {
 	ps.Lock()
 	defer ps.Unlock()
 
@@ -792,7 +792,7 @@ func (ps *peerScore) RejectMessage(msg *Message, reason string) {
 	drec.peers = nil
 }
 
-func (ps *peerScore) DuplicateMessage(msg *Message) {
+func (ps *PeerScore) DuplicateMessage(msg *Message) {
 	ps.Lock()
 	defer ps.Unlock()
 
@@ -826,15 +826,15 @@ func (ps *peerScore) DuplicateMessage(msg *Message) {
 	}
 }
 
-func (ps *peerScore) ThrottlePeer(p peer.ID) {}
+func (ps *PeerScore) ThrottlePeer(p peer.ID) {}
 
-func (ps *peerScore) RecvRPC(rpc *RPC) {}
+func (ps *PeerScore) RecvRPC(rpc *RPC) {}
 
-func (ps *peerScore) SendRPC(rpc *RPC, p peer.ID) {}
+func (ps *PeerScore) SendRPC(rpc *RPC, p peer.ID) {}
 
-func (ps *peerScore) DropRPC(rpc *RPC, p peer.ID) {}
+func (ps *PeerScore) DropRPC(rpc *RPC, p peer.ID) {}
 
-func (ps *peerScore) UndeliverableMessage(msg *Message) {}
+func (ps *PeerScore) UndeliverableMessage(msg *Message) {}
 
 // message delivery records
 func (d *messageDeliveries) getRecord(id string) *deliveryRecord {
@@ -898,7 +898,7 @@ func (pstats *peerStats) getTopicStats(topic string, params *PeerScoreParams) (*
 
 // markInvalidMessageDelivery increments the "invalid message deliveries"
 // counter for all scored topics the message is published in.
-func (ps *peerScore) markInvalidMessageDelivery(p peer.ID, msg *Message) {
+func (ps *PeerScore) markInvalidMessageDelivery(p peer.ID, msg *Message) {
 	pstats, ok := ps.peerStats[p]
 	if !ok {
 		return
@@ -916,7 +916,7 @@ func (ps *peerScore) markInvalidMessageDelivery(p peer.ID, msg *Message) {
 // markFirstMessageDelivery increments the "first message deliveries" counter
 // for all scored topics the message is published in, as well as the "mesh
 // message deliveries" counter, if the peer is in the mesh for the topic.
-func (ps *peerScore) markFirstMessageDelivery(p peer.ID, msg *Message) {
+func (ps *PeerScore) markFirstMessageDelivery(p peer.ID, msg *Message) {
 	pstats, ok := ps.peerStats[p]
 	if !ok {
 		return
@@ -948,7 +948,7 @@ func (ps *peerScore) markFirstMessageDelivery(p peer.ID, msg *Message) {
 // markDuplicateMessageDelivery increments the "mesh message deliveries" counter
 // for messages we've seen before, as long the message was received within the
 // P3 window.
-func (ps *peerScore) markDuplicateMessageDelivery(p peer.ID, msg *Message, validated time.Time) {
+func (ps *PeerScore) markDuplicateMessageDelivery(p peer.ID, msg *Message, validated time.Time) {
 	pstats, ok := ps.peerStats[p]
 	if !ok {
 		return
@@ -981,7 +981,7 @@ func (ps *peerScore) markDuplicateMessageDelivery(p peer.ID, msg *Message, valid
 }
 
 // getIPs gets the current IPs for a peer.
-func (ps *peerScore) getIPs(p peer.ID) []string {
+func (ps *PeerScore) getIPs(p peer.ID) []string {
 	// in unit tests this can be nil
 	if ps.host == nil {
 		return nil
@@ -1025,7 +1025,7 @@ func (ps *peerScore) getIPs(p peer.ID) []string {
 
 // setIPs adds tracking for the new IPs in the list, and removes tracking from
 // the obsolete IPs.
-func (ps *peerScore) setIPs(p peer.ID, newips, oldips []string) {
+func (ps *PeerScore) setIPs(p peer.ID, newips, oldips []string) {
 addNewIPs:
 	// add the new IPs to the tracking
 	for _, ip := range newips {
@@ -1066,7 +1066,7 @@ removeOldIPs:
 }
 
 // removeIPs removes an IP list from the tracking list for a peer.
-func (ps *peerScore) removeIPs(p peer.ID, ips []string) {
+func (ps *PeerScore) removeIPs(p peer.ID, ips []string) {
 	for _, ip := range ips {
 		peers, ok := ps.peerIPs[ip]
 		if !ok {

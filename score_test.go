@@ -811,7 +811,7 @@ func TestScoreBehaviourPenalty(t *testing.T) {
 
 	peerA := peer.ID("A")
 
-	var ps *peerScore
+	var ps *PeerScore
 
 	// first check AddPenalty on a nil peerScore
 	ps.AddPenalty(peerA, 1)
@@ -1069,7 +1069,7 @@ func withinVariance(score float64, expected float64, variance float64) bool {
 }
 
 // hack to set IPs for a peer without having to spin up real hosts with shared IPs
-func setIPsForPeer(t *testing.T, ps *peerScore, p peer.ID, ips ...string) {
+func setIPsForPeer(t *testing.T, ps *PeerScore, p peer.ID, ips ...string) {
 	t.Helper()
 	ps.setIPs(p, ips, []string{})
 	pstats, ok := ps.peerStats[p]

@@ -56,18 +56,18 @@ func (t *Topic) SetScoreParams(p *TopicScoreParams) error {
 
 	result := make(chan error, 1)
 	update := func() {
-		gs, ok := t.p.rt.(*GossipSubRouter)
+		gs, ok := t.p.rt.(GossipPubSubRouter)
 		if !ok {
 			result <- fmt.Errorf("pubsub router is not gossipsub")
 			return
 		}
 
-		if gs.score == nil {
+		if gs.GetPeerScore() == nil {
 			result <- fmt.Errorf("peer scoring is not enabled in router")
 			return
 		}
 
-		err := gs.score.SetTopicScoreParams(t.topic, p)
+		err := gs.GetPeerScore().SetTopicScoreParams(t.topic, p)
 		result <- err
 	}
 

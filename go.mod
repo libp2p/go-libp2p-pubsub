@@ -1,4 +1,4 @@
-module github.com/yhassanzadeh13/go-libp2p-pubsub
+module github.com/libp2p/go-libp2p-pubsub
 
 go 1.17
 

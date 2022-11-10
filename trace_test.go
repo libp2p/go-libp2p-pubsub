@@ -28,10 +28,10 @@ func testWithTracer(t *testing.T, tracer EventTracer) {
 	defer cancel()
 
 	hosts := getNetHosts(t, ctx, 20)
-	psubs := getGossipsubs(ctx, hosts,
+	routers := getGossipSubRouters(hosts, WithPeerExchange(true))
+	psubs := getGossipSubsWithRouters(ctx, hosts, routers,
 		WithEventTracer(tracer),
 		// to bootstrap from star topology
-		WithPeerExchange(true),
 		// to exercise the score paths in the tracer
 		WithPeerScore(
 			&PeerScoreParams{

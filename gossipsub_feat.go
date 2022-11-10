@@ -1,8 +1,6 @@
 package pubsub
 
 import (
-	"fmt"
-
 	"github.com/libp2p/go-libp2p/core/protocol"
 )
 
@@ -37,16 +35,10 @@ func GossipSubDefaultFeatures(feat GossipSubFeature, proto protocol.ID) bool {
 
 // WithGossipSubProtocols is a gossipsub router option that configures a custom protocol list
 // and feature test function
-func WithGossipSubProtocols(protos []protocol.ID, feature GossipSubFeatureTest) Option {
-	return func(ps *PubSub) error {
-		gs, ok := ps.rt.(*GossipSubRouter)
-		if !ok {
-			return fmt.Errorf("pubsub router is not gossipsub")
-		}
-
+func WithGossipSubProtocols(protos []protocol.ID, feature GossipSubFeatureTest) GossipSubRouterOption {
+	return func(gs *GossipSubRouter) error {
 		gs.protos = protos
 		gs.feature = feature
-
 		return nil
 	}
 }
