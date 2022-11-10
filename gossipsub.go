@@ -1805,6 +1805,12 @@ func (gs *GossipSubRouter) pushControl(p peer.ID, ctl *pb.ControlMessage) {
 	}
 }
 
+// SendControl dispatches the given set of control messages to the given peer.
+func (gs *GossipSubRouter) SendControl(p peer.ID, ctl *pb.ControlMessage) {
+	out := rpcWithControl(nil, ctl.Ihave, ctl.Iwant, ctl.Graft, ctl.Prune)
+	gs.sendRPC(p, out)
+}
+
 func (gs *GossipSubRouter) piggybackControl(p peer.ID, out *RPC, ctl *pb.ControlMessage) {
 	// check control message for staleness first
 	var tograft []*pb.ControlGraft
