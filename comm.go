@@ -6,14 +6,14 @@ import (
 	"io"
 	"time"
 
+	"github.com/gogo/protobuf/proto"
+
 	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
-
-	pb "github.com/libp2p/go-libp2p-pubsub/pb"
-
+	"github.com/libp2p/go-msgio"
 	"github.com/libp2p/go-msgio/protoio"
 
-	"github.com/gogo/protobuf/proto"
+	pb "github.com/libp2p/go-libp2p-pubsub/pb"
 )
 
 // get the initial RPC containing all of our subscriptions to send to new peers
@@ -60,11 +60,11 @@ func (p *PubSub) handleNewStream(s network.Stream) {
 		p.inboundStreamsMx.Unlock()
 	}()
 
-	r := protoio.NewDelimitedReader(s, p.maxMessageSize)
+	r := msgio.NewVarintReaderSize(s, p.maxMessageSize)
 	for {
-		rpc := new(RPC)
-		err := r.ReadMsg(&rpc.RPC)
+		msgbytes, err := r.ReadMsg()
 		if err != nil {
+			r.ReleaseMsg(msgbytes)
 			if err != io.EOF {
 				s.Reset()
 				log.Debugf("error reading rpc from %s: %s", s.Conn().RemotePeer(), err)
@@ -74,6 +74,15 @@ func (p *PubSub) handleNewStream(s network.Stream) {
 				s.Close()
 			}
 
+			return
+		}
+
+		rpc := new(RPC)
+		err = rpc.Unmarshal(msgbytes)
+		r.ReleaseMsg(msgbytes)
+		if err != nil {
+			s.Reset()
+			log.Warnf("bogus rpc from %s: %s", s.Conn().RemotePeer(), err)
 			return
 		}
 
