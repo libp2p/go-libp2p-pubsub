@@ -1829,12 +1829,6 @@ func (gs *GossipSubRouter) pushControl(p peer.ID, ctl *pb.ControlMessage) {
 	}
 }
 
-// SendControl dispatches the given set of control messages to the given peer.
-func (gs *GossipSubRouter) SendControl(p peer.ID, ctl *pb.ControlMessage) {
-	out := rpcWithControl(nil, ctl.Ihave, ctl.Iwant, ctl.Graft, ctl.Prune)
-	gs.sendRPC(p, out)
-}
-
 func (gs *GossipSubRouter) piggybackControl(p peer.ID, out *RPC, ctl *pb.ControlMessage) {
 	// check control message for staleness first
 	var tograft []*pb.ControlGraft
@@ -1947,7 +1941,11 @@ func (gs *GossipSubRouter) getPeers(topic string, count int, filter func(peer.ID
 	return peers
 }
 
-func (gs *GossipSubRouter) WithTagTracerPubsubOption() Option {
+// WithDefaultTagTracer returns the tag tracer of the GossipSubRouter as a PubSub option.
+// This is useful for cases where the GossipSubRouter is instantiated externally, and is
+// injected into the GossipSub constructor as a dependency. This allows the tag tracer to be
+// also injected into the GossipSub constructor as a PubSub option dependency.
+func (gs *GossipSubRouter) WithDefaultTagTracer() Option {
 	return WithRawTracer(gs.tagTracer)
 }
 

@@ -1,4 +1,4 @@
-module github.com/yhassanzadeh13/go-libp2p-pubsub
+module github.com/libp2p/go-libp2p-pubsub
 
 go 1.17
 
@@ -7,7 +7,6 @@ require (
 	github.com/gogo/protobuf v1.3.2
 	github.com/ipfs/go-log v1.0.5
 	github.com/libp2p/go-libp2p v0.22.0
-	github.com/libp2p/go-libp2p-pubsub v0.8.1-0.20220908052023-8866ca88a105
 	github.com/libp2p/go-libp2p-testing v0.12.0
 	github.com/libp2p/go-msgio v0.2.0
 	github.com/multiformats/go-multiaddr v0.6.0
@@ -37,7 +36,6 @@ require (
 	github.com/jbenet/go-temp-err-catcher v0.1.0 // indirect
 	github.com/klauspost/compress v1.15.1 // indirect
 	github.com/klauspost/cpuid/v2 v2.1.0 // indirect
-	github.com/kr/pretty v0.2.1 // indirect
 	github.com/libp2p/go-buffer-pool v0.1.0 // indirect
 	github.com/libp2p/go-flow-metrics v0.1.0 // indirect
 	github.com/libp2p/go-netroute v0.2.0 // indirect
@@ -88,6 +86,7 @@ require (
 	golang.org/x/sys v0.0.0-20220811171246-fbc7d0a398ab // indirect
 	golang.org/x/tools v0.1.12 // indirect
 	google.golang.org/protobuf v1.28.1 // indirect
+	gopkg.in/check.v1 v1.0.0-20201130134442-10cb98267c6c // indirect
 	gopkg.in/tomb.v1 v1.0.0-20141024135613-dd632973f1e7 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	lukechampine.com/blake3 v1.1.7 // indirect
