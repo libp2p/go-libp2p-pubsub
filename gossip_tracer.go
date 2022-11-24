@@ -9,10 +9,10 @@ import (
 	"github.com/libp2p/go-libp2p/core/protocol"
 )
 
-// GossipTracer is an internal tracer that tracks IWANT requests in order to penalize
+// gossipTracer is an internal tracer that tracks IWANT requests in order to penalize
 // peers who don't follow up on IWANT requests after an IHAVE advertisement.
 // The tracking of promises is probabilistic to avoid using too much memory.
-type GossipTracer struct {
+type gossipTracer struct {
 	sync.Mutex
 
 	idGen *msgIDGenerator
@@ -27,15 +27,15 @@ type GossipTracer struct {
 	peerPromises map[peer.ID]map[string]struct{}
 }
 
-func newGossipTracer() *GossipTracer {
-	return &GossipTracer{
+func newGossipTracer() *gossipTracer {
+	return &gossipTracer{
 		idGen:        newMsgIdGenerator(),
 		promises:     make(map[string]map[peer.ID]time.Time),
 		peerPromises: make(map[peer.ID]map[string]struct{}),
 	}
 }
 
-func (gt *GossipTracer) Start(gs *GossipSubRouter) {
+func (gt *gossipTracer) Start(gs *GossipSubRouter) {
 	if gt == nil {
 		return
 	}
@@ -45,7 +45,7 @@ func (gt *GossipTracer) Start(gs *GossipSubRouter) {
 }
 
 // track a promise to deliver a message from a list of msgIDs we are requesting
-func (gt *GossipTracer) AddPromise(p peer.ID, msgIDs []string) {
+func (gt *gossipTracer) AddPromise(p peer.ID, msgIDs []string) {
 	if gt == nil {
 		return
 	}
@@ -76,7 +76,7 @@ func (gt *GossipTracer) AddPromise(p peer.ID, msgIDs []string) {
 
 // returns the number of broken promises for each peer who didn't follow up
 // on an IWANT request.
-func (gt *GossipTracer) GetBrokenPromises() map[peer.ID]int {
+func (gt *gossipTracer) GetBrokenPromises() map[peer.ID]int {
 	if gt == nil {
 		return nil
 	}
@@ -114,9 +114,9 @@ func (gt *GossipTracer) GetBrokenPromises() map[peer.ID]int {
 	return res
 }
 
-var _ RawTracer = (*GossipTracer)(nil)
+var _ RawTracer = (*gossipTracer)(nil)
 
-func (gt *GossipTracer) fulfillPromise(msg *Message) {
+func (gt *gossipTracer) fulfillPromise(msg *Message) {
 	mid := gt.idGen.ID(msg)
 
 	gt.Lock()
@@ -140,12 +140,12 @@ func (gt *GossipTracer) fulfillPromise(msg *Message) {
 	}
 }
 
-func (gt *GossipTracer) DeliverMessage(msg *Message) {
+func (gt *gossipTracer) DeliverMessage(msg *Message) {
 	// someone delivered a message, fulfill promises for it
 	gt.fulfillPromise(msg)
 }
 
-func (gt *GossipTracer) RejectMessage(msg *Message, reason string) {
+func (gt *gossipTracer) RejectMessage(msg *Message, reason string) {
 	// A message got rejected, so we can fulfill promises and let the score penalty apply
 	// from invalid message delivery.
 	// We do take exception and apply promise penalty regardless in the following cases, where
@@ -160,26 +160,26 @@ func (gt *GossipTracer) RejectMessage(msg *Message, reason string) {
 	gt.fulfillPromise(msg)
 }
 
-func (gt *GossipTracer) ValidateMessage(msg *Message) {
+func (gt *gossipTracer) ValidateMessage(msg *Message) {
 	// we consider the promise fulfilled as soon as the message begins validation
 	// if it was a case of signature issue it would have been rejected immediately
 	// without triggering the Validate trace
 	gt.fulfillPromise(msg)
 }
 
-func (gt *GossipTracer) AddPeer(p peer.ID, proto protocol.ID) {}
-func (gt *GossipTracer) RemovePeer(p peer.ID)                 {}
-func (gt *GossipTracer) Join(topic string)                    {}
-func (gt *GossipTracer) Leave(topic string)                   {}
-func (gt *GossipTracer) Graft(p peer.ID, topic string)        {}
-func (gt *GossipTracer) Prune(p peer.ID, topic string)        {}
-func (gt *GossipTracer) DuplicateMessage(msg *Message)        {}
-func (gt *GossipTracer) RecvRPC(rpc *RPC)                     {}
-func (gt *GossipTracer) SendRPC(rpc *RPC, p peer.ID)          {}
-func (gt *GossipTracer) DropRPC(rpc *RPC, p peer.ID)          {}
-func (gt *GossipTracer) UndeliverableMessage(msg *Message)    {}
+func (gt *gossipTracer) AddPeer(p peer.ID, proto protocol.ID) {}
+func (gt *gossipTracer) RemovePeer(p peer.ID)                 {}
+func (gt *gossipTracer) Join(topic string)                    {}
+func (gt *gossipTracer) Leave(topic string)                   {}
+func (gt *gossipTracer) Graft(p peer.ID, topic string)        {}
+func (gt *gossipTracer) Prune(p peer.ID, topic string)        {}
+func (gt *gossipTracer) DuplicateMessage(msg *Message)        {}
+func (gt *gossipTracer) RecvRPC(rpc *RPC)                     {}
+func (gt *gossipTracer) SendRPC(rpc *RPC, p peer.ID)          {}
+func (gt *gossipTracer) DropRPC(rpc *RPC, p peer.ID)          {}
+func (gt *gossipTracer) UndeliverableMessage(msg *Message)    {}
 
-func (gt *GossipTracer) ThrottlePeer(p peer.ID) {
+func (gt *gossipTracer) ThrottlePeer(p peer.ID) {
 	gt.Lock()
 	defer gt.Unlock()
 

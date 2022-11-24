@@ -116,7 +116,7 @@ func DefaultPeerGaterParams() *PeerGaterParams {
 }
 
 // the gater object.
-type PeerGater struct {
+type peerGater struct {
 	sync.Mutex
 
 	host host.Host
@@ -163,7 +163,7 @@ type peerGaterStats struct {
 // interval.
 func WithPeerGater(params *PeerGaterParams) Option {
 	return func(ps *PubSub) error {
-		gs, ok := ps.rt.(GossipPubSubRouter)
+		gs, ok := ps.rt.(*GossipSubRouter)
 		if !ok {
 			return fmt.Errorf("pubsub router is not gossipsub")
 		}
@@ -173,14 +173,14 @@ func WithPeerGater(params *PeerGaterParams) Option {
 			return err
 		}
 
-		gs.SetPeerGater(newPeerGater(ps.ctx, ps.host, params))
+		gs.gate = newPeerGater(ps.ctx, ps.host, params)
 
 		// hook the tracer
 		if ps.tracer != nil {
-			ps.tracer.raw = append(ps.tracer.raw, gs.GetPeerGater())
+			ps.tracer.raw = append(ps.tracer.raw, gs.gate)
 		} else {
 			ps.tracer = &pubsubTracer{
-				raw:   []RawTracer{gs.GetPeerGater()},
+				raw:   []RawTracer{gs.gate},
 				pid:   ps.host.ID(),
 				idGen: ps.idGen,
 			}
@@ -190,8 +190,8 @@ func WithPeerGater(params *PeerGaterParams) Option {
 	}
 }
 
-func newPeerGater(ctx context.Context, host host.Host, params *PeerGaterParams) *PeerGater {
-	pg := &PeerGater{
+func newPeerGater(ctx context.Context, host host.Host, params *PeerGaterParams) *peerGater {
+	pg := &peerGater{
 		params:    params,
 		peerStats: make(map[peer.ID]*peerGaterStats),
 		ipStats:   make(map[string]*peerGaterStats),
@@ -201,7 +201,7 @@ func newPeerGater(ctx context.Context, host host.Host, params *PeerGaterParams) 
 	return pg
 }
 
-func (pg *PeerGater) background(ctx context.Context) {
+func (pg *peerGater) background(ctx context.Context) {
 	tick := time.NewTicker(pg.params.DecayInterval)
 
 	defer tick.Stop()
@@ -216,7 +216,7 @@ func (pg *PeerGater) background(ctx context.Context) {
 	}
 }
 
-func (pg *PeerGater) decayStats() {
+func (pg *peerGater) decayStats() {
 	pg.Lock()
 	defer pg.Unlock()
 
@@ -258,7 +258,7 @@ func (pg *PeerGater) decayStats() {
 	}
 }
 
-func (pg *PeerGater) getPeerStats(p peer.ID) *peerGaterStats {
+func (pg *peerGater) getPeerStats(p peer.ID) *peerGaterStats {
 	st, ok := pg.peerStats[p]
 	if !ok {
 		st = pg.getIPStats(p)
@@ -267,7 +267,7 @@ func (pg *PeerGater) getPeerStats(p peer.ID) *peerGaterStats {
 	return st
 }
 
-func (pg *PeerGater) getIPStats(p peer.ID) *peerGaterStats {
+func (pg *peerGater) getIPStats(p peer.ID) *peerGaterStats {
 	ip := pg.getPeerIP(p)
 	st, ok := pg.ipStats[ip]
 	if !ok {
@@ -277,7 +277,7 @@ func (pg *PeerGater) getIPStats(p peer.ID) *peerGaterStats {
 	return st
 }
 
-func (pg *PeerGater) getPeerIP(p peer.ID) string {
+func (pg *peerGater) getPeerIP(p peer.ID) string {
 	if pg.getIP != nil {
 		return pg.getIP(p)
 	}
@@ -317,7 +317,7 @@ func (pg *PeerGater) getPeerIP(p peer.ID) string {
 }
 
 // router interface
-func (pg *PeerGater) AcceptFrom(p peer.ID) AcceptStatus {
+func (pg *peerGater) AcceptFrom(p peer.ID) AcceptStatus {
 	if pg == nil {
 		return AcceptAll
 	}
@@ -363,10 +363,10 @@ func (pg *PeerGater) AcceptFrom(p peer.ID) AcceptStatus {
 }
 
 // -- RawTracer interface methods
-var _ RawTracer = (*PeerGater)(nil)
+var _ RawTracer = (*peerGater)(nil)
 
 // tracer interface
-func (pg *PeerGater) AddPeer(p peer.ID, proto protocol.ID) {
+func (pg *peerGater) AddPeer(p peer.ID, proto protocol.ID) {
 	pg.Lock()
 	defer pg.Unlock()
 
@@ -374,7 +374,7 @@ func (pg *PeerGater) AddPeer(p peer.ID, proto protocol.ID) {
 	st.connected++
 }
 
-func (pg *PeerGater) RemovePeer(p peer.ID) {
+func (pg *peerGater) RemovePeer(p peer.ID) {
 	pg.Lock()
 	defer pg.Unlock()
 
@@ -385,19 +385,19 @@ func (pg *PeerGater) RemovePeer(p peer.ID) {
 	delete(pg.peerStats, p)
 }
 
-func (pg *PeerGater) Join(topic string)             {}
-func (pg *PeerGater) Leave(topic string)            {}
-func (pg *PeerGater) Graft(p peer.ID, topic string) {}
-func (pg *PeerGater) Prune(p peer.ID, topic string) {}
+func (pg *peerGater) Join(topic string)             {}
+func (pg *peerGater) Leave(topic string)            {}
+func (pg *peerGater) Graft(p peer.ID, topic string) {}
+func (pg *peerGater) Prune(p peer.ID, topic string) {}
 
-func (pg *PeerGater) ValidateMessage(msg *Message) {
+func (pg *peerGater) ValidateMessage(msg *Message) {
 	pg.Lock()
 	defer pg.Unlock()
 
 	pg.validate++
 }
 
-func (pg *PeerGater) DeliverMessage(msg *Message) {
+func (pg *peerGater) DeliverMessage(msg *Message) {
 	pg.Lock()
 	defer pg.Unlock()
 
@@ -413,7 +413,7 @@ func (pg *PeerGater) DeliverMessage(msg *Message) {
 	st.deliver += weight
 }
 
-func (pg *PeerGater) RejectMessage(msg *Message, reason string) {
+func (pg *peerGater) RejectMessage(msg *Message, reason string) {
 	pg.Lock()
 	defer pg.Unlock()
 
@@ -434,7 +434,7 @@ func (pg *PeerGater) RejectMessage(msg *Message, reason string) {
 	}
 }
 
-func (pg *PeerGater) DuplicateMessage(msg *Message) {
+func (pg *peerGater) DuplicateMessage(msg *Message) {
 	pg.Lock()
 	defer pg.Unlock()
 
@@ -442,12 +442,12 @@ func (pg *PeerGater) DuplicateMessage(msg *Message) {
 	st.duplicate++
 }
 
-func (pg *PeerGater) ThrottlePeer(p peer.ID) {}
+func (pg *peerGater) ThrottlePeer(p peer.ID) {}
 
-func (pg *PeerGater) RecvRPC(rpc *RPC) {}
+func (pg *peerGater) RecvRPC(rpc *RPC) {}
 
-func (pg *PeerGater) SendRPC(rpc *RPC, p peer.ID) {}
+func (pg *peerGater) SendRPC(rpc *RPC, p peer.ID) {}
 
-func (pg *PeerGater) DropRPC(rpc *RPC, p peer.ID) {}
+func (pg *peerGater) DropRPC(rpc *RPC, p peer.ID) {}
 
-func (pg *PeerGater) UndeliverableMessage(msg *Message) {}
+func (pg *peerGater) UndeliverableMessage(msg *Message) {}

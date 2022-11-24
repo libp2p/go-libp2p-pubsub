@@ -25,7 +25,7 @@ import (
 	"github.com/libp2p/go-msgio/protoio"
 )
 
-func getGossipSub(ctx context.Context, h host.Host, opts ...Option) *PubSub {
+func getGossipsub(ctx context.Context, h host.Host, opts ...Option) *PubSub {
 	ps, err := NewGossipSub(ctx, h, opts...)
 	if err != nil {
 		panic(err)
@@ -33,49 +33,12 @@ func getGossipSub(ctx context.Context, h host.Host, opts ...Option) *PubSub {
 	return ps
 }
 
-func getGossipSubs(ctx context.Context, hs []host.Host, opts ...Option) []*PubSub {
+func getGossipsubs(ctx context.Context, hs []host.Host, opts ...Option) []*PubSub {
 	var psubs []*PubSub
 	for _, h := range hs {
-		psubs = append(psubs, getGossipSub(ctx, h, opts...))
+		psubs = append(psubs, getGossipsub(ctx, h, opts...))
 	}
 	return psubs
-}
-
-func getGossipSubsWithRouters(ctx context.Context, hs []host.Host, routers []GossipPubSubRouter, opts ...Option) []*PubSub {
-	var psubs []*PubSub
-	if len(hs) != len(routers) {
-		panic("hosts and routers must have the same length")
-	}
-
-	for i, h := range hs {
-		psubs = append(psubs, getGossipSubWithRouter(ctx, h, routers[i], opts...))
-	}
-
-	return psubs
-}
-
-func getGossipSubWithRouter(ctx context.Context, hs host.Host, router GossipPubSubRouter, opts ...Option) *PubSub {
-	ps, err := NewGossipSubWithRouter(ctx, hs, router, opts...)
-	if err != nil {
-		panic(err)
-	}
-	return ps
-}
-
-func getGossipSubRouter(h host.Host, opts ...GossipSubRouterOption) *GossipSubRouter {
-	ps, err := DefaultGossipSubRouter(h, opts...)
-	if err != nil {
-		panic(err)
-	}
-	return ps
-}
-
-func getGossipSubRouters(hs []host.Host, opts ...GossipSubRouterOption) []GossipPubSubRouter {
-	var routers []GossipPubSubRouter
-	for _, h := range hs {
-		routers = append(routers, getGossipSubRouter(h, opts...))
-	}
-	return routers
 }
 
 func TestSparseGossipsub(t *testing.T) {
@@ -83,7 +46,7 @@ func TestSparseGossipsub(t *testing.T) {
 	defer cancel()
 	hosts := getNetHosts(t, ctx, 20)
 
-	psubs := getGossipSubs(ctx, hosts)
+	psubs := getGossipsubs(ctx, hosts)
 
 	var msgs []*Subscription
 	for _, ps := range psubs {
@@ -124,7 +87,7 @@ func TestDenseGossipsub(t *testing.T) {
 	defer cancel()
 	hosts := getNetHosts(t, ctx, 20)
 
-	psubs := getGossipSubs(ctx, hosts)
+	psubs := getGossipsubs(ctx, hosts)
 
 	var msgs []*Subscription
 	for _, ps := range psubs {
@@ -165,7 +128,7 @@ func TestGossipsubFanout(t *testing.T) {
 	defer cancel()
 	hosts := getNetHosts(t, ctx, 20)
 
-	psubs := getGossipSubs(ctx, hosts)
+	psubs := getGossipsubs(ctx, hosts)
 
 	var msgs []*Subscription
 	for _, ps := range psubs[1:] {
@@ -234,7 +197,7 @@ func TestGossipsubFanoutMaintenance(t *testing.T) {
 	defer cancel()
 	hosts := getNetHosts(t, ctx, 20)
 
-	psubs := getGossipSubs(ctx, hosts)
+	psubs := getGossipsubs(ctx, hosts)
 
 	var msgs []*Subscription
 	for _, ps := range psubs[1:] {
@@ -319,7 +282,7 @@ func TestGossipsubFanoutExpiry(t *testing.T) {
 	defer cancel()
 	hosts := getNetHosts(t, ctx, 10)
 
-	psubs := getGossipSubs(ctx, hosts)
+	psubs := getGossipsubs(ctx, hosts)
 
 	var msgs []*Subscription
 	for _, ps := range psubs[1:] {
@@ -378,7 +341,7 @@ func TestGossipsubGossip(t *testing.T) {
 	defer cancel()
 	hosts := getNetHosts(t, ctx, 20)
 
-	psubs := getGossipSubs(ctx, hosts)
+	psubs := getGossipsubs(ctx, hosts)
 
 	var msgs []*Subscription
 	for _, ps := range psubs {
@@ -426,7 +389,7 @@ func TestGossipsubGossipPiggyback(t *testing.T) {
 	defer cancel()
 	hosts := getNetHosts(t, ctx, 20)
 
-	psubs := getGossipSubs(ctx, hosts)
+	psubs := getGossipsubs(ctx, hosts)
 
 	var msgs []*Subscription
 	for _, ps := range psubs {
@@ -494,7 +457,7 @@ func TestGossipsubGossipPropagation(t *testing.T) {
 	defer cancel()
 
 	hosts := getNetHosts(t, ctx, 20)
-	psubs := getGossipSubs(ctx, hosts)
+	psubs := getGossipsubs(ctx, hosts)
 
 	hosts1 := hosts[:GossipSubD+1]
 	hosts2 := append(hosts[GossipSubD+1:], hosts[0])
@@ -575,7 +538,7 @@ func TestGossipsubPrune(t *testing.T) {
 	defer cancel()
 	hosts := getNetHosts(t, ctx, 20)
 
-	psubs := getGossipSubs(ctx, hosts)
+	psubs := getGossipsubs(ctx, hosts)
 
 	var msgs []*Subscription
 	for _, ps := range psubs {
@@ -631,9 +594,7 @@ func TestGossipsubPruneBackoffTime(t *testing.T) {
 	params.HeartbeatInitialDelay = time.Millisecond * 10
 	params.HeartbeatInterval = time.Millisecond * 100
 
-	routers := getGossipSubRouters(hosts, WithGossipSubParams(params))
-
-	psubs := getGossipSubsWithRouters(ctx, hosts, routers, WithPeerScore(
+	psubs := getGossipsubs(ctx, hosts, WithGossipSubParams(params), WithPeerScore(
 		&PeerScoreParams{
 			AppSpecificScore: func(p peer.ID) float64 {
 				if p == hosts[0].ID() {
@@ -724,7 +685,7 @@ func TestGossipsubGraft(t *testing.T) {
 	defer cancel()
 	hosts := getNetHosts(t, ctx, 20)
 
-	psubs := getGossipSubs(ctx, hosts)
+	psubs := getGossipsubs(ctx, hosts)
 
 	sparseConnect(t, hosts)
 
@@ -769,7 +730,7 @@ func TestGossipsubRemovePeer(t *testing.T) {
 	defer cancel()
 	hosts := getNetHosts(t, ctx, 20)
 
-	psubs := getGossipSubs(ctx, hosts)
+	psubs := getGossipsubs(ctx, hosts)
 
 	var msgs []*Subscription
 	for _, ps := range psubs {
@@ -818,7 +779,7 @@ func TestGossipsubGraftPruneRetry(t *testing.T) {
 	defer cancel()
 
 	hosts := getNetHosts(t, ctx, 10)
-	psubs := getGossipSubs(ctx, hosts)
+	psubs := getGossipsubs(ctx, hosts)
 	denseConnect(t, hosts)
 
 	var topics []string
@@ -868,7 +829,7 @@ func TestGossipsubControlPiggyback(t *testing.T) {
 	defer cancel()
 
 	hosts := getNetHosts(t, ctx, 10)
-	psubs := getGossipSubs(ctx, hosts)
+	psubs := getGossipsubs(ctx, hosts)
 	denseConnect(t, hosts)
 
 	for _, ps := range psubs {
@@ -950,7 +911,7 @@ func TestMixedGossipsub(t *testing.T) {
 	defer cancel()
 	hosts := getNetHosts(t, ctx, 30)
 
-	gsubs := getGossipSubs(ctx, hosts[:20])
+	gsubs := getGossipsubs(ctx, hosts[:20])
 	fsubs := getPubsubs(ctx, hosts[20:])
 	psubs := append(gsubs, fsubs...)
 
@@ -994,7 +955,7 @@ func TestGossipsubMultihops(t *testing.T) {
 
 	hosts := getNetHosts(t, ctx, 6)
 
-	psubs := getGossipSubs(ctx, hosts)
+	psubs := getGossipsubs(ctx, hosts)
 
 	connect(t, hosts[0], hosts[1])
 	connect(t, hosts[1], hosts[2])
@@ -1036,7 +997,7 @@ func TestGossipsubTreeTopology(t *testing.T) {
 	defer cancel()
 
 	hosts := getNetHosts(t, ctx, 10)
-	psubs := getGossipSubs(ctx, hosts)
+	psubs := getGossipsubs(ctx, hosts)
 
 	connect(t, hosts[0], hosts[1])
 	connect(t, hosts[1], hosts[2])
@@ -1100,8 +1061,7 @@ func TestGossipsubStarTopology(t *testing.T) {
 	defer cancel()
 
 	hosts := getNetHosts(t, ctx, 20)
-	routers := getGossipSubRouters(hosts, WithPeerExchange(true), WithFloodPublish(true))
-	psubs := getGossipSubsWithRouters(ctx, hosts, routers)
+	psubs := getGossipsubs(ctx, hosts, WithPeerExchange(true), WithFloodPublish(true))
 
 	// configure the center of the star with a very low D
 	psubs[0].eval <- func() {
@@ -1185,8 +1145,7 @@ func TestGossipsubStarTopologyWithSignedPeerRecords(t *testing.T) {
 	defer cancel()
 
 	hosts := getNetHosts(t, ctx, 20)
-	routers := getGossipSubRouters(hosts, WithPeerExchange(true), WithFloodPublish(true))
-	psubs := getGossipSubsWithRouters(ctx, hosts, routers)
+	psubs := getGossipsubs(ctx, hosts, WithPeerExchange(true), WithFloodPublish(true))
 
 	// configure the center of the star with a very low D
 	psubs[0].eval <- func() {
@@ -1265,9 +1224,9 @@ func TestGossipsubDirectPeers(t *testing.T) {
 
 	h := getNetHosts(t, ctx, 3)
 	psubs := []*PubSub{
-		getGossipSubWithRouter(ctx, h[0], getGossipSubRouter(h[0], WithDirectConnectTicks(2))),
-		getGossipSubWithRouter(ctx, h[1], getGossipSubRouter(h[1], WithDirectConnectTicks(2)), WithDirectPeers([]peer.AddrInfo{{ID: h[2].ID(), Addrs: h[2].Addrs()}})),
-		getGossipSubWithRouter(ctx, h[2], getGossipSubRouter(h[2], WithDirectConnectTicks(2)), WithDirectPeers([]peer.AddrInfo{{ID: h[1].ID(), Addrs: h[1].Addrs()}})),
+		getGossipsub(ctx, h[0], WithDirectConnectTicks(2)),
+		getGossipsub(ctx, h[1], WithDirectPeers([]peer.AddrInfo{{ID: h[2].ID(), Addrs: h[2].Addrs()}}), WithDirectConnectTicks(2)),
+		getGossipsub(ctx, h[2], WithDirectPeers([]peer.AddrInfo{{ID: h[1].ID(), Addrs: h[1].Addrs()}}), WithDirectConnectTicks(2)),
 	}
 
 	connect(t, h[0], h[1])
@@ -1329,13 +1288,13 @@ func TestGossipSubPeerFilter(t *testing.T) {
 
 	h := getNetHosts(t, ctx, 3)
 	psubs := []*PubSub{
-		getGossipSub(ctx, h[0], WithPeerFilter(func(pid peer.ID, topic string) bool {
+		getGossipsub(ctx, h[0], WithPeerFilter(func(pid peer.ID, topic string) bool {
 			return pid == h[1].ID()
 		})),
-		getGossipSub(ctx, h[1], WithPeerFilter(func(pid peer.ID, topic string) bool {
+		getGossipsub(ctx, h[1], WithPeerFilter(func(pid peer.ID, topic string) bool {
 			return pid == h[0].ID()
 		})),
-		getGossipSub(ctx, h[2]),
+		getGossipsub(ctx, h[2]),
 	}
 
 	connect(t, h[0], h[1])
@@ -1371,9 +1330,9 @@ func TestGossipsubDirectPeersFanout(t *testing.T) {
 
 	h := getNetHosts(t, ctx, 3)
 	psubs := []*PubSub{
-		getGossipSub(ctx, h[0]),
-		getGossipSub(ctx, h[1], WithDirectPeers([]peer.AddrInfo{{ID: h[2].ID(), Addrs: h[2].Addrs()}})),
-		getGossipSub(ctx, h[2], WithDirectPeers([]peer.AddrInfo{{ID: h[1].ID(), Addrs: h[1].Addrs()}})),
+		getGossipsub(ctx, h[0]),
+		getGossipsub(ctx, h[1], WithDirectPeers([]peer.AddrInfo{{ID: h[2].ID(), Addrs: h[2].Addrs()}})),
+		getGossipsub(ctx, h[2], WithDirectPeers([]peer.AddrInfo{{ID: h[1].ID(), Addrs: h[1].Addrs()}})),
 	}
 
 	connect(t, h[0], h[1])
@@ -1457,8 +1416,7 @@ func TestGossipsubFloodPublish(t *testing.T) {
 	defer cancel()
 
 	hosts := getNetHosts(t, ctx, 20)
-	routers := getGossipSubRouters(hosts, WithFloodPublish(true))
-	psubs := getGossipSubsWithRouters(ctx, hosts, routers)
+	psubs := getGossipsubs(ctx, hosts, WithFloodPublish(true))
 
 	// build the star
 	for i := 1; i < 20; i++ {
@@ -1493,7 +1451,7 @@ func TestGossipsubEnoughPeers(t *testing.T) {
 	defer cancel()
 
 	hosts := getNetHosts(t, ctx, 20)
-	psubs := getGossipSubs(ctx, hosts)
+	psubs := getGossipsubs(ctx, hosts)
 
 	for _, ps := range psubs {
 		_, err := ps.Subscribe("test")
@@ -1542,8 +1500,8 @@ func TestGossipsubCustomParams(t *testing.T) {
 	wantedMaxPendingConns := 23
 	params.MaxPendingConnections = wantedMaxPendingConns
 	hosts := getNetHosts(t, ctx, 1)
-	routers := getGossipSubRouters(hosts, WithGossipSubParams(params))
-	psubs := getGossipSubsWithRouters(ctx, hosts, routers)
+	psubs := getGossipsubs(ctx, hosts,
+		WithGossipSubParams(params))
 
 	if len(psubs) != 1 {
 		t.Fatalf("incorrect number of pusbub objects received: wanted %d but got %d", 1, len(psubs))
@@ -1571,7 +1529,7 @@ func TestGossipsubNegativeScore(t *testing.T) {
 	defer cancel()
 
 	hosts := getNetHosts(t, ctx, 20)
-	psubs := getGossipSubs(ctx, hosts,
+	psubs := getGossipsubs(ctx, hosts,
 		WithPeerScore(
 			&PeerScoreParams{
 				AppSpecificScore: func(p peer.ID) float64 {
@@ -1655,7 +1613,7 @@ func TestGossipsubScoreValidatorEx(t *testing.T) {
 	defer cancel()
 
 	hosts := getNetHosts(t, ctx, 3)
-	psubs := getGossipSubs(ctx, hosts,
+	psubs := getGossipsubs(ctx, hosts,
 		WithPeerScore(
 			&PeerScoreParams{
 				AppSpecificScore: func(p peer.ID) float64 { return 0 },
@@ -1744,7 +1702,7 @@ func TestGossipsubPiggybackControl(t *testing.T) {
 
 	h := bhost.NewBlankHost(swarmt.GenSwarm(t))
 	defer h.Close()
-	ps := getGossipSub(ctx, h)
+	ps := getGossipsub(ctx, h)
 
 	blah := peer.ID("bogotr0n")
 
@@ -1792,7 +1750,7 @@ func TestGossipsubMultipleGraftTopics(t *testing.T) {
 	defer cancel()
 
 	hosts := getNetHosts(t, ctx, 2)
-	psubs := getGossipSubs(ctx, hosts)
+	psubs := getGossipsubs(ctx, hosts)
 	sparseConnect(t, hosts)
 
 	time.Sleep(time.Second * 1)
@@ -1861,8 +1819,8 @@ func TestGossipsubOpportunisticGrafting(t *testing.T) {
 
 	hosts := getNetHosts(t, ctx, 50)
 	// pubsubs for the first 10 hosts
-	routers := getGossipSubRouters(hosts[:10], WithFloodPublish(true))
-	psubs := getGossipSubsWithRouters(ctx, hosts[:10], routers,
+	psubs := getGossipsubs(ctx, hosts[:10],
+		WithFloodPublish(true),
 		WithPeerScore(
 			&PeerScoreParams{
 				AppSpecificScore:  func(peer.ID) float64 { return 0 },
@@ -1962,8 +1920,8 @@ func TestGossipSubLeaveTopic(t *testing.T) {
 
 	h := getNetHosts(t, ctx, 2)
 	psubs := []*PubSub{
-		getGossipSub(ctx, h[0]),
-		getGossipSub(ctx, h[1]),
+		getGossipsub(ctx, h[0]),
+		getGossipsub(ctx, h[1]),
 	}
 
 	connect(t, h[0], h[1])
@@ -2033,9 +1991,9 @@ func TestGossipSubJoinTopic(t *testing.T) {
 
 	h := getNetHosts(t, ctx, 3)
 	psubs := []*PubSub{
-		getGossipSub(ctx, h[0]),
-		getGossipSub(ctx, h[1]),
-		getGossipSub(ctx, h[2]),
+		getGossipsub(ctx, h[0]),
+		getGossipsub(ctx, h[1]),
+		getGossipsub(ctx, h[2]),
 	}
 
 	connect(t, h[0], h[1])
@@ -2114,8 +2072,9 @@ func TestGossipsubPeerScoreInspect(t *testing.T) {
 	defer cancel()
 
 	hosts := getNetHosts(t, ctx, 2)
+
 	inspector := &mockPeerScoreInspector{}
-	psub1 := getGossipSub(ctx, hosts[0],
+	psub1 := getGossipsub(ctx, hosts[0],
 		WithPeerScore(
 			&PeerScoreParams{
 				Topics: map[string]*TopicScoreParams{
@@ -2138,9 +2097,8 @@ func TestGossipsubPeerScoreInspect(t *testing.T) {
 				PublishThreshold:  -10,
 				GraylistThreshold: -1000,
 			}),
-		WithPeerScoreInspect(inspector.inspect, time.Second),
-	)
-	psub2 := getGossipSub(ctx, hosts[1])
+		WithPeerScoreInspect(inspector.inspect, time.Second))
+	psub2 := getGossipsub(ctx, hosts[1])
 	psubs := []*PubSub{psub1, psub2}
 
 	connect(t, hosts[0], hosts[1])
@@ -2175,7 +2133,7 @@ func TestGossipsubPeerScoreResetTopicParams(t *testing.T) {
 
 	hosts := getNetHosts(t, ctx, 1)
 
-	ps := getGossipSub(ctx, hosts[0],
+	ps := getGossipsub(ctx, hosts[0],
 		WithPeerScore(
 			&PeerScoreParams{
 				Topics: map[string]*TopicScoreParams{
@@ -2241,7 +2199,7 @@ func TestGossipsubRPCFragmentation(t *testing.T) {
 	defer cancel()
 
 	hosts := getNetHosts(t, ctx, 2)
-	ps := getGossipSub(ctx, hosts[0])
+	ps := getGossipsub(ctx, hosts[0])
 
 	// make a fake peer that requests everything through IWANT gossip
 	iwe := iwantEverything{h: hosts[1]}

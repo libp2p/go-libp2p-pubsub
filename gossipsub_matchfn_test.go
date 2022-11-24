@@ -19,10 +19,10 @@ func TestGossipSubMatchingFn(t *testing.T) {
 
 	h := getNetHosts(t, ctx, 4)
 	psubs := []*PubSub{
-		getGossipSubWithRouter(ctx, h[0], getGossipSubRouter(h[0], WithGossipSubProtocols([]protocol.ID{customsubA100, GossipSubID_v11}, GossipSubDefaultFeatures)), WithProtocolMatchFn(protocolNameMatch)),
-		getGossipSubWithRouter(ctx, h[1], getGossipSubRouter(h[1], WithGossipSubProtocols([]protocol.ID{customsubA101Beta}, GossipSubDefaultFeatures)), WithProtocolMatchFn(protocolNameMatch)),
-		getGossipSubWithRouter(ctx, h[2], getGossipSubRouter(h[2], WithGossipSubProtocols([]protocol.ID{GossipSubID_v11}, GossipSubDefaultFeatures)), WithProtocolMatchFn(protocolNameMatch)),
-		getGossipSubWithRouter(ctx, h[3], getGossipSubRouter(h[3], WithGossipSubProtocols([]protocol.ID{customsubB100}, GossipSubDefaultFeatures)), WithProtocolMatchFn(protocolNameMatch)),
+		getGossipsub(ctx, h[0], WithProtocolMatchFn(protocolNameMatch), WithGossipSubProtocols([]protocol.ID{customsubA100, GossipSubID_v11}, GossipSubDefaultFeatures)),
+		getGossipsub(ctx, h[1], WithProtocolMatchFn(protocolNameMatch), WithGossipSubProtocols([]protocol.ID{customsubA101Beta}, GossipSubDefaultFeatures)),
+		getGossipsub(ctx, h[2], WithProtocolMatchFn(protocolNameMatch), WithGossipSubProtocols([]protocol.ID{GossipSubID_v11}, GossipSubDefaultFeatures)),
+		getGossipsub(ctx, h[3], WithProtocolMatchFn(protocolNameMatch), WithGossipSubProtocols([]protocol.ID{customsubB100}, GossipSubDefaultFeatures)),
 	}
 
 	connect(t, h[0], h[1])

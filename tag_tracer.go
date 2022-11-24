@@ -30,7 +30,7 @@ var (
 	GossipSubConnTagMessageDeliveryCap = 15
 )
 
-// TagTracer is an internal tracer that applies connection manager tags to peer
+// tagTracer is an internal tracer that applies connection manager tags to peer
 // connections based on their behavior.
 //
 // We tag a peer's connections for the following reasons:
@@ -41,7 +41,7 @@ var (
 //     first.
 //     The delivery tags have a maximum value, GossipSubConnTagMessageDeliveryCap, and they decay at
 //     a rate of GossipSubConnTagDecayAmount / GossipSubConnTagDecayInterval.
-type TagTracer struct {
+type tagTracer struct {
 	sync.RWMutex
 
 	cmgr     connmgr.ConnManager
@@ -55,12 +55,12 @@ type TagTracer struct {
 	nearFirst map[string]map[peer.ID]struct{}
 }
 
-func newTagTracer(cmgr connmgr.ConnManager) *TagTracer {
+func newTagTracer(cmgr connmgr.ConnManager) *tagTracer {
 	decayer, ok := connmgr.SupportsDecay(cmgr)
 	if !ok {
 		log.Debugf("connection manager does not support decaying tags, delivery tags will not be applied")
 	}
-	return &TagTracer{
+	return &tagTracer{
 		cmgr:      cmgr,
 		idGen:     newMsgIdGenerator(),
 		decayer:   decayer,
@@ -69,7 +69,7 @@ func newTagTracer(cmgr connmgr.ConnManager) *TagTracer {
 	}
 }
 
-func (t *TagTracer) Start(gs *GossipSubRouter) {
+func (t *tagTracer) Start(gs *GossipSubRouter) {
 	if t == nil {
 		return
 	}
@@ -78,7 +78,7 @@ func (t *TagTracer) Start(gs *GossipSubRouter) {
 	t.direct = gs.direct
 }
 
-func (t *TagTracer) tagPeerIfDirect(p peer.ID) {
+func (t *tagTracer) tagPeerIfDirect(p peer.ID) {
 	if t.direct == nil {
 		return
 	}
@@ -90,12 +90,12 @@ func (t *TagTracer) tagPeerIfDirect(p peer.ID) {
 	}
 }
 
-func (t *TagTracer) tagMeshPeer(p peer.ID, topic string) {
+func (t *tagTracer) tagMeshPeer(p peer.ID, topic string) {
 	tag := topicTag(topic)
 	t.cmgr.Protect(p, tag)
 }
 
-func (t *TagTracer) untagMeshPeer(p peer.ID, topic string) {
+func (t *tagTracer) untagMeshPeer(p peer.ID, topic string) {
 	tag := topicTag(topic)
 	t.cmgr.Unprotect(p, tag)
 }
@@ -104,7 +104,7 @@ func topicTag(topic string) string {
 	return fmt.Sprintf("pubsub:%s", topic)
 }
 
-func (t *TagTracer) addDeliveryTag(topic string) {
+func (t *tagTracer) addDeliveryTag(topic string) {
 	if t.decayer == nil {
 		return
 	}
@@ -125,7 +125,7 @@ func (t *TagTracer) addDeliveryTag(topic string) {
 	t.decaying[topic] = tag
 }
 
-func (t *TagTracer) removeDeliveryTag(topic string) {
+func (t *tagTracer) removeDeliveryTag(topic string) {
 	t.Lock()
 	defer t.Unlock()
 	tag, ok := t.decaying[topic]
@@ -139,7 +139,7 @@ func (t *TagTracer) removeDeliveryTag(topic string) {
 	delete(t.decaying, topic)
 }
 
-func (t *TagTracer) bumpDeliveryTag(p peer.ID, topic string) error {
+func (t *tagTracer) bumpDeliveryTag(p peer.ID, topic string) error {
 	t.RLock()
 	defer t.RUnlock()
 
@@ -150,7 +150,7 @@ func (t *TagTracer) bumpDeliveryTag(p peer.ID, topic string) error {
 	return tag.Bump(p, GossipSubConnTagBumpMessageDelivery)
 }
 
-func (t *TagTracer) bumpTagsForMessage(p peer.ID, msg *Message) {
+func (t *tagTracer) bumpTagsForMessage(p peer.ID, msg *Message) {
 	topic := msg.GetTopic()
 	err := t.bumpDeliveryTag(p, topic)
 	if err != nil {
@@ -159,7 +159,7 @@ func (t *TagTracer) bumpTagsForMessage(p peer.ID, msg *Message) {
 }
 
 // nearFirstPeers returns the peers who delivered the message while it was still validating
-func (t *TagTracer) nearFirstPeers(msg *Message) []peer.ID {
+func (t *tagTracer) nearFirstPeers(msg *Message) []peer.ID {
 	t.Lock()
 	defer t.Unlock()
 	peersMap, ok := t.nearFirst[t.idGen.ID(msg)]
@@ -174,17 +174,17 @@ func (t *TagTracer) nearFirstPeers(msg *Message) []peer.ID {
 }
 
 // -- RawTracer interface methods
-var _ RawTracer = (*TagTracer)(nil)
+var _ RawTracer = (*tagTracer)(nil)
 
-func (t *TagTracer) AddPeer(p peer.ID, proto protocol.ID) {
+func (t *tagTracer) AddPeer(p peer.ID, proto protocol.ID) {
 	t.tagPeerIfDirect(p)
 }
 
-func (t *TagTracer) Join(topic string) {
+func (t *tagTracer) Join(topic string) {
 	t.addDeliveryTag(topic)
 }
 
-func (t *TagTracer) DeliverMessage(msg *Message) {
+func (t *tagTracer) DeliverMessage(msg *Message) {
 	nearFirst := t.nearFirstPeers(msg)
 
 	t.bumpTagsForMessage(msg.ReceivedFrom, msg)
@@ -198,19 +198,19 @@ func (t *TagTracer) DeliverMessage(msg *Message) {
 	t.Unlock()
 }
 
-func (t *TagTracer) Leave(topic string) {
+func (t *tagTracer) Leave(topic string) {
 	t.removeDeliveryTag(topic)
 }
 
-func (t *TagTracer) Graft(p peer.ID, topic string) {
+func (t *tagTracer) Graft(p peer.ID, topic string) {
 	t.tagMeshPeer(p, topic)
 }
 
-func (t *TagTracer) Prune(p peer.ID, topic string) {
+func (t *tagTracer) Prune(p peer.ID, topic string) {
 	t.untagMeshPeer(p, topic)
 }
 
-func (t *TagTracer) ValidateMessage(msg *Message) {
+func (t *tagTracer) ValidateMessage(msg *Message) {
 	t.Lock()
 	defer t.Unlock()
 
@@ -222,7 +222,7 @@ func (t *TagTracer) ValidateMessage(msg *Message) {
 	t.nearFirst[id] = make(map[peer.ID]struct{})
 }
 
-func (t *TagTracer) DuplicateMessage(msg *Message) {
+func (t *tagTracer) DuplicateMessage(msg *Message) {
 	t.Lock()
 	defer t.Unlock()
 
@@ -234,7 +234,7 @@ func (t *TagTracer) DuplicateMessage(msg *Message) {
 	peers[msg.ReceivedFrom] = struct{}{}
 }
 
-func (t *TagTracer) RejectMessage(msg *Message, reason string) {
+func (t *tagTracer) RejectMessage(msg *Message, reason string) {
 	t.Lock()
 	defer t.Unlock()
 
@@ -251,9 +251,9 @@ func (t *TagTracer) RejectMessage(msg *Message, reason string) {
 	}
 }
 
-func (t *TagTracer) RemovePeer(peer.ID)                {}
-func (t *TagTracer) ThrottlePeer(p peer.ID)            {}
-func (t *TagTracer) RecvRPC(rpc *RPC)                  {}
-func (t *TagTracer) SendRPC(rpc *RPC, p peer.ID)       {}
-func (t *TagTracer) DropRPC(rpc *RPC, p peer.ID)       {}
-func (t *TagTracer) UndeliverableMessage(msg *Message) {}
+func (t *tagTracer) RemovePeer(peer.ID)                {}
+func (t *tagTracer) ThrottlePeer(p peer.ID)            {}
+func (t *tagTracer) RecvRPC(rpc *RPC)                  {}
+func (t *tagTracer) SendRPC(rpc *RPC, p peer.ID)       {}
+func (t *tagTracer) DropRPC(rpc *RPC, p peer.ID)       {}
+func (t *tagTracer) UndeliverableMessage(msg *Message) {}

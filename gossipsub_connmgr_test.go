@@ -79,8 +79,8 @@ func TestGossipsubConnTagMessageDeliveries(t *testing.T) {
 
 	// use flood publishing, so non-mesh peers will still be delivering messages
 	// to everyone
-	routers := getGossipSubRouters(honestHosts, WithFloodPublish(true))
-	psubs := getGossipSubsWithRouters(ctx, honestHosts, routers)
+	psubs := getGossipsubs(ctx, honestHosts,
+		WithFloodPublish(true))
 
 	// sybil squatters to be connected later
 	sybilHosts := getNetHosts(t, ctx, nSquatter)
