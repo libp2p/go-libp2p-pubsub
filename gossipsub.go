@@ -217,9 +217,9 @@ func NewGossipSubWithRouter(ctx context.Context, h host.Host, rt PubSubRouter, o
 }
 
 // DefaultGossipSubRouter returns a new GossipSubRouter with default parameters.
-func DefaultGossipSubRouter(h host.Host) *GossipSubRouter {
+func DefaultGossipSubRouter(h host.Host, opts ...func(*GossipSubRouter)) *GossipSubRouter {
 	params := DefaultGossipSubParams()
-	return &GossipSubRouter{
+	rt := &GossipSubRouter{
 		peers:     make(map[peer.ID]protocol.ID),
 		mesh:      make(map[string]map[peer.ID]struct{}),
 		fanout:    make(map[string]map[peer.ID]struct{}),
@@ -236,6 +236,18 @@ func DefaultGossipSubRouter(h host.Host) *GossipSubRouter {
 		feature:   GossipSubDefaultFeatures,
 		tagTracer: newTagTracer(h.ConnManager()),
 		params:    params,
+	}
+
+	for _, opt := range opts {
+		opt(rt)
+	}
+
+	return rt
+}
+
+func WithAppSpecificRpcInspector(inspector func(peer.ID, *RPC) bool) func(*GossipSubRouter) {
+	return func(rt *GossipSubRouter) {
+		rt.appSpecificRpcInspector = inspector
 	}
 }
 
@@ -474,6 +486,11 @@ type GossipSubRouter struct {
 	// number of heartbeats since the beginning of time; this allows us to amortize some resource
 	// clean up -- eg backoff clean up.
 	heartbeatTicks uint64
+
+	// appSpecificRpcInspector is an auxiliary that may be set by the application to inspect incoming RPCs prior to
+	// processing them. The inspector is invoked on an accepted RPC right prior to handling it.
+	// The return value of the inspector function is a boolean indicating whether the RPC should be processed or not.
+	appSpecificRpcInspector func(peer.ID, *RPC) bool
 }
 
 type connectInfo struct {
@@ -612,6 +629,13 @@ func (gs *GossipSubRouter) HandleRPC(rpc *RPC) {
 	ctl := rpc.GetControl()
 	if ctl == nil {
 		return
+	}
+
+	if gs.appSpecificRpcInspector != nil {
+		// check if the RPC is allowed by the external inspector
+		if accept := gs.appSpecificRpcInspector(rpc.from, rpc); !accept {
+			return // reject the RPC
+		}
 	}
 
 	iwant := gs.handleIHave(rpc.from, ctl)
