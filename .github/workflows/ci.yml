@@ -1,0 +1,34 @@
+name: CI
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+
+jobs:
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    steps:
+    - name: Build
+      run: make build
+    
+    
+  unittest:
+    name: Unit Tests
+    strategy:
+      fail-fast: false
+      matrix:
+        go-version:
+          - 1.16
+    runs-on: ubuntu-latest
+    steps:
+    - name: Check Go Version
+      uses: actions/setup-go@v2
+      with:
+        go-version: ${{matrix.go-version}}
+    - name: Checkout repo
+      uses: actions/checkout@v2
+    - name: Run tests
+      run: make test
