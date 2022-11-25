@@ -170,6 +170,11 @@ type PubSub struct {
 	protoMatchFunc ProtocolMatchFn
 
 	ctx context.Context
+
+	// appSpecificRpcInspector is an auxiliary that may be set by the application to inspect incoming RPCs prior to
+	// processing them. The inspector is invoked on an accepted RPC right prior to handling it.
+	// The return value of the inspector function is a boolean indicating whether the RPC should be processed or not.
+	appSpecificRpcInspector func(peer.ID, *RPC) bool
 }
 
 // PubSubRouter is the message router component of PubSub.
@@ -523,6 +528,13 @@ func WithProtocolMatchFn(m ProtocolMatchFn) Option {
 func WithSeenMessagesTTL(ttl time.Duration) Option {
 	return func(ps *PubSub) error {
 		ps.seenMsgTTL = ttl
+		return nil
+	}
+}
+
+func WithAppSpecificRpcInspector(inspector func(peer.ID, *RPC) bool) Option {
+	return func(ps *PubSub) error {
+		ps.appSpecificRpcInspector = inspector
 		return nil
 	}
 }
@@ -1067,6 +1079,14 @@ func (p *PubSub) handleIncomingRPC(rpc *RPC) {
 			}
 
 			p.pushMsg(&Message{pmsg, "", rpc.from, nil, false})
+		}
+	}
+
+	// pass the rpc through app specific validation (if any available).
+	if p.appSpecificRpcInspector != nil {
+		// check if the RPC is allowed by the external inspector
+		if accept := p.appSpecificRpcInspector(rpc.from, rpc); !accept {
+			return // reject the RPC
 		}
 	}
 
