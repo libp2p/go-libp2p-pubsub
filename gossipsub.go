@@ -217,9 +217,9 @@ func NewGossipSubWithRouter(ctx context.Context, h host.Host, rt PubSubRouter, o
 }
 
 // DefaultGossipSubRouter returns a new GossipSubRouter with default parameters.
-func DefaultGossipSubRouter(h host.Host, opts ...func(*GossipSubRouter)) *GossipSubRouter {
+func DefaultGossipSubRouter(h host.Host) *GossipSubRouter {
 	params := DefaultGossipSubParams()
-	rt := &GossipSubRouter{
+	return &GossipSubRouter{
 		peers:     make(map[peer.ID]protocol.ID),
 		mesh:      make(map[string]map[peer.ID]struct{}),
 		fanout:    make(map[string]map[peer.ID]struct{}),
@@ -237,12 +237,6 @@ func DefaultGossipSubRouter(h host.Host, opts ...func(*GossipSubRouter)) *Gossip
 		tagTracer: newTagTracer(h.ConnManager()),
 		params:    params,
 	}
-
-	for _, opt := range opts {
-		opt(rt)
-	}
-
-	return rt
 }
 
 // DefaultGossipSubParams returns the default gossip sub parameters
