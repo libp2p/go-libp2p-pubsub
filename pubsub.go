@@ -1017,6 +1017,14 @@ func (p *PubSub) notifyLeave(topic string, pid peer.ID) {
 }
 
 func (p *PubSub) handleIncomingRPC(rpc *RPC) {
+	// pass the rpc through app specific validation (if any available).
+	if p.appSpecificRpcInspector != nil {
+		// check if the RPC is allowed by the external inspector
+		if accept := p.appSpecificRpcInspector(rpc.from, rpc); !accept {
+			return // reject the RPC
+		}
+	}
+
 	p.tracer.RecvRPC(rpc)
 
 	subs := rpc.GetSubscriptions()
@@ -1079,14 +1087,6 @@ func (p *PubSub) handleIncomingRPC(rpc *RPC) {
 			}
 
 			p.pushMsg(&Message{pmsg, "", rpc.from, nil, false})
-		}
-	}
-
-	// pass the rpc through app specific validation (if any available).
-	if p.appSpecificRpcInspector != nil {
-		// check if the RPC is allowed by the external inspector
-		if accept := p.appSpecificRpcInspector(rpc.from, rpc); !accept {
-			return // reject the RPC
 		}
 	}
 
