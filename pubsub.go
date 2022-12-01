@@ -533,6 +533,10 @@ func WithSeenMessagesTTL(ttl time.Duration) Option {
 	}
 }
 
+// WithAppSpecificRpcInspector sets a hook that inspect incomings RPCs prior to
+// processing them.  The inspector is invoked on an accepted RPC just before it
+// is handled.  If inspector's error is nil, the RPC is handled. Otherwise, it
+// is dropped.
 func WithAppSpecificRpcInspector(inspector func(peer.ID, *RPC) error) Option {
 	return func(ps *PubSub) error {
 		ps.appSpecificRpcInspector = inspector
