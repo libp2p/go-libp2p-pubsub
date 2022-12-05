@@ -1925,6 +1925,12 @@ func (gs *GossipSubRouter) WithDefaultTagTracer() Option {
 	return WithRawTracer(gs.tagTracer)
 }
 
+// SendControl dispatches the given set of control messages to the given peer.
+func (gs *GossipSubRouter) SendControl(p peer.ID, ctl *pb.ControlMessage) {
+	out := rpcWithControl(nil, ctl.Ihave, ctl.Iwant, ctl.Graft, ctl.Prune)
+	gs.sendRPC(p, out)
+}
+
 func peerListToMap(peers []peer.ID) map[peer.ID]struct{} {
 	pmap := make(map[peer.ID]struct{})
 	for _, p := range peers {
