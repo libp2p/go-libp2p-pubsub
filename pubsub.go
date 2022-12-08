@@ -544,6 +544,11 @@ func WithAppSpecificRpcInspector(inspector func(peer.ID, *RPC) error) Option {
 	}
 }
 
+func (p *PubSub) EnsureNewPendingPeersProcessed() {
+	p.newPeers <- struct{}{} // first one to trigger the process.
+	p.newPeers <- struct{}{} // second one to wait for the first one to finish.
+}
+
 // processLoop handles all inputs arriving on the channels
 func (p *PubSub) processLoop(ctx context.Context) {
 	defer func() {
