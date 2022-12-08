@@ -544,9 +544,29 @@ func WithAppSpecificRpcInspector(inspector func(peer.ID, *RPC) error) Option {
 	}
 }
 
-func (p *PubSub) EnsureNewPendingPeersProcessed() {
+func (p *PubSub) ForceUpdatePendingPeers(peerIDs []peer.ID) []peer.ID {
+	p.newPeersPrioLk.RLock()
+	p.newPeersMx.Lock()
+	for _, peerID := range peerIDs {
+		p.newPeersPend[peerID] = struct{}{}
+	}
+	p.newPeersMx.Unlock()
+	p.newPeersPrioLk.RUnlock()
+
 	p.newPeers <- struct{}{} // first one to trigger the process.
 	p.newPeers <- struct{}{} // second one to wait for the first one to finish.
+	p.newPeers <- struct{}{} // third one (in case the first one just buffered).
+
+	p.newPeersPrioLk.RLock()
+	p.newPeersMx.Lock()
+	updated := make([]peer.ID, 0)
+	for peerID := range p.newPeersPend {
+		updated = append(updated, peerID)
+	}
+	p.newPeersMx.Unlock()
+	p.newPeersPrioLk.RUnlock()
+
+	return updated
 }
 
 // processLoop handles all inputs arriving on the channels
