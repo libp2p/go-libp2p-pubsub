@@ -11,6 +11,7 @@ import (
 	"time"
 
 	pb "github.com/libp2p/go-libp2p-pubsub/pb"
+	"github.com/libp2p/go-libp2p-pubsub/timecache"
 
 	"github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/libp2p/go-libp2p/core/discovery"
@@ -20,7 +21,6 @@ import (
 	"github.com/libp2p/go-libp2p/core/protocol"
 
 	logging "github.com/ipfs/go-log"
-	"github.com/whyrusleeping/timecache"
 )
 
 // DefaultMaximumMessageSize is 1mb.
@@ -30,6 +30,10 @@ var (
 	// TimeCacheDuration specifies how long a message ID will be remembered as seen.
 	// Use WithSeenMessagesTTL to configure this per pubsub instance, instead of overriding the global default.
 	TimeCacheDuration = 120 * time.Second
+
+	// TimeCacheStrategy specifies which type of lookup/cleanup strategy is used by the seen messages cache.
+	// Use WithSeenMessagesStrategy to configure this per pubsub instance, instead of overriding the global default.
+	TimeCacheStrategy = timecache.Strategy_LastSeen
 
 	// ErrSubscriptionCancelled may be returned when a subscription Next() is called after the
 	// subscription has been cancelled.
@@ -148,9 +152,10 @@ type PubSub struct {
 	inboundStreamsMx sync.Mutex
 	inboundStreams   map[peer.ID]network.Stream
 
-	seenMessagesMx sync.Mutex
-	seenMessages   *timecache.TimeCache
-	seenMsgTTL     time.Duration
+	seenMessagesMx  sync.Mutex
+	seenMessages    timecache.TimeCache
+	seenMsgTTL      time.Duration
+	seenMsgStrategy timecache.Strategy
 
 	// generator used to compute the ID for a message
 	idGen *msgIDGenerator
@@ -286,6 +291,7 @@ func NewPubSub(ctx context.Context, h host.Host, rt PubSubRouter, opts ...Option
 		blacklist:             NewMapBlacklist(),
 		blacklistPeer:         make(chan peer.ID),
 		seenMsgTTL:            TimeCacheDuration,
+		seenMsgStrategy:       TimeCacheStrategy,
 		idGen:                 newMsgIdGenerator(),
 		counter:               uint64(time.Now().UnixNano()),
 	}
@@ -307,7 +313,7 @@ func NewPubSub(ctx context.Context, h host.Host, rt PubSubRouter, opts ...Option
 		}
 	}
 
-	ps.seenMessages = timecache.NewTimeCache(ps.seenMsgTTL)
+	ps.seenMessages = timecache.NewTimeCacheWithStrategy(ps.seenMsgStrategy, ps.seenMsgTTL)
 
 	if err := ps.disc.Start(ps); err != nil {
 		return nil, err
@@ -529,6 +535,14 @@ func WithProtocolMatchFn(m ProtocolMatchFn) Option {
 func WithSeenMessagesTTL(ttl time.Duration) Option {
 	return func(ps *PubSub) error {
 		ps.seenMsgTTL = ttl
+		return nil
+	}
+}
+
+// WithSeenMessagesStrategy configures which type of lookup/cleanup strategy is used by the seen messages cache
+func WithSeenMessagesStrategy(strategy timecache.Strategy) Option {
+	return func(ps *PubSub) error {
+		ps.seenMsgStrategy = strategy
 		return nil
 	}
 }
