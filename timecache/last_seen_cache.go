@@ -7,8 +7,8 @@ import (
 	"github.com/emirpasic/gods/maps/linkedhashmap"
 )
 
-// LastSeenTimeCache is a LRU cache that keeps entries for up to a specified time duration. After this duration has
-// elapsed, "old" entries will be purged from the cache.
+// LastSeenCache is a LRU cache that keeps entries for up to a specified time duration. After this duration has elapsed,
+// "old" entries will be purged from the cache.
 //
 // It's also a "sliding window" cache. Every time an unexpired entry is seen again, its timestamp slides forward. This
 // keeps frequently occurring entries cached and prevents them from being propagated, especially because of network
@@ -19,21 +19,21 @@ import (
 // appears that would grow the cache, garbage collection will attempt to reduce the pressure on the cache.
 //
 // This implementation is heavily inspired by https://github.com/whyrusleeping/timecache.
-type LastSeenTimeCache struct {
+type LastSeenCache struct {
 	m     *linkedhashmap.Map
 	span  time.Duration
 	guard *sync.Mutex
 }
 
 func newLastSeenCache(span time.Duration) TimeCache {
-	return &LastSeenTimeCache{
+	return &LastSeenCache{
 		m:     linkedhashmap.New(),
 		span:  span,
 		guard: new(sync.Mutex),
 	}
 }
 
-func (tc *LastSeenTimeCache) Add(s string) {
+func (tc *LastSeenCache) Add(s string) {
 	tc.guard.Lock()
 	defer tc.guard.Unlock()
 
@@ -43,7 +43,7 @@ func (tc *LastSeenTimeCache) Add(s string) {
 	tc.gc()
 }
 
-func (tc *LastSeenTimeCache) add(s string) {
+func (tc *LastSeenCache) add(s string) {
 	// We don't need a lock here because this function is always called with the lock already acquired.
 
 	// If an entry already exists, remove it and add a new one to the back of the list to maintain temporal ordering and
@@ -53,7 +53,7 @@ func (tc *LastSeenTimeCache) add(s string) {
 	tc.m.Put(s, &now)
 }
 
-func (tc *LastSeenTimeCache) gc() {
+func (tc *LastSeenCache) gc() {
 	// We don't need a lock here because this function is always called with the lock already acquired.
 	iter := tc.m.Iterator()
 	for iter.Next() {
@@ -68,7 +68,7 @@ func (tc *LastSeenTimeCache) gc() {
 	}
 }
 
-func (tc *LastSeenTimeCache) Has(s string) bool {
+func (tc *LastSeenCache) Has(s string) bool {
 	tc.guard.Lock()
 	defer tc.guard.Unlock()
 

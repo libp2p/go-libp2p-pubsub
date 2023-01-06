@@ -6,7 +6,7 @@ import (
 	"time"
 )
 
-func TestFirstSeenCacheEntriesFound(t *testing.T) {
+func TestFirstSeenCacheFound(t *testing.T) {
 	tc := newFirstSeenCache(time.Minute)
 
 	tc.Add("test")
@@ -16,7 +16,7 @@ func TestFirstSeenCacheEntriesFound(t *testing.T) {
 	}
 }
 
-func TestFirstSeenCacheEntriesExpire(t *testing.T) {
+func TestFirstSeenCacheExpire(t *testing.T) {
 	tc := newFirstSeenCache(time.Second)
 	for i := 0; i < 11; i++ {
 		tc.Add(fmt.Sprint(i))

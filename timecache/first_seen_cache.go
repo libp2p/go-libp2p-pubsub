@@ -6,8 +6,8 @@ import (
 	"time"
 )
 
-// FirstSeenTimeCache is a thread-safe copy of https://github.com/whyrusleeping/timecache.
-type FirstSeenTimeCache struct {
+// FirstSeenCache is a thread-safe copy of https://github.com/whyrusleeping/timecache.
+type FirstSeenCache struct {
 	q     *list.List
 	m     map[string]time.Time
 	span  time.Duration
@@ -15,7 +15,7 @@ type FirstSeenTimeCache struct {
 }
 
 func newFirstSeenCache(span time.Duration) TimeCache {
-	return &FirstSeenTimeCache{
+	return &FirstSeenCache{
 		q:     list.New(),
 		m:     make(map[string]time.Time),
 		span:  span,
@@ -23,7 +23,7 @@ func newFirstSeenCache(span time.Duration) TimeCache {
 	}
 }
 
-func (tc FirstSeenTimeCache) Add(s string) {
+func (tc FirstSeenCache) Add(s string) {
 	tc.guard.Lock()
 	defer tc.guard.Unlock()
 
@@ -38,7 +38,7 @@ func (tc FirstSeenTimeCache) Add(s string) {
 	tc.q.PushFront(s)
 }
 
-func (tc FirstSeenTimeCache) sweep() {
+func (tc FirstSeenCache) sweep() {
 	for {
 		back := tc.q.Back()
 		if back == nil {
@@ -60,7 +60,7 @@ func (tc FirstSeenTimeCache) sweep() {
 	}
 }
 
-func (tc FirstSeenTimeCache) Has(s string) bool {
+func (tc FirstSeenCache) Has(s string) bool {
 	tc.guard.RLock()
 	defer tc.guard.RUnlock()
 
