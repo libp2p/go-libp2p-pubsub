@@ -64,6 +64,9 @@ func (tc FirstSeenCache) Has(s string) bool {
 	tc.guard.RLock()
 	defer tc.guard.RUnlock()
 
-	_, ok := tc.m[s]
-	return ok
+	// Only consider the entry found if it was present in the cache AND hadn't already expired.
+	if ts, ok := tc.m[s]; ok {
+		return time.Since(ts) <= tc.span
+	}
+	return false
 }
