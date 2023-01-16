@@ -14,9 +14,9 @@ type TimeCache interface {
 	Has(string) bool
 }
 
-// NewTimeCache defaults to the original ("first seen") cache implementation
+// NewTimeCache defaults to the new ("last seen") cache implementation
 func NewTimeCache(span time.Duration) TimeCache {
-	return NewTimeCacheWithStrategy(Strategy_FirstSeen, span)
+	return NewTimeCacheWithStrategy(Strategy_LastSeen, span)
 }
 
 func NewTimeCacheWithStrategy(strategy Strategy, span time.Duration) TimeCache {
@@ -26,7 +26,7 @@ func NewTimeCacheWithStrategy(strategy Strategy, span time.Duration) TimeCache {
 	case Strategy_LastSeen:
 		return newLastSeenCache(span)
 	default:
-		// Default to the original time cache implementation
-		return newFirstSeenCache(span)
+		// Default to the new time cache implementation
+		return newLastSeenCache(span)
 	}
 }
