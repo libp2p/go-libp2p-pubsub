@@ -33,7 +33,7 @@ var (
 
 	// TimeCacheStrategy specifies which type of lookup/cleanup strategy is used by the seen messages cache.
 	// Use WithSeenMessagesStrategy to configure this per pubsub instance, instead of overriding the global default.
-	TimeCacheStrategy = timecache.Strategy_LastSeen
+	TimeCacheStrategy = timecache.Strategy_FirstSeen
 
 	// ErrSubscriptionCancelled may be returned when a subscription Next() is called after the
 	// subscription has been cancelled.

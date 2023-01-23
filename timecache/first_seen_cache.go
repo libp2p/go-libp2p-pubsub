@@ -32,6 +32,7 @@ func (tc FirstSeenCache) Add(s string) {
 		panic("putting the same entry twice not supported")
 	}
 
+	// TODO(#515): Do GC in the background
 	tc.sweep()
 
 	tc.m[s] = time.Now()

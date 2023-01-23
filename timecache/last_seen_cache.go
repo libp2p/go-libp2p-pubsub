@@ -40,6 +40,7 @@ func (tc *LastSeenCache) Add(s string) {
 	tc.add(s)
 
 	// Garbage collect expired entries
+	// TODO(#515): Do GC in the background
 	tc.gc()
 }
 
