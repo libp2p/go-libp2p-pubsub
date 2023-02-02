@@ -6,7 +6,7 @@ require (
 	github.com/benbjohnson/clock v1.3.0
 	github.com/emirpasic/gods v1.18.1
 	github.com/gogo/protobuf v1.3.2
-	github.com/ipfs/go-log v1.0.5
+	github.com/ipfs/go-log/v2 v2.5.1
 	github.com/libp2p/go-buffer-pool v0.1.0
 	github.com/libp2p/go-libp2p v0.25.0
 	github.com/libp2p/go-libp2p-testing v0.12.0
@@ -34,7 +34,6 @@ require (
 	github.com/google/pprof v0.0.0-20221203041831-ce31453925ec // indirect
 	github.com/hashicorp/golang-lru/v2 v2.0.1 // indirect
 	github.com/ipfs/go-cid v0.3.2 // indirect
-	github.com/ipfs/go-log/v2 v2.5.1 // indirect
 	github.com/jbenet/go-temp-err-catcher v0.1.0 // indirect
 	github.com/klauspost/compress v1.15.12 // indirect
 	github.com/klauspost/cpuid/v2 v2.2.1 // indirect
@@ -60,7 +59,6 @@ require (
 	github.com/multiformats/go-multistream v0.4.0 // indirect
 	github.com/onsi/ginkgo/v2 v2.5.1 // indirect
 	github.com/opencontainers/runtime-spec v1.0.2 // indirect
-	github.com/opentracing/opentracing-go v1.2.0 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/prometheus/client_golang v1.14.0 // indirect
