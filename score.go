@@ -14,7 +14,7 @@ import (
 	manet "github.com/multiformats/go-multiaddr/net"
 )
 
-type peerStats struct {
+type PeerStats struct {
 	// true if the peer is currently connected
 	connected bool
 
@@ -68,7 +68,7 @@ type peerScore struct {
 	params *PeerScoreParams
 
 	// per peer stats for score calculation
-	peerStats map[peer.ID]*peerStats
+	peerStats map[peer.ID]*PeerStats
 
 	// IP colocation tracking; maps IP => set of peers.
 	peerIPs map[string]map[peer.ID]struct{}
@@ -187,7 +187,7 @@ func newPeerScore(params *PeerScoreParams) *peerScore {
 	}
 	return &peerScore{
 		params:     params,
-		peerStats:  make(map[peer.ID]*peerStats),
+		peerStats:  make(map[peer.ID]*PeerStats),
 		peerIPs:    make(map[string]map[peer.ID]struct{}),
 		deliveries: &messageDeliveries{seenMsgTTL: seenMsgTTL, records: make(map[string]*deliveryRecord)},
 		idGen:      newMsgIdGenerator(),
@@ -311,7 +311,7 @@ func (ps *peerScore) score(p peer.ID) float64 {
 
 		// P4: invalid messages
 		// NOTE: the weight of P4 is negative (validated in TopicScoreParams.validate), so this detracts.
-		p4 := (tstats.invalidMessageDeliveries * tstats.invalidMessageDeliveries)
+		p4 := tstats.invalidMessageDeliveries * tstats.invalidMessageDeliveries
 		topicScore += p4 * topicParams.InvalidMessageDeliveriesWeight
 
 		// update score, mixing with topic weight
@@ -598,7 +598,7 @@ func (ps *peerScore) AddPeer(p peer.ID, proto protocol.ID) {
 
 	pstats, ok := ps.peerStats[p]
 	if !ok {
-		pstats = &peerStats{topics: make(map[string]*topicStats)}
+		pstats = &PeerStats{topics: make(map[string]*topicStats)}
 		ps.peerStats[p] = pstats
 	}
 
@@ -878,8 +878,8 @@ func (d *messageDeliveries) gc() {
 
 // getTopicStats returns existing topic stats for a given a given (peer, topic)
 // tuple, or initialises a new topicStats object and inserts it in the
-// peerStats, iff the topic is scored.
-func (pstats *peerStats) getTopicStats(topic string, params *PeerScoreParams) (*topicStats, bool) {
+// PeerStats, iff the topic is scored.
+func (pstats *PeerStats) getTopicStats(topic string, params *PeerScoreParams) (*topicStats, bool) {
 	tstats, ok := pstats.topics[topic]
 	if ok {
 		return tstats, true
@@ -1078,4 +1078,30 @@ func (ps *peerScore) removeIPs(p peer.ID, ips []string) {
 			delete(ps.peerIPs, ip)
 		}
 	}
+}
+
+// GetAllPeerStats returns a deep copy of the peer stats map.
+func (ps *peerScore) getAllPeerStats() map[peer.ID]PeerStats {
+	ps.Lock()
+	defer ps.Unlock()
+
+	res := make(map[peer.ID]PeerStats, len(ps.peerStats))
+	for p, pstats := range ps.peerStats {
+		res[p] = *pstats
+	}
+
+	return res
+}
+
+// GetPeerStats returns a deep copy of the peer stats for a peer.
+func (ps *peerScore) getPeerStats(p peer.ID) (PeerStats, bool) {
+	ps.Lock()
+	defer ps.Unlock()
+
+	pstats, ok := ps.peerStats[p]
+	if !ok {
+		return PeerStats{}, false
+	}
+
+	return *pstats, true
 }

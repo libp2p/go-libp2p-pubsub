@@ -1919,6 +1919,14 @@ func (gs *GossipSubRouter) getPeers(topic string, count int, filter func(peer.ID
 	return peers
 }
 
+func (gs *GossipSubRouter) GetAllPeerStats() map[peer.ID]PeerStats {
+	return gs.score.getAllPeerStats()
+}
+
+func (gs *GossipSubRouter) GetPeerStats(p peer.ID) (PeerStats, bool) {
+	return gs.score.getPeerStats(p)
+}
+
 // WithDefaultTagTracer returns the tag tracer of the GossipSubRouter as a PubSub option.
 // This is useful for cases where the GossipSubRouter is instantiated externally, and is
 // injected into the GossipSub constructor as a dependency. This allows the tag tracer to be

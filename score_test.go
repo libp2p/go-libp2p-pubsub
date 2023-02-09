@@ -1074,7 +1074,7 @@ func setIPsForPeer(t *testing.T, ps *peerScore, p peer.ID, ips ...string) {
 	ps.setIPs(p, ips, []string{})
 	pstats, ok := ps.peerStats[p]
 	if !ok {
-		t.Fatal("unable to get peerStats")
+		t.Fatal("unable to get PeerStats")
 	}
 	pstats.ips = ips
 }
