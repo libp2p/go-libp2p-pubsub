@@ -4,6 +4,7 @@ go 1.17
 
 require (
 	github.com/benbjohnson/clock v1.3.0
+	github.com/emirpasic/gods v1.18.1
 	github.com/gogo/protobuf v1.3.2
 	github.com/ipfs/go-log v1.0.5
 	github.com/libp2p/go-buffer-pool v0.1.0
@@ -13,7 +14,6 @@ require (
 	github.com/libp2p/go-msgio v0.2.0
 	github.com/multiformats/go-multiaddr v0.6.0
 	github.com/multiformats/go-varint v0.0.6
-	github.com/whyrusleeping/timecache v0.0.0-20160911033111-cfcb2f1abfee
 )
 
 require (
@@ -39,7 +39,6 @@ require (
 	github.com/jbenet/go-temp-err-catcher v0.1.0 // indirect
 	github.com/klauspost/compress v1.15.1 // indirect
 	github.com/klauspost/cpuid/v2 v2.1.0 // indirect
-	github.com/kr/pretty v0.2.1 // indirect
 	github.com/libp2p/go-flow-metrics v0.1.0 // indirect
 	github.com/libp2p/go-netroute v0.2.0 // indirect
 	github.com/libp2p/go-openssl v0.1.0 // indirect
