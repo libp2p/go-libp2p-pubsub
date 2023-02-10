@@ -75,8 +75,8 @@ func TestGossipSubMatchingFn(t *testing.T) {
 	}
 }
 
-func protocolNameMatch(base string) func(string) bool {
-	return func(check string) bool {
+func protocolNameMatch(base protocol.ID) func(protocol.ID) bool {
+	return func(check protocol.ID) bool {
 		baseName := strings.Split(string(base), "/")[1]
 		checkName := strings.Split(string(check), "/")[1]
 		return baseName == checkName

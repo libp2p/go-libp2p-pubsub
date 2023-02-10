@@ -42,7 +42,7 @@ var (
 
 var log = logging.Logger("pubsub")
 
-type ProtocolMatchFn = func(string) func(string) bool
+type ProtocolMatchFn = func(protocol.ID) func(protocol.ID) bool
 
 // PubSub is the implementation of the pubsub system.
 type PubSub struct {
@@ -323,7 +323,7 @@ func NewPubSub(ctx context.Context, h host.Host, rt PubSubRouter, opts ...Option
 
 	for _, id := range rt.Protocols() {
 		if ps.protoMatchFunc != nil {
-			h.SetStreamHandlerMatch(id, ps.protoMatchFunc(string(id)), ps.handleNewStream)
+			h.SetStreamHandlerMatch(id, ps.protoMatchFunc(id), ps.handleNewStream)
 		} else {
 			h.SetStreamHandler(id, ps.handleNewStream)
 		}
