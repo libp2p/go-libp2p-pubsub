@@ -1243,7 +1243,7 @@ func (gs *GossipSubRouter) sendPrune(p peer.ID, topic string, isUnsubscribe bool
 	gs.sendRPC(p, out)
 }
 
-func (gs *GossipSubRouter) sendRPC(p peer.ID, out *RPC) bool {
+func (gs *GossipSubRouter) sendRPC(p peer.ID, out *RPC) {
 	// do we own the RPC?
 	own := false
 
@@ -1269,27 +1269,27 @@ func (gs *GossipSubRouter) sendRPC(p peer.ID, out *RPC) bool {
 
 	mch, ok := gs.p.peers[p]
 	if !ok {
-		return false
+		return
 	}
 
 	// If we're below the max message size, go ahead and send
 	if out.Size() < gs.p.maxMessageSize {
 		gs.doSendRPC(out, p, mch)
-		return true
+		return
 	}
 
 	// If we're too big, fragment into multiple RPCs and send each sequentially
 	outRPCs, err := fragmentRPC(out, gs.p.maxMessageSize)
 	if err != nil {
 		gs.doDropRPC(out, p, fmt.Sprintf("unable to fragment RPC: %s", err))
-		return false
+		return
 	}
 
 	for _, rpc := range outRPCs {
 		gs.doSendRPC(rpc, p, mch)
 	}
 
-	return true
+	return
 }
 
 func (gs *GossipSubRouter) doDropRPC(rpc *RPC, p peer.ID, reason string) {
@@ -2044,12 +2044,6 @@ func (gs *GossipSubRouter) GetPeerStats(p peer.ID) (PeerStats, bool) {
 // also injected into the GossipSub constructor as a PubSub option dependency.
 func (gs *GossipSubRouter) WithDefaultTagTracer() Option {
 	return WithRawTracer(gs.tagTracer)
-}
-
-// SendControl dispatches the given set of control messages to the given peer.
-func (gs *GossipSubRouter) SendControl(p peer.ID, ctl *pb.ControlMessage) bool {
-	out := rpcWithControl(nil, ctl.Ihave, ctl.Iwant, ctl.Graft, ctl.Prune)
-	return gs.sendRPC(p, out)
 }
 
 func peerListToMap(peers []peer.ID) map[peer.ID]struct{} {
