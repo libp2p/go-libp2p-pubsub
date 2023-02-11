@@ -223,14 +223,14 @@ func NewGossipSubWithRouter(ctx context.Context, h host.Host, rt PubSubRouter, o
 type ReadOnlyRoutingMetadata struct {
 	mu sync.RWMutex
 	// metda-date will be updated every k-heartbeats by the router. This is used to avoid unnecessary updates.
-	k int
+	k uint64
 	// heartbeat counter
-	count  int
+	count  uint64
 	mesh   map[string]map[peer.ID]struct{}
 	fanout map[string]map[peer.ID]struct{}
 }
 
-func newReadOnlyRoutingMetadataTracer(k int) *ReadOnlyRoutingMetadata {
+func newReadOnlyRoutingMetadataTracer(k uint64) *ReadOnlyRoutingMetadata {
 	return &ReadOnlyRoutingMetadata{
 		k:      k,
 		count:  0,
@@ -288,7 +288,9 @@ func (r *ReadOnlyRoutingMetadata) update(mesh map[string]map[peer.ID]struct{}, f
 
 type GossipSubRouterOption func(*GossipSubRouter)
 
-func WithReadOnlyRoutingMetadata(k int) GossipSubRouterOption {
+// WithReadOnlyRoutingMetadata returns a GossipSubRouterOption that enables the read-only routing metadataTracer.
+// The metadataTracer is updated every k-heartbeats by the router.
+func WithReadOnlyRoutingMetadata(k uint64) GossipSubRouterOption {
 	return func(r *GossipSubRouter) {
 		r.metadataTracer = newReadOnlyRoutingMetadataTracer(k)
 	}
