@@ -1288,8 +1288,6 @@ func (gs *GossipSubRouter) sendRPC(p peer.ID, out *RPC) {
 	for _, rpc := range outRPCs {
 		gs.doSendRPC(rpc, p, mch)
 	}
-
-	return
 }
 
 func (gs *GossipSubRouter) doDropRPC(rpc *RPC, p peer.ID, reason string) {
@@ -1715,7 +1713,9 @@ func (gs *GossipSubRouter) heartbeat() {
 	gs.mcache.Shift()
 
 	// deep copy mesh and fanout for the metadata tracer
-	gs.metadataTracer.update(gs.mesh, gs.fanout)
+	if gs.metadataTracer != nil {
+		gs.metadataTracer.update(gs.mesh, gs.fanout)
+	}
 }
 
 func (gs *GossipSubRouter) clearIHaveCounters() {
