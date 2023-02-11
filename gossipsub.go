@@ -2,9 +2,11 @@ package pubsub
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math/rand"
 	"sort"
+	"sync"
 	"time"
 
 	pb "github.com/libp2p/go-libp2p-pubsub/pb"
@@ -216,10 +218,86 @@ func NewGossipSubWithRouter(ctx context.Context, h host.Host, rt PubSubRouter, o
 	return NewPubSub(ctx, h, rt, opts...)
 }
 
+// ReadOnlyRoutingMetadata is a read-only view of the routing metadataTracer maintained by the GossipSubRouter.
+// It is used to expose the metadataTracer to the application without exposing the router internals.
+type ReadOnlyRoutingMetadata struct {
+	mu sync.RWMutex
+	// metda-date will be updated every k-heartbeats by the router. This is used to avoid unnecessary updates.
+	k int
+	// heartbeat counter
+	count  int
+	mesh   map[string]map[peer.ID]struct{}
+	fanout map[string]map[peer.ID]struct{}
+}
+
+func newReadOnlyRoutingMetadataTracer(k int) *ReadOnlyRoutingMetadata {
+	return &ReadOnlyRoutingMetadata{
+		k:      k,
+		count:  0,
+		mesh:   make(map[string]map[peer.ID]struct{}),
+		fanout: make(map[string]map[peer.ID]struct{}),
+	}
+}
+
+func (r *ReadOnlyRoutingMetadata) getMeshPeers(topic string) []peer.ID {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	peers := make([]peer.ID, 0, len(r.mesh[topic]))
+	for p := range r.mesh[topic] {
+		peers = append(peers, p)
+	}
+	return peers
+}
+
+func (r *ReadOnlyRoutingMetadata) getFanoutPeers(topic string) []peer.ID {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	peers := make([]peer.ID, 0, len(r.fanout[topic]))
+	for p := range r.fanout[topic] {
+		peers = append(peers, p)
+	}
+	return peers
+}
+
+func (r *ReadOnlyRoutingMetadata) update(mesh map[string]map[peer.ID]struct{}, fanout map[string]map[peer.ID]struct{}) {
+	r.count++
+	if r.count%r.k != 0 {
+		return // skip update
+	}
+
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	// deep copies mesh and fanout maps
+	for topic, peers := range mesh {
+		r.mesh[topic] = make(map[peer.ID]struct{}, len(peers))
+		for p := range peers {
+			r.mesh[topic][p] = struct{}{}
+		}
+	}
+
+	for topic, peers := range fanout {
+		r.fanout[topic] = make(map[peer.ID]struct{}, len(peers))
+		for p := range peers {
+			r.fanout[topic][p] = struct{}{}
+		}
+	}
+}
+
+type GossipSubRouterOption func(*GossipSubRouter)
+
+func WithReadOnlyRoutingMetadata(k int) GossipSubRouterOption {
+	return func(r *GossipSubRouter) {
+		r.metadataTracer = newReadOnlyRoutingMetadataTracer(k)
+	}
+}
+
 // DefaultGossipSubRouter returns a new GossipSubRouter with default parameters.
-func DefaultGossipSubRouter(h host.Host) *GossipSubRouter {
+func DefaultGossipSubRouter(h host.Host, opts ...GossipSubRouterOption) *GossipSubRouter {
 	params := DefaultGossipSubParams()
-	return &GossipSubRouter{
+	r := &GossipSubRouter{
 		peers:     make(map[peer.ID]protocol.ID),
 		mesh:      make(map[string]map[peer.ID]struct{}),
 		fanout:    make(map[string]map[peer.ID]struct{}),
@@ -237,6 +315,12 @@ func DefaultGossipSubRouter(h host.Host) *GossipSubRouter {
 		tagTracer: newTagTracer(h.ConnManager()),
 		params:    params,
 	}
+
+	for _, opt := range opts {
+		opt(r)
+	}
+
+	return r
 }
 
 // DefaultGossipSubParams returns the default gossip sub parameters
@@ -434,6 +518,10 @@ type GossipSubRouter struct {
 
 	protos  []protocol.ID
 	feature GossipSubFeatureTest
+	// a read-only copy of the router internal state for the application layer.
+	// note that updates on this metadataTracer are happening asynchronously, so it may not be
+	// up-to-date with the internal state.
+	metadataTracer *ReadOnlyRoutingMetadata
 
 	mcache       *MessageCache
 	tracer       *pubsubTracer
@@ -625,6 +713,24 @@ func (gs *GossipSubRouter) HandleRPC(rpc *RPC) {
 
 	out := rpcWithControl(ihave, nil, iwant, nil, prune)
 	gs.sendRPC(rpc.from, out)
+}
+
+// GetMeshPeers returns the mesh peers for a topic. Note that this is not a snapshot of the mesh
+// at the time of the call, but a live view of the mesh that is updated asynchronously every few heartbeats.
+func (gs *GossipSubRouter) GetMeshPeers(topic string) ([]peer.ID, error) {
+	if gs.metadataTracer == nil {
+		return nil, errors.New("no metadataTracer available")
+	}
+	return gs.metadataTracer.getMeshPeers(topic), nil
+}
+
+// GetFanoutPeers returns the fanout peers for a topic. Note that this is not a snapshot of the fanout
+// at the time of the call, but a live view of the fanout that is updated asynchronously every few heartbeats.
+func (gs *GossipSubRouter) GetFanoutPeers(topic string) ([]peer.ID, error) {
+	if gs.metadataTracer == nil {
+		return nil, errors.New("no metadataTracer available")
+	}
+	return gs.metadataTracer.getFanoutPeers(topic), nil
 }
 
 func (gs *GossipSubRouter) handleIHave(p peer.ID, ctl *pb.ControlMessage) []*pb.ControlIWant {
@@ -1605,6 +1711,9 @@ func (gs *GossipSubRouter) heartbeat() {
 
 	// advance the message history window
 	gs.mcache.Shift()
+
+	// deep copy mesh and fanout for the metadata tracer
+	gs.metadataTracer.update(gs.mesh, gs.fanout)
 }
 
 func (gs *GossipSubRouter) clearIHaveCounters() {
