@@ -16,23 +16,24 @@ const (
 )
 
 type TimeCache interface {
-	Add(string)
+	Add(string) bool
 	Has(string) bool
+	Done()
 }
 
 // NewTimeCache defaults to the original ("first seen") cache implementation
-func NewTimeCache(span time.Duration) TimeCache {
-	return NewTimeCacheWithStrategy(Strategy_FirstSeen, span)
+func NewTimeCache(ttl time.Duration) TimeCache {
+	return NewTimeCacheWithStrategy(Strategy_FirstSeen, ttl)
 }
 
-func NewTimeCacheWithStrategy(strategy Strategy, span time.Duration) TimeCache {
+func NewTimeCacheWithStrategy(strategy Strategy, ttl time.Duration) TimeCache {
 	switch strategy {
 	case Strategy_FirstSeen:
-		return newFirstSeenCache(span)
+		return newFirstSeenCache(ttl)
 	case Strategy_LastSeen:
-		return newLastSeenCache(span)
+		return newLastSeenCache(ttl)
 	default:
 		// Default to the original time cache implementation
-		return newFirstSeenCache(span)
+		return newFirstSeenCache(ttl)
 	}
 }

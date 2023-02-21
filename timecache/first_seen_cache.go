@@ -1,72 +1,85 @@
 package timecache
 
 import (
-	"container/list"
+	"context"
 	"sync"
 	"time"
 )
 
-// FirstSeenCache is a thread-safe copy of https://github.com/whyrusleeping/timecache.
+var backgroundSweepInterval = time.Minute
+
+// FirstSeenCache is a time cache that only marks the expiry of a message when first added.
 type FirstSeenCache struct {
-	q     *list.List
-	m     map[string]time.Time
-	span  time.Duration
-	guard *sync.RWMutex
+	lk  sync.RWMutex
+	m   map[string]time.Time
+	ttl time.Duration
+
+	done func()
 }
 
-func newFirstSeenCache(span time.Duration) TimeCache {
-	return &FirstSeenCache{
-		q:     list.New(),
-		m:     make(map[string]time.Time),
-		span:  span,
-		guard: new(sync.RWMutex),
+var _ TimeCache = (*FirstSeenCache)(nil)
+
+func newFirstSeenCache(ttl time.Duration) *FirstSeenCache {
+	tc := &FirstSeenCache{
+		m:   make(map[string]time.Time),
+		ttl: ttl,
 	}
+
+	ctx, done := context.WithCancel(context.Background())
+	tc.done = done
+	go tc.background(ctx)
+
+	return tc
 }
 
-func (tc FirstSeenCache) Add(s string) {
-	tc.guard.Lock()
-	defer tc.guard.Unlock()
+func (tc *FirstSeenCache) Done() {
+	tc.done()
+}
+
+func (tc *FirstSeenCache) Has(s string) bool {
+	tc.lk.RLock()
+	defer tc.lk.RUnlock()
+
+	_, ok := tc.m[s]
+	return ok
+}
+
+func (tc *FirstSeenCache) Add(s string) bool {
+	tc.lk.Lock()
+	defer tc.lk.Unlock()
 
 	_, ok := tc.m[s]
 	if ok {
-		log.Debug("first-seen: got same entry")
-		return
+		return false
 	}
-
-	// TODO(#515): Do GC in the background
-	tc.sweep()
 
 	tc.m[s] = time.Now()
-	tc.q.PushFront(s)
+	return true
 }
 
-func (tc FirstSeenCache) sweep() {
+func (tc *FirstSeenCache) background(ctx context.Context) {
+	ticker := time.NewTimer(backgroundSweepInterval)
+	defer ticker.Stop()
+
 	for {
-		back := tc.q.Back()
-		if back == nil {
-			return
-		}
+		select {
+		case now := <-ticker.C:
+			tc.sweep(now)
 
-		v := back.Value.(string)
-		t, ok := tc.m[v]
-		if !ok {
-			panic("inconsistent cache state")
-		}
-
-		if time.Since(t) > tc.span {
-			tc.q.Remove(back)
-			delete(tc.m, v)
-		} else {
+		case <-ctx.Done():
 			return
 		}
 	}
 }
 
-func (tc FirstSeenCache) Has(s string) bool {
-	tc.guard.RLock()
-	defer tc.guard.RUnlock()
+func (tc *FirstSeenCache) sweep(now time.Time) {
+	tc.lk.Lock()
+	defer tc.lk.Unlock()
 
-	ts, ok := tc.m[s]
-	// Only consider the entry found if it was present in the cache AND hadn't already expired.
-	return ok && time.Since(ts) <= tc.span
+	expired := now.Add(tc.ttl)
+	for k, expiry := range tc.m {
+		if expiry.Before(expired) {
+			delete(tc.m, k)
+		}
+	}
 }
