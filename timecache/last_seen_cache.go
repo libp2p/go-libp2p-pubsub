@@ -6,7 +6,8 @@ import (
 	"time"
 )
 
-// LastSeenCache is a time cache that marks the expiry of a message when added or cheked for presence.
+// LastSeenCache is a time cache that extends the expiry of a seen message when added
+// or checked for presence with Has..
 type LastSeenCache struct {
 	lk  sync.Mutex
 	m   map[string]time.Time
