@@ -7,6 +7,7 @@ import (
 )
 
 var log = logger.Logger("pubsub/timecache")
+var backgroundSweepInterval = time.Minute
 
 type Strategy uint8
 

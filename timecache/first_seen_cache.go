@@ -6,8 +6,6 @@ import (
 	"time"
 )
 
-var backgroundSweepInterval = time.Minute
-
 // FirstSeenCache is a time cache that only marks the expiry of a message when first added.
 type FirstSeenCache struct {
 	lk  sync.RWMutex

@@ -17,22 +17,27 @@ func TestFirstSeenCacheFound(t *testing.T) {
 }
 
 func TestFirstSeenCacheExpire(t *testing.T) {
+	backgroundSweepInterval = time.Second
+
 	tc := newFirstSeenCache(time.Second)
-	for i := 0; i < 11; i++ {
+	for i := 0; i < 10; i++ {
 		tc.Add(fmt.Sprint(i))
 		time.Sleep(time.Millisecond * 100)
 	}
 
+	time.Sleep(2 * time.Second)
 	if tc.Has(fmt.Sprint(0)) {
 		t.Fatal("should have dropped this from the cache already")
 	}
 }
 
 func TestFirstSeenCacheNotFoundAfterExpire(t *testing.T) {
+	backgroundSweepInterval = time.Second
+
 	tc := newFirstSeenCache(time.Second)
 	tc.Add(fmt.Sprint(0))
-	time.Sleep(1100 * time.Millisecond)
 
+	time.Sleep(2 * time.Second)
 	if tc.Has(fmt.Sprint(0)) {
 		t.Fatal("should have dropped this from the cache already")
 	}
