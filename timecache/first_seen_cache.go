@@ -51,7 +51,7 @@ func (tc *FirstSeenCache) Add(s string) bool {
 		return false
 	}
 
-	tc.m[s] = time.Now()
+	tc.m[s] = time.Now().Add(tc.ttl)
 	return true
 }
 
@@ -74,9 +74,8 @@ func (tc *FirstSeenCache) sweep(now time.Time) {
 	tc.lk.Lock()
 	defer tc.lk.Unlock()
 
-	expired := now.Add(tc.ttl)
 	for k, expiry := range tc.m {
-		if expiry.Before(expired) {
+		if expiry.Before(now) {
 			delete(tc.m, k)
 		}
 	}

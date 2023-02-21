@@ -40,7 +40,7 @@ func (tc *LastSeenCache) Add(s string) bool {
 	defer tc.lk.Unlock()
 
 	_, ok := tc.m[s]
-	tc.m[s] = time.Now()
+	tc.m[s] = time.Now().Add(tc.ttl)
 
 	return !ok
 }
@@ -51,7 +51,7 @@ func (tc *LastSeenCache) Has(s string) bool {
 
 	_, ok := tc.m[s]
 	if ok {
-		tc.m[s] = time.Now()
+		tc.m[s] = time.Now().Add(tc.ttl)
 	}
 
 	return ok
@@ -76,9 +76,8 @@ func (tc *LastSeenCache) sweep(now time.Time) {
 	tc.lk.Lock()
 	defer tc.lk.Unlock()
 
-	expired := now.Add(tc.ttl)
 	for k, expiry := range tc.m {
-		if expiry.Before(expired) {
+		if expiry.Before(now) {
 			delete(tc.m, k)
 		}
 	}
