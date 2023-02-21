@@ -26,7 +26,7 @@ func newLastSeenCache(ttl time.Duration) *LastSeenCache {
 
 	ctx, done := context.WithCancel(context.Background())
 	tc.done = done
-	go tc.background(ctx)
+	go background(ctx, &tc.lk, tc.m)
 
 	return tc
 }
@@ -55,30 +55,4 @@ func (tc *LastSeenCache) Has(s string) bool {
 	}
 
 	return ok
-}
-
-func (tc *LastSeenCache) background(ctx context.Context) {
-	ticker := time.NewTimer(backgroundSweepInterval)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case now := <-ticker.C:
-			tc.sweep(now)
-
-		case <-ctx.Done():
-			return
-		}
-	}
-}
-
-func (tc *LastSeenCache) sweep(now time.Time) {
-	tc.lk.Lock()
-	defer tc.lk.Unlock()
-
-	for k, expiry := range tc.m {
-		if expiry.Before(now) {
-			delete(tc.m, k)
-		}
-	}
 }

@@ -25,7 +25,7 @@ func newFirstSeenCache(ttl time.Duration) *FirstSeenCache {
 
 	ctx, done := context.WithCancel(context.Background())
 	tc.done = done
-	go tc.background(ctx)
+	go background(ctx, &tc.lk, tc.m)
 
 	return tc
 }
@@ -53,30 +53,4 @@ func (tc *FirstSeenCache) Add(s string) bool {
 
 	tc.m[s] = time.Now().Add(tc.ttl)
 	return true
-}
-
-func (tc *FirstSeenCache) background(ctx context.Context) {
-	ticker := time.NewTimer(backgroundSweepInterval)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case now := <-ticker.C:
-			tc.sweep(now)
-
-		case <-ctx.Done():
-			return
-		}
-	}
-}
-
-func (tc *FirstSeenCache) sweep(now time.Time) {
-	tc.lk.Lock()
-	defer tc.lk.Unlock()
-
-	for k, expiry := range tc.m {
-		if expiry.Before(now) {
-			delete(tc.m, k)
-		}
-	}
 }
