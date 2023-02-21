@@ -1,6 +1,12 @@
 package timecache
 
-import "time"
+import (
+	"time"
+
+	logger "github.com/ipfs/go-log/v2"
+)
+
+var log = logger.Logger("pubsub/timecache")
 
 type Strategy uint8
 

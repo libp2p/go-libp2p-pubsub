@@ -29,7 +29,8 @@ func (tc FirstSeenCache) Add(s string) {
 
 	_, ok := tc.m[s]
 	if ok {
-		panic("putting the same entry twice not supported")
+		log.Debug("first-seen: got same entry")
+		return
 	}
 
 	// TODO(#515): Do GC in the background
