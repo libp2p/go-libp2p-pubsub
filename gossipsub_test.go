@@ -611,7 +611,7 @@ func TestGossipsubPruneBackoffTime(t *testing.T) {
 			GossipThreshold:   -1,
 			PublishThreshold:  -1,
 			GraylistThreshold: -1,
-		}))
+		}, nil))
 
 	var msgs []*Subscription
 	for _, ps := range psubs {
@@ -1547,7 +1547,7 @@ func TestGossipsubNegativeScore(t *testing.T) {
 				GossipThreshold:   -10,
 				PublishThreshold:  -100,
 				GraylistThreshold: -10000,
-			}))
+			}, nil))
 
 	denseConnect(t, hosts)
 
@@ -1632,7 +1632,7 @@ func TestGossipsubScoreValidatorEx(t *testing.T) {
 				GossipThreshold:   -10,
 				PublishThreshold:  -100,
 				GraylistThreshold: -10000,
-			}))
+			}, nil))
 
 	connectAll(t, hosts)
 
@@ -1845,7 +1845,7 @@ func TestGossipsubOpportunisticGrafting(t *testing.T) {
 				PublishThreshold:            -100,
 				GraylistThreshold:           -10000,
 				OpportunisticGraftThreshold: 1,
-			}))
+			}, nil))
 
 	// connect the real hosts with degree 5
 	connectSome(t, hosts[:10], 5)
@@ -2096,7 +2096,7 @@ func TestGossipsubPeerScoreInspect(t *testing.T) {
 				GossipThreshold:   -1,
 				PublishThreshold:  -10,
 				GraylistThreshold: -1000,
-			}),
+			}, nil),
 		WithPeerScoreInspect(inspector.inspect, time.Second))
 	psub2 := getGossipsub(ctx, hosts[1])
 	psubs := []*PubSub{psub1, psub2}
@@ -2155,7 +2155,7 @@ func TestGossipsubPeerScoreResetTopicParams(t *testing.T) {
 				GossipThreshold:   -1,
 				PublishThreshold:  -10,
 				GraylistThreshold: -1000,
-			}))
+			}, nil))
 
 	topic, err := ps.Join("test")
 	if err != nil {

@@ -361,7 +361,10 @@ func DefaultGossipSubParams() GossipSubParams {
 }
 
 // WithPeerScore is a gossipsub router option that enables peer scoring.
-func WithPeerScore(params *PeerScoreParams, thresholds *PeerScoreThresholds) Option {
+// The "tracer" parameter is an optional tracer that will receive notifications of peer score updates upon any
+// critical events related to a peer happens in the router such as a peer being pruned. This tracer can be left nil if
+// no notifications are required.
+func WithPeerScore(params *PeerScoreParams, thresholds *PeerScoreThresholds, tracer *AppPeerStatsTracer) Option {
 	return func(ps *PubSub) error {
 		gs, ok := ps.rt.(*GossipSubRouter)
 		if !ok {
@@ -380,7 +383,7 @@ func WithPeerScore(params *PeerScoreParams, thresholds *PeerScoreThresholds) Opt
 			return err
 		}
 
-		gs.score = newPeerScore(params)
+		gs.score = newPeerScore(params, tracer)
 		gs.gossipThreshold = thresholds.GossipThreshold
 		gs.publishThreshold = thresholds.PublishThreshold
 		gs.graylistThreshold = thresholds.GraylistThreshold
