@@ -45,7 +45,7 @@ func testWithTracer(t *testing.T, tracer EventTracer) {
 				PublishThreshold:            -2,
 				GraylistThreshold:           -3,
 				OpportunisticGraftThreshold: 1,
-			}, nil))
+			}))
 
 	// add a validator that rejects some messages to exercise those code paths in the tracer
 	for _, ps := range psubs {

@@ -160,7 +160,7 @@ func TestGossipsubAttackSpamIHAVE(t *testing.T) {
 				GossipThreshold:   -100,
 				PublishThreshold:  -500,
 				GraylistThreshold: -1000,
-			}, nil))
+			}))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -394,7 +394,7 @@ func TestGossipsubAttackGRAFTDuringBackoff(t *testing.T) {
 				GossipThreshold:   -100,
 				PublishThreshold:  -500,
 				GraylistThreshold: -1000,
-			}, nil))
+			}))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -663,7 +663,7 @@ func TestGossipsubAttackInvalidMessageSpam(t *testing.T) {
 	tracer := &gsAttackInvalidMsgTracer{}
 	ps, err := NewGossipSub(ctx, legit,
 		WithEventTracer(tracer),
-		WithPeerScore(params, thresholds, nil),
+		WithPeerScore(params, thresholds),
 	)
 	if err != nil {
 		t.Fatal(err)

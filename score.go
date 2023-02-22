@@ -83,9 +83,6 @@ type peerScore struct {
 	inspect       PeerScoreInspectFn
 	inspectEx     ExtendedPeerScoreInspectFn
 	inspectPeriod time.Duration
-
-	// appTracer
-	appTracer *AppPeerStatsTracer
 }
 
 var _ RawTracer = (*peerScore)(nil)
@@ -183,7 +180,7 @@ func WithPeerScoreInspect(inspect interface{}, period time.Duration) Option {
 }
 
 // implementation
-func newPeerScore(params *PeerScoreParams, tracer *AppPeerStatsTracer) *peerScore {
+func newPeerScore(params *PeerScoreParams) *peerScore {
 	seenMsgTTL := params.SeenMsgTTL
 	if seenMsgTTL == 0 {
 		seenMsgTTL = TimeCacheDuration
@@ -194,7 +191,6 @@ func newPeerScore(params *PeerScoreParams, tracer *AppPeerStatsTracer) *peerScor
 		peerIPs:    make(map[string]map[peer.ID]struct{}),
 		deliveries: &messageDeliveries{seenMsgTTL: seenMsgTTL, records: make(map[string]*deliveryRecord)},
 		idGen:      newMsgIdGenerator(),
-		appTracer:  tracer,
 	}
 }
 
@@ -315,7 +311,7 @@ func (ps *peerScore) score(p peer.ID) float64 {
 
 		// P4: invalid messages
 		// NOTE: the weight of P4 is negative (validated in TopicScoreParams.validate), so this detracts.
-		p4 := (tstats.invalidMessageDeliveries * tstats.invalidMessageDeliveries)
+		p4 := tstats.invalidMessageDeliveries * tstats.invalidMessageDeliveries
 		topicScore += p4 * topicParams.InvalidMessageDeliveriesWeight
 
 		// update score, mixing with topic weight
@@ -595,7 +591,7 @@ func (ps *peerScore) gcDeliveryRecords() {
 	ps.deliveries.gc()
 }
 
-// AddPeer implements the RawTracer interface and is invoked when a new peer is added.
+// tracer interface
 func (ps *peerScore) AddPeer(p peer.ID, proto protocol.ID) {
 	ps.Lock()
 	defer ps.Unlock()
@@ -605,7 +601,6 @@ func (ps *peerScore) AddPeer(p peer.ID, proto protocol.ID) {
 		pstats = &PeerStats{topics: make(map[string]*topicStats)}
 		ps.peerStats[p] = pstats
 	}
-	ps.updatePeerStateTracerWithStats(p, *pstats)
 
 	pstats.connected = true
 	ips := ps.getIPs(p)
@@ -613,7 +608,6 @@ func (ps *peerScore) AddPeer(p peer.ID, proto protocol.ID) {
 	pstats.ips = ips
 }
 
-// RemovePeer implements the RawTracer interface and is invoked when a peer is removed.
 func (ps *peerScore) RemovePeer(p peer.ID) {
 	ps.Lock()
 	defer ps.Unlock()
@@ -622,8 +616,6 @@ func (ps *peerScore) RemovePeer(p peer.ID) {
 	if !ok {
 		return
 	}
-
-	ps.updatePeerStateTracerWithStats(p, *pstats)
 
 	// decide whether to retain the score; this currently only retains non-positive scores
 	// to dissuade attacks on the score function.
@@ -651,13 +643,9 @@ func (ps *peerScore) RemovePeer(p peer.ID) {
 	pstats.expire = time.Now().Add(ps.params.RetainScore)
 }
 
-// Join implements the RawTracer interface and is invoked when the current node joins a topic.
-func (ps *peerScore) Join(topic string) {}
-
-// Leave implements the RawTracer interface and is invoked when the current node leaves a topic.
+func (ps *peerScore) Join(topic string)  {}
 func (ps *peerScore) Leave(topic string) {}
 
-// Graft implements the RawTracer interface and invoked when a peer is grafted on a topic (for GossipSub).
 func (ps *peerScore) Graft(p peer.ID, topic string) {
 	ps.Lock()
 	defer ps.Unlock()
@@ -666,8 +654,6 @@ func (ps *peerScore) Graft(p peer.ID, topic string) {
 	if !ok {
 		return
 	}
-
-	ps.updatePeerStateTracerWithStats(p, *pstats)
 
 	tstats, ok := pstats.getTopicStats(topic, ps.params)
 	if !ok {
@@ -680,7 +666,6 @@ func (ps *peerScore) Graft(p peer.ID, topic string) {
 	tstats.meshMessageDeliveriesActive = false
 }
 
-// Prune implements the RawTracer interface and invoked when a peer is pruned from a topic (for GossipSub).
 func (ps *peerScore) Prune(p peer.ID, topic string) {
 	ps.Lock()
 	defer ps.Unlock()
@@ -689,8 +674,6 @@ func (ps *peerScore) Prune(p peer.ID, topic string) {
 	if !ok {
 		return
 	}
-
-	ps.updatePeerStateTracerWithStats(p, *pstats)
 
 	tstats, ok := pstats.getTopicStats(topic, ps.params)
 	if !ok {
@@ -707,7 +690,6 @@ func (ps *peerScore) Prune(p peer.ID, topic string) {
 	tstats.inMesh = false
 }
 
-// ValidateMessage implements the raw tracer interface and is invoked when a message enters the validation pipeline.
 func (ps *peerScore) ValidateMessage(msg *Message) {
 	ps.Lock()
 	defer ps.Unlock()
@@ -715,16 +697,12 @@ func (ps *peerScore) ValidateMessage(msg *Message) {
 	// the pubsub subsystem is beginning validation; create a record to track time in
 	// the validation pipeline with an accurate firstSeen time.
 	_ = ps.deliveries.getRecord(ps.idGen.ID(msg))
-
-	ps.updatePeerStatsTracer(msg.ReceivedFrom)
 }
 
-// DeliverMessage implements the raw tracer interface and is invoked when a message is rejected by the validation pipeline.
 func (ps *peerScore) DeliverMessage(msg *Message) {
 	ps.Lock()
 	defer ps.Unlock()
 
-	ps.updatePeerStatsTracer(msg.ReceivedFrom)
 	ps.markFirstMessageDelivery(msg.ReceivedFrom, msg)
 
 	drec := ps.deliveries.getRecord(ps.idGen.ID(msg))
@@ -747,12 +725,9 @@ func (ps *peerScore) DeliverMessage(msg *Message) {
 	}
 }
 
-// RejectMessage implements the RawTracer interface and is invoked when a message is rejected by the validation pipeline.
 func (ps *peerScore) RejectMessage(msg *Message, reason string) {
 	ps.Lock()
 	defer ps.Unlock()
-
-	ps.updatePeerStatsTracer(msg.ReceivedFrom)
 
 	switch reason {
 	// we don't track those messages, but we penalize the peer as they are clearly invalid
@@ -817,13 +792,9 @@ func (ps *peerScore) RejectMessage(msg *Message, reason string) {
 	drec.peers = nil
 }
 
-// DuplicateMessage implements the RawTracer interface and is invoked when a message is received from a peer that we have
-// already seen from another peer.
 func (ps *peerScore) DuplicateMessage(msg *Message) {
 	ps.Lock()
 	defer ps.Unlock()
-
-	ps.updatePeerStatsTracer(msg.ReceivedFrom)
 
 	drec := ps.deliveries.getRecord(ps.idGen.ID(msg))
 
@@ -855,66 +826,15 @@ func (ps *peerScore) DuplicateMessage(msg *Message) {
 	}
 }
 
-// ThrottlePeer implements RawTracer and is invoked when a peer is throttled.
-func (ps *peerScore) ThrottlePeer(p peer.ID) {
-	ps.Lock()
-	defer ps.Unlock()
+func (ps *peerScore) ThrottlePeer(p peer.ID) {}
 
-	ps.updatePeerStatsTracer(p)
-}
+func (ps *peerScore) RecvRPC(rpc *RPC) {}
 
-func (ps *peerScore) RecvRPC(rpc *RPC) {
-	ps.Lock()
-	defer ps.Unlock()
+func (ps *peerScore) SendRPC(rpc *RPC, p peer.ID) {}
 
-	ps.updatePeerStatsTracer(rpc.from)
-}
+func (ps *peerScore) DropRPC(rpc *RPC, p peer.ID) {}
 
-func (ps *peerScore) SendRPC(rpc *RPC, p peer.ID) {
-	ps.Lock()
-	defer ps.Unlock()
-
-	ps.updatePeerStatsTracer(p)
-}
-
-// DropRPC implements the RawTracer interface and is invoked when an outbound rpc is dropped typically due to a full queue.
-func (ps *peerScore) DropRPC(rpc *RPC, p peer.ID) {
-	ps.Lock()
-	defer ps.Unlock()
-
-	ps.updatePeerStatsTracer(p)
-}
-
-// UndeliverableMessage implements the RawTracer interface and is invoked when the consumer of Subscribe is not reading messages fast enough and
-//
-//	// the pressure release mechanism trigger, dropping messages.
-func (ps *peerScore) UndeliverableMessage(msg *Message) {
-	ps.Lock()
-	defer ps.Unlock()
-
-	ps.updatePeerStatsTracer(msg.ReceivedFrom)
-
-}
-func (ps *peerScore) updatePeerStatsTracer(p peer.ID) {
-	if ps.appTracer == nil {
-		return
-	}
-
-	stats, ok := ps.peerStats[p]
-	if !ok {
-		return
-	}
-
-	ps.appTracer.updatePeerStats(p, *stats)
-}
-
-func (ps *peerScore) updatePeerStateTracerWithStats(p peer.ID, stats PeerStats) {
-	if ps.appTracer == nil {
-		return
-	}
-
-	ps.appTracer.updatePeerStats(p, stats)
-}
+func (ps *peerScore) UndeliverableMessage(msg *Message) {}
 
 // message delivery records
 func (d *messageDeliveries) getRecord(id string) *deliveryRecord {
