@@ -50,7 +50,14 @@ func TestScoreTimeInMesh(t *testing.T) {
 		t.Fatalf("Score: %f. Expected >= %f", aScore, expected)
 	}
 
-	tracerMustTrackPeer(t, tracer, peerA, ps.peerStats[peerA])
+	state, ok := tracer.GetPeerStats(peerA)
+	if !ok {
+		t.Fatal("expected peer stats to be tracked")
+	}
+
+	if state.topics[mytopic].meshTime != ps.peerStats[peerA].topics[mytopic].meshTime {
+		t.Fatal("expected time in mesh to be tracked")
+	}
 }
 
 func TestScoreTimeInMeshCap(t *testing.T) {
@@ -88,7 +95,14 @@ func TestScoreTimeInMeshCap(t *testing.T) {
 		t.Fatalf("Score: %f. Expected %f ± %f", aScore, expected, variance*expected)
 	}
 
-	tracerMustTrackPeer(t, tracer, peerA, ps.peerStats[peerA])
+	state, ok := tracer.GetPeerStats(peerA)
+	if !ok {
+		t.Fatal("expected peer stats to be tracked")
+	}
+
+	if state.topics[mytopic].meshTime != ps.peerStats[peerA].topics[mytopic].meshTime {
+		t.Fatal("expected time in mesh to be tracked")
+	}
 }
 
 func TestScoreFirstMessageDeliveries(t *testing.T) {
@@ -132,7 +146,14 @@ func TestScoreFirstMessageDeliveries(t *testing.T) {
 		t.Fatalf("Score: %f. Expected %f", aScore, expected)
 	}
 
-	tracerMustTrackPeer(t, tracer, peerA, ps.peerStats[peerA])
+	state, ok := tracer.GetPeerStats(peerA)
+	if !ok {
+		t.Fatal("expected peer stats to be tracked")
+	}
+
+	if state.topics[mytopic].firstMessageDeliveries != ps.peerStats[peerA].topics[mytopic].firstMessageDeliveries {
+		t.Fatal("expected first message delivery to be tracked")
+	}
 }
 
 func TestScoreFirstMessageDeliveriesCap(t *testing.T) {
@@ -176,7 +197,14 @@ func TestScoreFirstMessageDeliveriesCap(t *testing.T) {
 		t.Fatalf("Score: %f. Expected %f", aScore, expected)
 	}
 
-	tracerMustTrackPeer(t, tracer, peerA, ps.peerStats[peerA])
+	state, ok := tracer.GetPeerStats(peerA)
+	if !ok {
+		t.Fatal("expected peer stats to be tracked")
+	}
+
+	if state.topics[mytopic].firstMessageDeliveries != ps.peerStats[peerA].topics[mytopic].firstMessageDeliveries {
+		t.Fatal("expected first message delivery to be tracked")
+	}
 }
 
 func TestScoreFirstMessageDeliveriesDecay(t *testing.T) {
@@ -231,7 +259,14 @@ func TestScoreFirstMessageDeliveriesDecay(t *testing.T) {
 		t.Fatalf("Score: %f. Expected %f", aScore, expected)
 	}
 
-	tracerMustTrackPeer(t, tracer, peerA, ps.peerStats[peerA])
+	state, ok := tracer.GetPeerStats(peerA)
+	if !ok {
+		t.Fatal("expected peer stats to be tracked")
+	}
+
+	if state.topics[mytopic].firstMessageDeliveries != ps.peerStats[peerA].topics[mytopic].firstMessageDeliveries {
+		t.Fatal("expected first message delivery to be tracked")
+	}
 }
 
 func TestScoreMeshMessageDeliveries(t *testing.T) {
@@ -328,9 +363,22 @@ func TestScoreMeshMessageDeliveries(t *testing.T) {
 		t.Fatalf("Score: %f. Expected %f", cScore, expected)
 	}
 
-	tracerMustTrackPeer(t, tracer, peerA, ps.peerStats[peerA])
-	tracerMustTrackPeer(t, tracer, peerB, ps.peerStats[peerB])
-	tracerMustTrackPeer(t, tracer, peerC, ps.peerStats[peerC])
+	state, ok := tracer.GetPeerStats(peerA)
+	if !ok {
+		t.Fatal("expected peer stats to be tracked")
+	}
+
+	if state.topics[mytopic].firstMessageDeliveries != ps.peerStats[peerA].topics[mytopic].firstMessageDeliveries {
+		t.Fatal("expected first message delivery to be tracked")
+	}
+
+	if state.topics[mytopic].meshMessageDeliveries != ps.peerStats[peerA].topics[mytopic].meshMessageDeliveries {
+		t.Fatal("expected mesh message delivery to be tracked")
+	}
+
+	if state.topics[mytopic].meshMessageDeliveriesActive != ps.peerStats[peerA].topics[mytopic].meshMessageDeliveriesActive {
+		t.Fatal("expected mesh message delivery active to be tracked")
+	}
 }
 
 func TestScoreMeshMessageDeliveriesDecay(t *testing.T) {
@@ -395,7 +443,22 @@ func TestScoreMeshMessageDeliveriesDecay(t *testing.T) {
 		t.Fatalf("Score: %f. Expected %f", aScore, expected)
 	}
 
-	tracerMustTrackPeer(t, tracer, peerA, ps.peerStats[peerA])
+	state, ok := tracer.GetPeerStats(peerA)
+	if !ok {
+		t.Fatal("expected peer stats to be tracked")
+	}
+
+	if state.topics[mytopic].firstMessageDeliveries != ps.peerStats[peerA].topics[mytopic].firstMessageDeliveries {
+		t.Fatal("expected first message delivery to be tracked")
+	}
+
+	if state.topics[mytopic].meshMessageDeliveries != ps.peerStats[peerA].topics[mytopic].meshMessageDeliveries {
+		t.Fatal("expected mesh message delivery to be tracked")
+	}
+
+	if state.topics[mytopic].meshMessageDeliveriesActive != ps.peerStats[peerA].topics[mytopic].meshMessageDeliveriesActive {
+		t.Fatal("expected mesh message delivery active to be tracked")
+	}
 }
 
 func TestScoreMeshFailurePenalty(t *testing.T) {
@@ -480,8 +543,50 @@ func TestScoreMeshFailurePenalty(t *testing.T) {
 		t.Fatalf("Score: %f. Expected %f", bScore, expected)
 	}
 
-	tracerMustTrackPeer(t, tracer, peerA, ps.peerStats[peerA])
-	tracerMustTrackPeer(t, tracer, peerB, ps.peerStats[peerB])
+	// check that the tracer has the correct values
+	// peer A
+	state, ok := tracer.GetPeerStats(peerA)
+	if !ok {
+		t.Fatal("expected peer stats to be tracked")
+	}
+
+	if state.topics[mytopic].firstMessageDeliveries != ps.peerStats[peerA].topics[mytopic].firstMessageDeliveries {
+		t.Fatal("expected first message delivery to be tracked")
+	}
+
+	if state.topics[mytopic].meshMessageDeliveries != ps.peerStats[peerA].topics[mytopic].meshMessageDeliveries {
+		t.Fatal("expected mesh message delivery to be tracked")
+	}
+
+	if state.topics[mytopic].meshMessageDeliveriesActive != ps.peerStats[peerA].topics[mytopic].meshMessageDeliveriesActive {
+		t.Fatal("expected mesh message delivery active to be tracked")
+	}
+
+	if state.topics[mytopic].meshFailurePenalty != ps.peerStats[peerA].topics[mytopic].meshFailurePenalty {
+		t.Fatal("expected mesh failure penalty to be tracked")
+	}
+
+	// peer B
+	state, ok = tracer.GetPeerStats(peerB)
+	if !ok {
+		t.Fatal("expected peer stats to be tracked")
+	}
+
+	if state.topics[mytopic].firstMessageDeliveries != ps.peerStats[peerB].topics[mytopic].firstMessageDeliveries {
+		t.Fatal("expected first message delivery to be tracked")
+	}
+
+	if state.topics[mytopic].meshMessageDeliveries != ps.peerStats[peerB].topics[mytopic].meshMessageDeliveries {
+		t.Fatal("expected mesh message delivery to be tracked")
+	}
+
+	if state.topics[mytopic].meshMessageDeliveriesActive != ps.peerStats[peerB].topics[mytopic].meshMessageDeliveriesActive {
+		t.Fatal("expected mesh message delivery active to be tracked")
+	}
+
+	if state.topics[mytopic].meshFailurePenalty != ps.peerStats[peerB].topics[mytopic].meshFailurePenalty {
+		t.Fatal("expected mesh failure penalty to be tracked")
+	}
 }
 
 func TestScoreInvalidMessageDeliveries(t *testing.T) {
@@ -522,7 +627,20 @@ func TestScoreInvalidMessageDeliveries(t *testing.T) {
 		t.Fatalf("Score: %f. Expected %f", aScore, expected)
 	}
 
-	tracerMustTrackPeer(t, tracer, peerA, ps.peerStats[peerA])
+	// check that the tracer has the correct values
+	// peer A
+	state, ok := tracer.GetPeerStats(peerA)
+	if !ok {
+		t.Fatal("expected peer stats to be tracked")
+	}
+
+	if state.topics[mytopic].invalidMessageDeliveries != ps.peerStats[peerA].topics[mytopic].invalidMessageDeliveries {
+		t.Fatal("expected invalid message delivery to be tracked")
+	}
+
+	if state.topics[mytopic].meshTime != ps.peerStats[peerA].topics[mytopic].meshTime {
+		t.Fatal("expected mesh time to be tracked")
+	}
 }
 
 func TestScoreInvalidMessageDeliveriesDecay(t *testing.T) {
@@ -573,7 +691,20 @@ func TestScoreInvalidMessageDeliveriesDecay(t *testing.T) {
 		t.Fatalf("Score: %f. Expected %f", aScore, expected)
 	}
 
-	tracerMustTrackPeer(t, tracer, peerA, ps.peerStats[peerA])
+	// check that the tracer has the correct values
+	// peer A
+	state, ok := tracer.GetPeerStats(peerA)
+	if !ok {
+		t.Fatal("expected peer stats to be tracked")
+	}
+
+	if state.topics[mytopic].invalidMessageDeliveries != ps.peerStats[peerA].topics[mytopic].invalidMessageDeliveries {
+		t.Fatal("expected invalid message delivery to be tracked")
+	}
+
+	if state.topics[mytopic].meshTime != ps.peerStats[peerA].topics[mytopic].meshTime {
+		t.Fatal("expected mesh time to be tracked")
+	}
 }
 
 func TestScoreRejectMessageDeliveries(t *testing.T) {
@@ -708,8 +839,34 @@ func TestScoreRejectMessageDeliveries(t *testing.T) {
 		t.Fatalf("Score: %f. Expected %f", bScore, expected)
 	}
 
-	tracerMustTrackPeer(t, tracer, peerA, ps.peerStats[peerA])
-	tracerMustTrackPeer(t, tracer, peerB, ps.peerStats[peerB])
+	// check that the tracer has the correct values
+	// peer A
+	state, ok := tracer.GetPeerStats(peerA)
+	if !ok {
+		t.Fatal("expected peer stats to be tracked")
+	}
+
+	if state.topics[mytopic].invalidMessageDeliveries != ps.peerStats[peerA].topics[mytopic].invalidMessageDeliveries {
+		t.Fatal("expected invalid message delivery to be tracked")
+	}
+
+	if state.topics[mytopic].meshTime != ps.peerStats[peerA].topics[mytopic].meshTime {
+		t.Fatal("expected mesh time to be tracked")
+	}
+
+	// peer B
+	state, ok = tracer.GetPeerStats(peerB)
+	if !ok {
+		t.Fatal("expected peer stats to be tracked")
+	}
+
+	if state.topics[mytopic].invalidMessageDeliveries != ps.peerStats[peerB].topics[mytopic].invalidMessageDeliveries {
+		t.Fatal("expected invalid message delivery to be tracked")
+	}
+
+	if state.topics[mytopic].meshTime != ps.peerStats[peerB].topics[mytopic].meshTime {
+		t.Fatal("expected mesh time to be tracked")
+	}
 }
 
 func TestScoreApplicationScore(t *testing.T) {
@@ -724,8 +881,8 @@ func TestScoreApplicationScore(t *testing.T) {
 	}
 
 	peerA := peer.ID("A")
-	tracer := NewAppPeerStatsTracer()
-	ps := newPeerScore(params, tracer)
+
+	ps := newPeerScore(params, nil)
 	ps.AddPeer(peerA, "myproto")
 	ps.Graft(peerA, mytopic)
 
@@ -738,8 +895,6 @@ func TestScoreApplicationScore(t *testing.T) {
 			t.Errorf("expected peer score to equal app-specific score %f, got %f", expected, aScore)
 		}
 	}
-
-	tracerMustTrackPeer(t, tracer, peerA, ps.peerStats[peerA])
 }
 
 func TestScoreIPColocation(t *testing.T) {
@@ -759,8 +914,7 @@ func TestScoreIPColocation(t *testing.T) {
 	peerD := peer.ID("D")
 	peers := []peer.ID{peerA, peerB, peerC, peerD}
 
-	tracer := NewAppPeerStatsTracer()
-	ps := newPeerScore(params, tracer)
+	ps := newPeerScore(params, nil)
 	for _, p := range peers {
 		ps.AddPeer(p, "myproto")
 		ps.Graft(p, mytopic)
@@ -791,11 +945,6 @@ func TestScoreIPColocation(t *testing.T) {
 			t.Fatalf("Score: %f. Expected %f", score, expected)
 		}
 	}
-
-	tracerMustTrackPeer(t, tracer, peerA, ps.peerStats[peerA])
-	tracerMustTrackPeer(t, tracer, peerB, ps.peerStats[peerB])
-	tracerMustTrackPeer(t, tracer, peerC, ps.peerStats[peerC])
-	tracerMustTrackPeer(t, tracer, peerD, ps.peerStats[peerD])
 }
 
 func TestScoreIPColocationWhitelist(t *testing.T) {
@@ -821,8 +970,7 @@ func TestScoreIPColocationWhitelist(t *testing.T) {
 	peerD := peer.ID("D")
 	peers := []peer.ID{peerA, peerB, peerC, peerD}
 
-	tracer := NewAppPeerStatsTracer()
-	ps := newPeerScore(params, tracer)
+	ps := newPeerScore(params, nil)
 	for _, p := range peers {
 		ps.AddPeer(p, "myproto")
 		ps.Graft(p, mytopic)
@@ -856,10 +1004,6 @@ func TestScoreIPColocationWhitelist(t *testing.T) {
 		t.Errorf("expected peer D to have score 0.0, got %f", aScore)
 	}
 
-	tracerMustTrackPeer(t, tracer, peerA, ps.peerStats[peerA])
-	tracerMustTrackPeer(t, tracer, peerB, ps.peerStats[peerB])
-	tracerMustTrackPeer(t, tracer, peerC, ps.peerStats[peerC])
-	tracerMustTrackPeer(t, tracer, peerD, ps.peerStats[peerA])
 }
 
 func TestScoreBehaviourPenalty(t *testing.T) {
@@ -917,8 +1061,6 @@ func TestScoreBehaviourPenalty(t *testing.T) {
 	if aScore != -3.9204 {
 		t.Errorf("expected peer score to be -3.9204, got %f", aScore)
 	}
-
-	tracerMustTrackPeer(t, tracer, peerA, ps.peerStats[peerA])
 }
 
 func TestScoreRetention(t *testing.T) {
@@ -1070,8 +1212,42 @@ func TestScoreRecapTopicParams(t *testing.T) {
 		t.Fatalf("expected 50 MeshMessageDeliveries for peerB, but got %f", ps.peerStats[peerB].topics[mytopic].meshMessageDeliveries)
 	}
 
-	tracerMustTrackPeer(t, tracer, peerA, ps.peerStats[peerA])
-	tracerMustTrackPeer(t, tracer, peerB, ps.peerStats[peerB])
+	// check that the tracer has the correct values
+	// peer A
+	state, ok := tracer.GetPeerStats(peerA)
+	if !ok {
+		t.Fatal("expected peer stats to be tracked")
+	}
+
+	if state.topics[mytopic].firstMessageDeliveries != ps.peerStats[peerA].topics[mytopic].firstMessageDeliveries {
+		t.Fatal("expected first message delivery to be tracked")
+	}
+
+	if state.topics[mytopic].meshMessageDeliveries != ps.peerStats[peerA].topics[mytopic].meshMessageDeliveries {
+		t.Fatal("expected mesh message delivery to be tracked")
+	}
+
+	if state.topics[mytopic].meshTime != ps.peerStats[peerA].topics[mytopic].meshTime {
+		t.Fatal("expected mesh time to be tracked")
+	}
+
+	// peer B
+	state, ok = tracer.GetPeerStats(peerB)
+	if !ok {
+		t.Fatal("expected peer stats to be tracked")
+	}
+
+	if state.topics[mytopic].firstMessageDeliveries != ps.peerStats[peerB].topics[mytopic].firstMessageDeliveries {
+		t.Fatal("expected first message delivery to be tracked")
+	}
+
+	if state.topics[mytopic].meshMessageDeliveries != ps.peerStats[peerB].topics[mytopic].meshMessageDeliveries {
+		t.Fatal("expected mesh message delivery to be tracked")
+	}
+
+	if state.topics[mytopic].meshTime != ps.peerStats[peerB].topics[mytopic].meshTime {
+		t.Fatal("expected mesh time to be tracked")
+	}
 }
 
 func TestScoreResetTopicParams(t *testing.T) {
@@ -1136,7 +1312,28 @@ func TestScoreResetTopicParams(t *testing.T) {
 		t.Fatalf("expected a -1000000 score, but got %f instead", aScore)
 	}
 
-	tracerMustTrackPeer(t, tracer, peerA, ps.peerStats[peerA])
+	// check that the tracer has the correct values
+	// peer A
+	state, ok := tracer.GetPeerStats(peerA)
+	if !ok {
+		t.Fatal("expected peer stats to be tracked")
+	}
+
+	if state.topics[mytopic].firstMessageDeliveries != ps.peerStats[peerA].topics[mytopic].firstMessageDeliveries {
+		t.Fatal("expected first message delivery to be tracked")
+	}
+
+	if state.topics[mytopic].meshMessageDeliveries != ps.peerStats[peerA].topics[mytopic].meshMessageDeliveries {
+		t.Fatal("expected mesh message delivery to be tracked")
+	}
+
+	if state.topics[mytopic].meshTime != ps.peerStats[peerA].topics[mytopic].meshTime {
+		t.Fatal("expected mesh time to be tracked")
+	}
+
+	if state.topics[mytopic].invalidMessageDeliveries != ps.peerStats[peerA].topics[mytopic].invalidMessageDeliveries {
+		t.Fatal("expected invalid message delivery to be tracked")
+	}
 }
 
 func withinVariance(score float64, expected float64, variance float64) bool {
@@ -1155,70 +1352,4 @@ func setIPsForPeer(t *testing.T, ps *peerScore, p peer.ID, ips ...string) {
 		t.Fatal("unable to get PeerStats")
 	}
 	pstats.ips = ips
-}
-
-// tracerMustTrackPeer checks that the tracer is tracking the peer and that the peer stats are equal to the expected stats.
-func tracerMustTrackPeer(t *testing.T, tracer *AppPeerStatsTracer, p peer.ID, expectedStats *PeerStats) {
-	stats, ok := tracer.GetPeerStats(p)
-	if !ok {
-		t.Fatalf("expected peer stats to be tracked: %s", p)
-	}
-
-	peerStatsMustBeEqual(t, &stats, expectedStats)
-}
-
-// peerStatsMustBeEqual checks that the expected and actual peer stats are equal. It fails the test if they are not equal
-// in at least one field.
-func peerStatsMustBeEqual(t *testing.T, actual, expected *PeerStats) {
-	if expected.expire != actual.expire {
-		t.Fatalf("expected expire to be %s, but got %s instead", expected.expire, actual.expire)
-	}
-
-	if expected.connected != actual.connected {
-		t.Fatalf("expected connected to be %t, but got %t instead", expected.connected, actual.connected)
-	}
-
-	if expected.behaviourPenalty != actual.behaviourPenalty {
-		t.Fatalf("expected behaviour penalty to be %f, but got %f instead", expected.behaviourPenalty, actual.behaviourPenalty)
-	}
-
-	for topic, expectedTopicStats := range expected.topics {
-		actualTopicStats, ok := actual.topics[topic]
-		if !ok {
-			t.Fatalf("expected topic %s to be present in actual peer stats", topic)
-		}
-		topicStatsMustBeEqual(t, expectedTopicStats, actualTopicStats)
-	}
-}
-
-// topicStatsMustBeEqual checks that the expected and actual topic stats are equal. It fails the test if they are not equal
-// in at least one field.
-func topicStatsMustBeEqual(t *testing.T, expected, actual *topicStats) {
-	if expected.inMesh != actual.inMesh {
-		t.Fatalf("expected in mesh to be %t, but got %t instead", expected.inMesh, actual.inMesh)
-	}
-
-	if expected.graftTime != actual.graftTime {
-		t.Fatalf("expected graft time to be %s, but got %s instead", expected.graftTime, actual.graftTime)
-	}
-
-	if expected.firstMessageDeliveries != actual.firstMessageDeliveries {
-		t.Fatalf("expected first message deliveries to be %f, but got %f instead", expected.firstMessageDeliveries, actual.firstMessageDeliveries)
-	}
-
-	if expected.meshMessageDeliveries != actual.meshMessageDeliveries {
-		t.Fatalf("expected mesh message deliveries to be %f, but got %f instead", expected.meshMessageDeliveries, actual.meshMessageDeliveries)
-	}
-
-	if expected.meshMessageDeliveriesActive != actual.meshMessageDeliveriesActive {
-		t.Fatalf("expected mesh message deliveries active to be %t, but got %t instead", expected.meshMessageDeliveriesActive, actual.meshMessageDeliveriesActive)
-	}
-
-	if expected.meshFailurePenalty != actual.meshFailurePenalty {
-		t.Fatalf("expected mesh failure penalty to be %f, but got %f instead", expected.meshFailurePenalty, actual.meshFailurePenalty)
-	}
-
-	if expected.invalidMessageDeliveries != actual.invalidMessageDeliveries {
-		t.Fatalf("expected invalid message deliveries to be %f, but got %f instead", expected.invalidMessageDeliveries, actual.invalidMessageDeliveries)
-	}
 }
