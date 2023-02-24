@@ -517,7 +517,6 @@ func (ps *peerScore) refreshScores() {
 				// yes, throw it away (but clean up the IP tracking first)
 				ps.removeIPs(p, pstats.ips)
 				delete(ps.peerStats, p)
-				ps.removePeerStatsFromTracer(p) // also remove from app stats tracer
 			}
 
 			// we don't decay retained scores, as the peer is not active.
@@ -624,12 +623,13 @@ func (ps *peerScore) RemovePeer(p peer.ID) {
 		return
 	}
 
+	ps.updatePeerStateTracerWithStats(p, *pstats)
+
 	// decide whether to retain the score; this currently only retains non-positive scores
 	// to dissuade attacks on the score function.
 	if ps.score(p) > 0 {
 		ps.removeIPs(p, pstats.ips)
 		delete(ps.peerStats, p)
-		ps.removePeerStatsFromTracer(p)
 		return
 	}
 
@@ -649,8 +649,6 @@ func (ps *peerScore) RemovePeer(p peer.ID) {
 
 	pstats.connected = false
 	pstats.expire = time.Now().Add(ps.params.RetainScore)
-
-	ps.updatePeerStateTracerWithStats(p, *pstats)
 }
 
 // Join implements the RawTracer interface and is invoked when the current node joins a topic.
@@ -916,14 +914,6 @@ func (ps *peerScore) updatePeerStateTracerWithStats(p peer.ID, stats PeerStats) 
 	}
 
 	ps.appTracer.updatePeerStats(p, stats)
-}
-
-func (ps *peerScore) removePeerStatsFromTracer(p peer.ID) {
-	if ps.appTracer == nil {
-		return
-	}
-
-	ps.appTracer.removePeerStats(p)
 }
 
 // message delivery records

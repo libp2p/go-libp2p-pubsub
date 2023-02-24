@@ -31,10 +31,3 @@ func (s *AppPeerStatsTracer) updatePeerStats(p peer.ID, stats PeerStats) {
 
 	s.peerStats[p] = stats
 }
-
-func (s *AppPeerStatsTracer) removePeerStats(p peer.ID) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	delete(s.peerStats, p)
-}
