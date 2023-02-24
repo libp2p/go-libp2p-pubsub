@@ -406,6 +406,7 @@ func (ps *peerScore) AddPenalty(p peer.ID, count int) {
 	}
 
 	pstats.behaviourPenalty += float64(count)
+	ps.updatePeerStateTracerWithStats(p, *pstats)
 }
 
 // periodic maintenance
@@ -566,6 +567,8 @@ func (ps *peerScore) refreshScores() {
 		if pstats.behaviourPenalty < ps.params.DecayToZero {
 			pstats.behaviourPenalty = 0
 		}
+
+		ps.updatePeerStateTracerWithStats(p, *pstats) // also update app stats tracer
 	}
 }
 
@@ -606,12 +609,13 @@ func (ps *peerScore) AddPeer(p peer.ID, proto protocol.ID) {
 		pstats = &PeerStats{topics: make(map[string]*topicStats)}
 		ps.peerStats[p] = pstats
 	}
-	ps.updatePeerStateTracerWithStats(p, *pstats)
 
 	pstats.connected = true
 	ips := ps.getIPs(p)
 	ps.setIPs(p, ips, pstats.ips)
 	pstats.ips = ips
+
+	ps.updatePeerStateTracerWithStats(p, *pstats)
 }
 
 // RemovePeer implements the RawTracer interface and is invoked when a peer is removed.
