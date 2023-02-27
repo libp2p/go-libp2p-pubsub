@@ -2073,7 +2073,6 @@ func TestGossipsubPeerScoreInspect(t *testing.T) {
 
 	hosts := getNetHosts(t, ctx, 2)
 
-	appScoreTracer := NewAppPeerStatsTracer()
 	inspector := &mockPeerScoreInspector{}
 	psub1 := getGossipsub(ctx, hosts[0],
 		WithPeerScore(
@@ -2097,7 +2096,7 @@ func TestGossipsubPeerScoreInspect(t *testing.T) {
 				GossipThreshold:   -1,
 				PublishThreshold:  -10,
 				GraylistThreshold: -1000,
-			}, appScoreTracer),
+			}, nil),
 		WithPeerScoreInspect(inspector.inspect, time.Second))
 	psub2 := getGossipsub(ctx, hosts[1])
 	psubs := []*PubSub{psub1, psub2}

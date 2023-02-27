@@ -1167,14 +1167,6 @@ func tracerMustTrackPeer(t *testing.T, tracer *AppPeerStatsTracer, p peer.ID, ex
 	peerStatsMustBeEqual(t, &stats, expectedStats)
 }
 
-// tracerMustTrackPeer checks that the tracer is tracking the peer and that the peer stats are equal to the expected stats.
-func tracerMustNotTrackPeer(t *testing.T, tracer *AppPeerStatsTracer, p peer.ID) {
-	_, ok := tracer.GetPeerStats(p)
-	if ok {
-		t.Fatalf("expected peer stats not to be tracked: %s", p)
-	}
-}
-
 // peerStatsMustBeEqual checks that the expected and actual peer stats are equal. It fails the test if they are not equal
 // in at least one field.
 func peerStatsMustBeEqual(t *testing.T, actual, expected *PeerStats) {
