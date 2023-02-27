@@ -147,6 +147,7 @@ func TestGossipsubAttackSpamIHAVE(t *testing.T) {
 	attacker := hosts[1]
 
 	// Set up gossipsub on the legit host
+	appScoreTracer := NewAppPeerStatsTracer()
 	ps, err := NewGossipSub(ctx, legit,
 		WithPeerScore(
 			&PeerScoreParams{
@@ -160,7 +161,7 @@ func TestGossipsubAttackSpamIHAVE(t *testing.T) {
 				GossipThreshold:   -100,
 				PublishThreshold:  -500,
 				GraylistThreshold: -1000,
-			}, nil))
+			}, appScoreTracer))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -246,6 +247,9 @@ func TestGossipsubAttackSpamIHAVE(t *testing.T) {
 					case <-time.After(GossipSubHeartbeatInterval):
 					}
 
+					// the attacker's stats must still be tracked by the score tracer of the victim.
+					tracerMustTrackPeer(t, appScoreTracer, attacker.ID(), ps.rt.(*GossipSubRouter).score.peerStats[attacker.ID()])
+
 					// Should have sent more IWANTs after the heartbeat
 					iwc = getIWantCount()
 					if iwc == firstBatchCount {
@@ -257,6 +261,9 @@ func TestGossipsubAttackSpamIHAVE(t *testing.T) {
 						t.Errorf("Expecting max %d IWANTs per heartbeat but received %d", GossipSubMaxIHaveLength, iwc-firstBatchCount)
 						return // cannot call t.Fatalf in a non-test goroutine
 					}
+
+					// the attacker's stats must still be tracked by the score tracer of the victim.
+					tracerMustTrackPeer(t, appScoreTracer, attacker.ID(), ps.rt.(*GossipSubRouter).score.peerStats[attacker.ID()])
 
 					select {
 					case <-ctx.Done():
@@ -270,6 +277,9 @@ func TestGossipsubAttackSpamIHAVE(t *testing.T) {
 						t.Errorf("Expected negative score, but got %f", score)
 						return // cannot call t.Fatalf in a non-test goroutine
 					}
+
+					// the attacker's stats must still be tracked by the score tracer of the victim.
+					tracerMustTrackPeer(t, appScoreTracer, attacker.ID(), ps.rt.(*GossipSubRouter).score.peerStats[attacker.ID()])
 				}()
 			}
 		}
@@ -281,6 +291,9 @@ func TestGossipsubAttackSpamIHAVE(t *testing.T) {
 	})
 
 	connect(t, hosts[0], hosts[1])
+
+	// the score tracer of victim must have stopped tracking attacker's score.
+	tracerMustNotTrackPeer(t, appScoreTracer, attacker.ID())
 
 	<-ctx.Done()
 }
@@ -380,6 +393,7 @@ func TestGossipsubAttackGRAFTDuringBackoff(t *testing.T) {
 	legit := hosts[0]
 	attacker := hosts[1]
 
+	appScoreTracer := NewAppPeerStatsTracer()
 	// Set up gossipsub on the legit host
 	ps, err := NewGossipSub(ctx, legit,
 		WithPeerScore(
@@ -394,7 +408,7 @@ func TestGossipsubAttackGRAFTDuringBackoff(t *testing.T) {
 				GossipThreshold:   -100,
 				PublishThreshold:  -500,
 				GraylistThreshold: -1000,
-			}, nil))
+			}, appScoreTracer))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -444,6 +458,9 @@ func TestGossipsubAttackGRAFTDuringBackoff(t *testing.T) {
 						return // cannot call t.Fatalf in a non-test goroutine
 					}
 
+					// the attacker's stats must still be tracked by the score tracer of the victim.
+					tracerMustTrackPeer(t, appScoreTracer, attacker.ID(), ps.rt.(*GossipSubRouter).score.peerStats[attacker.ID()])
+
 					// Send a PRUNE to remove the attacker node from the legit
 					// host's mesh
 					var prune []*pb.ControlPrune
@@ -466,6 +483,9 @@ func TestGossipsubAttackGRAFTDuringBackoff(t *testing.T) {
 
 					}
 
+					// the attacker's stats must still be tracked by the score tracer of the victim.
+					tracerMustTrackPeer(t, appScoreTracer, attacker.ID(), ps.rt.(*GossipSubRouter).score.peerStats[attacker.ID()])
+
 					// wait for the GossipSubGraftFloodThreshold to pass before attempting another graft
 					time.Sleep(GossipSubGraftFloodThreshold + time.Millisecond)
 
@@ -479,6 +499,9 @@ func TestGossipsubAttackGRAFTDuringBackoff(t *testing.T) {
 						return
 					case <-time.After(20 * time.Millisecond):
 					}
+
+					// the attacker's stats must still be tracked by the score tracer of the victim.
+					tracerMustTrackPeer(t, appScoreTracer, attacker.ID(), ps.rt.(*GossipSubRouter).score.peerStats[attacker.ID()])
 
 					// We should have been peanalized by the peer for sending before the backoff has expired
 					// but should still receive a PRUNE because we haven't dropped below GraylistThreshold
@@ -506,6 +529,9 @@ func TestGossipsubAttackGRAFTDuringBackoff(t *testing.T) {
 					case <-time.After(20 * time.Millisecond):
 					}
 
+					// the attacker's stats must still be tracked by the score tracer of the victim.
+					tracerMustTrackPeer(t, appScoreTracer, attacker.ID(), ps.rt.(*GossipSubRouter).score.peerStats[attacker.ID()])
+
 					// we are before the flood threshold so we should be penalized twice, but still get
 					// a PRUNE because we are before the flood threshold
 					pc = getPruneCount()
@@ -530,6 +556,9 @@ func TestGossipsubAttackGRAFTDuringBackoff(t *testing.T) {
 						return
 					case <-time.After(20 * time.Millisecond):
 					}
+
+					// the attacker's stats must still be tracked by the score tracer of the victim.
+					tracerMustTrackPeer(t, appScoreTracer, attacker.ID(), ps.rt.(*GossipSubRouter).score.peerStats[attacker.ID()])
 
 					pc = getPruneCount()
 					if pc != 3 {
@@ -560,11 +589,17 @@ func TestGossipsubAttackGRAFTDuringBackoff(t *testing.T) {
 						Control: &pb.ControlMessage{Graft: graft},
 					})
 
+					// the attacker's stats must still be tracked by the score tracer of the victim.
+					tracerMustTrackPeer(t, appScoreTracer, attacker.ID(), ps.rt.(*GossipSubRouter).score.peerStats[attacker.ID()])
+
 					select {
 					case <-ctx.Done():
 						return
 					case <-time.After(20 * time.Millisecond):
 					}
+
+					// the attacker's stats must still be tracked by the score tracer of the victim.
+					tracerMustTrackPeer(t, appScoreTracer, attacker.ID(), ps.rt.(*GossipSubRouter).score.peerStats[attacker.ID()])
 
 					pc = getPruneCount()
 					if pc != 3 {
@@ -595,6 +630,9 @@ func TestGossipsubAttackGRAFTDuringBackoff(t *testing.T) {
 	})
 
 	connect(t, hosts[0], hosts[1])
+
+	// the score tracer of victim must have stopped tracking attacker's score.
+	tracerMustNotTrackPeer(t, appScoreTracer, attacker.ID())
 
 	<-ctx.Done()
 }
