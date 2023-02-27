@@ -673,6 +673,8 @@ func (ps *peerScore) Graft(p peer.ID, topic string) {
 		return
 	}
 
+	ps.updatePeerStateTracerWithStats(p, *pstats)
+
 	tstats, ok := pstats.getTopicStats(topic, ps.params)
 	if !ok {
 		return
@@ -682,8 +684,6 @@ func (ps *peerScore) Graft(p peer.ID, topic string) {
 	tstats.graftTime = time.Now()
 	tstats.meshTime = 0
 	tstats.meshMessageDeliveriesActive = false
-
-	ps.updatePeerStateTracerWithStats(p, *pstats)
 }
 
 // Prune implements the RawTracer interface and invoked when a peer is pruned from a topic (for GossipSub).
@@ -695,6 +695,8 @@ func (ps *peerScore) Prune(p peer.ID, topic string) {
 	if !ok {
 		return
 	}
+
+	ps.updatePeerStateTracerWithStats(p, *pstats)
 
 	tstats, ok := pstats.getTopicStats(topic, ps.params)
 	if !ok {
@@ -709,8 +711,6 @@ func (ps *peerScore) Prune(p peer.ID, topic string) {
 	}
 
 	tstats.inMesh = false
-
-	ps.updatePeerStateTracerWithStats(p, *pstats)
 }
 
 // ValidateMessage implements the raw tracer interface and is invoked when a message enters the validation pipeline.
