@@ -142,6 +142,7 @@ func (v *validation) AddValidator(req *addValReq) {
 	val, err := v.makeValidator(req)
 	if err != nil {
 		req.resp <- err
+		return
 	}
 
 	v.mx.Lock()
