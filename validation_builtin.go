@@ -36,7 +36,9 @@ func NewBasicSeqnoValidator(meta PeerMetadataStore) *BasicSeqnoValidator {
 	}
 }
 
-func (v *BasicSeqnoValidator) validate(ctx context.Context, p peer.ID, m *Message) ValidationResult {
+func (v *BasicSeqnoValidator) validate(ctx context.Context, _ peer.ID, m *Message) ValidationResult {
+	p := m.GetFrom()
+
 	v.mx.RLock()
 	nonceBytes, err := v.meta.Get(ctx, p)
 	v.mx.RUnlock()
