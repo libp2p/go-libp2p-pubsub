@@ -24,6 +24,11 @@ type PeerMetadataStore interface {
 // messages in the network regardless of the seen cache span and network diameter.
 // It requires that pubsub is instantiated with a strict message signing policy and that seqnos
 // are not disabled, ie it doesn't support anonymous mode.
+//
+// Warning: See https://github.com/libp2p/rust-libp2p/issues/3453
+// TL;DR: rust is currently violating the spec by issuing a random seqno, which creates an
+// interoperability hazard. We expect this issue to be addressed in the not so distant future,
+// but keep this in mind if you are in a mixed environment with (older) rust nodes.
 type BasicSeqnoValidator struct {
 	mx   sync.RWMutex
 	meta PeerMetadataStore
