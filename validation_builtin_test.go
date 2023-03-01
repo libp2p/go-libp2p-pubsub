@@ -241,7 +241,7 @@ func (r *replayActor) send(p peer.ID, rpc *pb.RPC) {
 func (r *replayActor) replay(msg *pb.Message) {
 	// replay the message 10 times to a random subset of peers
 	for i := 0; i < 10; i++ {
-		delay := time.Duration(rng.Intn(20)) * time.Millisecond
+		delay := time.Duration(1+rng.Intn(20)) * time.Millisecond
 		time.Sleep(delay)
 
 		var peers []peer.ID
