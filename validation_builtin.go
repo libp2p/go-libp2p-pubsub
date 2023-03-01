@@ -35,10 +35,11 @@ type BasicSeqnoValidator struct {
 }
 
 // NewBasicSeqnoValidator constructs a BasicSeqnoValidator using the givven PeerMetadataStore.
-func NewBasicSeqnoValidator(meta PeerMetadataStore) *BasicSeqnoValidator {
-	return &BasicSeqnoValidator{
+func NewBasicSeqnoValidator(meta PeerMetadataStore) ValidatorEx {
+	val := &BasicSeqnoValidator{
 		meta: meta,
 	}
+	return val.validate
 }
 
 func (v *BasicSeqnoValidator) validate(ctx context.Context, _ peer.ID, m *Message) ValidationResult {
