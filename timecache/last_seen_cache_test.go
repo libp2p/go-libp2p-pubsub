@@ -25,8 +25,10 @@ func TestLastSeenCacheExpire(t *testing.T) {
 	}
 
 	time.Sleep(2 * time.Second)
-	if tc.Has(fmt.Sprint(0)) {
-		t.Fatal("should have dropped this from the cache already")
+	for i := 0; i < 11; i++ {
+		if tc.Has(fmt.Sprint(i)) {
+			t.Fatalf("should have dropped this key: %s from the cache already", fmt.Sprint(i))
+		}
 	}
 }
 
