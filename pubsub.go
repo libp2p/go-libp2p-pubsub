@@ -327,13 +327,14 @@ func NewPubSub(ctx context.Context, h host.Host, rt PubSubRouter, opts ...Option
 			h.SetStreamHandler(id, ps.handleNewStream)
 		}
 	}
-	h.Network().Notify((*PubSubNotif)(ps))
 
 	ps.val.Start(ps)
 
 	go ps.processLoop(ctx)
 
-	(*PubSubNotif)(ps).Initialize()
+	if err := (*PubSubNotif)(ps).startMonitoring(); err != nil {
+		return nil, fmt.Errorf("unable to start pubsub monitoring: %w", err)
+	}
 
 	return ps, nil
 }

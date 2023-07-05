@@ -1,75 +1,96 @@
 package pubsub
 
 import (
+	"fmt"
+
+	"github.com/libp2p/go-libp2p/core/event"
 	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
-	ma "github.com/multiformats/go-multiaddr"
+	"github.com/libp2p/go-libp2p/p2p/host/eventbus"
 )
-
-var _ network.Notifiee = (*PubSubNotif)(nil)
 
 type PubSubNotif PubSub
 
-func (p *PubSubNotif) OpenedStream(n network.Network, s network.Stream) {
-}
-
-func (p *PubSubNotif) ClosedStream(n network.Network, s network.Stream) {
-}
-
-func (p *PubSubNotif) Connected(n network.Network, c network.Conn) {
-	// ignore transient connections
-	if c.Stat().Transient {
-		return
+func (p *PubSubNotif) startMonitoring() error {
+	sub, err := p.host.EventBus().Subscribe([]interface{}{
+		new(event.EvtPeerConnectednessChanged),
+		new(event.EvtPeerProtocolsUpdated),
+	}, eventbus.Name("pubsub/peers-notify")) // @NOTE(gfanton): is the naming is correct ?
+	if err != nil {
+		return fmt.Errorf("unable to subscribe to EventBus: %w", err)
 	}
+
+	// add current peers
+	p.addPeers(p.host.Network().Peers()...)
 
 	go func() {
-		p.newPeersPrioLk.RLock()
-		p.newPeersMx.Lock()
-		p.newPeersPend[c.RemotePeer()] = struct{}{}
-		p.newPeersMx.Unlock()
-		p.newPeersPrioLk.RUnlock()
+		defer sub.Close()
 
-		select {
-		case p.newPeers <- struct{}{}:
-		default:
-		}
-	}()
-}
+		for {
+			var e interface{}
+			select {
+			case <-p.ctx.Done():
+				return
+			case e = <-sub.Out():
+			}
 
-func (p *PubSubNotif) Disconnected(n network.Network, c network.Conn) {
-}
+			switch evt := e.(type) {
+			case event.EvtPeerConnectednessChanged:
+				// send record to connected peer only
+				if evt.Connectedness == network.Connected {
+					go p.addPeers(evt.Peer)
+				}
+			case event.EvtPeerProtocolsUpdated:
+				supportedProtocols := p.rt.Protocols()
 
-func (p *PubSubNotif) Listen(n network.Network, _ ma.Multiaddr) {
-}
-
-func (p *PubSubNotif) ListenClose(n network.Network, _ ma.Multiaddr) {
-}
-
-func (p *PubSubNotif) Initialize() {
-	isTransient := func(pid peer.ID) bool {
-		for _, c := range p.host.Network().ConnsToPeer(pid) {
-			if !c.Stat().Transient {
-				return false
+			protocol_loop:
+				for _, addedProtocol := range evt.Added {
+					for _, wantedProtocol := range supportedProtocols {
+						if wantedProtocol == addedProtocol {
+							go p.addPeers(evt.Peer)
+							break protocol_loop
+						}
+					}
+				}
 			}
 		}
+	}()
 
-		return true
+	return nil
+}
+
+func (p *PubSubNotif) isTransient(pid peer.ID) bool {
+	for _, c := range p.host.Network().ConnsToPeer(pid) {
+		if !c.Stat().Transient {
+			return false
+		}
 	}
 
+	return true
+}
+
+func (p *PubSubNotif) addPeers(peers ...peer.ID) {
 	p.newPeersPrioLk.RLock()
 	p.newPeersMx.Lock()
-	for _, pid := range p.host.Network().Peers() {
-		if isTransient(pid) {
+
+	for _, pid := range peers {
+		if p.host.Network().Connectedness(pid) != network.Connected || p.isTransient(pid) {
 			continue
 		}
 
 		p.newPeersPend[pid] = struct{}{}
 	}
+
+	// do we need to update ?
+	haveNewPeer := len(p.newPeersPend) > 0
+
 	p.newPeersMx.Unlock()
 	p.newPeersPrioLk.RUnlock()
 
-	select {
-	case p.newPeers <- struct{}{}:
-	default:
+	if haveNewPeer {
+		select {
+		case p.newPeers <- struct{}{}:
+		default:
+		}
 	}
 }
