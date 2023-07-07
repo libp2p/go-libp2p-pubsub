@@ -20,9 +20,6 @@ func (p *PubSubNotif) startMonitoring() error {
 		return fmt.Errorf("unable to subscribe to EventBus: %w", err)
 	}
 
-	// add current peers
-	p.addPeers(p.host.Network().Peers()...)
-
 	go func() {
 		defer sub.Close()
 
@@ -38,7 +35,7 @@ func (p *PubSubNotif) startMonitoring() error {
 			case event.EvtPeerConnectednessChanged:
 				// send record to connected peer only
 				if evt.Connectedness == network.Connected {
-					go p.addPeers(evt.Peer)
+					go p.AddPeers(evt.Peer)
 				}
 			case event.EvtPeerProtocolsUpdated:
 				supportedProtocols := p.rt.Protocols()
@@ -47,7 +44,7 @@ func (p *PubSubNotif) startMonitoring() error {
 				for _, addedProtocol := range evt.Added {
 					for _, wantedProtocol := range supportedProtocols {
 						if wantedProtocol == addedProtocol {
-							go p.addPeers(evt.Peer)
+							go p.AddPeers(evt.Peer)
 							break protocol_loop
 						}
 					}
@@ -69,7 +66,7 @@ func (p *PubSubNotif) isTransient(pid peer.ID) bool {
 	return true
 }
 
-func (p *PubSubNotif) addPeers(peers ...peer.ID) {
+func (p *PubSubNotif) AddPeers(peers ...peer.ID) {
 	p.newPeersPrioLk.RLock()
 	p.newPeersMx.Lock()
 
