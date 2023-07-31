@@ -15,7 +15,7 @@ func (p *PubSubNotif) startMonitoring() error {
 	sub, err := p.host.EventBus().Subscribe([]interface{}{
 		new(event.EvtPeerConnectednessChanged),
 		new(event.EvtPeerProtocolsUpdated),
-	}, eventbus.Name("pubsub/peers-notify")) // @NOTE(gfanton): is the naming is correct ?
+	}, eventbus.Name("libp2p/pubsub/notify"))
 	if err != nil {
 		return fmt.Errorf("unable to subscribe to EventBus: %w", err)
 	}
@@ -33,9 +33,11 @@ func (p *PubSubNotif) startMonitoring() error {
 
 			switch evt := e.(type) {
 			case event.EvtPeerConnectednessChanged:
-				// send record to connected peer only
-				if evt.Connectedness == network.Connected {
+				switch evt.Connectedness {
+				case network.Connected:
 					go p.AddPeers(evt.Peer)
+				case network.NotConnected:
+					go p.RemovePeers(evt.Peer)
 				}
 			case event.EvtPeerProtocolsUpdated:
 				supportedProtocols := p.rt.Protocols()
@@ -71,11 +73,9 @@ func (p *PubSubNotif) AddPeers(peers ...peer.ID) {
 	p.newPeersMx.Lock()
 
 	for _, pid := range peers {
-		if p.host.Network().Connectedness(pid) != network.Connected || p.isTransient(pid) {
-			continue
+		if !p.isTransient(pid) && p.host.Network().Connectedness(pid) == network.Connected {
+			p.newPeersPend[pid] = struct{}{}
 		}
-
-		p.newPeersPend[pid] = struct{}{}
 	}
 
 	// do we need to update ?
@@ -87,6 +87,30 @@ func (p *PubSubNotif) AddPeers(peers ...peer.ID) {
 	if haveNewPeer {
 		select {
 		case p.newPeers <- struct{}{}:
+		default:
+		}
+	}
+}
+
+func (p *PubSubNotif) RemovePeers(peers ...peer.ID) {
+	p.peerDeadPrioLk.RLock()
+	p.peerDeadMx.Lock()
+
+	for _, pid := range peers {
+		if !p.isTransient(pid) && p.host.Network().Connectedness(pid) == network.NotConnected {
+			p.peerDeadPend[pid] = struct{}{}
+		}
+	}
+
+	// do we need to update ?
+	haveDeadPeer := len(p.peerDeadPend) > 0
+
+	p.peerDeadMx.Unlock()
+	p.peerDeadPrioLk.RUnlock()
+
+	if haveDeadPeer {
+		select {
+		case p.peerDead <- struct{}{}:
 		default:
 		}
 	}
