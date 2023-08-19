@@ -202,7 +202,7 @@ func (ps *peerScore) SetTopicScoreParams(topic string, p *TopicScoreParams) erro
 	ps.Lock()
 	defer ps.Unlock()
 
-	old, _ := ps.params.Topics[topic]
+	old := ps.params.Topics[topic]
 	ps.params.Topics[topic] = p
 
 	// check to see if the counter Caps are being lowered; if that's the case we need to recap them
