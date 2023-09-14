@@ -1161,7 +1161,7 @@ func TestGossipsubStarTopologyWithSignedPeerRecords(t *testing.T) {
 	for i := range hosts[1:] {
 		privKey := hosts[i].Peerstore().PrivKey(hosts[i].ID())
 		if privKey == nil {
-			t.Fatalf("unable to get private key for host %s", hosts[i].ID().Pretty())
+			t.Fatalf("unable to get private key for host %s", hosts[i].ID())
 		}
 		ai := host.InfoFromHost(hosts[i])
 		rec := peer.PeerRecordFromAddrInfo(*ai)
