@@ -170,7 +170,7 @@ func TestSimpleDiscovery(t *testing.T) {
 
 	for i, h := range hosts[1:] {
 		if !server.hasPeerRecord("floodsub:"+topic, h.ID()) {
-			t.Fatalf("Server did not register host %d with ID: %s", i+1, h.ID().Pretty())
+			t.Fatalf("Server did not register host %d with ID: %s", i+1, h.ID())
 		}
 	}
 
