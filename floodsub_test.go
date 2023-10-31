@@ -1240,7 +1240,7 @@ func TestDedupInboundStreams(t *testing.T) {
 	}
 
 	// Connect the two hosts together
-	connect(t, h2, h1)
+	connect(t, h1, h2)
 
 	// open a few streams and make sure all but the last one get reset
 	s1, err := h2.NewStream(ctx, h1.ID(), FloodSubID)
