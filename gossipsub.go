@@ -1220,14 +1220,14 @@ func (gs *GossipSubRouter) sendRPC(p peer.ID, out *RPC) {
 		delete(gs.gossip, p)
 	}
 
-	mch, ok := gs.p.peers[p]
+	q, ok := gs.p.peers[p]
 	if !ok {
 		return
 	}
 
 	// If we're below the max message size, go ahead and send
 	if out.Size() < gs.p.maxMessageSize {
-		gs.doSendRPC(out, p, mch)
+		gs.doSendRPC(out, p, q)
 		return
 	}
 
@@ -1239,7 +1239,7 @@ func (gs *GossipSubRouter) sendRPC(p peer.ID, out *RPC) {
 			gs.doDropRPC(out, p, fmt.Sprintf("Dropping oversized RPC. Size: %d, limit: %d. (Over by %d bytes)", rpc.Size(), gs.p.maxMessageSize, rpc.Size()-gs.p.maxMessageSize))
 			continue
 		}
-		gs.doSendRPC(rpc, p, mch)
+		gs.doSendRPC(rpc, p, q)
 	}
 }
 
@@ -1253,13 +1253,13 @@ func (gs *GossipSubRouter) doDropRPC(rpc *RPC, p peer.ID, reason string) {
 	}
 }
 
-func (gs *GossipSubRouter) doSendRPC(rpc *RPC, p peer.ID, mch chan *RPC) {
-	select {
-	case mch <- rpc:
-		gs.tracer.SendRPC(rpc, p)
-	default:
+func (gs *GossipSubRouter) doSendRPC(rpc *RPC, p peer.ID, q *rpcQueue) {
+	err := q.Push(rpc, false)
+	if err != nil {
 		gs.doDropRPC(rpc, p, "queue full")
+		return
 	}
+	gs.tracer.SendRPC(rpc, p)
 }
 
 // appendOrMergeRPC appends the given RPCs to the slice, merging them if possible.
