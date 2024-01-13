@@ -144,18 +144,18 @@ func (rs *RandomSubRouter) Publish(msg *Message) {
 
 	out := rpcWithMessages(msg.Message)
 	for p := range tosend {
-		mch, ok := rs.p.peers[p]
+		q, ok := rs.p.peers[p]
 		if !ok {
 			continue
 		}
 
-		select {
-		case mch <- out:
-			rs.tracer.SendRPC(out, p)
-		default:
+		err := q.Push(out, false)
+		if err != nil {
 			log.Infof("dropping message to peer %s: queue full", p)
 			rs.tracer.DropRPC(out, p)
+			continue
 		}
+		rs.tracer.SendRPC(out, p)
 	}
 }
 
