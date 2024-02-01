@@ -327,13 +327,19 @@ func NewPubSub(ctx context.Context, h host.Host, rt PubSubRouter, opts ...Option
 			h.SetStreamHandler(id, ps.handleNewStream)
 		}
 	}
-	h.Network().Notify((*PubSubNotif)(ps))
+
+	// start monitoring for new peers
+	notify := (*PubSubNotif)(ps)
+	if err := notify.startMonitoring(); err != nil {
+		return nil, fmt.Errorf("unable to start pubsub monitoring: %w", err)
+	}
 
 	ps.val.Start(ps)
 
 	go ps.processLoop(ctx)
 
-	(*PubSubNotif)(ps).Initialize()
+	// add current peers to notify system
+	notify.AddPeers(h.Network().Peers()...)
 
 	return ps, nil
 }

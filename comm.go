@@ -98,19 +98,6 @@ func (p *PubSub) handleNewStream(s network.Stream) {
 	}
 }
 
-func (p *PubSub) notifyPeerDead(pid peer.ID) {
-	p.peerDeadPrioLk.RLock()
-	p.peerDeadMx.Lock()
-	p.peerDeadPend[pid] = struct{}{}
-	p.peerDeadMx.Unlock()
-	p.peerDeadPrioLk.RUnlock()
-
-	select {
-	case p.peerDead <- struct{}{}:
-	default:
-	}
-}
-
 func (p *PubSub) handleNewPeer(ctx context.Context, pid peer.ID, outgoing <-chan *RPC) {
 	s, err := p.host.NewStream(p.ctx, pid, p.rt.Protocols()...)
 	if err != nil {
@@ -125,7 +112,6 @@ func (p *PubSub) handleNewPeer(ctx context.Context, pid peer.ID, outgoing <-chan
 	}
 
 	go p.handleSendingMessages(ctx, s, outgoing)
-	go p.handlePeerDead(s)
 	select {
 	case p.newPeerStream <- s:
 	case <-ctx.Done():
@@ -139,18 +125,6 @@ func (p *PubSub) handleNewPeerWithBackoff(ctx context.Context, pid peer.ID, back
 	case <-ctx.Done():
 		return
 	}
-}
-
-func (p *PubSub) handlePeerDead(s network.Stream) {
-	pid := s.Conn().RemotePeer()
-
-	_, err := s.Read([]byte{0})
-	if err == nil {
-		log.Debugf("unexpected message from %s", pid)
-	}
-
-	s.Reset()
-	p.notifyPeerDead(pid)
 }
 
 func (p *PubSub) handleSendingMessages(ctx context.Context, s network.Stream, outgoing <-chan *RPC) {
