@@ -13,12 +13,43 @@ var (
 	ErrQueuePushOnClosed = errors.New("push on closed rpc queue")
 )
 
+type priorityQueue struct {
+	normal   []*RPC
+	priority []*RPC
+}
+
+func (q *priorityQueue) Len() int {
+	return len(q.normal) + len(q.priority)
+}
+
+func (q *priorityQueue) NormalPush(rpc *RPC) {
+	q.normal = append(q.normal, rpc)
+}
+
+func (q *priorityQueue) PriorityPush(rpc *RPC) {
+	q.priority = append(q.priority, rpc)
+}
+
+func (q *priorityQueue) Pop() *RPC {
+	var rpc *RPC
+
+	if len(q.priority) > 0 {
+		rpc = q.priority[0]
+		q.priority = q.priority[1:]
+	} else if len(q.normal) > 0 {
+		rpc = q.normal[0]
+		q.normal = q.normal[1:]
+	}
+
+	return rpc
+}
+
 type rpcQueue struct {
 	dataAvailable  *sync.Cond
 	spaceAvailable *sync.Cond
 	// Mutex used to access queue
 	queueMu *sync.Mutex
-	queue   []*RPC
+	queue   *priorityQueue
 
 	// RWMutex used to access closed
 	closedMu *sync.RWMutex
@@ -32,6 +63,7 @@ func newRpcQueue(maxSize int) *rpcQueue {
 		dataAvailable:  sync.NewCond(queueMu),
 		spaceAvailable: sync.NewCond(queueMu),
 		queueMu:        queueMu,
+		queue:          &priorityQueue{},
 		closedMu:       &sync.RWMutex{},
 		maxSize:        maxSize,
 	}
@@ -44,13 +76,21 @@ func (q *rpcQueue) IsClosed() bool {
 }
 
 func (q *rpcQueue) Push(rpc *RPC, block bool) error {
+	return q.push(rpc, false, block)
+}
+
+func (q *rpcQueue) UrgentPush(rpc *RPC, block bool) error {
+	return q.push(rpc, true, block)
+}
+
+func (q *rpcQueue) push(rpc *RPC, urgent bool, block bool) error {
 	if q.IsClosed() {
 		panic(ErrQueuePushOnClosed)
 	}
 	q.queueMu.Lock()
 	defer q.queueMu.Unlock()
 
-	for len(q.queue) == q.maxSize {
+	for q.queue.Len() == q.maxSize {
 		if block {
 			q.spaceAvailable.Wait()
 			// It can receive a signal because the queue is closed.
@@ -61,7 +101,11 @@ func (q *rpcQueue) Push(rpc *RPC, block bool) error {
 			return ErrQueueFull
 		}
 	}
-	q.queue = append(q.queue, rpc)
+	if urgent {
+		q.queue.PriorityPush(rpc)
+	} else {
+		q.queue.NormalPush(rpc)
+	}
 
 	q.dataAvailable.Signal()
 	return nil
@@ -99,7 +143,7 @@ func (q *rpcQueue) Pop(ctx context.Context) (*RPC, error) {
 		}
 	}()
 
-	for len(q.queue) == 0 {
+	for q.queue.Len() == 0 {
 		select {
 		case <-done:
 			return nil, ErrQueueCancelled
@@ -111,8 +155,7 @@ func (q *rpcQueue) Pop(ctx context.Context) (*RPC, error) {
 			return nil, ErrQueueClosed
 		}
 	}
-	rpc := q.queue[0]
-	q.queue = q.queue[1:]
+	rpc := q.queue.Pop()
 	q.spaceAvailable.Signal()
 	return rpc, nil
 }
