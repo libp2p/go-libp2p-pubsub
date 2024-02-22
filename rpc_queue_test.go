@@ -32,6 +32,48 @@ func TestNewRpcQueue(t *testing.T) {
 	}
 }
 
+func TestRpcQueueUrgentPush(t *testing.T) {
+	maxSize := 32
+	q := newRpcQueue(maxSize)
+
+	rpc1 := &RPC{}
+	rpc2 := &RPC{}
+	rpc3 := &RPC{}
+	rpc4 := &RPC{}
+	q.Push(rpc1, true)
+	q.UrgentPush(rpc2, true)
+	q.Push(rpc3, true)
+	q.UrgentPush(rpc4, true)
+	pop1, err := q.Pop(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	pop2, err := q.Pop(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	pop3, err := q.Pop(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	pop4, err := q.Pop(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if pop1 != rpc2 {
+		t.Fatalf("get wrong item from rpc queue Pop")
+	}
+	if pop2 != rpc4 {
+		t.Fatalf("get wrong item from rpc queue Pop")
+	}
+	if pop3 != rpc1 {
+		t.Fatalf("get wrong item from rpc queue Pop")
+	}
+	if pop4 != rpc3 {
+		t.Fatalf("get wrong item from rpc queue Pop")
+	}
+}
+
 func TestRpcQueuePushThenPop(t *testing.T) {
 	maxSize := 32
 	q := newRpcQueue(maxSize)
