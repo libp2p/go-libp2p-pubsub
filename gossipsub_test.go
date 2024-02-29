@@ -2326,7 +2326,7 @@ func (iwe *iwantEverything) handleStream(s network.Stream) {
 				}
 			}
 
-			out := rpcWithControl(nil, nil, iwants, nil, prunes)
+			out := rpcWithControl(nil, nil, iwants, nil, prunes, nil)
 			err = w.WriteMsg(out)
 			if err != nil {
 				panic(err)
