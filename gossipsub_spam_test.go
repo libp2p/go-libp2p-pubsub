@@ -121,7 +121,7 @@ func TestGossipsubAttackSpamIWANT(t *testing.T) {
 			// being spammy)
 			iwantlst := []string{DefaultMsgIdFn(msg)}
 			iwant := []*pb.ControlIWant{{MessageIDs: iwantlst}}
-			orpc := rpcWithControl(nil, nil, iwant, nil, nil)
+			orpc := rpcWithControl(nil, nil, iwant, nil, nil, nil)
 			writeMsg(&orpc.RPC)
 		}
 	})
@@ -208,7 +208,7 @@ func TestGossipsubAttackSpamIHAVE(t *testing.T) {
 					for i := 0; i < 3*GossipSubMaxIHaveLength; i++ {
 						ihavelst := []string{"someid" + strconv.Itoa(i)}
 						ihave := []*pb.ControlIHave{{TopicID: sub.Topicid, MessageIDs: ihavelst}}
-						orpc := rpcWithControl(nil, ihave, nil, nil, nil)
+						orpc := rpcWithControl(nil, ihave, nil, nil, nil, nil)
 						writeMsg(&orpc.RPC)
 					}
 
@@ -238,7 +238,7 @@ func TestGossipsubAttackSpamIHAVE(t *testing.T) {
 					for i := 0; i < 3*GossipSubMaxIHaveLength; i++ {
 						ihavelst := []string{"someid" + strconv.Itoa(i+100)}
 						ihave := []*pb.ControlIHave{{TopicID: sub.Topicid, MessageIDs: ihavelst}}
-						orpc := rpcWithControl(nil, ihave, nil, nil, nil)
+						orpc := rpcWithControl(nil, ihave, nil, nil, nil, nil)
 						writeMsg(&orpc.RPC)
 					}
 
