@@ -830,7 +830,7 @@ func (ps *peerScore) ThrottlePeer(p peer.ID) {}
 
 func (ps *peerScore) RecvRPC(rpc *RPC) {}
 
-func (ps *peerScore) SendRPC(rpc *RPC, p peer.ID) {}
+func (ps *peerScore) SendRPC(rpc *RPC, p peer.ID, urgent bool) {}
 
 func (ps *peerScore) DropRPC(rpc *RPC, p peer.ID) {}
 

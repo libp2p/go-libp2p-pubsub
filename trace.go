@@ -51,7 +51,7 @@ type RawTracer interface {
 	// RecvRPC is invoked when an incoming RPC is received.
 	RecvRPC(rpc *RPC)
 	// SendRPC is invoked when a RPC is sent.
-	SendRPC(rpc *RPC, p peer.ID)
+	SendRPC(rpc *RPC, p peer.ID, urgent bool)
 	// DropRPC is invoked when an outbound RPC is dropped, typically because of a queue full.
 	DropRPC(rpc *RPC, p peer.ID)
 	// UndeliverableMessage is invoked when the consumer of Subscribe is not reading messages fast enough and
@@ -274,13 +274,13 @@ func (t *pubsubTracer) RecvRPC(rpc *RPC) {
 	t.tracer.Trace(evt)
 }
 
-func (t *pubsubTracer) SendRPC(rpc *RPC, p peer.ID) {
+func (t *pubsubTracer) SendRPC(rpc *RPC, p peer.ID, urgent bool) {
 	if t == nil {
 		return
 	}
 
 	for _, tr := range t.raw {
-		tr.SendRPC(rpc, p)
+		tr.SendRPC(rpc, p, urgent)
 	}
 
 	if t.tracer == nil {
@@ -295,6 +295,7 @@ func (t *pubsubTracer) SendRPC(rpc *RPC, p peer.ID) {
 		SendRPC: &pb.TraceEvent_SendRPC{
 			SendTo: []byte(p),
 			Meta:   t.traceRPCMeta(rpc),
+			Urgent: &urgent,
 		},
 	}
 
@@ -402,11 +403,23 @@ func (t *pubsubTracer) traceRPCMeta(rpc *RPC) *pb.TraceEvent_RPCMeta {
 			})
 		}
 
+		var idontwant []*pb.TraceEvent_ControlIDontWantMeta
+		for _, ctl := range rpc.Control.Idontwant {
+			var mids [][]byte
+			for _, mid := range ctl.MessageIDs {
+				mids = append(mids, []byte(mid))
+			}
+			idontwant = append(idontwant, &pb.TraceEvent_ControlIDontWantMeta{
+				MessageIDs: mids,
+			})
+		}
+
 		rpcMeta.Control = &pb.TraceEvent_ControlMeta{
-			Ihave: ihave,
-			Iwant: iwant,
-			Graft: graft,
-			Prune: prune,
+			Ihave:     ihave,
+			Iwant:     iwant,
+			Graft:     graft,
+			Prune:     prune,
+			Idontwant: idontwant,
 		}
 	}
 
