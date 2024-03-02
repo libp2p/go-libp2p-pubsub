@@ -60,6 +60,7 @@ var (
 	GossipSubMaxIHaveLength                   = 5000
 	GossipSubMaxIHaveMessages                 = 10
 	GossipSubIWantFollowupTime                = 3 * time.Second
+	GossipSubIDontWantMessageThreshold        = 1024 // 1KB
 )
 
 // GossipSubParams defines all the gossipsub specific parameters.
@@ -205,6 +206,9 @@ type GossipSubParams struct {
 	// If the message is not received within this window, a broken promise is declared and
 	// the router may apply bahavioural penalties.
 	IWantFollowupTime time.Duration
+
+	// IDONTWANT is only sent for messages larger than the threshold.
+	IDontWantMessageThreshold int
 }
 
 // NewGossipSub returns a new PubSub object using the default GossipSubRouter as the router.
@@ -274,6 +278,7 @@ func DefaultGossipSubParams() GossipSubParams {
 		MaxIHaveLength:            GossipSubMaxIHaveLength,
 		MaxIHaveMessages:          GossipSubMaxIHaveMessages,
 		IWantFollowupTime:         GossipSubIWantFollowupTime,
+		IDontWantMessageThreshold: GossipSubIDontWantMessageThreshold,
 		SlowHeartbeatWarning:      0.1,
 	}
 }
@@ -669,10 +674,16 @@ func (gs *GossipSubRouter) AcceptFrom(p peer.ID) AcceptStatus {
 func (gs *GossipSubRouter) PreValidation(msgs []*Message) {
 	tmids := make(map[string][]string)
 	for _, msg := range msgs {
+		if len(msg.GetData()) < gs.params.IDontWantMessageThreshold {
+			continue
+		}
 		topic := msg.GetTopic()
 		tmids[topic] = append(tmids[topic], gs.p.idGen.ID(msg))
 	}
 	for topic, mids := range tmids {
+		if len(mids) == 0 {
+			continue
+		}
 		// shuffle the messages got from the RPC envelope
 		shuffleStrings(mids)
 		// send IDONTWANT to all the mesh peers
