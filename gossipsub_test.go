@@ -1145,7 +1145,7 @@ func TestGossipsubStarTopologyWithSignedPeerRecords(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	hosts := getNetHosts(t, ctx, 20)
+	hosts := getDefaultHosts(t, 20)
 	psubs := getGossipsubs(ctx, hosts, WithPeerExchange(true), WithFloodPublish(true))
 
 	// configure the center of the star with a very low D
@@ -2603,92 +2603,5 @@ func TestGossipsubManagesAnAddressBook(t *testing.T) {
 	// There should be no Addrs left because we cleared all recently connected ones.
 	if len(addrs) != 0 {
 		t.Fatalf("expected no addrs, got %d addrs", len(addrs))
-	}
-}
-
-func TestPXWorksWithSignedRecords(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	nPeers := GossipSubDhi + 2 // +2 since we want the hub to get Dhi + 1 peers to trigger a prune
-	hosts := getDefaultHosts(t, nPeers)
-	// We will create a hub and spoke network. The hub should inform the peers
-	// at the spoke about other peers via PX.
-
-	// Peer 0 is the hub. The rest are on the spoke.
-
-	// Peer 1 (and the rest), will be well connected
-	psubs := getGossipsubs(ctx, hosts, WithPeerExchange(true))
-
-	// Connect peer 0 to everyone else
-	for _, h := range hosts[1:] {
-		connect(t, hosts[0], h)
-	}
-
-	// Assert that the other peers only have one other connected peer (the hub)
-	for _, h := range hosts[1:] {
-		seenPeers := make(map[peer.ID]struct{})
-		for _, c := range h.Network().Conns() {
-			seenPeers[c.RemotePeer()] = struct{}{}
-		}
-		if len(seenPeers) != 1 {
-			t.Fatalf("expected 1 connected peer, got %d", len(seenPeers))
-		}
-	}
-
-	// Do some pubsubbing
-	var msgs []*Subscription
-	for _, ps := range psubs {
-		subch, err := ps.Subscribe("foobar")
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		msgs = append(msgs, subch)
-	}
-
-	// wait for heartbeats to build mesh
-	time.Sleep(time.Second * 2)
-
-	for i := 0; i < 100; i++ {
-		msg := []byte(fmt.Sprintf("%d it's not a floooooood %d", i, i))
-
-		owner := rand.Intn(len(psubs))
-
-		psubs[owner].Publish("foobar", msg)
-
-		for _, sub := range msgs {
-			got, err := sub.Next(ctx)
-			if err != nil {
-				t.Fatal(sub.err)
-			}
-			if !bytes.Equal(msg, got.Data) {
-				t.Fatal("got wrong message!")
-			}
-		}
-	}
-
-	timeout := time.After(time.Second * 10)
-	timer := time.NewTicker(time.Second)
-	defer timer.Stop()
-
-outer:
-	for {
-		select {
-		case <-timeout:
-			t.Fatal("timed out waiting for px to happen")
-		case <-timer.C:
-			// Check if any of the peers along the spoke are now interconnected (true if total connected peers > nPeers - 1)
-			for _, h := range hosts[1:] {
-				seenPeers := make(map[peer.ID]struct{})
-				for _, c := range h.Network().Conns() {
-					seenPeers[c.RemotePeer()] = struct{}{}
-				}
-				if len(seenPeers) > 1 {
-					// Success! We have performed at least one successful px
-					break outer
-				}
-			}
-		}
 	}
 }
