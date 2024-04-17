@@ -5,11 +5,11 @@ orbs:
 executors:
   golang:
     docker:
-      - image: cimg/go:1.20
+      - image: cimg/go:1.22
     resource_class: 2xlarge
   ubuntu:
     docker:
-      - image: ubuntu:20.04
+      - image: ubuntu:22.04
 
 commands:
   prepare:
