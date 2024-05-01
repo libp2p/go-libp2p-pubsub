@@ -2608,7 +2608,7 @@ func TestGossipsubManagesAnAddressBook(t *testing.T) {
 	}
 }
 
-func TestGossipsubIdontwant(t *testing.T) {
+func TestGossipsubIdontwantSend(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	hosts := getNetHosts(t, ctx, 3)
@@ -2729,6 +2729,101 @@ func TestGossipsubIdontwant(t *testing.T) {
 				// Add the message to the list and reset the timer
 				actMids = append(actMids, mid)
 				msgTimer.Reset(msgWaitMax)
+			}
+		}
+	})
+
+	connect(t, hosts[0], hosts[1])
+	connect(t, hosts[1], hosts[2])
+
+	<-ctx.Done()
+}
+
+func TestGossipsubIdontwantReceive(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	hosts := getNetHosts(t, ctx, 3)
+
+	msgID := func(pmsg *pb.Message) string {
+		// silly content-based test message-ID: just use the data as whole
+		return base64.URLEncoding.EncodeToString(pmsg.Data)
+	}
+
+	psubs := make([]*PubSub, 2)
+	psubs[0] = getGossipsub(ctx, hosts[0], WithMessageIdFn(msgID))
+	psubs[1] = getGossipsub(ctx, hosts[1], WithMessageIdFn(msgID))
+
+	var msgs []*Subscription
+	topic := "foobar"
+	for _, ps := range psubs {
+		subch, err := ps.Subscribe(topic)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		msgs = append(msgs, subch)
+	}
+
+	// Wait a bit after the last message before checking the result
+	msgWaitMax := time.Second
+	msgTimer := time.NewTimer(msgWaitMax)
+
+	// Checks we received no messages
+	received := false
+	checkMsgs := func() {
+		if received {
+			t.Fatalf("Expected no messages received after IDONWANT")
+		}
+	}
+
+	// Wait for the timer to expire
+	go func() {
+		select {
+		case <-msgTimer.C:
+			checkMsgs()
+			cancel()
+			return
+		case <-ctx.Done():
+			checkMsgs()
+		}
+	}()
+
+	newMockGS(ctx, t, hosts[2], func(writeMsg func(*pb.RPC), irpc *pb.RPC) {
+		// Check if it receives any message
+		if len(irpc.GetPublish()) > 0 {
+			received = true
+		}
+		// When the middle peer connects it will send us its subscriptions
+		for _, sub := range irpc.GetSubscriptions() {
+			if sub.GetSubscribe() {
+				// Reply by subcribing to the topic and grafting to the middle peer
+				writeMsg(&pb.RPC{
+					Subscriptions: []*pb.RPC_SubOpts{{Subscribe: sub.Subscribe, Topicid: sub.Topicid}},
+					Control:       &pb.ControlMessage{Graft: []*pb.ControlGraft{{TopicID: sub.Topicid}}},
+				})
+
+				go func() {
+					// Wait for a short interval to make sure the middle peer
+					// received and processed the subscribe + graft
+					time.Sleep(100 * time.Millisecond)
+
+					// Generate a message and send IDONTWANT to the middle peer
+					data := make([]byte, 16)
+					rand.Read(data)
+					mid := msgID(&pb.Message{Data: data})
+					writeMsg(&pb.RPC{
+						Control: &pb.ControlMessage{Idontwant: []*pb.ControlIDontWant{{MessageIDs: []string{mid}}}},
+					})
+
+					// Wait for a short interval to make sure the middle peer
+					// received and processed the IDONTWANTs
+					time.Sleep(100 * time.Millisecond)
+
+					// Publish the message from the first peer
+					if err := psubs[0].Publish(topic, data); err != nil {
+						t.Fatal(err)
+					}
+				}()
 			}
 		}
 	})
