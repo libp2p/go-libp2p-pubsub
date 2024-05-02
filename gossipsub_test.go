@@ -2335,7 +2335,24 @@ func (iwe *iwantEverything) handleStream(s network.Stream) {
 	}
 }
 
+func validRPCSizes(slice []*RPC, limit int) bool {
+	for _, rpc := range slice {
+		if rpc.Size() > limit {
+			return false
+		}
+	}
+	return true
+}
+
 func TestFragmentRPCFunction(t *testing.T) {
+	fragmentRPC := func(rpc *RPC, limit int) ([]*RPC, error) {
+		rpcs := appendOrMergeRPC(nil, limit, *rpc)
+		if allValid := validRPCSizes(rpcs, limit); !allValid {
+			return rpcs, fmt.Errorf("RPC size exceeds limit")
+		}
+		return rpcs, nil
+	}
+
 	p := peer.ID("some-peer")
 	topic := "test"
 	rpc := &RPC{from: p}
@@ -2485,7 +2502,24 @@ func TestFragmentRPCFunction(t *testing.T) {
 			{MessageIDs: []string{"hello", string(giantIdBytes)}},
 		},
 	}
-	results, err = fragmentRPC(rpc, limit)
+	results, _ = fragmentRPC(rpc, limit)
+
+	// The old behavior would silently drop the giant ID.
+	// Now we return a the giant ID in a RPC by itself so that it can be
+	// dropped before actually sending the RPC. This lets us log the anamoly.
+	// To keep this test useful, we implement the old behavior here.
+	filtered := make([]*RPC, 0, len(results))
+	for _, r := range results {
+		if r.Size() < limit {
+			filtered = append(filtered, r)
+		}
+	}
+	results = filtered
+	err = nil
+	if !validRPCSizes(results, limit) {
+		err = fmt.Errorf("RPC size exceeds limit")
+	}
+
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -2499,4 +2533,21 @@ func TestFragmentRPCFunction(t *testing.T) {
 		t.Fatalf("expected small message ID to be included unaltered, got %s instead",
 			results[0].Control.Iwant[0].MessageIDs[0])
 	}
+}
+
+func FuzzAppendOrMergeRPC(f *testing.F) {
+	minMaxMsgSize := 100
+	maxMaxMsgSize := 2048
+	f.Fuzz(func(t *testing.T, data []byte) {
+		maxSize := int(generateU16(&data)) % maxMaxMsgSize
+		if maxSize < minMaxMsgSize {
+			maxSize = minMaxMsgSize
+		}
+		rpc := generateRPC(data, maxSize)
+		rpcs := appendOrMergeRPC(nil, maxSize, *rpc)
+
+		if !validRPCSizes(rpcs, maxSize) {
+			t.Fatalf("invalid RPC size")
+		}
+	})
 }
