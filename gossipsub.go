@@ -536,6 +536,7 @@ func (gs *GossipSubRouter) manageAddrBook() {
 	})
 	if err != nil {
 		log.Errorf("failed to subscribe to peer identification events: %v", err)
+		return
 	}
 	defer sub.Close()
 
