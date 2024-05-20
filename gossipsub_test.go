@@ -2557,7 +2557,7 @@ func getDefaultHosts(t *testing.T, n int) []host.Host {
 	var out []host.Host
 
 	for i := 0; i < n; i++ {
-		h, err := libp2p.New()
+		h, err := libp2p.New(libp2p.ResourceManager(&network.NullResourceManager{}))
 		if err != nil {
 			t.Fatal(err)
 		}
