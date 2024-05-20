@@ -534,7 +534,7 @@ loop:
 	for _, c := range conns {
 		stat := c.Stat()
 
-		if stat.Transient {
+		if stat.Limited {
 			continue
 		}
 
