@@ -529,7 +529,7 @@ func (gs *GossipSubRouter) Attach(p *PubSub) {
 	}
 }
 
-func (gs *GossipSubRouter) manageAddrBook() error {
+func (gs *GossipSubRouter) manageAddrBook() {
 	sub, err := gs.p.host.EventBus().Subscribe([]interface{}{
 		&event.EvtPeerIdentificationCompleted{},
 		&event.EvtPeerConnectednessChanged{},
@@ -542,7 +542,7 @@ func (gs *GossipSubRouter) manageAddrBook() error {
 	for {
 		select {
 		case <-gs.p.ctx.Done():
-			return nil
+			return
 		case ev := <-sub.Out():
 			switch ev := ev.(type) {
 			case event.EvtPeerIdentificationCompleted:
