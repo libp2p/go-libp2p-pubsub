@@ -13,6 +13,7 @@ import (
 
 	pb "github.com/libp2p/go-libp2p-pubsub/pb"
 
+	"github.com/libp2p/go-libp2p"
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
@@ -1144,7 +1145,7 @@ func TestGossipsubStarTopologyWithSignedPeerRecords(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	hosts := getNetHosts(t, ctx, 20)
+	hosts := getDefaultHosts(t, 20)
 	psubs := getGossipsubs(ctx, hosts, WithPeerExchange(true), WithFloodPublish(true))
 
 	// configure the center of the star with a very low D
@@ -2550,4 +2551,57 @@ func FuzzAppendOrMergeRPC(f *testing.F) {
 			t.Fatalf("invalid RPC size")
 		}
 	})
+}
+
+func getDefaultHosts(t *testing.T, n int) []host.Host {
+	var out []host.Host
+
+	for i := 0; i < n; i++ {
+		h, err := libp2p.New(libp2p.ResourceManager(&network.NullResourceManager{}))
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { h.Close() })
+		out = append(out, h)
+	}
+
+	return out
+}
+
+func TestGossipsubManagesAnAddressBook(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	// Create a pair of hosts
+	hosts := getDefaultHosts(t, 2)
+
+	psubs := getGossipsubs(ctx, hosts)
+	connectAll(t, hosts)
+
+	// wait for identify events to propagate
+	time.Sleep(time.Second)
+
+	// Check that the address book is populated
+	cab, ok := peerstore.GetCertifiedAddrBook(psubs[0].rt.(*GossipSubRouter).cab)
+	if !ok {
+		t.Fatalf("expected a certified address book")
+	}
+
+	env := cab.GetPeerRecord(hosts[1].ID())
+	if env == nil {
+		t.Fatalf("expected a peer record for host 1")
+	}
+
+	// Disconnect host 1. Host 0 should then update the TTL of the address book
+	for _, c := range hosts[1].Network().Conns() {
+		c.Close()
+	}
+	time.Sleep(time.Second)
+
+	// This only updates addrs that are marked as recently connected, which should be all of them
+	psubs[0].rt.(*GossipSubRouter).cab.UpdateAddrs(hosts[1].ID(), peerstore.RecentlyConnectedAddrTTL, 0)
+	addrs := psubs[0].rt.(*GossipSubRouter).cab.Addrs(hosts[1].ID())
+	// There should be no Addrs left because we cleared all recently connected ones.
+	if len(addrs) != 0 {
+		t.Fatalf("expected no addrs, got %d addrs", len(addrs))
+	}
 }
