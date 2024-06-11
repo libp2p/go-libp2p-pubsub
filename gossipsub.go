@@ -2,6 +2,7 @@ package pubsub
 
 import (
 	"context"
+	"crypto/sha256"
 	"fmt"
 	"io"
 	"math/rand"
@@ -64,6 +65,8 @@ var (
 	GossipSubIDontWantMessageThreshold        = 1024 // 1KB
 	GossipSubIDontWantMessageTTL              = 3    // 3 heartbeats
 )
+
+type checksum [32]byte
 
 // GossipSubParams defines all the gossipsub specific parameters.
 type GossipSubParams struct {
@@ -244,7 +247,7 @@ func DefaultGossipSubRouter(h host.Host) *GossipSubRouter {
 		backoff:      make(map[string]map[peer.ID]time.Time),
 		peerhave:     make(map[peer.ID]int),
 		peerdontwant: make(map[peer.ID]int),
-		unwanted:     make(map[peer.ID]map[string]int),
+		unwanted:     make(map[peer.ID]map[checksum]int),
 		iasked:       make(map[peer.ID]int),
 		outbound:     make(map[peer.ID]bool),
 		connect:      make(chan connectInfo, params.MaxPendingConnections),
@@ -449,7 +452,7 @@ type GossipSubRouter struct {
 	control      map[peer.ID]*pb.ControlMessage   // pending control messages
 	peerhave     map[peer.ID]int                  // number of IHAVEs received from peer in the last heartbeat
 	peerdontwant map[peer.ID]int                  // number of IDONTWANTs received from peer in the last heartbeat
-	unwanted     map[peer.ID]map[string]int       // TTL of the message ids peers don't want
+	unwanted     map[peer.ID]map[checksum]int     // TTL of the message ids peers don't want
 	iasked       map[peer.ID]int                  // number of messages we have asked from peer in the last heartbeat
 	outbound     map[peer.ID]bool                 // connection direction cache, marks peers with outbound connections
 	backoff      map[string]map[peer.ID]time.Time // prune backoff
@@ -980,7 +983,7 @@ func (gs *GossipSubRouter) handlePrune(p peer.ID, ctl *pb.ControlMessage) {
 
 func (gs *GossipSubRouter) handleIDontWant(p peer.ID, ctl *pb.ControlMessage) {
 	if gs.unwanted[p] == nil {
-		gs.unwanted[p] = make(map[string]int)
+		gs.unwanted[p] = make(map[checksum]int)
 	}
 
 	// IDONTWANT flood protection
@@ -993,7 +996,8 @@ func (gs *GossipSubRouter) handleIDontWant(p peer.ID, ctl *pb.ControlMessage) {
 	// Remember all the unwanted message ids
 	for _, idontwant := range ctl.GetIdontwant() {
 		for _, mid := range idontwant.GetMessageIDs() {
-			gs.unwanted[p][mid] = gs.params.IDontWantMessageTTL
+			hashed := sha256.Sum256([]byte(mid))
+			gs.unwanted[p][hashed] = gs.params.IDontWantMessageTTL
 		}
 	}
 }
@@ -1159,9 +1163,10 @@ func (gs *GossipSubRouter) Publish(msg *Message) {
 
 		for p := range gmap {
 			mid := gs.p.idGen.ID(msg)
+			hashed := sha256.Sum256([]byte(mid))
 			// Check if it has already received an IDONTWANT for the message.
 			// If so, don't send it to the peer
-			if _, ok := gs.unwanted[p][mid]; ok {
+			if _, ok := gs.unwanted[p][hashed]; ok {
 				continue
 			}
 			tosend[p] = struct{}{}
