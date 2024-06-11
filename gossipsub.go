@@ -62,6 +62,7 @@ var (
 	GossipSubMaxIDontWantMessages             = 10
 	GossipSubIWantFollowupTime                = 3 * time.Second
 	GossipSubIDontWantMessageThreshold        = 1024 // 1KB
+	GossipSubIDontWantMessageTTL              = 3    // 3 heartbeats
 )
 
 // GossipSubParams defines all the gossipsub specific parameters.
@@ -213,6 +214,9 @@ type GossipSubParams struct {
 
 	// IDONTWANT is only sent for messages larger than the threshold.
 	IDontWantMessageThreshold int
+
+	// IDONTWANT is cleared when it's older than the TTL.
+	IDontWantMessageTTL int
 }
 
 // NewGossipSub returns a new PubSub object using the default GossipSubRouter as the router.
@@ -240,7 +244,7 @@ func DefaultGossipSubRouter(h host.Host) *GossipSubRouter {
 		backoff:      make(map[string]map[peer.ID]time.Time),
 		peerhave:     make(map[peer.ID]int),
 		peerdontwant: make(map[peer.ID]int),
-		unwanted:     make(map[peer.ID]map[string]struct{}),
+		unwanted:     make(map[peer.ID]map[string]int),
 		iasked:       make(map[peer.ID]int),
 		outbound:     make(map[peer.ID]bool),
 		connect:      make(chan connectInfo, params.MaxPendingConnections),
@@ -286,6 +290,7 @@ func DefaultGossipSubParams() GossipSubParams {
 		MaxIDontWantMessages:      GossipSubMaxIDontWantMessages,
 		IWantFollowupTime:         GossipSubIWantFollowupTime,
 		IDontWantMessageThreshold: GossipSubIDontWantMessageThreshold,
+		IDontWantMessageTTL:       GossipSubIDontWantMessageTTL,
 		SlowHeartbeatWarning:      0.1,
 	}
 }
@@ -444,7 +449,7 @@ type GossipSubRouter struct {
 	control      map[peer.ID]*pb.ControlMessage   // pending control messages
 	peerhave     map[peer.ID]int                  // number of IHAVEs received from peer in the last heartbeat
 	peerdontwant map[peer.ID]int                  // number of IDONTWANTs received from peer in the last heartbeat
-	unwanted     map[peer.ID]map[string]struct{}  // message ids peers don't want
+	unwanted     map[peer.ID]map[string]int       // TTL of the message ids peers don't want
 	iasked       map[peer.ID]int                  // number of messages we have asked from peer in the last heartbeat
 	outbound     map[peer.ID]bool                 // connection direction cache, marks peers with outbound connections
 	backoff      map[string]map[peer.ID]time.Time // prune backoff
@@ -975,7 +980,7 @@ func (gs *GossipSubRouter) handlePrune(p peer.ID, ctl *pb.ControlMessage) {
 
 func (gs *GossipSubRouter) handleIDontWant(p peer.ID, ctl *pb.ControlMessage) {
 	if gs.unwanted[p] == nil {
-		gs.unwanted[p] = make(map[string]struct{})
+		gs.unwanted[p] = make(map[string]int)
 	}
 
 	// IDONTWANT flood protection
@@ -988,7 +993,7 @@ func (gs *GossipSubRouter) handleIDontWant(p peer.ID, ctl *pb.ControlMessage) {
 	// Remember all the unwanted message ids
 	for _, idontwant := range ctl.GetIdontwant() {
 		for _, mid := range idontwant.GetMessageIDs() {
-			gs.unwanted[p][mid] = struct{}{}
+			gs.unwanted[p][mid] = gs.params.IDontWantMessageTTL
 		}
 	}
 }
@@ -1773,6 +1778,16 @@ func (gs *GossipSubRouter) clearIDontWantCounters() {
 	if len(gs.peerdontwant) > 0 {
 		// throw away the old map and make a new one
 		gs.peerdontwant = make(map[peer.ID]int)
+	}
+
+	// decrement TTLs of all the IDONTWANTs and delete it from the cache when it reaches zero
+	for _, mids := range gs.unwanted {
+		for mid := range mids {
+			mids[mid]--
+			if mids[mid] == 0 {
+				delete(mids, mid)
+			}
+		}
 	}
 }
 
