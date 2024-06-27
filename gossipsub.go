@@ -683,13 +683,11 @@ func (gs *GossipSubRouter) handleIHave(p peer.ID, ctl *pb.ControlMessage) []*pb.
 	}
 
 	// IHAVE flood protection
-	// prevent the remote peer from sending too many IHAVE messages
 	gs.peerhave[p]++
 	if gs.peerhave[p] > gs.params.MaxIHaveMessages {
 		log.Debugf("IHAVE: peer %s has advertised too many times (%d) within this heartbeat interval; ignoring", p, gs.peerhave[p])
 		return nil
 	}
-	// prevent ourselfs to process Ihaves if we reached the max sent message ID limit
 	if gs.iasked[p] >= gs.params.MaxIHaveLength {
 		log.Debugf("IHAVE: peer %s has already advertised too many messages (%d); ignoring", p, gs.iasked[p])
 		return nil
