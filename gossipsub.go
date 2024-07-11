@@ -3,6 +3,7 @@ package pubsub
 import (
 	"context"
 	"fmt"
+	"io"
 	"math/rand"
 	"sort"
 	"time"
@@ -543,6 +544,13 @@ func (gs *GossipSubRouter) manageAddrBook() {
 	for {
 		select {
 		case <-gs.p.ctx.Done():
+			cabCloser, ok := gs.cab.(io.Closer)
+			if ok {
+				errClose := cabCloser.Close()
+				if errClose != nil {
+					log.Warnf("failed to close addr book: %v", errClose)
+				}
+			}
 			return
 		case ev := <-sub.Out():
 			switch ev := ev.(type) {
