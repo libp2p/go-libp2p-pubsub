@@ -25,7 +25,7 @@ func TestGossipsubAttackSpamIWANT(t *testing.T) {
 	defer cancel()
 
 	// Create legitimate and attacker hosts
-	hosts := getNetHosts(t, ctx, 2)
+	hosts := getDefaultHosts(t, 2)
 	legit := hosts[0]
 	attacker := hosts[1]
 
@@ -142,7 +142,7 @@ func TestGossipsubAttackSpamIHAVE(t *testing.T) {
 	defer cancel()
 
 	// Create legitimate and attacker hosts
-	hosts := getNetHosts(t, ctx, 2)
+	hosts := getDefaultHosts(t, 2)
 	legit := hosts[0]
 	attacker := hosts[1]
 
@@ -195,6 +195,7 @@ func TestGossipsubAttackSpamIHAVE(t *testing.T) {
 					Control:       &pb.ControlMessage{Graft: []*pb.ControlGraft{{TopicID: sub.Topicid}}},
 				})
 
+				sub := sub
 				go func() {
 					defer cancel()
 
@@ -292,7 +293,7 @@ func TestGossipsubAttackGRAFTNonExistentTopic(t *testing.T) {
 	defer cancel()
 
 	// Create legitimate and attacker hosts
-	hosts := getNetHosts(t, ctx, 2)
+	hosts := getDefaultHosts(t, 2)
 	legit := hosts[0]
 	attacker := hosts[1]
 
@@ -376,7 +377,7 @@ func TestGossipsubAttackGRAFTDuringBackoff(t *testing.T) {
 	defer cancel()
 
 	// Create legitimate and attacker hosts
-	hosts := getNetHosts(t, ctx, 2)
+	hosts := getDefaultHosts(t, 2)
 	legit := hosts[0]
 	attacker := hosts[1]
 
@@ -430,6 +431,7 @@ func TestGossipsubAttackGRAFTDuringBackoff(t *testing.T) {
 					Control:       &pb.ControlMessage{Graft: graft},
 				})
 
+				sub := sub
 				go func() {
 					defer cancel()
 
@@ -617,7 +619,7 @@ func TestGossipsubAttackInvalidMessageSpam(t *testing.T) {
 	defer cancel()
 
 	// Create legitimate and attacker hosts
-	hosts := getNetHosts(t, ctx, 2)
+	hosts := getDefaultHosts(t, 2)
 	legit := hosts[0]
 	attacker := hosts[1]
 

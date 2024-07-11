@@ -40,7 +40,7 @@ func TestRandomsubSmall(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	hosts := getNetHosts(t, ctx, 10)
+	hosts := getDefaultHosts(t, 10)
 	psubs := getRandomsubs(ctx, hosts, 10)
 
 	connectAll(t, hosts)
@@ -77,7 +77,7 @@ func TestRandomsubBig(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	hosts := getNetHosts(t, ctx, 50)
+	hosts := getDefaultHosts(t, 50)
 	psubs := getRandomsubs(ctx, hosts, 50)
 
 	connectSome(t, hosts, 12)
@@ -114,7 +114,7 @@ func TestRandomsubMixed(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	hosts := getNetHosts(t, ctx, 40)
+	hosts := getDefaultHosts(t, 40)
 	fsubs := getPubsubs(ctx, hosts[:10])
 	rsubs := getRandomsubs(ctx, hosts[10:], 30)
 	psubs := append(fsubs, rsubs...)
@@ -153,7 +153,7 @@ func TestRandomsubEnoughPeers(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	hosts := getNetHosts(t, ctx, 40)
+	hosts := getDefaultHosts(t, 40)
 	fsubs := getPubsubs(ctx, hosts[:10])
 	rsubs := getRandomsubs(ctx, hosts[10:], 30)
 	psubs := append(fsubs, rsubs...)

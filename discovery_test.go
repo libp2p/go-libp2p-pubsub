@@ -134,7 +134,7 @@ func TestSimpleDiscovery(t *testing.T) {
 	server := newDiscoveryServer()
 	discOpts := []discovery.Option{discovery.Limit(numHosts), discovery.TTL(1 * time.Minute)}
 
-	hosts := getNetHosts(t, ctx, numHosts)
+	hosts := getDefaultHosts(t, numHosts)
 	psubs := make([]*PubSub, numHosts)
 	topicHandlers := make([]*Topic, numHosts)
 
@@ -234,7 +234,7 @@ func TestGossipSubDiscoveryAfterBootstrap(t *testing.T) {
 	discOpts := []discovery.Option{discovery.Limit(numHosts), discovery.TTL(ttl)}
 
 	// Put the pubsub clients into two partitions
-	hosts := getNetHosts(t, ctx, numHosts)
+	hosts := getDefaultHosts(t, numHosts)
 	psubs := make([]*PubSub, numHosts)
 	topicHandlers := make([]*Topic, numHosts)
 

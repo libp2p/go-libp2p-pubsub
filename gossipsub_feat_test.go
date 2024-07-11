@@ -42,7 +42,7 @@ func TestGossipSubCustomProtocols(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	hosts := getNetHosts(t, ctx, 3)
+	hosts := getDefaultHosts(t, 3)
 
 	gsubs := getGossipsubs(ctx, hosts[:2], WithGossipSubProtocols(protos, features))
 	fsub := getPubsub(ctx, hosts[2])
