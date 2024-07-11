@@ -13,15 +13,11 @@ import (
 
 	pb "github.com/libp2p/go-libp2p-pubsub/pb"
 
-	"github.com/libp2p/go-libp2p"
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/core/peerstore"
 	"github.com/libp2p/go-libp2p/core/record"
-
-	bhost "github.com/libp2p/go-libp2p/p2p/host/blank"
-	swarmt "github.com/libp2p/go-libp2p/p2p/net/swarm/testing"
 
 	"github.com/libp2p/go-msgio/protoio"
 )
@@ -45,7 +41,7 @@ func getGossipsubs(ctx context.Context, hs []host.Host, opts ...Option) []*PubSu
 func TestSparseGossipsub(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	hosts := getNetHosts(t, ctx, 20)
+	hosts := getDefaultHosts(t, 20)
 
 	psubs := getGossipsubs(ctx, hosts)
 
@@ -86,7 +82,7 @@ func TestSparseGossipsub(t *testing.T) {
 func TestDenseGossipsub(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	hosts := getNetHosts(t, ctx, 20)
+	hosts := getDefaultHosts(t, 20)
 
 	psubs := getGossipsubs(ctx, hosts)
 
@@ -127,7 +123,7 @@ func TestDenseGossipsub(t *testing.T) {
 func TestGossipsubFanout(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	hosts := getNetHosts(t, ctx, 20)
+	hosts := getDefaultHosts(t, 20)
 
 	psubs := getGossipsubs(ctx, hosts)
 
@@ -196,7 +192,7 @@ func TestGossipsubFanout(t *testing.T) {
 func TestGossipsubFanoutMaintenance(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	hosts := getNetHosts(t, ctx, 20)
+	hosts := getDefaultHosts(t, 20)
 
 	psubs := getGossipsubs(ctx, hosts)
 
@@ -281,7 +277,7 @@ func TestGossipsubFanoutExpiry(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	hosts := getNetHosts(t, ctx, 10)
+	hosts := getDefaultHosts(t, 10)
 
 	psubs := getGossipsubs(ctx, hosts)
 
@@ -340,7 +336,7 @@ func TestGossipsubFanoutExpiry(t *testing.T) {
 func TestGossipsubGossip(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	hosts := getNetHosts(t, ctx, 20)
+	hosts := getDefaultHosts(t, 20)
 
 	psubs := getGossipsubs(ctx, hosts)
 
@@ -388,7 +384,7 @@ func TestGossipsubGossipPiggyback(t *testing.T) {
 	t.Skip("test no longer relevant; gossip propagation has become eager")
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	hosts := getNetHosts(t, ctx, 20)
+	hosts := getDefaultHosts(t, 20)
 
 	psubs := getGossipsubs(ctx, hosts)
 
@@ -457,7 +453,7 @@ func TestGossipsubGossipPropagation(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	hosts := getNetHosts(t, ctx, 20)
+	hosts := getDefaultHosts(t, 20)
 	psubs := getGossipsubs(ctx, hosts)
 
 	hosts1 := hosts[:GossipSubD+1]
@@ -537,7 +533,7 @@ func TestGossipsubGossipPropagation(t *testing.T) {
 func TestGossipsubPrune(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	hosts := getNetHosts(t, ctx, 20)
+	hosts := getDefaultHosts(t, 20)
 
 	psubs := getGossipsubs(ctx, hosts)
 
@@ -586,7 +582,7 @@ func TestGossipsubPrune(t *testing.T) {
 func TestGossipsubPruneBackoffTime(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	hosts := getNetHosts(t, ctx, 10)
+	hosts := getDefaultHosts(t, 10)
 
 	// App specific score that we'll change later.
 	currentScoreForHost0 := int32(0)
@@ -684,7 +680,7 @@ func TestGossipsubPruneBackoffTime(t *testing.T) {
 func TestGossipsubGraft(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	hosts := getNetHosts(t, ctx, 20)
+	hosts := getDefaultHosts(t, 20)
 
 	psubs := getGossipsubs(ctx, hosts)
 
@@ -729,7 +725,7 @@ func TestGossipsubGraft(t *testing.T) {
 func TestGossipsubRemovePeer(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	hosts := getNetHosts(t, ctx, 20)
+	hosts := getDefaultHosts(t, 20)
 
 	psubs := getGossipsubs(ctx, hosts)
 
@@ -779,7 +775,7 @@ func TestGossipsubGraftPruneRetry(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	hosts := getNetHosts(t, ctx, 10)
+	hosts := getDefaultHosts(t, 10)
 	psubs := getGossipsubs(ctx, hosts)
 	denseConnect(t, hosts)
 
@@ -829,7 +825,7 @@ func TestGossipsubControlPiggyback(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	hosts := getNetHosts(t, ctx, 10)
+	hosts := getDefaultHosts(t, 10)
 	psubs := getGossipsubs(ctx, hosts)
 	denseConnect(t, hosts)
 
@@ -910,7 +906,7 @@ func TestGossipsubControlPiggyback(t *testing.T) {
 func TestMixedGossipsub(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	hosts := getNetHosts(t, ctx, 30)
+	hosts := getDefaultHosts(t, 30)
 
 	gsubs := getGossipsubs(ctx, hosts[:20])
 	fsubs := getPubsubs(ctx, hosts[20:])
@@ -954,7 +950,7 @@ func TestGossipsubMultihops(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	hosts := getNetHosts(t, ctx, 6)
+	hosts := getDefaultHosts(t, 6)
 
 	psubs := getGossipsubs(ctx, hosts)
 
@@ -997,7 +993,7 @@ func TestGossipsubTreeTopology(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	hosts := getNetHosts(t, ctx, 10)
+	hosts := getDefaultHosts(t, 10)
 	psubs := getGossipsubs(ctx, hosts)
 
 	connect(t, hosts[0], hosts[1])
@@ -1061,7 +1057,7 @@ func TestGossipsubStarTopology(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	hosts := getNetHosts(t, ctx, 20)
+	hosts := getDefaultHosts(t, 20)
 	psubs := getGossipsubs(ctx, hosts, WithPeerExchange(true), WithFloodPublish(true))
 
 	// configure the center of the star with a very low D
@@ -1223,7 +1219,7 @@ func TestGossipsubDirectPeers(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	h := getNetHosts(t, ctx, 3)
+	h := getDefaultHosts(t, 3)
 	psubs := []*PubSub{
 		getGossipsub(ctx, h[0], WithDirectConnectTicks(2)),
 		getGossipsub(ctx, h[1], WithDirectPeers([]peer.AddrInfo{{ID: h[2].ID(), Addrs: h[2].Addrs()}}), WithDirectConnectTicks(2)),
@@ -1287,7 +1283,7 @@ func TestGossipSubPeerFilter(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	h := getNetHosts(t, ctx, 3)
+	h := getDefaultHosts(t, 3)
 	psubs := []*PubSub{
 		getGossipsub(ctx, h[0], WithPeerFilter(func(pid peer.ID, topic string) bool {
 			return pid == h[1].ID()
@@ -1329,7 +1325,7 @@ func TestGossipsubDirectPeersFanout(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	h := getNetHosts(t, ctx, 3)
+	h := getDefaultHosts(t, 3)
 	psubs := []*PubSub{
 		getGossipsub(ctx, h[0]),
 		getGossipsub(ctx, h[1], WithDirectPeers([]peer.AddrInfo{{ID: h[2].ID(), Addrs: h[2].Addrs()}})),
@@ -1416,7 +1412,7 @@ func TestGossipsubFloodPublish(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	hosts := getNetHosts(t, ctx, 20)
+	hosts := getDefaultHosts(t, 20)
 	psubs := getGossipsubs(ctx, hosts, WithFloodPublish(true))
 
 	// build the star
@@ -1451,7 +1447,7 @@ func TestGossipsubEnoughPeers(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	hosts := getNetHosts(t, ctx, 20)
+	hosts := getDefaultHosts(t, 20)
 	psubs := getGossipsubs(ctx, hosts)
 
 	for _, ps := range psubs {
@@ -1500,7 +1496,7 @@ func TestGossipsubCustomParams(t *testing.T) {
 
 	wantedMaxPendingConns := 23
 	params.MaxPendingConnections = wantedMaxPendingConns
-	hosts := getNetHosts(t, ctx, 1)
+	hosts := getDefaultHosts(t, 1)
 	psubs := getGossipsubs(ctx, hosts,
 		WithGossipSubParams(params))
 
@@ -1529,7 +1525,7 @@ func TestGossipsubNegativeScore(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	hosts := getNetHosts(t, ctx, 20)
+	hosts := getDefaultHosts(t, 20)
 	psubs := getGossipsubs(ctx, hosts,
 		WithPeerScore(
 			&PeerScoreParams{
@@ -1613,7 +1609,7 @@ func TestGossipsubScoreValidatorEx(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	hosts := getNetHosts(t, ctx, 3)
+	hosts := getDefaultHosts(t, 3)
 	psubs := getGossipsubs(ctx, hosts,
 		WithPeerScore(
 			&PeerScoreParams{
@@ -1701,8 +1697,7 @@ func TestGossipsubPiggybackControl(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	h := bhost.NewBlankHost(swarmt.GenSwarm(t))
-	defer h.Close()
+	h := getDefaultHosts(t, 1)[0]
 	ps := getGossipsub(ctx, h)
 
 	blah := peer.ID("bogotr0n")
@@ -1750,7 +1745,7 @@ func TestGossipsubMultipleGraftTopics(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	hosts := getNetHosts(t, ctx, 2)
+	hosts := getDefaultHosts(t, 2)
 	psubs := getGossipsubs(ctx, hosts)
 	sparseConnect(t, hosts)
 
@@ -1818,7 +1813,7 @@ func TestGossipsubOpportunisticGrafting(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	hosts := getNetHosts(t, ctx, 50)
+	hosts := getDefaultHosts(t, 50)
 	// pubsubs for the first 10 hosts
 	psubs := getGossipsubs(ctx, hosts[:10],
 		WithFloodPublish(true),
@@ -1919,7 +1914,7 @@ func TestGossipSubLeaveTopic(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	h := getNetHosts(t, ctx, 2)
+	h := getDefaultHosts(t, 2)
 	psubs := []*PubSub{
 		getGossipsub(ctx, h[0]),
 		getGossipsub(ctx, h[1]),
@@ -1990,7 +1985,7 @@ func TestGossipSubJoinTopic(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	h := getNetHosts(t, ctx, 3)
+	h := getDefaultHosts(t, 3)
 	psubs := []*PubSub{
 		getGossipsub(ctx, h[0]),
 		getGossipsub(ctx, h[1]),
@@ -2072,7 +2067,7 @@ func TestGossipsubPeerScoreInspect(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	hosts := getNetHosts(t, ctx, 2)
+	hosts := getDefaultHosts(t, 2)
 
 	inspector := &mockPeerScoreInspector{}
 	psub1 := getGossipsub(ctx, hosts[0],
@@ -2132,7 +2127,7 @@ func TestGossipsubPeerScoreResetTopicParams(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	hosts := getNetHosts(t, ctx, 1)
+	hosts := getDefaultHosts(t, 1)
 
 	ps := getGossipsub(ctx, hosts[0],
 		WithPeerScore(
@@ -2199,7 +2194,7 @@ func TestGossipsubRPCFragmentation(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	hosts := getNetHosts(t, ctx, 2)
+	hosts := getDefaultHosts(t, 2)
 	ps := getGossipsub(ctx, hosts[0])
 
 	// make a fake peer that requests everything through IWANT gossip
@@ -2551,21 +2546,6 @@ func FuzzAppendOrMergeRPC(f *testing.F) {
 			t.Fatalf("invalid RPC size")
 		}
 	})
-}
-
-func getDefaultHosts(t *testing.T, n int) []host.Host {
-	var out []host.Host
-
-	for i := 0; i < n; i++ {
-		h, err := libp2p.New(libp2p.ResourceManager(&network.NullResourceManager{}))
-		if err != nil {
-			t.Fatal(err)
-		}
-		t.Cleanup(func() { h.Close() })
-		out = append(out, h)
-	}
-
-	return out
 }
 
 func TestGossipsubManagesAnAddressBook(t *testing.T) {

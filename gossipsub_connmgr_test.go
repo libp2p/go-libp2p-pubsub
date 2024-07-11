@@ -7,10 +7,10 @@ import (
 
 	"github.com/benbjohnson/clock"
 	"github.com/libp2p/go-libp2p/core/host"
-	swarmt "github.com/libp2p/go-libp2p/p2p/net/swarm/testing"
 
+	"github.com/libp2p/go-libp2p"
+	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
-	bhost "github.com/libp2p/go-libp2p/p2p/host/blank"
 	"github.com/libp2p/go-libp2p/p2p/net/connmgr"
 )
 
@@ -70,9 +70,14 @@ func TestGossipsubConnTagMessageDeliveries(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		netw := swarmt.GenSwarm(t)
-		defer netw.Close()
-		h := bhost.NewBlankHost(netw, bhost.WithConnectionManager(connmgrs[i]))
+		h, err := libp2p.New(
+			libp2p.ResourceManager(&network.NullResourceManager{}),
+			libp2p.ConnectionManager(connmgrs[i]),
+		)
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { h.Close() })
 		honestHosts[i] = h
 		honestPeers[h.ID()] = struct{}{}
 	}
@@ -83,7 +88,7 @@ func TestGossipsubConnTagMessageDeliveries(t *testing.T) {
 		WithFloodPublish(true))
 
 	// sybil squatters to be connected later
-	sybilHosts := getNetHosts(t, ctx, nSquatter)
+	sybilHosts := getDefaultHosts(t, nSquatter)
 	for _, h := range sybilHosts {
 		squatter := &sybilSquatter{h: h}
 		h.SetStreamHandler(GossipSubID_v10, squatter.handleStream)

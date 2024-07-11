@@ -38,7 +38,7 @@ func testBasicSeqnoValidator(t *testing.T, ttl time.Duration) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	hosts := getNetHosts(t, ctx, 20)
+	hosts := getDefaultHosts(t, 20)
 	psubs := getPubsubsWithOptionC(ctx, hosts,
 		func(i int) Option {
 			return WithDefaultValidator(NewBasicSeqnoValidator(newMockPeerMetadataStore()))
@@ -86,7 +86,7 @@ func TestBasicSeqnoValidatorReplay(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	hosts := getNetHosts(t, ctx, 20)
+	hosts := getDefaultHosts(t, 20)
 	psubs := getPubsubsWithOptionC(ctx, hosts[:19],
 		func(i int) Option {
 			return WithDefaultValidator(NewBasicSeqnoValidator(newMockPeerMetadataStore()))
