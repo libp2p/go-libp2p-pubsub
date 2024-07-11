@@ -38,9 +38,30 @@ func (ps *PubSub) watchForNewPeers(ctx context.Context) {
 	default:
 	}
 
-	supportedProtocols := make(map[protocol.ID]struct{})
-	for _, proto := range ps.rt.Protocols() {
-		supportedProtocols[proto] = struct{}{}
+	var supportsProtocol func(protocol.ID) bool
+	if ps.protoMatchFunc != nil {
+		var supportedProtocols []func(protocol.ID) bool
+		for _, proto := range ps.rt.Protocols() {
+
+			supportedProtocols = append(supportedProtocols, ps.protoMatchFunc(proto))
+		}
+		supportsProtocol = func(proto protocol.ID) bool {
+			for _, fn := range supportedProtocols {
+				if (fn)(proto) {
+					return true
+				}
+			}
+			return false
+		}
+	} else {
+		supportedProtocols := make(map[protocol.ID]struct{})
+		for _, proto := range ps.rt.Protocols() {
+			supportedProtocols[proto] = struct{}{}
+		}
+		supportsProtocol = func(proto protocol.ID) bool {
+			_, ok := supportedProtocols[proto]
+			return ok
+		}
 	}
 
 	for ctx.Err() == nil {
@@ -68,7 +89,7 @@ func (ps *PubSub) watchForNewPeers(ctx context.Context) {
 		// we'll check when actually handling the new peer.
 
 		for _, p := range protos {
-			if _, ok := supportedProtocols[p]; ok {
+			if supportsProtocol(p) {
 				ps.notifyNewPeer(peer)
 				break
 			}
