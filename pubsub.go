@@ -327,13 +327,11 @@ func NewPubSub(ctx context.Context, h host.Host, rt PubSubRouter, opts ...Option
 			h.SetStreamHandler(id, ps.handleNewStream)
 		}
 	}
-	h.Network().Notify((*PubSubNotif)(ps))
+	go ps.watchForNewPeers(ctx)
 
 	ps.val.Start(ps)
 
 	go ps.processLoop(ctx)
-
-	(*PubSubNotif)(ps).Initialize()
 
 	return ps, nil
 }
@@ -687,6 +685,8 @@ func (p *PubSub) handlePendingPeers() {
 	p.newPeersPrioLk.Unlock()
 
 	for pid := range newPeers {
+		// Make sure we have a non-limited connection. We do this late because we may have
+		// disconnected in the meantime.
 		if p.host.Network().Connectedness(pid) != network.Connected {
 			continue
 		}
