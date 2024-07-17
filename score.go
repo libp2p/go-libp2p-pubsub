@@ -770,12 +770,14 @@ func (ps *peerScore) RejectMessage(msg *Message, reason string) {
 		// because we don't know if it was valid.
 		drec.status = deliveryThrottled
 		// release the delivery time tracking map to free some memory early
+		clear(drec.peers)
 		drec.peers = nil
 		return
 	case RejectValidationIgnored:
 		// we were explicitly instructed by the validator to ignore the message but not penalize
 		// the peer
 		drec.status = deliveryIgnored
+		clear(drec.peers)
 		drec.peers = nil
 		return
 	}
@@ -789,6 +791,7 @@ func (ps *peerScore) RejectMessage(msg *Message, reason string) {
 	}
 
 	// release the delivery time tracking map to free some memory early
+	clear(drec.peers)
 	drec.peers = nil
 }
 
@@ -867,6 +870,11 @@ func (d *messageDeliveries) gc() {
 
 	now := time.Now()
 	for d.head != nil && now.After(d.head.expire) {
+		drec, ok := d.records[d.head.id]
+		if ok {
+			// Empty peer delivery records.
+			clear(drec.peers)
+		}
 		delete(d.records, d.head.id)
 		d.head = d.head.next
 	}
