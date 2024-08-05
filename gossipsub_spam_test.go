@@ -15,6 +15,7 @@ import (
 
 	pb "github.com/libp2p/go-libp2p-pubsub/pb"
 
+	//lint:ignore SA1019 "github.com/libp2p/go-msgio/protoio" is deprecated
 	"github.com/libp2p/go-msgio/protoio"
 )
 

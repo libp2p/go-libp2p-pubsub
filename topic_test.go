@@ -743,7 +743,7 @@ func notifSubThenUnSub(ctx context.Context, t *testing.T, topics []*Topic) {
 	}
 
 	// Wait for the unsubscribe messages to reach the primary peer
-	for len(primaryTopic.ListPeers()) < 0 {
+	for len(primaryTopic.ListPeers()) > 0 {
 		time.Sleep(time.Millisecond * 100)
 	}
 

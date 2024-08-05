@@ -20,6 +20,7 @@ import (
 	"github.com/libp2p/go-libp2p/core/peerstore"
 	"github.com/libp2p/go-libp2p/core/record"
 
+	//lint:ignore SA1019 "github.com/libp2p/go-msgio/protoio" is deprecated
 	"github.com/libp2p/go-msgio/protoio"
 )
 
@@ -1924,13 +1925,11 @@ func TestGossipSubLeaveTopic(t *testing.T) {
 	connect(t, h[0], h[1])
 
 	// Join all peers
-	var subs []*Subscription
 	for _, ps := range psubs {
-		sub, err := ps.Subscribe("test")
+		_, err := ps.Subscribe("test")
 		if err != nil {
 			t.Fatal(err)
 		}
-		subs = append(subs, sub)
 	}
 
 	time.Sleep(time.Second)
@@ -2005,13 +2004,11 @@ func TestGossipSubJoinTopic(t *testing.T) {
 	router0.backoff["test"] = peerMap
 
 	// Join all peers
-	var subs []*Subscription
 	for _, ps := range psubs {
-		sub, err := ps.Subscribe("test")
+		_, err := ps.Subscribe("test")
 		if err != nil {
 			t.Fatal(err)
 		}
-		subs = append(subs, sub)
 	}
 
 	time.Sleep(time.Second)
