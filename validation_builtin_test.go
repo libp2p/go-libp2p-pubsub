@@ -246,7 +246,7 @@ func (r *replayActor) replay(msg *pb.Message) {
 
 		var peers []peer.ID
 		r.mx.Lock()
-		for p, _ := range r.out {
+		for p := range r.out {
 			if rng.Intn(2) > 0 {
 				peers = append(peers, p)
 			}
