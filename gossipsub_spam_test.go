@@ -2,7 +2,7 @@ package pubsub
 
 import (
 	"context"
-	"math/rand"
+	"crypto/rand"
 	"strconv"
 	"sync"
 	"testing"

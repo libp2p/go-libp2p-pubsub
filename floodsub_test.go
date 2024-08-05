@@ -3,11 +3,12 @@ package pubsub
 import (
 	"bytes"
 	"context"
+	crand "crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
 	"fmt"
 	"io"
-	"math/rand"
+	mrand "math/rand"
 	"sort"
 	"sync"
 	"testing"
@@ -25,7 +26,7 @@ import (
 
 func checkMessageRouting(t *testing.T, topic string, pubs []*PubSub, subs []*Subscription) {
 	data := make([]byte, 16)
-	rand.Read(data)
+	crand.Read(data)
 
 	for _, p := range pubs {
 		err := p.Publish(topic, data)
@@ -58,7 +59,7 @@ func denseConnect(t *testing.T, hosts []host.Host) {
 func connectSome(t *testing.T, hosts []host.Host, d int) {
 	for i, a := range hosts {
 		for j := 0; j < d; j++ {
-			n := rand.Intn(len(hosts))
+			n := mrand.Intn(len(hosts))
 			if n == i {
 				j--
 				continue
@@ -157,7 +158,7 @@ func TestBasicFloodsub(t *testing.T) {
 	for i := 0; i < 100; i++ {
 		msg := []byte(fmt.Sprintf("%d the flooooooood %d", i, i))
 
-		owner := rand.Intn(len(psubs))
+		owner := mrand.Intn(len(psubs))
 
 		psubs[owner].Publish("foobar", msg)
 
@@ -1006,7 +1007,7 @@ func TestConfigurableMaxMessageSize(t *testing.T) {
 
 	// 2mb payload.
 	msg := make([]byte, 1<<21)
-	rand.Read(msg)
+	crand.Read(msg)
 	err := psubs[0].Publish(topic, msg)
 	if err != nil {
 		t.Fatal(err)
