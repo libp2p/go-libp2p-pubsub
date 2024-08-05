@@ -3,9 +3,10 @@ package pubsub
 import (
 	"bytes"
 	"context"
+	crand "crypto/rand"
 	"fmt"
 	"io"
-	"math/rand"
+	mrand "math/rand"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -63,7 +64,7 @@ func TestSparseGossipsub(t *testing.T) {
 	for i := 0; i < 100; i++ {
 		msg := []byte(fmt.Sprintf("%d it's not a floooooood %d", i, i))
 
-		owner := rand.Intn(len(psubs))
+		owner := mrand.Intn(len(psubs))
 
 		psubs[owner].Publish("foobar", msg)
 
@@ -104,7 +105,7 @@ func TestDenseGossipsub(t *testing.T) {
 	for i := 0; i < 100; i++ {
 		msg := []byte(fmt.Sprintf("%d it's not a floooooood %d", i, i))
 
-		owner := rand.Intn(len(psubs))
+		owner := mrand.Intn(len(psubs))
 
 		psubs[owner].Publish("foobar", msg)
 
@@ -358,7 +359,7 @@ func TestGossipsubGossip(t *testing.T) {
 	for i := 0; i < 100; i++ {
 		msg := []byte(fmt.Sprintf("%d it's not a floooooood %d", i, i))
 
-		owner := rand.Intn(len(psubs))
+		owner := mrand.Intn(len(psubs))
 
 		psubs[owner].Publish("foobar", msg)
 
@@ -416,7 +417,7 @@ func TestGossipsubGossipPiggyback(t *testing.T) {
 	for i := 0; i < 100; i++ {
 		msg := []byte(fmt.Sprintf("%d it's not a floooooood %d", i, i))
 
-		owner := rand.Intn(len(psubs))
+		owner := mrand.Intn(len(psubs))
 
 		psubs[owner].Publish("foobar", msg)
 		psubs[owner].Publish("bazcrux", msg)
@@ -563,7 +564,7 @@ func TestGossipsubPrune(t *testing.T) {
 	for i := 0; i < 10; i++ {
 		msg := []byte(fmt.Sprintf("%d it's not a floooooood %d", i, i))
 
-		owner := rand.Intn(len(psubs))
+		owner := mrand.Intn(len(psubs))
 
 		psubs[owner].Publish("foobar", msg)
 
@@ -661,7 +662,7 @@ func TestGossipsubPruneBackoffTime(t *testing.T) {
 		msg := []byte(fmt.Sprintf("%d it's not a floooooood %d", i, i))
 
 		// Don't publish from host 0, since everyone should have pruned it.
-		owner := rand.Intn(len(psubs)-1) + 1
+		owner := mrand.Intn(len(psubs)-1) + 1
 
 		psubs[owner].Publish("foobar", msg)
 
@@ -706,7 +707,7 @@ func TestGossipsubGraft(t *testing.T) {
 	for i := 0; i < 100; i++ {
 		msg := []byte(fmt.Sprintf("%d it's not a floooooood %d", i, i))
 
-		owner := rand.Intn(len(psubs))
+		owner := mrand.Intn(len(psubs))
 
 		psubs[owner].Publish("foobar", msg)
 
@@ -755,7 +756,7 @@ func TestGossipsubRemovePeer(t *testing.T) {
 	for i := 0; i < 10; i++ {
 		msg := []byte(fmt.Sprintf("%d it's not a floooooood %d", i, i))
 
-		owner := 5 + rand.Intn(len(psubs)-5)
+		owner := 5 + mrand.Intn(len(psubs)-5)
 
 		psubs[owner].Publish("foobar", msg)
 
@@ -803,7 +804,7 @@ func TestGossipsubGraftPruneRetry(t *testing.T) {
 	for i, topic := range topics {
 		msg := []byte(fmt.Sprintf("%d it's not a floooooood %d", i, i))
 
-		owner := rand.Intn(len(psubs))
+		owner := mrand.Intn(len(psubs))
 
 		psubs[owner].Publish(topic, msg)
 
@@ -849,7 +850,7 @@ func TestGossipsubControlPiggyback(t *testing.T) {
 	// create a background flood of messages that overloads the queues
 	done := make(chan struct{})
 	go func() {
-		owner := rand.Intn(len(psubs))
+		owner := mrand.Intn(len(psubs))
 		for i := 0; i < 10000; i++ {
 			msg := []byte("background flooooood")
 			psubs[owner].Publish("flood", msg)
@@ -887,7 +888,7 @@ func TestGossipsubControlPiggyback(t *testing.T) {
 	for i, topic := range topics {
 		msg := []byte(fmt.Sprintf("%d it's not a floooooood %d", i, i))
 
-		owner := rand.Intn(len(psubs))
+		owner := mrand.Intn(len(psubs))
 
 		psubs[owner].Publish(topic, msg)
 
@@ -930,7 +931,7 @@ func TestMixedGossipsub(t *testing.T) {
 	for i := 0; i < 100; i++ {
 		msg := []byte(fmt.Sprintf("%d it's not a floooooood %d", i, i))
 
-		owner := rand.Intn(len(psubs))
+		owner := mrand.Intn(len(psubs))
 
 		psubs[owner].Publish("foobar", msg)
 
@@ -2217,7 +2218,7 @@ func TestGossipsubRPCFragmentation(t *testing.T) {
 	msgSize := 20000
 	for i := 0; i < nMessages; i++ {
 		msg := make([]byte, msgSize)
-		rand.Read(msg)
+		crand.Read(msg)
 		ps.Publish("test", msg)
 		time.Sleep(20 * time.Millisecond)
 	}
@@ -2357,7 +2358,7 @@ func TestFragmentRPCFunction(t *testing.T) {
 	mkMsg := func(size int) *pb.Message {
 		msg := &pb.Message{}
 		msg.Data = make([]byte, size-4) // subtract the protobuf overhead, so msg.Size() returns requested size
-		rand.Read(msg.Data)
+		crand.Read(msg.Data)
 		return msg
 	}
 
@@ -2471,7 +2472,7 @@ func TestFragmentRPCFunction(t *testing.T) {
 		messageIds := make([]string, msgsPerTopic)
 		for m := 0; m < msgsPerTopic; m++ {
 			mid := make([]byte, messageIdSize)
-			rand.Read(mid)
+			crand.Read(mid)
 			messageIds[m] = string(mid)
 		}
 		rpc.Control.Ihave[i] = &pb.ControlIHave{MessageIDs: messageIds}
@@ -2492,7 +2493,7 @@ func TestFragmentRPCFunction(t *testing.T) {
 	// It should not be present in the fragmented messages, but smaller IDs should be
 	rpc.Reset()
 	giantIdBytes := make([]byte, limit*2)
-	rand.Read(giantIdBytes)
+	crand.Read(giantIdBytes)
 	rpc.Control = &pb.ControlMessage{
 		Iwant: []*pb.ControlIWant{
 			{MessageIDs: []string{"hello", string(giantIdBytes)}},
