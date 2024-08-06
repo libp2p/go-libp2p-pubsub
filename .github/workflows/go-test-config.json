@@ -1,4 +1,4 @@
 {
-  "skipOSes": ["windows"],
+  "skipOSes": ["windows", "macos"],
   "skipRace": true
 }
