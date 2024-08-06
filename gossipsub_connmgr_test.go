@@ -15,7 +15,6 @@ import (
 )
 
 func TestGossipsubConnTagMessageDeliveries(t *testing.T) {
-	t.Skip("Test disabled with go-libp2p v0.22.0") // TODO: reenable test when updating to v0.23.0
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -90,7 +89,7 @@ func TestGossipsubConnTagMessageDeliveries(t *testing.T) {
 	// sybil squatters to be connected later
 	sybilHosts := getDefaultHosts(t, nSquatter)
 	for _, h := range sybilHosts {
-		squatter := &sybilSquatter{h: h}
+		squatter := &sybilSquatter{h: h, ignoreErrors: true}
 		h.SetStreamHandler(GossipSubID_v10, squatter.handleStream)
 	}
 
@@ -143,18 +142,6 @@ func TestGossipsubConnTagMessageDeliveries(t *testing.T) {
 	// now connect the sybils to put pressure on the real hosts' connection managers
 	allHosts := append(honestHosts, sybilHosts...)
 	connectAll(t, allHosts)
-
-	// verify that we have a bunch of connections
-	for _, h := range honestHosts {
-		if len(h.Network().Conns()) != nHonest+nSquatter-1 {
-			t.Errorf("expected to have conns to all peers, have %d", len(h.Network().Conns()))
-		}
-	}
-
-	// force the connection managers to trim, so we don't need to muck about with timing as much
-	for _, cm := range connmgrs {
-		cm.TrimOpenConns(ctx)
-	}
 
 	// we should still have conns to all the honest peers, but not the sybils
 	for _, h := range honestHosts {

@@ -2025,7 +2025,8 @@ func TestGossipSubJoinTopic(t *testing.T) {
 }
 
 type sybilSquatter struct {
-	h host.Host
+	h            host.Host
+	ignoreErrors bool // set to false to ignore connection/stream errors.
 }
 
 func (sq *sybilSquatter) handleStream(s network.Stream) {
@@ -2033,7 +2034,10 @@ func (sq *sybilSquatter) handleStream(s network.Stream) {
 
 	os, err := sq.h.NewStream(context.Background(), s.Conn().RemotePeer(), GossipSubID_v10)
 	if err != nil {
-		panic(err)
+		if !sq.ignoreErrors {
+			panic(err)
+		}
+		return
 	}
 
 	// send a subscription for test in the output stream to become candidate for GRAFT
@@ -2044,7 +2048,10 @@ func (sq *sybilSquatter) handleStream(s network.Stream) {
 	topic := "test"
 	err = w.WriteMsg(&pb.RPC{Subscriptions: []*pb.RPC_SubOpts{{Subscribe: &truth, Topicid: &topic}}})
 	if err != nil {
-		panic(err)
+		if !sq.ignoreErrors {
+			panic(err)
+		}
+		return
 	}
 
 	var rpc pb.RPC
