@@ -3005,7 +3005,7 @@ func TestGossipsubIdontwantSmallMessage(t *testing.T) {
 func TestGossipsubIdontwantClear(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	hosts := getNetHosts(t, ctx, 3)
+	hosts := getDefaultHosts(t, 3)
 
 	msgID := func(pmsg *pb.Message) string {
 		// silly content-based test message-ID: just use the data as whole
@@ -3072,7 +3072,7 @@ func TestGossipsubIdontwantClear(t *testing.T) {
 
 					// Generate a message and send IDONTWANT to the middle peer
 					data := make([]byte, 16)
-					rand.Read(data)
+					mrand.Read(data)
 					mid := msgID(&pb.Message{Data: data})
 					writeMsg(&pb.RPC{
 						Control: &pb.ControlMessage{Idontwant: []*pb.ControlIDontWant{{MessageIDs: []string{mid}}}},
