@@ -23,13 +23,19 @@ import (
 
 const (
 	// GossipSubID_v10 is the protocol ID for version 1.0.0 of the GossipSub protocol.
-	// It is advertised along with GossipSubID_v11 for backwards compatibility.
+	// It is advertised along with GossipSubID_v11 and GossipSubID_v12 for backwards compatibility.
 	GossipSubID_v10 = protocol.ID("/meshsub/1.0.0")
 
 	// GossipSubID_v11 is the protocol ID for version 1.1.0 of the GossipSub protocol.
+	// It is advertised along with GossipSubID_v12 for backwards compatibility.
 	// See the spec for details about how v1.1.0 compares to v1.0.0:
 	// https://github.com/libp2p/specs/blob/master/pubsub/gossipsub/gossipsub-v1.1.md
 	GossipSubID_v11 = protocol.ID("/meshsub/1.1.0")
+
+	// GossipSubID_v12 is the protocol ID for version 1.2.0 of the GossipSub protocol.
+	// See the spec for details about how v1.2.0 compares to v1.1.0:
+	// https://github.com/libp2p/specs/blob/master/pubsub/gossipsub/gossipsub-v1.2.md
+	GossipSubID_v12 = protocol.ID("/meshsub/1.2.0")
 )
 
 // Defines the default gossipsub parameters.
@@ -705,9 +711,12 @@ func (gs *GossipSubRouter) PreValidation(msgs []*Message) {
 		shuffleStrings(mids)
 		// send IDONTWANT to all the mesh peers
 		for p := range gs.mesh[topic] {
-			idontwant := []*pb.ControlIDontWant{{MessageIDs: mids}}
-			out := rpcWithControl(nil, nil, nil, nil, nil, idontwant)
-			gs.sendRPC(p, out, true)
+			// send to only peers that support IDONTWANT
+			if gs.feature(GossipSubFeatureIdontwant, gs.peers[p]) {
+				idontwant := []*pb.ControlIDontWant{{MessageIDs: mids}}
+				out := rpcWithControl(nil, nil, nil, nil, nil, idontwant)
+				gs.sendRPC(p, out, true)
+			}
 		}
 	}
 }

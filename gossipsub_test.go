@@ -20,6 +20,7 @@ import (
 	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/core/peerstore"
+	"github.com/libp2p/go-libp2p/core/protocol"
 	"github.com/libp2p/go-libp2p/core/record"
 
 	//lint:ignore SA1019 "github.com/libp2p/go-msgio/protoio" is deprecated
@@ -2888,6 +2889,97 @@ func TestGossipsubIdontwantNonMesh(t *testing.T) {
 				go func() {
 					// Wait for a short interval to make sure the middle peer
 					// received and processed the subscribe
+					time.Sleep(100 * time.Millisecond)
+
+					// Publish messages from the first peer
+					for i := 0; i < 10; i++ {
+						publishMsg()
+					}
+				}()
+			}
+		}
+
+		// Each time the middle peer sends an IDONTWANT message
+		for _ = range irpc.GetControl().GetIdontwant() {
+			received = true
+		}
+	})
+
+	connect(t, hosts[0], hosts[1])
+	connect(t, hosts[1], hosts[2])
+
+	<-ctx.Done()
+}
+
+// Test that peers with incompatible versions will not get IDONTWANT
+func TestGossipsubIdontwantIncompat(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	hosts := getDefaultHosts(t, 3)
+
+	params := DefaultGossipSubParams()
+	params.IDontWantMessageThreshold = 16
+	psubs := getGossipsubs(ctx, hosts[:2], WithGossipSubParams(params))
+
+	var msgs []*Subscription
+	topic := "foobar"
+	for _, ps := range psubs {
+		subch, err := ps.Subscribe(topic)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		msgs = append(msgs, subch)
+	}
+
+	// Used to publish a message with random data
+	publishMsg := func() {
+		data := make([]byte, 16)
+		mrand.Read(data)
+
+		if err := psubs[0].Publish(topic, data); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// Wait a bit after the last message before checking we got the right messages
+	msgWaitMax := time.Second
+	msgTimer := time.NewTimer(msgWaitMax)
+	received := false
+
+	// Checks if we received any IDONTWANT
+	checkMsgs := func() {
+		if received {
+			t.Fatalf("No IDONTWANT is expected")
+		}
+	}
+
+	// Wait for the timer to expire
+	go func() {
+		select {
+		case <-msgTimer.C:
+			checkMsgs()
+			cancel()
+			return
+		case <-ctx.Done():
+			checkMsgs()
+		}
+	}()
+
+	// Use the old GossipSub version
+	newMockGSWithVersion(ctx, t, hosts[2], protocol.ID("/meshsub/1.1.0"), func(writeMsg func(*pb.RPC), irpc *pb.RPC) {
+		// When the middle peer connects it will send us its subscriptions
+		for _, sub := range irpc.GetSubscriptions() {
+			if sub.GetSubscribe() {
+				// Reply by subcribing to the topic and grafting to the middle peer
+				writeMsg(&pb.RPC{
+					Subscriptions: []*pb.RPC_SubOpts{{Subscribe: sub.Subscribe, Topicid: sub.Topicid}},
+					Control:       &pb.ControlMessage{Graft: []*pb.ControlGraft{{TopicID: sub.Topicid}}},
+				})
+
+				go func() {
+					// Wait for a short interval to make sure the middle peer
+					// received and processed the subscribe + graft
 					time.Sleep(100 * time.Millisecond)
 
 					// Publish messages from the first peer

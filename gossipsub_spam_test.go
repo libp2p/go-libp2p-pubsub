@@ -895,8 +895,11 @@ func TestGossipsubAttackSpamIDONTWANT(t *testing.T) {
 type mockGSOnRead func(writeMsg func(*pb.RPC), irpc *pb.RPC)
 
 func newMockGS(ctx context.Context, t *testing.T, attacker host.Host, onReadMsg mockGSOnRead) {
+	newMockGSWithVersion(ctx, t, attacker, protocol.ID("/meshsub/1.2.0"), onReadMsg)
+}
+
+func newMockGSWithVersion(ctx context.Context, t *testing.T, attacker host.Host, gossipSubID protocol.ID, onReadMsg mockGSOnRead) {
 	// Listen on the gossipsub protocol
-	const gossipSubID = protocol.ID("/meshsub/1.0.0")
 	const maxMessageSize = 1024 * 1024
 	attacker.SetStreamHandler(gossipSubID, func(stream network.Stream) {
 		// When an incoming stream is opened, set up an outgoing stream
