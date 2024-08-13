@@ -174,7 +174,7 @@ func (p *PubSub) handleSendingMessages(ctx context.Context, s network.Stream, ou
 	}
 
 	defer s.Close()
-	for {
+	for ctx.Err() == nil {
 		rpc, err := outgoing.Pop(ctx)
 		if err != nil {
 			log.Debugf("popping message from the queue to send to %s: %s", s.Conn().RemotePeer(), err)
