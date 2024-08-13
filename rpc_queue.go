@@ -45,28 +45,23 @@ func (q *priorityQueue) Pop() *RPC {
 }
 
 type rpcQueue struct {
-	dataAvailable  *sync.Cond
-	spaceAvailable *sync.Cond
+	dataAvailable  sync.Cond
+	spaceAvailable sync.Cond
 	// Mutex used to access queue
-	queueMu *sync.Mutex
-	queue   *priorityQueue
+	queueMu sync.Mutex
+	queue   priorityQueue
 
 	// RWMutex used to access closed
-	closedMu *sync.RWMutex
+	closedMu sync.RWMutex
 	closed   bool
 	maxSize  int
 }
 
 func newRpcQueue(maxSize int) *rpcQueue {
-	queueMu := &sync.Mutex{}
-	return &rpcQueue{
-		dataAvailable:  sync.NewCond(queueMu),
-		spaceAvailable: sync.NewCond(queueMu),
-		queueMu:        queueMu,
-		queue:          &priorityQueue{},
-		closedMu:       &sync.RWMutex{},
-		maxSize:        maxSize,
-	}
+	q := &rpcQueue{maxSize: maxSize}
+	q.dataAvailable.L = &q.queueMu
+	q.spaceAvailable.L = &q.queueMu
+	return q
 }
 
 func (q *rpcQueue) IsClosed() bool {

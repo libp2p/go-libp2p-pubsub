@@ -12,22 +12,10 @@ func TestNewRpcQueue(t *testing.T) {
 	if q.maxSize != maxSize {
 		t.Fatalf("rpc queue has wrong max size, expected %d but got %d", maxSize, q.maxSize)
 	}
-	if q.closedMu == nil {
-		t.Fatalf("the closedMu field of rpc queue is nil")
-	}
-	if q.queueMu == nil {
-		t.Fatalf("the queueMu field of rpc queue is nil")
-	}
-	if q.dataAvailable == nil {
-		t.Fatalf("the dataAvailable field of rpc queue is nil")
-	}
-	if q.dataAvailable.L != q.queueMu {
+	if q.dataAvailable.L != &q.queueMu {
 		t.Fatalf("the dataAvailable field of rpc queue has an incorrect mutex")
 	}
-	if q.spaceAvailable == nil {
-		t.Fatalf("the spaceAvailable field of rpc queue is nil")
-	}
-	if q.spaceAvailable.L != q.queueMu {
+	if q.spaceAvailable.L != &q.queueMu {
 		t.Fatalf("the spaceAvailable field of rpc queue has an incorrect mutex")
 	}
 }
