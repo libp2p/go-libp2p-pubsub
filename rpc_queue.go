@@ -64,12 +64,6 @@ func newRpcQueue(maxSize int) *rpcQueue {
 	return q
 }
 
-func (q *rpcQueue) IsClosed() bool {
-	q.closedMu.RLock()
-	defer q.closedMu.RUnlock()
-	return q.closed
-}
-
 func (q *rpcQueue) Push(rpc *RPC, block bool) error {
 	return q.push(rpc, false, block)
 }
@@ -79,17 +73,18 @@ func (q *rpcQueue) UrgentPush(rpc *RPC, block bool) error {
 }
 
 func (q *rpcQueue) push(rpc *RPC, urgent bool, block bool) error {
-	if q.IsClosed() {
-		panic(ErrQueuePushOnClosed)
-	}
 	q.queueMu.Lock()
 	defer q.queueMu.Unlock()
+
+	if q.closed {
+		panic(ErrQueuePushOnClosed)
+	}
 
 	for q.queue.Len() == q.maxSize {
 		if block {
 			q.spaceAvailable.Wait()
 			// It can receive a signal because the queue is closed.
-			if q.IsClosed() {
+			if q.closed {
 				panic(ErrQueuePushOnClosed)
 			}
 		} else {
@@ -110,11 +105,12 @@ func (q *rpcQueue) push(rpc *RPC, urgent bool, block bool) error {
 // doesn't mean that the first Pop will get the item from the next Push. The
 // second Pop will probably get it instead.
 func (q *rpcQueue) Pop(ctx context.Context) (*RPC, error) {
-	if q.IsClosed() {
-		return nil, ErrQueueClosed
-	}
 	q.queueMu.Lock()
 	defer q.queueMu.Unlock()
+
+	if q.closed {
+		return nil, ErrQueueClosed
+	}
 
 	finished := make(chan struct{})
 	done := make(chan struct{})
@@ -146,7 +142,7 @@ func (q *rpcQueue) Pop(ctx context.Context) (*RPC, error) {
 		}
 		q.dataAvailable.Wait()
 		// It can receive a signal because the queue is closed.
-		if q.IsClosed() {
+		if q.closed {
 			return nil, ErrQueueClosed
 		}
 	}
@@ -156,10 +152,10 @@ func (q *rpcQueue) Pop(ctx context.Context) (*RPC, error) {
 }
 
 func (q *rpcQueue) Close() {
-	q.closedMu.Lock()
-	q.closed = true
-	q.closedMu.Unlock()
+	q.queueMu.Lock()
+	defer q.queueMu.Unlock()
 
+	q.closed = true
 	q.dataAvailable.Broadcast()
 	q.spaceAvailable.Broadcast()
 }
