@@ -1005,8 +1005,7 @@ func (gs *GossipSubRouter) handleIDontWant(p peer.ID, ctl *pb.ControlMessage) {
 	// Remember all the unwanted message ids
 	for _, idontwant := range ctl.GetIdontwant() {
 		for _, mid := range idontwant.GetMessageIDs() {
-			hashed := sha256.Sum256([]byte(mid))
-			gs.unwanted[p][hashed] = gs.params.IDontWantMessageTTL
+			gs.unwanted[p][computeChecksum(mid)] = gs.params.IDontWantMessageTTL
 		}
 	}
 }
@@ -1172,10 +1171,9 @@ func (gs *GossipSubRouter) Publish(msg *Message) {
 
 		for p := range gmap {
 			mid := gs.p.idGen.ID(msg)
-			hashed := sha256.Sum256([]byte(mid))
 			// Check if it has already received an IDONTWANT for the message.
 			// If so, don't send it to the peer
-			if _, ok := gs.unwanted[p][hashed]; ok {
+			if _, ok := gs.unwanted[p][computeChecksum(mid)]; ok {
 				continue
 			}
 			tosend[p] = struct{}{}
@@ -2149,4 +2147,14 @@ func shuffleStrings(lst []string) {
 		j := rand.Intn(i + 1)
 		lst[i], lst[j] = lst[j], lst[i]
 	}
+}
+
+func computeChecksum(mid string) checksum {
+	var hashed checksum
+	if len(mid) > 32 {
+		hashed = sha256.Sum256([]byte(mid))
+	} else {
+		copy(hashed[:], mid)
+	}
+	return hashed
 }
