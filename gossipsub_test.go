@@ -2623,15 +2623,12 @@ func TestGossipsubIdontwantSend(t *testing.T) {
 		WithMessageIdFn(msgID),
 		WithDefaultValidator(validate))
 
-	var msgs []*Subscription
 	topic := "foobar"
 	for _, ps := range psubs {
-		subch, err := ps.Subscribe(topic)
+		_, err := ps.Subscribe(topic)
 		if err != nil {
 			t.Fatal(err)
 		}
-
-		msgs = append(msgs, subch)
 	}
 
 	var expMids []string
@@ -2640,7 +2637,7 @@ func TestGossipsubIdontwantSend(t *testing.T) {
 	// Used to publish a message with random data
 	publishMsg := func() {
 		data := make([]byte, 16)
-		mrand.Read(data)
+		crand.Read(data)
 		m := &pb.Message{Data: data}
 		expMids = append(expMids, msgID(m))
 
@@ -2739,15 +2736,12 @@ func TestGossipsubIdontwantReceive(t *testing.T) {
 	psubs[0] = getGossipsub(ctx, hosts[0], WithMessageIdFn(msgID))
 	psubs[1] = getGossipsub(ctx, hosts[1], WithMessageIdFn(msgID))
 
-	var msgs []*Subscription
 	topic := "foobar"
 	for _, ps := range psubs {
-		subch, err := ps.Subscribe(topic)
+		_, err := ps.Subscribe(topic)
 		if err != nil {
 			t.Fatal(err)
 		}
-
-		msgs = append(msgs, subch)
 	}
 
 	// Wait a bit after the last message before checking the result
@@ -2795,7 +2789,7 @@ func TestGossipsubIdontwantReceive(t *testing.T) {
 
 					// Generate a message and send IDONTWANT to the middle peer
 					data := make([]byte, 16)
-					mrand.Read(data)
+					crand.Read(data)
 					mid := msgID(&pb.Message{Data: data})
 					writeMsg(&pb.RPC{
 						Control: &pb.ControlMessage{Idontwant: []*pb.ControlIDontWant{{MessageIDs: []string{mid}}}},
@@ -2807,7 +2801,8 @@ func TestGossipsubIdontwantReceive(t *testing.T) {
 
 					// Publish the message from the first peer
 					if err := psubs[0].Publish(topic, data); err != nil {
-						t.Fatal(err)
+						t.Error(err)
+						return // cannot call t.Fatal in a non-test goroutine
 					}
 				}()
 			}
@@ -2830,21 +2825,18 @@ func TestGossipsubIdontwantNonMesh(t *testing.T) {
 	params.IDontWantMessageThreshold = 16
 	psubs := getGossipsubs(ctx, hosts[:2], WithGossipSubParams(params))
 
-	var msgs []*Subscription
 	topic := "foobar"
 	for _, ps := range psubs {
-		subch, err := ps.Subscribe(topic)
+		_, err := ps.Subscribe(topic)
 		if err != nil {
 			t.Fatal(err)
 		}
-
-		msgs = append(msgs, subch)
 	}
 
 	// Used to publish a message with random data
 	publishMsg := func() {
 		data := make([]byte, 16)
-		mrand.Read(data)
+		crand.Read(data)
 
 		if err := psubs[0].Publish(topic, data); err != nil {
 			t.Fatal(err)
@@ -2900,7 +2892,7 @@ func TestGossipsubIdontwantNonMesh(t *testing.T) {
 		}
 
 		// Each time the middle peer sends an IDONTWANT message
-		for _ = range irpc.GetControl().GetIdontwant() {
+		for range irpc.GetControl().GetIdontwant() {
 			received = true
 		}
 	})
@@ -2921,21 +2913,18 @@ func TestGossipsubIdontwantIncompat(t *testing.T) {
 	params.IDontWantMessageThreshold = 16
 	psubs := getGossipsubs(ctx, hosts[:2], WithGossipSubParams(params))
 
-	var msgs []*Subscription
 	topic := "foobar"
 	for _, ps := range psubs {
-		subch, err := ps.Subscribe(topic)
+		_, err := ps.Subscribe(topic)
 		if err != nil {
 			t.Fatal(err)
 		}
-
-		msgs = append(msgs, subch)
 	}
 
 	// Used to publish a message with random data
 	publishMsg := func() {
 		data := make([]byte, 16)
-		mrand.Read(data)
+		crand.Read(data)
 
 		if err := psubs[0].Publish(topic, data); err != nil {
 			t.Fatal(err)
@@ -2991,7 +2980,7 @@ func TestGossipsubIdontwantIncompat(t *testing.T) {
 		}
 
 		// Each time the middle peer sends an IDONTWANT message
-		for _ = range irpc.GetControl().GetIdontwant() {
+		for range irpc.GetControl().GetIdontwant() {
 			received = true
 		}
 	})
@@ -3012,21 +3001,18 @@ func TestGossipsubIdontwantSmallMessage(t *testing.T) {
 	params.IDontWantMessageThreshold = 16
 	psubs := getGossipsubs(ctx, hosts[:2], WithGossipSubParams(params))
 
-	var msgs []*Subscription
 	topic := "foobar"
 	for _, ps := range psubs {
-		subch, err := ps.Subscribe(topic)
+		_, err := ps.Subscribe(topic)
 		if err != nil {
 			t.Fatal(err)
 		}
-
-		msgs = append(msgs, subch)
 	}
 
 	// Used to publish a message with random data
 	publishMsg := func() {
 		data := make([]byte, 8)
-		mrand.Read(data)
+		crand.Read(data)
 
 		if err := psubs[0].Publish(topic, data); err != nil {
 			t.Fatal(err)
@@ -3082,7 +3068,7 @@ func TestGossipsubIdontwantSmallMessage(t *testing.T) {
 		}
 
 		// Each time the middle peer sends an IDONTWANT message
-		for _ = range irpc.GetControl().GetIdontwant() {
+		for range irpc.GetControl().GetIdontwant() {
 			received = true
 		}
 	})
@@ -3108,15 +3094,12 @@ func TestGossipsubIdontwantClear(t *testing.T) {
 	psubs[0] = getGossipsub(ctx, hosts[0], WithMessageIdFn(msgID))
 	psubs[1] = getGossipsub(ctx, hosts[1], WithMessageIdFn(msgID))
 
-	var msgs []*Subscription
 	topic := "foobar"
 	for _, ps := range psubs {
-		subch, err := ps.Subscribe(topic)
+		_, err := ps.Subscribe(topic)
 		if err != nil {
 			t.Fatal(err)
 		}
-
-		msgs = append(msgs, subch)
 	}
 
 	// Wait a bit after the last message before checking the result
@@ -3164,7 +3147,7 @@ func TestGossipsubIdontwantClear(t *testing.T) {
 
 					// Generate a message and send IDONTWANT to the middle peer
 					data := make([]byte, 16)
-					mrand.Read(data)
+					crand.Read(data)
 					mid := msgID(&pb.Message{Data: data})
 					writeMsg(&pb.RPC{
 						Control: &pb.ControlMessage{Idontwant: []*pb.ControlIDontWant{{MessageIDs: []string{mid}}}},
@@ -3179,7 +3162,8 @@ func TestGossipsubIdontwantClear(t *testing.T) {
 
 					// Publish the message from the first peer
 					if err := psubs[0].Publish(topic, data); err != nil {
-						t.Fatal(err)
+						t.Error(err)
+						return // cannot call t.Fatal in a non-test goroutine
 					}
 				}()
 			}

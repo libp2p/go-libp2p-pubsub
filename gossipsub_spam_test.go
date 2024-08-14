@@ -781,15 +781,12 @@ func TestGossipsubAttackSpamIDONTWANT(t *testing.T) {
 	psubs[0] = getGossipsub(ctx, hosts[0], WithMessageIdFn(msgID))
 	psubs[1] = getGossipsub(ctx, hosts[1], WithMessageIdFn(msgID))
 
-	var msgs []*Subscription
 	topic := "foobar"
 	for _, ps := range psubs {
-		subch, err := ps.Subscribe(topic)
+		_, err := ps.Subscribe(topic)
 		if err != nil {
 			t.Fatal(err)
 		}
-
-		msgs = append(msgs, subch)
 	}
 
 	// Wait a bit after the last message before checking the result
@@ -861,7 +858,8 @@ func TestGossipsubAttackSpamIDONTWANT(t *testing.T) {
 
 					// Publish the message from the first peer
 					if err := psubs[0].Publish(topic, data); err != nil {
-						t.Fatal(err)
+						t.Error(err)
+						return // cannot call t.Fatal in a non-test goroutine
 					}
 
 					// Wait for the next heartbeat so that the prevention will be reset
