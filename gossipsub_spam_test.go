@@ -877,7 +877,8 @@ func TestGossipsubAttackSpamIDONTWANT(t *testing.T) {
 					})
 					time.Sleep(100 * time.Millisecond)
 					if err := psubs[0].Publish(topic, data); err != nil {
-						t.Fatal(err)
+						t.Error(err)
+						return // cannot call t.Fatal in a non-test goroutine
 					}
 				}()
 			}
