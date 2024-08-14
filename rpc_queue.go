@@ -110,27 +110,16 @@ func (q *rpcQueue) Pop(ctx context.Context) (*RPC, error) {
 		return nil, ErrQueueClosed
 	}
 
-	finished := make(chan struct{})
 	done := make(chan struct{})
-	go func() {
-		select {
-		case <-finished:
-		case <-ctx.Done():
-			// Wake up all the waiting routines. The only routine that correponds
-			// to this Pop call will return from the function. Note that this can
-			// be expensive, if there are too many waiting routines.
-			q.dataAvailable.Broadcast()
-			done <- struct{}{}
-		}
-	}()
 
-	defer func() {
-		// Tell the other routine that this function is finished.
-		select {
-		case finished <- struct{}{}:
-		default:
-		}
-	}()
+	unregisterAfterFunc := context.AfterFunc(ctx, func() {
+		// Wake up all the waiting routines. The only routine that correponds
+		// to this Pop call will return from the function. Note that this can
+		// be expensive, if there are too many waiting routines.
+		q.dataAvailable.Broadcast()
+		done <- struct{}{}
+	})
+	defer unregisterAfterFunc()
 
 	for q.queue.Len() == 0 {
 		select {
