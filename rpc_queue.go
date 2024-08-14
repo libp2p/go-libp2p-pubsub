@@ -51,10 +51,8 @@ type rpcQueue struct {
 	queueMu sync.Mutex
 	queue   priorityQueue
 
-	// RWMutex used to access closed
-	closedMu sync.RWMutex
-	closed   bool
-	maxSize  int
+	closed  bool
+	maxSize int
 }
 
 func newRpcQueue(maxSize int) *rpcQueue {
