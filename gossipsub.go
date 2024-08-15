@@ -66,7 +66,7 @@ var (
 	GossipSubGraftFloodThreshold              = 10 * time.Second
 	GossipSubMaxIHaveLength                   = 5000
 	GossipSubMaxIHaveMessages                 = 10
-	GossipSubMaxIDontWantMessages             = 10
+	GossipSubMaxIDontWantMessages             = 1000
 	GossipSubIWantFollowupTime                = 3 * time.Second
 	GossipSubIDontWantMessageThreshold        = 1024 // 1KB
 	GossipSubIDontWantMessageTTL              = 3    // 3 heartbeats
