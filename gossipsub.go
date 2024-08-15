@@ -996,11 +996,11 @@ func (gs *GossipSubRouter) handleIDontWant(p peer.ID, ctl *pb.ControlMessage) {
 	}
 
 	// IDONTWANT flood protection
-	gs.peerdontwant[p]++
-	if gs.peerdontwant[p] > gs.params.MaxIDontWantMessages {
+	if gs.peerdontwant[p] >= gs.params.MaxIDontWantMessages {
 		log.Debugf("IDONWANT: peer %s has advertised too many times (%d) within this heartbeat interval; ignoring", p, gs.peerdontwant[p])
 		return
 	}
+	gs.peerdontwant[p]++
 
 	// Remember all the unwanted message ids
 	for _, idontwant := range ctl.GetIdontwant() {
