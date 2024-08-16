@@ -35,9 +35,11 @@ func (q *priorityQueue) Pop() *RPC {
 
 	if len(q.priority) > 0 {
 		rpc = q.priority[0]
+		q.priority[0] = nil
 		q.priority = q.priority[1:]
 	} else if len(q.normal) > 0 {
 		rpc = q.normal[0]
+		q.normal[0] = nil
 		q.normal = q.normal[1:]
 	}
 
