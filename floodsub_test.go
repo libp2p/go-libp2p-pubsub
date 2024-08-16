@@ -42,8 +42,7 @@ func checkMessageRouting(t *testing.T, topic string, pubs []*PubSub, subs []*Sub
 }
 
 func connect(t *testing.T, a, b host.Host) {
-	pinfo := a.Peerstore().PeerInfo(a.ID())
-	err := b.Connect(context.Background(), pinfo)
+	err := b.Connect(context.Background(), peer.AddrInfo{ID: a.ID(), Addrs: a.Addrs()})
 	if err != nil {
 		t.Fatal(err)
 	}

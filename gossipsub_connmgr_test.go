@@ -98,7 +98,7 @@ func TestGossipsubConnTagMessageDeliveries(t *testing.T) {
 	connectAll(t, honestHosts)
 
 	for _, h := range honestHosts {
-		if len(h.Network().Conns()) != nHonest-1 {
+		if len(h.Network().Peers()) != nHonest-1 {
 			t.Errorf("expected to have conns to all honest peers, have %d", len(h.Network().Conns()))
 		}
 	}
@@ -148,8 +148,8 @@ func TestGossipsubConnTagMessageDeliveries(t *testing.T) {
 	for _, h := range honestHosts {
 		nHonestConns := 0
 		nDishonestConns := 0
-		for _, conn := range h.Network().Conns() {
-			if _, ok := honestPeers[conn.RemotePeer()]; !ok {
+		for _, p := range h.Network().Peers() {
+			if _, ok := honestPeers[p]; !ok {
 				nDishonestConns++
 			} else {
 				nHonestConns++
