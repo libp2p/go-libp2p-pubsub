@@ -221,7 +221,9 @@ type GossipSubParams struct {
 	// the router may apply bahavioural penalties.
 	IWantFollowupTime time.Duration
 
-	// IDONTWANT is only sent for messages larger than the threshold.
+	// IDONTWANT is only sent for messages larger than the threshold. This should be greater than
+	// D_high * the size of the message id. Otherwise, the attacker can do the amplication attack by sending
+	// small messages while the receiver replies back with larger IDONTWANT messages.
 	IDontWantMessageThreshold int
 
 	// IDONTWANT is cleared when it's older than the TTL.
