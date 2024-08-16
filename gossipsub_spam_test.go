@@ -3,6 +3,7 @@ package pubsub
 import (
 	"context"
 	"crypto/rand"
+	"encoding/base64"
 	"strconv"
 	"sync"
 	"testing"
@@ -121,7 +122,7 @@ func TestGossipsubAttackSpamIWANT(t *testing.T) {
 			// being spammy)
 			iwantlst := []string{DefaultMsgIdFn(msg)}
 			iwant := []*pb.ControlIWant{{MessageIDs: iwantlst}}
-			orpc := rpcWithControl(nil, nil, iwant, nil, nil)
+			orpc := rpcWithControl(nil, nil, iwant, nil, nil, nil)
 			writeMsg(&orpc.RPC)
 		}
 	})
@@ -208,7 +209,7 @@ func TestGossipsubAttackSpamIHAVE(t *testing.T) {
 					for i := 0; i < 3*GossipSubMaxIHaveLength; i++ {
 						ihavelst := []string{"someid" + strconv.Itoa(i)}
 						ihave := []*pb.ControlIHave{{TopicID: sub.Topicid, MessageIDs: ihavelst}}
-						orpc := rpcWithControl(nil, ihave, nil, nil, nil)
+						orpc := rpcWithControl(nil, ihave, nil, nil, nil, nil)
 						writeMsg(&orpc.RPC)
 					}
 
@@ -238,7 +239,7 @@ func TestGossipsubAttackSpamIHAVE(t *testing.T) {
 					for i := 0; i < 3*GossipSubMaxIHaveLength; i++ {
 						ihavelst := []string{"someid" + strconv.Itoa(i+100)}
 						ihave := []*pb.ControlIHave{{TopicID: sub.Topicid, MessageIDs: ihavelst}}
-						orpc := rpcWithControl(nil, ihave, nil, nil, nil)
+						orpc := rpcWithControl(nil, ihave, nil, nil, nil, nil)
 						writeMsg(&orpc.RPC)
 					}
 
@@ -765,11 +766,139 @@ func TestGossipsubAttackInvalidMessageSpam(t *testing.T) {
 	<-ctx.Done()
 }
 
+// Test that when Gossipsub receives too many IDONTWANT messages from a peer
+func TestGossipsubAttackSpamIDONTWANT(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	hosts := getDefaultHosts(t, 3)
+
+	msgID := func(pmsg *pb.Message) string {
+		// silly content-based test message-ID: just use the data as whole
+		return base64.URLEncoding.EncodeToString(pmsg.Data)
+	}
+
+	psubs := make([]*PubSub, 2)
+	psubs[0] = getGossipsub(ctx, hosts[0], WithMessageIdFn(msgID))
+	psubs[1] = getGossipsub(ctx, hosts[1], WithMessageIdFn(msgID))
+
+	topic := "foobar"
+	for _, ps := range psubs {
+		_, err := ps.Subscribe(topic)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// Wait a bit after the last message before checking the result
+	msgWaitMax := time.Second + GossipSubHeartbeatInterval
+	msgTimer := time.NewTimer(msgWaitMax)
+
+	// Checks we received some messages
+	var expMid string
+	var actMids []string
+	checkMsgs := func() {
+		if len(actMids) == 0 {
+			t.Fatalf("Expected some messages when the maximum number of IDONTWANTs is reached")
+		}
+		if actMids[0] != expMid {
+			t.Fatalf("The expected message is incorrect")
+		}
+		if len(actMids) > 1 {
+			t.Fatalf("The spam prevention should be reset after the heartbeat")
+		}
+	}
+
+	// Wait for the timer to expire
+	go func() {
+		select {
+		case <-msgTimer.C:
+			checkMsgs()
+			cancel()
+			return
+		case <-ctx.Done():
+			checkMsgs()
+		}
+	}()
+
+	newMockGS(ctx, t, hosts[2], func(writeMsg func(*pb.RPC), irpc *pb.RPC) {
+		// Each time the host receives a message
+		for _, msg := range irpc.GetPublish() {
+			actMids = append(actMids, msgID(msg))
+		}
+		// When the middle peer connects it will send us its subscriptions
+		for _, sub := range irpc.GetSubscriptions() {
+			if sub.GetSubscribe() {
+				// Reply by subcribing to the topic and grafting to the middle peer
+				writeMsg(&pb.RPC{
+					Subscriptions: []*pb.RPC_SubOpts{{Subscribe: sub.Subscribe, Topicid: sub.Topicid}},
+					Control:       &pb.ControlMessage{Graft: []*pb.ControlGraft{{TopicID: sub.Topicid}}},
+				})
+
+				go func() {
+					// Wait for a short interval to make sure the middle peer
+					// received and processed the subscribe + graft
+					time.Sleep(100 * time.Millisecond)
+
+					// Generate a message and send IDONTWANT to the middle peer
+					data := make([]byte, 16)
+					var mid string
+					for i := 0; i < 1+GossipSubMaxIDontWantMessages; i++ {
+						rand.Read(data)
+						mid = msgID(&pb.Message{Data: data})
+						writeMsg(&pb.RPC{
+							Control: &pb.ControlMessage{Idontwant: []*pb.ControlIDontWant{{MessageIDs: []string{mid}}}},
+						})
+					}
+					// The host should receives this message id because the maximum was reached
+					expMid = mid
+
+					// Wait for a short interval to make sure the middle peer
+					// received and processed the IDONTWANTs
+					time.Sleep(100 * time.Millisecond)
+
+					// Publish the message from the first peer
+					if err := psubs[0].Publish(topic, data); err != nil {
+						t.Error(err)
+						return // cannot call t.Fatal in a non-test goroutine
+					}
+
+					// Wait for the next heartbeat so that the prevention will be reset
+					select {
+					case <-ctx.Done():
+						return
+					case <-time.After(GossipSubHeartbeatInterval):
+					}
+
+					// Test IDONTWANT again to see that it now works again
+					rand.Read(data)
+					mid = msgID(&pb.Message{Data: data})
+					writeMsg(&pb.RPC{
+						Control: &pb.ControlMessage{Idontwant: []*pb.ControlIDontWant{{MessageIDs: []string{mid}}}},
+					})
+					time.Sleep(100 * time.Millisecond)
+					if err := psubs[0].Publish(topic, data); err != nil {
+						t.Error(err)
+						return // cannot call t.Fatal in a non-test goroutine
+					}
+				}()
+			}
+		}
+	})
+
+	connect(t, hosts[0], hosts[1])
+	connect(t, hosts[1], hosts[2])
+
+	<-ctx.Done()
+}
+
 type mockGSOnRead func(writeMsg func(*pb.RPC), irpc *pb.RPC)
 
 func newMockGS(ctx context.Context, t *testing.T, attacker host.Host, onReadMsg mockGSOnRead) {
+	newMockGSWithVersion(ctx, t, attacker, protocol.ID("/meshsub/1.2.0"), onReadMsg)
+}
+
+func newMockGSWithVersion(ctx context.Context, t *testing.T, attacker host.Host, gossipSubID protocol.ID, onReadMsg mockGSOnRead) {
 	// Listen on the gossipsub protocol
-	const gossipSubID = protocol.ID("/meshsub/1.0.0")
 	const maxMessageSize = 1024 * 1024
 	attacker.SetStreamHandler(gossipSubID, func(stream network.Stream) {
 		// When an incoming stream is opened, set up an outgoing stream
