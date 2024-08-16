@@ -72,7 +72,10 @@ var (
 	GossipSubIDontWantMessageTTL              = 3    // 3 heartbeats
 )
 
-type checksum [32]byte
+type checksum struct {
+	payload [32]byte
+	length  uint8
+}
 
 // GossipSubParams defines all the gossipsub specific parameters.
 type GossipSubParams struct {
@@ -2152,11 +2155,11 @@ func shuffleStrings(lst []string) {
 }
 
 func computeChecksum(mid string) checksum {
-	var hashed checksum
-	if len(mid) > 32 {
-		hashed = sha256.Sum256([]byte(mid))
+	var cs checksum
+	if len(mid) > 32 || len(mid) == 0 {
+		cs.payload = sha256.Sum256([]byte(mid))
 	} else {
-		copy(hashed[:], mid)
+		cs.length = uint8(copy(cs.payload[:], mid))
 	}
-	return hashed
+	return cs
 }
