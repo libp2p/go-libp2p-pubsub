@@ -1,6 +1,6 @@
 module github.com/libp2p/go-libp2p-pubsub
 
-go 1.21
+go 1.22
 
 require (
 	github.com/benbjohnson/clock v1.3.5
