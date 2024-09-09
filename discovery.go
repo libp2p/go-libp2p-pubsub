@@ -245,7 +245,9 @@ func (d *discover) Bootstrap(ctx context.Context, topic string, ready RouterRead
 	}
 
 	t := time.NewTimer(time.Hour)
-	t.Stop()
+	if !t.Stop() {
+		<-t.C
+	}
 	defer t.Stop()
 
 	for {
