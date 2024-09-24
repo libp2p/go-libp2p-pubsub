@@ -19,6 +19,8 @@ import (
 	"github.com/libp2p/go-libp2p/core/protocol"
 	"github.com/libp2p/go-libp2p/core/record"
 	"github.com/libp2p/go-libp2p/p2p/host/peerstore/pstoremem"
+
+	"go.uber.org/zap/zapcore"
 )
 
 const (
@@ -1334,7 +1336,9 @@ func (gs *GossipSubRouter) sendRPC(p peer.ID, out *RPC, urgent bool) {
 }
 
 func (gs *GossipSubRouter) doDropRPC(rpc *RPC, p peer.ID, reason string) {
-	log.Debugf("dropping message to peer %s: %s", p, reason)
+	if log.Level() <= zapcore.DebugLevel {
+		log.Debugf("dropping message to peer %s: %s", p, reason)
+	}
 	gs.tracer.DropRPC(rpc, p)
 	// push control messages that need to be retried
 	ctl := rpc.GetControl()
