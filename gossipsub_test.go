@@ -3175,3 +3175,11 @@ func TestGossipsubIdontwantClear(t *testing.T) {
 
 	<-ctx.Done()
 }
+
+func BenchmarkAllocDoDropRPC(b *testing.B) {
+	gs := GossipSubRouter{tracer: &pubsubTracer{}}
+
+	for i := 0; i < b.N; i++ {
+		gs.doDropRPC(&RPC{}, "peerID", "reason")
+	}
+}
