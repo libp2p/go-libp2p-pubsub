@@ -2416,6 +2416,7 @@ func TestFragmentRPCFunction(t *testing.T) {
 	ensureBelowLimit(results)
 	msgsPerRPC := limit / msgSize
 	expectedRPCs := nMessages / msgsPerRPC
+	expectedRPCs += 1 // add one more message to account for message size approximation when fragmenting
 	if len(results) != expectedRPCs {
 		t.Fatalf("expected %d RPC messages in output, got %d", expectedRPCs, len(results))
 	}
