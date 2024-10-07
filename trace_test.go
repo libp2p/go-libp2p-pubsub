@@ -17,9 +17,7 @@ import (
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/core/peerstore"
 
-	bhost "github.com/libp2p/go-libp2p/p2p/host/blank"
-	swarmt "github.com/libp2p/go-libp2p/p2p/net/swarm/testing"
-
+	//lint:ignore SA1019 "github.com/libp2p/go-msgio/protoio" is deprecated
 	"github.com/libp2p/go-msgio/protoio"
 )
 
@@ -27,7 +25,7 @@ func testWithTracer(t *testing.T, tracer EventTracer) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	hosts := getNetHosts(t, ctx, 20)
+	hosts := getDefaultHosts(t, 20)
 	psubs := getGossipsubs(ctx, hosts,
 		WithEventTracer(tracer),
 		// to bootstrap from star topology
@@ -302,10 +300,9 @@ func TestRemoteTracer(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	h1 := bhost.NewBlankHost(swarmt.GenSwarm(t))
-	h2 := bhost.NewBlankHost(swarmt.GenSwarm(t))
-	defer h1.Close()
-	defer h2.Close()
+	hosts := getDefaultHosts(t, 2)
+	h1 := hosts[0]
+	h2 := hosts[1]
 
 	mrt := &mockRemoteTracer{}
 	h1.SetStreamHandler(RemoteTracerProtoID, mrt.handleStream)

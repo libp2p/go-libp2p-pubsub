@@ -3,11 +3,12 @@ package pubsub
 import (
 	"bytes"
 	"context"
+	crand "crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
 	"fmt"
 	"io"
-	"math/rand"
+	mrand "math/rand"
 	"sort"
 	"sync"
 	"testing"
@@ -20,15 +21,13 @@ import (
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/core/protocol"
 
-	bhost "github.com/libp2p/go-libp2p/p2p/host/blank"
-	swarmt "github.com/libp2p/go-libp2p/p2p/net/swarm/testing"
-
+	//lint:ignore SA1019 "github.com/libp2p/go-msgio/protoio" is deprecated
 	"github.com/libp2p/go-msgio/protoio"
 )
 
 func checkMessageRouting(t *testing.T, topic string, pubs []*PubSub, subs []*Subscription) {
 	data := make([]byte, 16)
-	rand.Read(data)
+	crand.Read(data)
 
 	for _, p := range pubs {
 		err := p.Publish(topic, data)
@@ -42,22 +41,8 @@ func checkMessageRouting(t *testing.T, topic string, pubs []*PubSub, subs []*Sub
 	}
 }
 
-func getNetHosts(t *testing.T, ctx context.Context, n int) []host.Host {
-	var out []host.Host
-
-	for i := 0; i < n; i++ {
-		netw := swarmt.GenSwarm(t)
-		h := bhost.NewBlankHost(netw)
-		t.Cleanup(func() { h.Close() })
-		out = append(out, h)
-	}
-
-	return out
-}
-
 func connect(t *testing.T, a, b host.Host) {
-	pinfo := a.Peerstore().PeerInfo(a.ID())
-	err := b.Connect(context.Background(), pinfo)
+	err := b.Connect(context.Background(), peer.AddrInfo{ID: a.ID(), Addrs: a.Addrs()})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -74,7 +59,7 @@ func denseConnect(t *testing.T, hosts []host.Host) {
 func connectSome(t *testing.T, hosts []host.Host, d int) {
 	for i, a := range hosts {
 		for j := 0; j < d; j++ {
-			n := rand.Intn(len(hosts))
+			n := mrand.Intn(len(hosts))
 			if n == i {
 				j--
 				continue
@@ -151,7 +136,7 @@ func assertNeverReceives(t *testing.T, ch *Subscription, timeout time.Duration) 
 func TestBasicFloodsub(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	hosts := getNetHosts(t, ctx, 20)
+	hosts := getDefaultHosts(t, 20)
 
 	psubs := getPubsubs(ctx, hosts)
 
@@ -173,7 +158,7 @@ func TestBasicFloodsub(t *testing.T) {
 	for i := 0; i < 100; i++ {
 		msg := []byte(fmt.Sprintf("%d the flooooooood %d", i, i))
 
-		owner := rand.Intn(len(psubs))
+		owner := mrand.Intn(len(psubs))
 
 		psubs[owner].Publish("foobar", msg)
 
@@ -193,7 +178,7 @@ func TestMultihops(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	hosts := getNetHosts(t, ctx, 6)
+	hosts := getDefaultHosts(t, 6)
 
 	psubs := getPubsubs(ctx, hosts)
 
@@ -235,7 +220,7 @@ func TestReconnects(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	hosts := getNetHosts(t, ctx, 3)
+	hosts := getDefaultHosts(t, 3)
 
 	psubs := getPubsubs(ctx, hosts)
 
@@ -309,7 +294,7 @@ func TestNoConnection(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	hosts := getNetHosts(t, ctx, 10)
+	hosts := getDefaultHosts(t, 10)
 
 	psubs := getPubsubs(ctx, hosts)
 
@@ -334,7 +319,7 @@ func TestSelfReceive(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	host := getNetHosts(t, ctx, 1)[0]
+	host := getDefaultHosts(t, 1)[0]
 
 	psub, err := NewFloodSub(ctx, host)
 	if err != nil {
@@ -368,7 +353,7 @@ func TestOneToOne(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	hosts := getNetHosts(t, ctx, 2)
+	hosts := getDefaultHosts(t, 2)
 	psubs := getPubsubs(ctx, hosts)
 
 	connect(t, hosts[0], hosts[1])
@@ -401,7 +386,7 @@ func TestTreeTopology(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	hosts := getNetHosts(t, ctx, 10)
+	hosts := getDefaultHosts(t, 10)
 	psubs := getPubsubs(ctx, hosts)
 
 	connect(t, hosts[0], hosts[1])
@@ -464,7 +449,7 @@ func TestFloodSubPluggableProtocol(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
 
-		hosts := getNetHosts(t, ctx, 3)
+		hosts := getDefaultHosts(t, 3)
 
 		psubA := mustCreatePubSub(ctx, t, hosts[0], "/esh/floodsub", "/lsr/floodsub")
 		psubB := mustCreatePubSub(ctx, t, hosts[1], "/esh/floodsub")
@@ -496,7 +481,7 @@ func TestFloodSubPluggableProtocol(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
 
-		hosts := getNetHosts(t, ctx, 2)
+		hosts := getDefaultHosts(t, 2)
 
 		psubA := mustCreatePubSub(ctx, t, hosts[0], "/esh/floodsub")
 		psubB := mustCreatePubSub(ctx, t, hosts[1], "/lsr/floodsub")
@@ -551,7 +536,7 @@ func TestSubReporting(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	host := getNetHosts(t, ctx, 1)[0]
+	host := getDefaultHosts(t, 1)[0]
 	psub, err := NewFloodSub(ctx, host)
 	if err != nil {
 		t.Fatal(err)
@@ -593,7 +578,7 @@ func TestPeerTopicReporting(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	hosts := getNetHosts(t, ctx, 4)
+	hosts := getDefaultHosts(t, 4)
 	psubs := getPubsubs(ctx, hosts)
 
 	connect(t, hosts[0], hosts[1])
@@ -650,7 +635,7 @@ func TestSubscribeMultipleTimes(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	hosts := getNetHosts(t, ctx, 2)
+	hosts := getDefaultHosts(t, 2)
 	psubs := getPubsubs(ctx, hosts)
 
 	connect(t, hosts[0], hosts[1])
@@ -695,7 +680,7 @@ func TestPeerDisconnect(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	hosts := getNetHosts(t, ctx, 2)
+	hosts := getDefaultHosts(t, 2)
 	psubs := getPubsubs(ctx, hosts)
 
 	connect(t, hosts[0], hosts[1])
@@ -743,7 +728,7 @@ func TestWithNoSigning(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	hosts := getNetHosts(t, ctx, 2)
+	hosts := getDefaultHosts(t, 2)
 	psubs := getPubsubs(ctx, hosts, WithNoAuthor(), WithMessageIdFn(func(pmsg *pb.Message) string {
 		// silly content-based test message-ID: just use the data as whole
 		return base64.URLEncoding.EncodeToString(pmsg.Data)
@@ -788,7 +773,7 @@ func TestWithSigning(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	hosts := getNetHosts(t, ctx, 2)
+	hosts := getDefaultHosts(t, 2)
 	psubs := getPubsubs(ctx, hosts, WithStrictSignatureVerification(true))
 
 	connect(t, hosts[0], hosts[1])
@@ -830,7 +815,7 @@ func TestImproperlySignedMessageRejected(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	hosts := getNetHosts(t, ctx, 2)
+	hosts := getDefaultHosts(t, 2)
 	adversary := hosts[0]
 	honestPeer := hosts[1]
 
@@ -948,7 +933,7 @@ func TestMessageSender(t *testing.T) {
 
 	const topic = "foobar"
 
-	hosts := getNetHosts(t, ctx, 3)
+	hosts := getDefaultHosts(t, 3)
 	psubs := getPubsubs(ctx, hosts)
 
 	var msgs []*Subscription
@@ -1002,7 +987,7 @@ func TestConfigurableMaxMessageSize(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	hosts := getNetHosts(t, ctx, 10)
+	hosts := getDefaultHosts(t, 10)
 
 	// use a 4mb limit; default is 1mb; we'll test with a 2mb payload.
 	psubs := getPubsubs(ctx, hosts, WithMaxMessageSize(1<<22))
@@ -1022,7 +1007,7 @@ func TestConfigurableMaxMessageSize(t *testing.T) {
 
 	// 2mb payload.
 	msg := make([]byte, 1<<21)
-	rand.Read(msg)
+	crand.Read(msg)
 	err := psubs[0].Publish(topic, msg)
 	if err != nil {
 		t.Fatal(err)
@@ -1045,7 +1030,7 @@ func TestAnnounceRetry(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	hosts := getNetHosts(t, ctx, 2)
+	hosts := getDefaultHosts(t, 2)
 	ps := getPubsub(ctx, hosts[0])
 	watcher := &announceWatcher{}
 	hosts[1].SetStreamHandler(FloodSubID, watcher.handleStream)
@@ -1117,7 +1102,7 @@ func TestPubsubWithAssortedOptions(t *testing.T) {
 		return string(hash[:])
 	}
 
-	hosts := getNetHosts(t, ctx, 2)
+	hosts := getDefaultHosts(t, 2)
 	psubs := getPubsubs(ctx, hosts,
 		WithMessageIdFn(hashMsgID),
 		WithPeerOutboundQueueSize(10),
@@ -1152,8 +1137,7 @@ func TestWithInvalidMessageAuthor(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	h := bhost.NewBlankHost(swarmt.GenSwarm(t))
-	defer h.Close()
+	h := getDefaultHosts(t, 1)[0]
 	_, err := NewFloodSub(ctx, h, WithMessageAuthor("bogotr0n"))
 	if err == nil {
 		t.Fatal("expected error")
@@ -1168,10 +1152,9 @@ func TestPreconnectedNodes(t *testing.T) {
 	defer cancel()
 
 	// Create hosts
-	h1 := bhost.NewBlankHost(swarmt.GenSwarm(t))
-	h2 := bhost.NewBlankHost(swarmt.GenSwarm(t))
-	defer h1.Close()
-	defer h2.Close()
+	hosts := getDefaultHosts(t, 2)
+	h1 := hosts[0]
+	h2 := hosts[1]
 
 	opts := []Option{WithDiscovery(&dummyDiscovery{})}
 	// Setup first PubSub
@@ -1229,10 +1212,9 @@ func TestDedupInboundStreams(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	h1 := bhost.NewBlankHost(swarmt.GenSwarm(t))
-	h2 := bhost.NewBlankHost(swarmt.GenSwarm(t))
-	defer h1.Close()
-	defer h2.Close()
+	hosts := getDefaultHosts(t, 2)
+	h1 := hosts[0]
+	h2 := hosts[1]
 
 	_, err := NewFloodSub(ctx, h1)
 	if err != nil {
@@ -1247,15 +1229,27 @@ func TestDedupInboundStreams(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	_, err = s1.Read(nil) // force protocol negotiation to complete
+	if err != nil {
+		t.Fatal(err)
+	}
 	time.Sleep(100 * time.Millisecond)
 
 	s2, err := h2.NewStream(ctx, h1.ID(), FloodSubID)
 	if err != nil {
 		t.Fatal(err)
 	}
+	_, err = s2.Read(nil) // force protocol negotiation to complete
+	if err != nil {
+		t.Fatal(err)
+	}
 	time.Sleep(100 * time.Millisecond)
 
 	s3, err := h2.NewStream(ctx, h1.ID(), FloodSubID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = s3.Read(nil) // force protocol negotiation to complete
 	if err != nil {
 		t.Fatal(err)
 	}

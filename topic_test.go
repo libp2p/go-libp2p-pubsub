@@ -99,7 +99,7 @@ func testTopicCloseWithOpenResource(t *testing.T, openResource func(topic *Topic
 
 	const numHosts = 1
 	topicID := "foobar"
-	hosts := getNetHosts(t, ctx, numHosts)
+	hosts := getDefaultHosts(t, numHosts)
 	ps := getPubsub(ctx, hosts[0])
 
 	// Try create and cancel topic
@@ -139,7 +139,7 @@ func TestTopicReuse(t *testing.T) {
 
 	const numHosts = 2
 	topicID := "foobar"
-	hosts := getNetHosts(t, ctx, numHosts)
+	hosts := getDefaultHosts(t, numHosts)
 
 	sender := getPubsub(ctx, hosts[0], WithDiscovery(&dummyDiscovery{}))
 	receiver := getPubsub(ctx, hosts[1])
@@ -233,7 +233,7 @@ func TestTopicEventHandlerCancel(t *testing.T) {
 
 	const numHosts = 5
 	topicID := "foobar"
-	hosts := getNetHosts(t, ctx, numHosts)
+	hosts := getDefaultHosts(t, numHosts)
 	ps := getPubsub(ctx, hosts[0])
 
 	// Try create and cancel topic
@@ -265,7 +265,7 @@ func TestSubscriptionJoinNotification(t *testing.T) {
 
 	const numLateSubscribers = 10
 	const numHosts = 20
-	hosts := getNetHosts(t, ctx, numHosts)
+	hosts := getDefaultHosts(t, numHosts)
 	topics := getTopics(getPubsubs(ctx, hosts), "foobar")
 	evts := getTopicEvts(topics)
 
@@ -331,7 +331,7 @@ func TestSubscriptionLeaveNotification(t *testing.T) {
 	defer cancel()
 
 	const numHosts = 20
-	hosts := getNetHosts(t, ctx, numHosts)
+	hosts := getDefaultHosts(t, numHosts)
 	psubs := getPubsubs(ctx, hosts)
 	topics := getTopics(psubs, "foobar")
 	evts := getTopicEvts(topics)
@@ -416,7 +416,7 @@ func TestSubscriptionManyNotifications(t *testing.T) {
 	const topic = "foobar"
 
 	const numHosts = 33
-	hosts := getNetHosts(t, ctx, numHosts)
+	hosts := getDefaultHosts(t, numHosts)
 	topics := getTopics(getPubsubs(ctx, hosts), topic)
 	evts := getTopicEvts(topics)
 
@@ -521,7 +521,7 @@ func TestSubscriptionNotificationSubUnSub(t *testing.T) {
 	const topic = "foobar"
 
 	const numHosts = 35
-	hosts := getNetHosts(t, ctx, numHosts)
+	hosts := getDefaultHosts(t, numHosts)
 	topics := getTopics(getPubsubs(ctx, hosts), topic)
 
 	for i := 1; i < numHosts; i++ {
@@ -539,7 +539,7 @@ func TestTopicRelay(t *testing.T) {
 	const topic = "foobar"
 	const numHosts = 5
 
-	hosts := getNetHosts(t, ctx, numHosts)
+	hosts := getDefaultHosts(t, numHosts)
 	topics := getTopics(getPubsubs(ctx, hosts), topic)
 
 	// [0.Rel] - [1.Rel] - [2.Sub]
@@ -603,7 +603,7 @@ func TestTopicRelayReuse(t *testing.T) {
 	const topic = "foobar"
 	const numHosts = 1
 
-	hosts := getNetHosts(t, ctx, numHosts)
+	hosts := getDefaultHosts(t, numHosts)
 	pubsubs := getPubsubs(ctx, hosts)
 	topics := getTopics(pubsubs, topic)
 
@@ -670,7 +670,7 @@ func TestTopicRelayOnClosedTopic(t *testing.T) {
 	const topic = "foobar"
 	const numHosts = 1
 
-	hosts := getNetHosts(t, ctx, numHosts)
+	hosts := getDefaultHosts(t, numHosts)
 	topics := getTopics(getPubsubs(ctx, hosts), topic)
 
 	err := topics[0].Close()
@@ -690,7 +690,7 @@ func TestProducePanic(t *testing.T) {
 
 	const numHosts = 5
 	topicID := "foobar"
-	hosts := getNetHosts(t, ctx, numHosts)
+	hosts := getDefaultHosts(t, numHosts)
 	ps := getPubsub(ctx, hosts[0])
 
 	// Create topic
@@ -743,7 +743,7 @@ func notifSubThenUnSub(ctx context.Context, t *testing.T, topics []*Topic) {
 	}
 
 	// Wait for the unsubscribe messages to reach the primary peer
-	for len(primaryTopic.ListPeers()) < 0 {
+	for len(primaryTopic.ListPeers()) > 0 {
 		time.Sleep(time.Millisecond * 100)
 	}
 
@@ -792,7 +792,7 @@ func TestMinTopicSizeNoDiscovery(t *testing.T) {
 
 	const numHosts = 3
 	topicID := "foobar"
-	hosts := getNetHosts(t, ctx, numHosts)
+	hosts := getDefaultHosts(t, numHosts)
 
 	sender := getPubsub(ctx, hosts[0])
 	receiver1 := getPubsub(ctx, hosts[1])
@@ -872,7 +872,7 @@ func TestWithTopicMsgIdFunction(t *testing.T) {
 	const topicA, topicB = "foobarA", "foobarB"
 	const numHosts = 2
 
-	hosts := getNetHosts(t, ctx, numHosts)
+	hosts := getDefaultHosts(t, numHosts)
 	pubsubs := getPubsubs(ctx, hosts, WithMessageIdFn(func(pmsg *pb.Message) string {
 		hash := sha256.Sum256(pmsg.Data)
 		return string(hash[:])
@@ -932,7 +932,7 @@ func TestTopicPublishWithKeyInvalidParameters(t *testing.T) {
 	const numHosts = 5
 
 	virtualPeer := tnet.RandPeerNetParamsOrFatal(t)
-	hosts := getNetHosts(t, ctx, numHosts)
+	hosts := getDefaultHosts(t, numHosts)
 	topics := getTopics(getPubsubs(ctx, hosts), topic)
 
 	t.Run("nil sign private key should error", func(t *testing.T) {
@@ -959,7 +959,7 @@ func TestTopicRelayPublishWithKey(t *testing.T) {
 	const numHosts = 5
 
 	virtualPeer := tnet.RandPeerNetParamsOrFatal(t)
-	hosts := getNetHosts(t, ctx, numHosts)
+	hosts := getDefaultHosts(t, numHosts)
 	topics := getTopics(getPubsubs(ctx, hosts), topic)
 
 	// [0.Rel] - [1.Rel] - [2.Sub]
@@ -1026,7 +1026,7 @@ func TestWithLocalPublication(t *testing.T) {
 
 	const topic = "test"
 
-	hosts := getNetHosts(t, ctx, 2)
+	hosts := getDefaultHosts(t, 2)
 	pubsubs := getPubsubs(ctx, hosts)
 	topics := getTopics(pubsubs, topic)
 	connectAll(t, hosts)

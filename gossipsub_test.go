@@ -3,9 +3,12 @@ package pubsub
 import (
 	"bytes"
 	"context"
+	crand "crypto/rand"
+	"encoding/base64"
 	"fmt"
 	"io"
-	"math/rand"
+	mrand "math/rand"
+	"sort"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -13,16 +16,14 @@ import (
 
 	pb "github.com/libp2p/go-libp2p-pubsub/pb"
 
-	"github.com/libp2p/go-libp2p"
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/core/peerstore"
+	"github.com/libp2p/go-libp2p/core/protocol"
 	"github.com/libp2p/go-libp2p/core/record"
 
-	bhost "github.com/libp2p/go-libp2p/p2p/host/blank"
-	swarmt "github.com/libp2p/go-libp2p/p2p/net/swarm/testing"
-
+	//lint:ignore SA1019 "github.com/libp2p/go-msgio/protoio" is deprecated
 	"github.com/libp2p/go-msgio/protoio"
 )
 
@@ -45,7 +46,7 @@ func getGossipsubs(ctx context.Context, hs []host.Host, opts ...Option) []*PubSu
 func TestSparseGossipsub(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	hosts := getNetHosts(t, ctx, 20)
+	hosts := getDefaultHosts(t, 20)
 
 	psubs := getGossipsubs(ctx, hosts)
 
@@ -67,7 +68,7 @@ func TestSparseGossipsub(t *testing.T) {
 	for i := 0; i < 100; i++ {
 		msg := []byte(fmt.Sprintf("%d it's not a floooooood %d", i, i))
 
-		owner := rand.Intn(len(psubs))
+		owner := mrand.Intn(len(psubs))
 
 		psubs[owner].Publish("foobar", msg)
 
@@ -86,7 +87,7 @@ func TestSparseGossipsub(t *testing.T) {
 func TestDenseGossipsub(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	hosts := getNetHosts(t, ctx, 20)
+	hosts := getDefaultHosts(t, 20)
 
 	psubs := getGossipsubs(ctx, hosts)
 
@@ -108,7 +109,7 @@ func TestDenseGossipsub(t *testing.T) {
 	for i := 0; i < 100; i++ {
 		msg := []byte(fmt.Sprintf("%d it's not a floooooood %d", i, i))
 
-		owner := rand.Intn(len(psubs))
+		owner := mrand.Intn(len(psubs))
 
 		psubs[owner].Publish("foobar", msg)
 
@@ -127,7 +128,7 @@ func TestDenseGossipsub(t *testing.T) {
 func TestGossipsubFanout(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	hosts := getNetHosts(t, ctx, 20)
+	hosts := getDefaultHosts(t, 20)
 
 	psubs := getGossipsubs(ctx, hosts)
 
@@ -196,7 +197,7 @@ func TestGossipsubFanout(t *testing.T) {
 func TestGossipsubFanoutMaintenance(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	hosts := getNetHosts(t, ctx, 20)
+	hosts := getDefaultHosts(t, 20)
 
 	psubs := getGossipsubs(ctx, hosts)
 
@@ -281,7 +282,7 @@ func TestGossipsubFanoutExpiry(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	hosts := getNetHosts(t, ctx, 10)
+	hosts := getDefaultHosts(t, 10)
 
 	psubs := getGossipsubs(ctx, hosts)
 
@@ -340,7 +341,7 @@ func TestGossipsubFanoutExpiry(t *testing.T) {
 func TestGossipsubGossip(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	hosts := getNetHosts(t, ctx, 20)
+	hosts := getDefaultHosts(t, 20)
 
 	psubs := getGossipsubs(ctx, hosts)
 
@@ -362,7 +363,7 @@ func TestGossipsubGossip(t *testing.T) {
 	for i := 0; i < 100; i++ {
 		msg := []byte(fmt.Sprintf("%d it's not a floooooood %d", i, i))
 
-		owner := rand.Intn(len(psubs))
+		owner := mrand.Intn(len(psubs))
 
 		psubs[owner].Publish("foobar", msg)
 
@@ -388,7 +389,7 @@ func TestGossipsubGossipPiggyback(t *testing.T) {
 	t.Skip("test no longer relevant; gossip propagation has become eager")
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	hosts := getNetHosts(t, ctx, 20)
+	hosts := getDefaultHosts(t, 20)
 
 	psubs := getGossipsubs(ctx, hosts)
 
@@ -420,7 +421,7 @@ func TestGossipsubGossipPiggyback(t *testing.T) {
 	for i := 0; i < 100; i++ {
 		msg := []byte(fmt.Sprintf("%d it's not a floooooood %d", i, i))
 
-		owner := rand.Intn(len(psubs))
+		owner := mrand.Intn(len(psubs))
 
 		psubs[owner].Publish("foobar", msg)
 		psubs[owner].Publish("bazcrux", msg)
@@ -457,7 +458,7 @@ func TestGossipsubGossipPropagation(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	hosts := getNetHosts(t, ctx, 20)
+	hosts := getDefaultHosts(t, 20)
 	psubs := getGossipsubs(ctx, hosts)
 
 	hosts1 := hosts[:GossipSubD+1]
@@ -537,7 +538,7 @@ func TestGossipsubGossipPropagation(t *testing.T) {
 func TestGossipsubPrune(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	hosts := getNetHosts(t, ctx, 20)
+	hosts := getDefaultHosts(t, 20)
 
 	psubs := getGossipsubs(ctx, hosts)
 
@@ -567,7 +568,7 @@ func TestGossipsubPrune(t *testing.T) {
 	for i := 0; i < 10; i++ {
 		msg := []byte(fmt.Sprintf("%d it's not a floooooood %d", i, i))
 
-		owner := rand.Intn(len(psubs))
+		owner := mrand.Intn(len(psubs))
 
 		psubs[owner].Publish("foobar", msg)
 
@@ -586,7 +587,7 @@ func TestGossipsubPrune(t *testing.T) {
 func TestGossipsubPruneBackoffTime(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	hosts := getNetHosts(t, ctx, 10)
+	hosts := getDefaultHosts(t, 10)
 
 	// App specific score that we'll change later.
 	currentScoreForHost0 := int32(0)
@@ -665,7 +666,7 @@ func TestGossipsubPruneBackoffTime(t *testing.T) {
 		msg := []byte(fmt.Sprintf("%d it's not a floooooood %d", i, i))
 
 		// Don't publish from host 0, since everyone should have pruned it.
-		owner := rand.Intn(len(psubs)-1) + 1
+		owner := mrand.Intn(len(psubs)-1) + 1
 
 		psubs[owner].Publish("foobar", msg)
 
@@ -684,7 +685,7 @@ func TestGossipsubPruneBackoffTime(t *testing.T) {
 func TestGossipsubGraft(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	hosts := getNetHosts(t, ctx, 20)
+	hosts := getDefaultHosts(t, 20)
 
 	psubs := getGossipsubs(ctx, hosts)
 
@@ -710,7 +711,7 @@ func TestGossipsubGraft(t *testing.T) {
 	for i := 0; i < 100; i++ {
 		msg := []byte(fmt.Sprintf("%d it's not a floooooood %d", i, i))
 
-		owner := rand.Intn(len(psubs))
+		owner := mrand.Intn(len(psubs))
 
 		psubs[owner].Publish("foobar", msg)
 
@@ -729,7 +730,7 @@ func TestGossipsubGraft(t *testing.T) {
 func TestGossipsubRemovePeer(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	hosts := getNetHosts(t, ctx, 20)
+	hosts := getDefaultHosts(t, 20)
 
 	psubs := getGossipsubs(ctx, hosts)
 
@@ -759,7 +760,7 @@ func TestGossipsubRemovePeer(t *testing.T) {
 	for i := 0; i < 10; i++ {
 		msg := []byte(fmt.Sprintf("%d it's not a floooooood %d", i, i))
 
-		owner := 5 + rand.Intn(len(psubs)-5)
+		owner := 5 + mrand.Intn(len(psubs)-5)
 
 		psubs[owner].Publish("foobar", msg)
 
@@ -779,7 +780,7 @@ func TestGossipsubGraftPruneRetry(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	hosts := getNetHosts(t, ctx, 10)
+	hosts := getDefaultHosts(t, 10)
 	psubs := getGossipsubs(ctx, hosts)
 	denseConnect(t, hosts)
 
@@ -807,7 +808,7 @@ func TestGossipsubGraftPruneRetry(t *testing.T) {
 	for i, topic := range topics {
 		msg := []byte(fmt.Sprintf("%d it's not a floooooood %d", i, i))
 
-		owner := rand.Intn(len(psubs))
+		owner := mrand.Intn(len(psubs))
 
 		psubs[owner].Publish(topic, msg)
 
@@ -829,7 +830,7 @@ func TestGossipsubControlPiggyback(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	hosts := getNetHosts(t, ctx, 10)
+	hosts := getDefaultHosts(t, 10)
 	psubs := getGossipsubs(ctx, hosts)
 	denseConnect(t, hosts)
 
@@ -853,7 +854,7 @@ func TestGossipsubControlPiggyback(t *testing.T) {
 	// create a background flood of messages that overloads the queues
 	done := make(chan struct{})
 	go func() {
-		owner := rand.Intn(len(psubs))
+		owner := mrand.Intn(len(psubs))
 		for i := 0; i < 10000; i++ {
 			msg := []byte("background flooooood")
 			psubs[owner].Publish("flood", msg)
@@ -891,7 +892,7 @@ func TestGossipsubControlPiggyback(t *testing.T) {
 	for i, topic := range topics {
 		msg := []byte(fmt.Sprintf("%d it's not a floooooood %d", i, i))
 
-		owner := rand.Intn(len(psubs))
+		owner := mrand.Intn(len(psubs))
 
 		psubs[owner].Publish(topic, msg)
 
@@ -910,7 +911,7 @@ func TestGossipsubControlPiggyback(t *testing.T) {
 func TestMixedGossipsub(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	hosts := getNetHosts(t, ctx, 30)
+	hosts := getDefaultHosts(t, 30)
 
 	gsubs := getGossipsubs(ctx, hosts[:20])
 	fsubs := getPubsubs(ctx, hosts[20:])
@@ -934,7 +935,7 @@ func TestMixedGossipsub(t *testing.T) {
 	for i := 0; i < 100; i++ {
 		msg := []byte(fmt.Sprintf("%d it's not a floooooood %d", i, i))
 
-		owner := rand.Intn(len(psubs))
+		owner := mrand.Intn(len(psubs))
 
 		psubs[owner].Publish("foobar", msg)
 
@@ -954,7 +955,7 @@ func TestGossipsubMultihops(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	hosts := getNetHosts(t, ctx, 6)
+	hosts := getDefaultHosts(t, 6)
 
 	psubs := getGossipsubs(ctx, hosts)
 
@@ -997,7 +998,7 @@ func TestGossipsubTreeTopology(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	hosts := getNetHosts(t, ctx, 10)
+	hosts := getDefaultHosts(t, 10)
 	psubs := getGossipsubs(ctx, hosts)
 
 	connect(t, hosts[0], hosts[1])
@@ -1061,7 +1062,7 @@ func TestGossipsubStarTopology(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	hosts := getNetHosts(t, ctx, 20)
+	hosts := getDefaultHosts(t, 20)
 	psubs := getGossipsubs(ctx, hosts, WithPeerExchange(true), WithFloodPublish(true))
 
 	// configure the center of the star with a very low D
@@ -1223,7 +1224,7 @@ func TestGossipsubDirectPeers(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	h := getNetHosts(t, ctx, 3)
+	h := getDefaultHosts(t, 3)
 	psubs := []*PubSub{
 		getGossipsub(ctx, h[0], WithDirectConnectTicks(2)),
 		getGossipsub(ctx, h[1], WithDirectPeers([]peer.AddrInfo{{ID: h[2].ID(), Addrs: h[2].Addrs()}}), WithDirectConnectTicks(2)),
@@ -1287,7 +1288,7 @@ func TestGossipSubPeerFilter(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	h := getNetHosts(t, ctx, 3)
+	h := getDefaultHosts(t, 3)
 	psubs := []*PubSub{
 		getGossipsub(ctx, h[0], WithPeerFilter(func(pid peer.ID, topic string) bool {
 			return pid == h[1].ID()
@@ -1329,7 +1330,7 @@ func TestGossipsubDirectPeersFanout(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	h := getNetHosts(t, ctx, 3)
+	h := getDefaultHosts(t, 3)
 	psubs := []*PubSub{
 		getGossipsub(ctx, h[0]),
 		getGossipsub(ctx, h[1], WithDirectPeers([]peer.AddrInfo{{ID: h[2].ID(), Addrs: h[2].Addrs()}})),
@@ -1416,7 +1417,7 @@ func TestGossipsubFloodPublish(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	hosts := getNetHosts(t, ctx, 20)
+	hosts := getDefaultHosts(t, 20)
 	psubs := getGossipsubs(ctx, hosts, WithFloodPublish(true))
 
 	// build the star
@@ -1451,7 +1452,7 @@ func TestGossipsubEnoughPeers(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	hosts := getNetHosts(t, ctx, 20)
+	hosts := getDefaultHosts(t, 20)
 	psubs := getGossipsubs(ctx, hosts)
 
 	for _, ps := range psubs {
@@ -1500,7 +1501,7 @@ func TestGossipsubCustomParams(t *testing.T) {
 
 	wantedMaxPendingConns := 23
 	params.MaxPendingConnections = wantedMaxPendingConns
-	hosts := getNetHosts(t, ctx, 1)
+	hosts := getDefaultHosts(t, 1)
 	psubs := getGossipsubs(ctx, hosts,
 		WithGossipSubParams(params))
 
@@ -1529,7 +1530,7 @@ func TestGossipsubNegativeScore(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	hosts := getNetHosts(t, ctx, 20)
+	hosts := getDefaultHosts(t, 20)
 	psubs := getGossipsubs(ctx, hosts,
 		WithPeerScore(
 			&PeerScoreParams{
@@ -1613,7 +1614,7 @@ func TestGossipsubScoreValidatorEx(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	hosts := getNetHosts(t, ctx, 3)
+	hosts := getDefaultHosts(t, 3)
 	psubs := getGossipsubs(ctx, hosts,
 		WithPeerScore(
 			&PeerScoreParams{
@@ -1701,8 +1702,7 @@ func TestGossipsubPiggybackControl(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	h := bhost.NewBlankHost(swarmt.GenSwarm(t))
-	defer h.Close()
+	h := getDefaultHosts(t, 1)[0]
 	ps := getGossipsub(ctx, h)
 
 	blah := peer.ID("bogotr0n")
@@ -1750,7 +1750,7 @@ func TestGossipsubMultipleGraftTopics(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	hosts := getNetHosts(t, ctx, 2)
+	hosts := getDefaultHosts(t, 2)
 	psubs := getGossipsubs(ctx, hosts)
 	sparseConnect(t, hosts)
 
@@ -1818,7 +1818,7 @@ func TestGossipsubOpportunisticGrafting(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	hosts := getNetHosts(t, ctx, 50)
+	hosts := getDefaultHosts(t, 50)
 	// pubsubs for the first 10 hosts
 	psubs := getGossipsubs(ctx, hosts[:10],
 		WithFloodPublish(true),
@@ -1919,7 +1919,7 @@ func TestGossipSubLeaveTopic(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	h := getNetHosts(t, ctx, 2)
+	h := getDefaultHosts(t, 2)
 	psubs := []*PubSub{
 		getGossipsub(ctx, h[0]),
 		getGossipsub(ctx, h[1]),
@@ -1928,13 +1928,11 @@ func TestGossipSubLeaveTopic(t *testing.T) {
 	connect(t, h[0], h[1])
 
 	// Join all peers
-	var subs []*Subscription
 	for _, ps := range psubs {
-		sub, err := ps.Subscribe("test")
+		_, err := ps.Subscribe("test")
 		if err != nil {
 			t.Fatal(err)
 		}
-		subs = append(subs, sub)
 	}
 
 	time.Sleep(time.Second)
@@ -1990,7 +1988,7 @@ func TestGossipSubJoinTopic(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	h := getNetHosts(t, ctx, 3)
+	h := getDefaultHosts(t, 3)
 	psubs := []*PubSub{
 		getGossipsub(ctx, h[0]),
 		getGossipsub(ctx, h[1]),
@@ -2009,13 +2007,11 @@ func TestGossipSubJoinTopic(t *testing.T) {
 	router0.backoff["test"] = peerMap
 
 	// Join all peers
-	var subs []*Subscription
 	for _, ps := range psubs {
-		sub, err := ps.Subscribe("test")
+		_, err := ps.Subscribe("test")
 		if err != nil {
 			t.Fatal(err)
 		}
-		subs = append(subs, sub)
 	}
 
 	time.Sleep(time.Second)
@@ -2032,7 +2028,8 @@ func TestGossipSubJoinTopic(t *testing.T) {
 }
 
 type sybilSquatter struct {
-	h host.Host
+	h            host.Host
+	ignoreErrors bool // set to false to ignore connection/stream errors.
 }
 
 func (sq *sybilSquatter) handleStream(s network.Stream) {
@@ -2040,7 +2037,10 @@ func (sq *sybilSquatter) handleStream(s network.Stream) {
 
 	os, err := sq.h.NewStream(context.Background(), s.Conn().RemotePeer(), GossipSubID_v10)
 	if err != nil {
-		panic(err)
+		if !sq.ignoreErrors {
+			panic(err)
+		}
+		return
 	}
 
 	// send a subscription for test in the output stream to become candidate for GRAFT
@@ -2051,7 +2051,10 @@ func (sq *sybilSquatter) handleStream(s network.Stream) {
 	topic := "test"
 	err = w.WriteMsg(&pb.RPC{Subscriptions: []*pb.RPC_SubOpts{{Subscribe: &truth, Topicid: &topic}}})
 	if err != nil {
-		panic(err)
+		if !sq.ignoreErrors {
+			panic(err)
+		}
+		return
 	}
 
 	var rpc pb.RPC
@@ -2072,7 +2075,7 @@ func TestGossipsubPeerScoreInspect(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	hosts := getNetHosts(t, ctx, 2)
+	hosts := getDefaultHosts(t, 2)
 
 	inspector := &mockPeerScoreInspector{}
 	psub1 := getGossipsub(ctx, hosts[0],
@@ -2132,7 +2135,7 @@ func TestGossipsubPeerScoreResetTopicParams(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	hosts := getNetHosts(t, ctx, 1)
+	hosts := getDefaultHosts(t, 1)
 
 	ps := getGossipsub(ctx, hosts[0],
 		WithPeerScore(
@@ -2199,7 +2202,7 @@ func TestGossipsubRPCFragmentation(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	hosts := getNetHosts(t, ctx, 2)
+	hosts := getDefaultHosts(t, 2)
 	ps := getGossipsub(ctx, hosts[0])
 
 	// make a fake peer that requests everything through IWANT gossip
@@ -2222,7 +2225,7 @@ func TestGossipsubRPCFragmentation(t *testing.T) {
 	msgSize := 20000
 	for i := 0; i < nMessages; i++ {
 		msg := make([]byte, msgSize)
-		rand.Read(msg)
+		crand.Read(msg)
 		ps.Publish("test", msg)
 		time.Sleep(20 * time.Millisecond)
 	}
@@ -2326,7 +2329,7 @@ func (iwe *iwantEverything) handleStream(s network.Stream) {
 				}
 			}
 
-			out := rpcWithControl(nil, nil, iwants, nil, prunes)
+			out := rpcWithControl(nil, nil, iwants, nil, prunes, nil)
 			err = w.WriteMsg(out)
 			if err != nil {
 				panic(err)
@@ -2362,7 +2365,7 @@ func TestFragmentRPCFunction(t *testing.T) {
 	mkMsg := func(size int) *pb.Message {
 		msg := &pb.Message{}
 		msg.Data = make([]byte, size-4) // subtract the protobuf overhead, so msg.Size() returns requested size
-		rand.Read(msg.Data)
+		crand.Read(msg.Data)
 		return msg
 	}
 
@@ -2476,7 +2479,7 @@ func TestFragmentRPCFunction(t *testing.T) {
 		messageIds := make([]string, msgsPerTopic)
 		for m := 0; m < msgsPerTopic; m++ {
 			mid := make([]byte, messageIdSize)
-			rand.Read(mid)
+			crand.Read(mid)
 			messageIds[m] = string(mid)
 		}
 		rpc.Control.Ihave[i] = &pb.ControlIHave{MessageIDs: messageIds}
@@ -2497,7 +2500,7 @@ func TestFragmentRPCFunction(t *testing.T) {
 	// It should not be present in the fragmented messages, but smaller IDs should be
 	rpc.Reset()
 	giantIdBytes := make([]byte, limit*2)
-	rand.Read(giantIdBytes)
+	crand.Read(giantIdBytes)
 	rpc.Control = &pb.ControlMessage{
 		Iwant: []*pb.ControlIWant{
 			{MessageIDs: []string{"hello", string(giantIdBytes)}},
@@ -2553,21 +2556,6 @@ func FuzzAppendOrMergeRPC(f *testing.F) {
 	})
 }
 
-func getDefaultHosts(t *testing.T, n int) []host.Host {
-	var out []host.Host
-
-	for i := 0; i < n; i++ {
-		h, err := libp2p.New(libp2p.ResourceManager(&network.NullResourceManager{}))
-		if err != nil {
-			t.Fatal(err)
-		}
-		t.Cleanup(func() { h.Close() })
-		out = append(out, h)
-	}
-
-	return out
-}
-
 func TestGossipsubManagesAnAddressBook(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -2603,5 +2591,595 @@ func TestGossipsubManagesAnAddressBook(t *testing.T) {
 	// There should be no Addrs left because we cleared all recently connected ones.
 	if len(addrs) != 0 {
 		t.Fatalf("expected no addrs, got %d addrs", len(addrs))
+	}
+}
+
+func TestGossipsubIdontwantSend(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	hosts := getDefaultHosts(t, 3)
+
+	msgID := func(pmsg *pb.Message) string {
+		// silly content-based test message-ID: just use the data as whole
+		return base64.URLEncoding.EncodeToString(pmsg.Data)
+	}
+
+	validated := false
+	validate := func(context.Context, peer.ID, *Message) bool {
+		time.Sleep(100 * time.Millisecond)
+		validated = true
+		return true
+	}
+
+	params := DefaultGossipSubParams()
+	params.IDontWantMessageThreshold = 16
+
+	psubs := make([]*PubSub, 2)
+	psubs[0] = getGossipsub(ctx, hosts[0],
+		WithGossipSubParams(params),
+		WithMessageIdFn(msgID))
+	psubs[1] = getGossipsub(ctx, hosts[1],
+		WithGossipSubParams(params),
+		WithMessageIdFn(msgID),
+		WithDefaultValidator(validate))
+
+	topic := "foobar"
+	for _, ps := range psubs {
+		_, err := ps.Subscribe(topic)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	var expMids []string
+	var actMids []string
+
+	// Used to publish a message with random data
+	publishMsg := func() {
+		data := make([]byte, 16)
+		crand.Read(data)
+		m := &pb.Message{Data: data}
+		expMids = append(expMids, msgID(m))
+
+		if err := psubs[0].Publish(topic, data); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// Wait a bit after the last message before checking we got the right messages
+	msgWaitMax := time.Second
+	msgTimer := time.NewTimer(msgWaitMax)
+
+	// Checks we received the right IDONTWANT messages
+	checkMsgs := func() {
+		sort.Strings(actMids)
+		sort.Strings(expMids)
+
+		if len(actMids) != len(expMids) {
+			t.Fatalf("Expected %d IDONTWANT messages, got %d", len(expMids), len(actMids))
+		}
+		for i, expMid := range expMids {
+			actMid := actMids[i]
+			if actMid != expMid {
+				t.Fatalf("Expected the id of %s in the %d'th IDONTWANT messages, got %s", expMid, i+1, actMid)
+			}
+		}
+	}
+
+	// Wait for the timer to expire
+	go func() {
+		select {
+		case <-msgTimer.C:
+			checkMsgs()
+			cancel()
+			return
+		case <-ctx.Done():
+			checkMsgs()
+		}
+	}()
+
+	newMockGS(ctx, t, hosts[2], func(writeMsg func(*pb.RPC), irpc *pb.RPC) {
+		// When the middle peer connects it will send us its subscriptions
+		for _, sub := range irpc.GetSubscriptions() {
+			if sub.GetSubscribe() {
+				// Reply by subcribing to the topic and grafting to the middle peer
+				writeMsg(&pb.RPC{
+					Subscriptions: []*pb.RPC_SubOpts{{Subscribe: sub.Subscribe, Topicid: sub.Topicid}},
+					Control:       &pb.ControlMessage{Graft: []*pb.ControlGraft{{TopicID: sub.Topicid}}},
+				})
+
+				go func() {
+					// Wait for a short interval to make sure the middle peer
+					// received and processed the subscribe + graft
+					time.Sleep(100 * time.Millisecond)
+
+					// Publish messages from the first peer
+					for i := 0; i < 10; i++ {
+						publishMsg()
+					}
+				}()
+			}
+		}
+
+		// Each time the middle peer sends an IDONTWANT message
+		for _, idonthave := range irpc.GetControl().GetIdontwant() {
+			// If true, it means that, when we get IDONTWANT, the middle peer has done validation
+			// already, which should not be the case
+			if validated {
+				t.Fatalf("IDONTWANT should be sent before doing validation")
+			}
+			for _, mid := range idonthave.GetMessageIDs() {
+				// Add the message to the list and reset the timer
+				actMids = append(actMids, mid)
+				msgTimer.Reset(msgWaitMax)
+			}
+		}
+	})
+
+	connect(t, hosts[0], hosts[1])
+	connect(t, hosts[1], hosts[2])
+
+	<-ctx.Done()
+}
+
+func TestGossipsubIdontwantReceive(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	hosts := getDefaultHosts(t, 3)
+
+	msgID := func(pmsg *pb.Message) string {
+		// silly content-based test message-ID: just use the data as whole
+		return base64.URLEncoding.EncodeToString(pmsg.Data)
+	}
+
+	psubs := make([]*PubSub, 2)
+	psubs[0] = getGossipsub(ctx, hosts[0], WithMessageIdFn(msgID))
+	psubs[1] = getGossipsub(ctx, hosts[1], WithMessageIdFn(msgID))
+
+	topic := "foobar"
+	for _, ps := range psubs {
+		_, err := ps.Subscribe(topic)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// Wait a bit after the last message before checking the result
+	msgWaitMax := time.Second
+	msgTimer := time.NewTimer(msgWaitMax)
+
+	// Checks we received no messages
+	received := false
+	checkMsgs := func() {
+		if received {
+			t.Fatalf("Expected no messages received after IDONWANT")
+		}
+	}
+
+	// Wait for the timer to expire
+	go func() {
+		select {
+		case <-msgTimer.C:
+			checkMsgs()
+			cancel()
+			return
+		case <-ctx.Done():
+			checkMsgs()
+		}
+	}()
+
+	newMockGS(ctx, t, hosts[2], func(writeMsg func(*pb.RPC), irpc *pb.RPC) {
+		// Check if it receives any message
+		if len(irpc.GetPublish()) > 0 {
+			received = true
+		}
+		// When the middle peer connects it will send us its subscriptions
+		for _, sub := range irpc.GetSubscriptions() {
+			if sub.GetSubscribe() {
+				// Reply by subcribing to the topic and grafting to the middle peer
+				writeMsg(&pb.RPC{
+					Subscriptions: []*pb.RPC_SubOpts{{Subscribe: sub.Subscribe, Topicid: sub.Topicid}},
+					Control:       &pb.ControlMessage{Graft: []*pb.ControlGraft{{TopicID: sub.Topicid}}},
+				})
+
+				go func() {
+					// Wait for a short interval to make sure the middle peer
+					// received and processed the subscribe + graft
+					time.Sleep(100 * time.Millisecond)
+
+					// Generate a message and send IDONTWANT to the middle peer
+					data := make([]byte, 16)
+					crand.Read(data)
+					mid := msgID(&pb.Message{Data: data})
+					writeMsg(&pb.RPC{
+						Control: &pb.ControlMessage{Idontwant: []*pb.ControlIDontWant{{MessageIDs: []string{mid}}}},
+					})
+
+					// Wait for a short interval to make sure the middle peer
+					// received and processed the IDONTWANTs
+					time.Sleep(100 * time.Millisecond)
+
+					// Publish the message from the first peer
+					if err := psubs[0].Publish(topic, data); err != nil {
+						t.Error(err)
+						return // cannot call t.Fatal in a non-test goroutine
+					}
+				}()
+			}
+		}
+	})
+
+	connect(t, hosts[0], hosts[1])
+	connect(t, hosts[1], hosts[2])
+
+	<-ctx.Done()
+}
+
+// Test that non-mesh peers will not get IDONTWANT
+func TestGossipsubIdontwantNonMesh(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	hosts := getDefaultHosts(t, 3)
+
+	params := DefaultGossipSubParams()
+	params.IDontWantMessageThreshold = 16
+	psubs := getGossipsubs(ctx, hosts[:2], WithGossipSubParams(params))
+
+	topic := "foobar"
+	for _, ps := range psubs {
+		_, err := ps.Subscribe(topic)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// Used to publish a message with random data
+	publishMsg := func() {
+		data := make([]byte, 16)
+		crand.Read(data)
+
+		if err := psubs[0].Publish(topic, data); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// Wait a bit after the last message before checking we got the right messages
+	msgWaitMax := time.Second
+	msgTimer := time.NewTimer(msgWaitMax)
+	received := false
+
+	// Checks if we received any IDONTWANT
+	checkMsgs := func() {
+		if received {
+			t.Fatalf("No IDONTWANT is expected")
+		}
+	}
+
+	// Wait for the timer to expire
+	go func() {
+		select {
+		case <-msgTimer.C:
+			checkMsgs()
+			cancel()
+			return
+		case <-ctx.Done():
+			checkMsgs()
+		}
+	}()
+
+	newMockGS(ctx, t, hosts[2], func(writeMsg func(*pb.RPC), irpc *pb.RPC) {
+		// When the middle peer connects it will send us its subscriptions
+		for _, sub := range irpc.GetSubscriptions() {
+			if sub.GetSubscribe() {
+				// Reply by subcribing to the topic and pruning to the middle peer to make sure
+				// that it's not in the mesh
+				writeMsg(&pb.RPC{
+					Subscriptions: []*pb.RPC_SubOpts{{Subscribe: sub.Subscribe, Topicid: sub.Topicid}},
+					Control:       &pb.ControlMessage{Prune: []*pb.ControlPrune{{TopicID: sub.Topicid}}},
+				})
+
+				go func() {
+					// Wait for a short interval to make sure the middle peer
+					// received and processed the subscribe
+					time.Sleep(100 * time.Millisecond)
+
+					// Publish messages from the first peer
+					for i := 0; i < 10; i++ {
+						publishMsg()
+					}
+				}()
+			}
+		}
+
+		// Each time the middle peer sends an IDONTWANT message
+		for range irpc.GetControl().GetIdontwant() {
+			received = true
+		}
+	})
+
+	connect(t, hosts[0], hosts[1])
+	connect(t, hosts[1], hosts[2])
+
+	<-ctx.Done()
+}
+
+// Test that peers with incompatible versions will not get IDONTWANT
+func TestGossipsubIdontwantIncompat(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	hosts := getDefaultHosts(t, 3)
+
+	params := DefaultGossipSubParams()
+	params.IDontWantMessageThreshold = 16
+	psubs := getGossipsubs(ctx, hosts[:2], WithGossipSubParams(params))
+
+	topic := "foobar"
+	for _, ps := range psubs {
+		_, err := ps.Subscribe(topic)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// Used to publish a message with random data
+	publishMsg := func() {
+		data := make([]byte, 16)
+		crand.Read(data)
+
+		if err := psubs[0].Publish(topic, data); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// Wait a bit after the last message before checking we got the right messages
+	msgWaitMax := time.Second
+	msgTimer := time.NewTimer(msgWaitMax)
+	received := false
+
+	// Checks if we received any IDONTWANT
+	checkMsgs := func() {
+		if received {
+			t.Fatalf("No IDONTWANT is expected")
+		}
+	}
+
+	// Wait for the timer to expire
+	go func() {
+		select {
+		case <-msgTimer.C:
+			checkMsgs()
+			cancel()
+			return
+		case <-ctx.Done():
+			checkMsgs()
+		}
+	}()
+
+	// Use the old GossipSub version
+	newMockGSWithVersion(ctx, t, hosts[2], protocol.ID("/meshsub/1.1.0"), func(writeMsg func(*pb.RPC), irpc *pb.RPC) {
+		// When the middle peer connects it will send us its subscriptions
+		for _, sub := range irpc.GetSubscriptions() {
+			if sub.GetSubscribe() {
+				// Reply by subcribing to the topic and grafting to the middle peer
+				writeMsg(&pb.RPC{
+					Subscriptions: []*pb.RPC_SubOpts{{Subscribe: sub.Subscribe, Topicid: sub.Topicid}},
+					Control:       &pb.ControlMessage{Graft: []*pb.ControlGraft{{TopicID: sub.Topicid}}},
+				})
+
+				go func() {
+					// Wait for a short interval to make sure the middle peer
+					// received and processed the subscribe + graft
+					time.Sleep(100 * time.Millisecond)
+
+					// Publish messages from the first peer
+					for i := 0; i < 10; i++ {
+						publishMsg()
+					}
+				}()
+			}
+		}
+
+		// Each time the middle peer sends an IDONTWANT message
+		for range irpc.GetControl().GetIdontwant() {
+			received = true
+		}
+	})
+
+	connect(t, hosts[0], hosts[1])
+	connect(t, hosts[1], hosts[2])
+
+	<-ctx.Done()
+}
+
+// Test that IDONTWANT will not be sent for small messages
+func TestGossipsubIdontwantSmallMessage(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	hosts := getDefaultHosts(t, 3)
+
+	params := DefaultGossipSubParams()
+	params.IDontWantMessageThreshold = 16
+	psubs := getGossipsubs(ctx, hosts[:2], WithGossipSubParams(params))
+
+	topic := "foobar"
+	for _, ps := range psubs {
+		_, err := ps.Subscribe(topic)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// Used to publish a message with random data
+	publishMsg := func() {
+		data := make([]byte, 8)
+		crand.Read(data)
+
+		if err := psubs[0].Publish(topic, data); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// Wait a bit after the last message before checking we got the right messages
+	msgWaitMax := time.Second
+	msgTimer := time.NewTimer(msgWaitMax)
+	received := false
+
+	// Checks if we received any IDONTWANT
+	checkMsgs := func() {
+		if received {
+			t.Fatalf("No IDONTWANT is expected")
+		}
+	}
+
+	// Wait for the timer to expire
+	go func() {
+		select {
+		case <-msgTimer.C:
+			checkMsgs()
+			cancel()
+			return
+		case <-ctx.Done():
+			checkMsgs()
+		}
+	}()
+
+	newMockGS(ctx, t, hosts[2], func(writeMsg func(*pb.RPC), irpc *pb.RPC) {
+		// When the middle peer connects it will send us its subscriptions
+		for _, sub := range irpc.GetSubscriptions() {
+			if sub.GetSubscribe() {
+				// Reply by subcribing to the topic and pruning to the middle peer to make sure
+				// that it's not in the mesh
+				writeMsg(&pb.RPC{
+					Subscriptions: []*pb.RPC_SubOpts{{Subscribe: sub.Subscribe, Topicid: sub.Topicid}},
+					Control:       &pb.ControlMessage{Graft: []*pb.ControlGraft{{TopicID: sub.Topicid}}},
+				})
+
+				go func() {
+					// Wait for a short interval to make sure the middle peer
+					// received and processed the subscribe
+					time.Sleep(100 * time.Millisecond)
+
+					// Publish messages from the first peer
+					for i := 0; i < 10; i++ {
+						publishMsg()
+					}
+				}()
+			}
+		}
+
+		// Each time the middle peer sends an IDONTWANT message
+		for range irpc.GetControl().GetIdontwant() {
+			received = true
+		}
+	})
+
+	connect(t, hosts[0], hosts[1])
+	connect(t, hosts[1], hosts[2])
+
+	<-ctx.Done()
+}
+
+// Test that IDONTWANT will cleared when it's old enough
+func TestGossipsubIdontwantClear(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	hosts := getDefaultHosts(t, 3)
+
+	msgID := func(pmsg *pb.Message) string {
+		// silly content-based test message-ID: just use the data as whole
+		return base64.URLEncoding.EncodeToString(pmsg.Data)
+	}
+
+	psubs := make([]*PubSub, 2)
+	psubs[0] = getGossipsub(ctx, hosts[0], WithMessageIdFn(msgID))
+	psubs[1] = getGossipsub(ctx, hosts[1], WithMessageIdFn(msgID))
+
+	topic := "foobar"
+	for _, ps := range psubs {
+		_, err := ps.Subscribe(topic)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// Wait a bit after the last message before checking the result
+	msgWaitMax := 5 * time.Second
+	msgTimer := time.NewTimer(msgWaitMax)
+
+	// Checks we received some message after the IDONTWANT is cleared
+	received := false
+	checkMsgs := func() {
+		if !received {
+			t.Fatalf("Expected some message after the IDONTWANT is cleared")
+		}
+	}
+
+	// Wait for the timer to expire
+	go func() {
+		select {
+		case <-msgTimer.C:
+			checkMsgs()
+			cancel()
+			return
+		case <-ctx.Done():
+			checkMsgs()
+		}
+	}()
+
+	newMockGS(ctx, t, hosts[2], func(writeMsg func(*pb.RPC), irpc *pb.RPC) {
+		// Check if it receives any message
+		if len(irpc.GetPublish()) > 0 {
+			received = true
+		}
+		// When the middle peer connects it will send us its subscriptions
+		for _, sub := range irpc.GetSubscriptions() {
+			if sub.GetSubscribe() {
+				// Reply by subcribing to the topic and grafting to the middle peer
+				writeMsg(&pb.RPC{
+					Subscriptions: []*pb.RPC_SubOpts{{Subscribe: sub.Subscribe, Topicid: sub.Topicid}},
+					Control:       &pb.ControlMessage{Graft: []*pb.ControlGraft{{TopicID: sub.Topicid}}},
+				})
+
+				go func() {
+					// Wait for a short interval to make sure the middle peer
+					// received and processed the subscribe + graft
+					time.Sleep(100 * time.Millisecond)
+
+					// Generate a message and send IDONTWANT to the middle peer
+					data := make([]byte, 16)
+					crand.Read(data)
+					mid := msgID(&pb.Message{Data: data})
+					writeMsg(&pb.RPC{
+						Control: &pb.ControlMessage{Idontwant: []*pb.ControlIDontWant{{MessageIDs: []string{mid}}}},
+					})
+
+					// Wait for a short interval to make sure the middle peer
+					// received and processed the IDONTWANTs
+					time.Sleep(100 * time.Millisecond)
+
+					// Wait for 4 heartbeats to make sure the IDONTWANT is cleared
+					time.Sleep(4 * time.Second)
+
+					// Publish the message from the first peer
+					if err := psubs[0].Publish(topic, data); err != nil {
+						t.Error(err)
+						return // cannot call t.Fatal in a non-test goroutine
+					}
+				}()
+			}
+		}
+	})
+
+	connect(t, hosts[0], hosts[1])
+	connect(t, hosts[1], hosts[2])
+
+	<-ctx.Done()
+}
+
+func BenchmarkAllocDoDropRPC(b *testing.B) {
+	gs := GossipSubRouter{tracer: &pubsubTracer{}}
+
+	for i := 0; i < b.N; i++ {
+		gs.doDropRPC(&RPC{}, "peerID", "reason")
 	}
 }

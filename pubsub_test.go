@@ -4,13 +4,32 @@ import (
 	"context"
 	"testing"
 	"time"
+
+	"github.com/libp2p/go-libp2p"
+	"github.com/libp2p/go-libp2p/core/host"
+	"github.com/libp2p/go-libp2p/core/network"
 )
+
+func getDefaultHosts(t *testing.T, n int) []host.Host {
+	var out []host.Host
+
+	for i := 0; i < n; i++ {
+		h, err := libp2p.New(libp2p.ResourceManager(&network.NullResourceManager{}))
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { h.Close() })
+		out = append(out, h)
+	}
+
+	return out
+}
 
 // See https://github.com/libp2p/go-libp2p-pubsub/issues/426
 func TestPubSubRemovesBlacklistedPeer(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 
-	hosts := getNetHosts(t, ctx, 2)
+	hosts := getDefaultHosts(t, 2)
 
 	bl := NewMapBlacklist()
 

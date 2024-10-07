@@ -15,7 +15,7 @@ func TestRegisterUnregisterValidator(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	hosts := getNetHosts(t, ctx, 1)
+	hosts := getDefaultHosts(t, 1)
 	psubs := getPubsubs(ctx, hosts)
 
 	err := psubs[0].RegisterTopicValidator("foo", func(context.Context, peer.ID, *Message) bool {
@@ -40,7 +40,7 @@ func TestRegisterValidatorEx(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	hosts := getNetHosts(t, ctx, 3)
+	hosts := getDefaultHosts(t, 3)
 	psubs := getPubsubs(ctx, hosts)
 
 	err := psubs[0].RegisterTopicValidator("test",
@@ -69,7 +69,7 @@ func TestValidate(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	hosts := getNetHosts(t, ctx, 2)
+	hosts := getDefaultHosts(t, 2)
 	psubs := getPubsubs(ctx, hosts)
 
 	connect(t, hosts[0], hosts[1])
@@ -123,7 +123,7 @@ func TestValidate2(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	hosts := getNetHosts(t, ctx, 1)
+	hosts := getDefaultHosts(t, 1)
 	psubs := getPubsubs(ctx, hosts)
 
 	topic := "foobar"
@@ -201,7 +201,7 @@ func TestValidateOverload(t *testing.T) {
 
 	for tci, tc := range tcs {
 		t.Run(fmt.Sprintf("%d", tci), func(t *testing.T) {
-			hosts := getNetHosts(t, ctx, 2)
+			hosts := getDefaultHosts(t, 2)
 			psubs := getPubsubs(ctx, hosts)
 
 			connect(t, hosts[0], hosts[1])
@@ -273,7 +273,7 @@ func TestValidateAssortedOptions(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	hosts := getNetHosts(t, ctx, 10)
+	hosts := getDefaultHosts(t, 10)
 	psubs := getPubsubs(ctx, hosts,
 		WithValidateQueueSize(10),
 		WithValidateThrottle(10),
