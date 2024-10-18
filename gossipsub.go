@@ -2134,8 +2134,8 @@ func (gs *GossipSubRouter) WithDefaultTagTracer() Option {
 //
 //	nothing.
 func (gs *GossipSubRouter) SendControl(p peer.ID, ctl *pb.ControlMessage, msgs ...*pb.Message) {
-	out := rpcWithControl(msgs, ctl.Ihave, ctl.Iwant, ctl.Graft, ctl.Prune)
-	gs.sendRPC(p, out)
+	out := rpcWithControl(msgs, ctl.Ihave, ctl.Iwant, ctl.Graft, ctl.Prune, ctl.Idontwant)
+	gs.sendRPC(p, out, false)
 }
 
 func peerListToMap(peers []peer.ID) map[peer.ID]struct{} {
