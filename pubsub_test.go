@@ -7,14 +7,17 @@ import (
 
 	"github.com/libp2p/go-libp2p"
 	"github.com/libp2p/go-libp2p/core/host"
-	"github.com/libp2p/go-libp2p/core/network"
+	libp2pquic "github.com/libp2p/go-libp2p/p2p/transport/quic"
 )
 
 func getDefaultHosts(t *testing.T, n int) []host.Host {
 	var out []host.Host
 
 	for i := 0; i < n; i++ {
-		h, err := libp2p.New(libp2p.ResourceManager(&network.NullResourceManager{}))
+		h, err := libp2p.New(
+			libp2p.ListenAddrStrings("/ip4/127.0.0.1/udp/0/quic-v1"),
+			libp2p.Transport(libp2pquic.NewTransport),
+		)
 		if err != nil {
 			t.Fatal(err)
 		}
