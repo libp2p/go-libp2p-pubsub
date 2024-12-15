@@ -25,19 +25,25 @@ import (
 
 const (
 	// GossipSubID_v10 is the protocol ID for version 1.0.0 of the GossipSub protocol.
-	// It is advertised along with GossipSubID_v11 and GossipSubID_v12 for backwards compatibility.
+	// It is advertised along with GossipSubID_v11, GossipSubID_v12, and GossipSubID_v20 for backwards compatibility.
 	GossipSubID_v10 = protocol.ID("/meshsub/1.0.0")
 
 	// GossipSubID_v11 is the protocol ID for version 1.1.0 of the GossipSub protocol.
-	// It is advertised along with GossipSubID_v12 for backwards compatibility.
+	// It is advertised along with GossipSubID_v12 and GossipSubID_v20 for backwards compatibility.
 	// See the spec for details about how v1.1.0 compares to v1.0.0:
 	// https://github.com/libp2p/specs/blob/master/pubsub/gossipsub/gossipsub-v1.1.md
 	GossipSubID_v11 = protocol.ID("/meshsub/1.1.0")
 
 	// GossipSubID_v12 is the protocol ID for version 1.2.0 of the GossipSub protocol.
+	// It is advertised along with GossipSubID_v20 for backwards compatibility.
 	// See the spec for details about how v1.2.0 compares to v1.1.0:
 	// https://github.com/libp2p/specs/blob/master/pubsub/gossipsub/gossipsub-v1.2.md
 	GossipSubID_v12 = protocol.ID("/meshsub/1.2.0")
+
+	// GossipSubID_v20 is the protocol ID for version 2.0.0 of the GossipSub protocol.
+	// See the spec for details about how v2.0.0 compares to v1.2.0:
+	// https://github.com/libp2p/specs/blob/master/pubsub/gossipsub/gossipsub-v2.0.md
+	GossipSubID_v20 = protocol.ID("/meshsub/2.0.0")
 )
 
 // Defines the default gossipsub parameters.
@@ -49,7 +55,9 @@ var (
 	GossipSubDout                             = 2
 	GossipSubHistoryLength                    = 5
 	GossipSubHistoryGossip                    = 3
+	GossipSubDannounce                        = 4
 	GossipSubDlazy                            = 6
+	GossipSubTimeout                          = 400 * time.Millisecond
 	GossipSubGossipFactor                     = 0.25
 	GossipSubGossipRetransmission             = 3
 	GossipSubHeartbeatInitialDelay            = 100 * time.Millisecond
@@ -127,11 +135,20 @@ type GossipSubParams struct {
 	// avoid a runtime panic.
 	HistoryGossip int
 
+	// Dannounce controls how many times a message is sent lazily to mesh peers. This number
+	// must be at most equal to D. Every time we want to forward a message to a particular
+	// peer, we will decide to forward it lazily with a probability Dannounce/D.
+	// Otherwise, we will forward eagerly.
+	Dannounce int
+
 	// Dlazy affects how many peers we will emit gossip to at each heartbeat.
 	// We will send gossip to at least Dlazy peers outside our mesh. The actual
 	// number may be more, depending on GossipFactor and how many peers we're
 	// connected to.
 	Dlazy int
+
+	// Timeout is the time limit to receive the message back after sending INEED out.
+	Timeout time.Duration
 
 	// GossipFactor affects how many peers we will emit gossip to at each heartbeat.
 	// We will send gossip to GossipFactor * (total number of non-mesh peers), or
@@ -289,7 +306,9 @@ func DefaultGossipSubParams() GossipSubParams {
 		Dout:                      GossipSubDout,
 		HistoryLength:             GossipSubHistoryLength,
 		HistoryGossip:             GossipSubHistoryGossip,
+		Dannounce:                 GossipSubDannounce,
 		Dlazy:                     GossipSubDlazy,
+		Timeout:                   GossipSubTimeout,
 		GossipFactor:              GossipSubGossipFactor,
 		GossipRetransmission:      GossipSubGossipRetransmission,
 		HeartbeatInitialDelay:     GossipSubHeartbeatInitialDelay,
