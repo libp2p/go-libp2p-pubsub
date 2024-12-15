@@ -746,7 +746,7 @@ func (gs *GossipSubRouter) PreValidation(msgs []*Message) {
 			// send to only peers that support IDONTWANT
 			if gs.feature(GossipSubFeatureIdontwant, gs.peers[p]) {
 				idontwant := []*pb.ControlIDontWant{{MessageIDs: mids}}
-				out := rpcWithControl(nil, nil, nil, nil, nil, idontwant)
+				out := rpcWithControl(nil, nil, nil, nil, nil, idontwant, nil, nil)
 				gs.sendRPC(p, out, true)
 			}
 		}
@@ -769,7 +769,7 @@ func (gs *GossipSubRouter) HandleRPC(rpc *RPC) {
 		return
 	}
 
-	out := rpcWithControl(ihave, nil, iwant, nil, prune, nil)
+	out := rpcWithControl(ihave, nil, iwant, nil, prune, nil, nil, nil)
 	gs.sendRPC(rpc.from, out, false)
 }
 
@@ -1226,13 +1226,44 @@ func (gs *GossipSubRouter) Publish(msg *Message) {
 		}
 	}
 
-	out := rpcWithMessages(msg.Message)
+	mid := gs.p.idGen.ID(msg)
+	iannounce := []*pb.ControlIAnnounce{{TopicID: &topic, MessageID: &mid}}
+	lazyOut := rpcWithControl(nil, nil, nil, nil, nil, nil, iannounce, nil)
+
+	eagerOut := rpcWithMessages(msg.Message)
+
 	for pid := range tosend {
 		if pid == from || pid == peer.ID(msg.GetFrom()) {
 			continue
 		}
 
-		gs.sendRPC(pid, out, false)
+		// if the peer doesn't support IANNOUNCE, send eagerly
+		if !gs.feature(GossipSubFeatureAnnounce, gs.peers[pid]) {
+			gs.sendRPC(pid, eagerOut, false)
+			continue
+		}
+
+		gmap, ok := gs.mesh[topic]
+		// if sending using fanout peers, send eagerly
+		if !ok {
+			gs.sendRPC(pid, eagerOut, false)
+			continue
+		}
+
+		_, isMesh := gmap[pid]
+		_, isDirect := gs.direct[pid]
+		// if the peer is neither in mesh nor a direct peer, send eagerly
+		if !isMesh && !isDirect {
+			gs.sendRPC(pid, eagerOut, false)
+			continue
+		}
+
+		// toss a coin to decide whether to send eagerly or lazily
+		if gs.params.D > 0 && rand.Intn(gs.params.D) < gs.params.Dannounce {
+			gs.sendRPC(pid, lazyOut, false)
+		} else {
+			gs.sendRPC(pid, eagerOut, false)
+		}
 	}
 }
 
@@ -1317,13 +1348,13 @@ func (gs *GossipSubRouter) Leave(topic string) {
 
 func (gs *GossipSubRouter) sendGraft(p peer.ID, topic string) {
 	graft := []*pb.ControlGraft{{TopicID: &topic}}
-	out := rpcWithControl(nil, nil, nil, graft, nil, nil)
+	out := rpcWithControl(nil, nil, nil, graft, nil, nil, nil, nil)
 	gs.sendRPC(p, out, false)
 }
 
 func (gs *GossipSubRouter) sendPrune(p peer.ID, topic string, isUnsubscribe bool) {
 	prune := []*pb.ControlPrune{gs.makePrune(p, topic, gs.doPX, isUnsubscribe)}
-	out := rpcWithControl(nil, nil, nil, nil, prune, nil)
+	out := rpcWithControl(nil, nil, nil, nil, prune, nil, nil, nil)
 	gs.sendRPC(p, out, false)
 }
 
@@ -1925,7 +1956,7 @@ func (gs *GossipSubRouter) sendGraftPrune(tograft, toprune map[peer.ID][]string,
 			}
 		}
 
-		out := rpcWithControl(nil, nil, nil, graft, prune, nil)
+		out := rpcWithControl(nil, nil, nil, graft, prune, nil, nil, nil)
 		gs.sendRPC(p, out, false)
 	}
 
@@ -1935,7 +1966,7 @@ func (gs *GossipSubRouter) sendGraftPrune(tograft, toprune map[peer.ID][]string,
 			prune = append(prune, gs.makePrune(p, topic, gs.doPX && !noPX[p], false))
 		}
 
-		out := rpcWithControl(nil, nil, nil, nil, prune, nil)
+		out := rpcWithControl(nil, nil, nil, nil, prune, nil, nil, nil)
 		gs.sendRPC(p, out, false)
 	}
 }
@@ -2002,14 +2033,14 @@ func (gs *GossipSubRouter) flush() {
 	// send gossip first, which will also piggyback pending control
 	for p, ihave := range gs.gossip {
 		delete(gs.gossip, p)
-		out := rpcWithControl(nil, ihave, nil, nil, nil, nil)
+		out := rpcWithControl(nil, ihave, nil, nil, nil, nil, nil, nil)
 		gs.sendRPC(p, out, false)
 	}
 
 	// send the remaining control messages that wasn't merged with gossip
 	for p, ctl := range gs.control {
 		delete(gs.control, p)
-		out := rpcWithControl(nil, nil, nil, ctl.Graft, ctl.Prune, nil)
+		out := rpcWithControl(nil, nil, nil, ctl.Graft, ctl.Prune, nil, nil, nil)
 		gs.sendRPC(p, out, false)
 	}
 }
@@ -2173,7 +2204,7 @@ func (gs *GossipSubRouter) WithDefaultTagTracer() Option {
 //
 //	nothing.
 func (gs *GossipSubRouter) SendControl(p peer.ID, ctl *pb.ControlMessage, msgs ...*pb.Message) {
-	out := rpcWithControl(msgs, ctl.Ihave, ctl.Iwant, ctl.Graft, ctl.Prune, ctl.Idontwant)
+	out := rpcWithControl(msgs, ctl.Ihave, ctl.Iwant, ctl.Graft, ctl.Prune, ctl.Idontwant, nil, nil)
 	gs.sendRPC(p, out, false)
 }
 

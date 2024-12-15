@@ -33,7 +33,9 @@ func TestGossipsubAttackSpamIWANT(t *testing.T) {
 	attacker := hosts[1]
 
 	// Set up gossipsub on the legit host
-	ps, err := NewGossipSub(ctx, legit)
+	params := DefaultGossipSubParams()
+	params.Dannounce = 0
+	ps, err := NewGossipSub(ctx, legit, WithGossipSubParams(params))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -123,7 +125,7 @@ func TestGossipsubAttackSpamIWANT(t *testing.T) {
 			// being spammy)
 			iwantlst := []string{DefaultMsgIdFn(msg)}
 			iwant := []*pb.ControlIWant{{MessageIDs: iwantlst}}
-			orpc := rpcWithControl(nil, nil, iwant, nil, nil, nil)
+			orpc := rpcWithControl(nil, nil, iwant, nil, nil, nil, nil, nil)
 			writeMsg(&orpc.RPC)
 		}
 	})
@@ -150,7 +152,10 @@ func TestGossipsubAttackSpamIHAVE(t *testing.T) {
 	attacker := hosts[1]
 
 	// Set up gossipsub on the legit host
+	params := DefaultGossipSubParams()
+	params.Dannounce = 0
 	ps, err := NewGossipSub(ctx, legit,
+		WithGossipSubParams(params),
 		WithPeerScore(
 			&PeerScoreParams{
 				AppSpecificScore:       func(peer.ID) float64 { return 0 },
@@ -210,7 +215,7 @@ func TestGossipsubAttackSpamIHAVE(t *testing.T) {
 					for i := 0; i < 3*GossipSubMaxIHaveLength; i++ {
 						ihavelst := []string{"someid" + strconv.Itoa(i)}
 						ihave := []*pb.ControlIHave{{TopicID: sub.Topicid, MessageIDs: ihavelst}}
-						orpc := rpcWithControl(nil, ihave, nil, nil, nil, nil)
+						orpc := rpcWithControl(nil, ihave, nil, nil, nil, nil, nil, nil)
 						writeMsg(&orpc.RPC)
 					}
 
@@ -240,7 +245,7 @@ func TestGossipsubAttackSpamIHAVE(t *testing.T) {
 					for i := 0; i < 3*GossipSubMaxIHaveLength; i++ {
 						ihavelst := []string{"someid" + strconv.Itoa(i+100)}
 						ihave := []*pb.ControlIHave{{TopicID: sub.Topicid, MessageIDs: ihavelst}}
-						orpc := rpcWithControl(nil, ihave, nil, nil, nil, nil)
+						orpc := rpcWithControl(nil, ihave, nil, nil, nil, nil, nil, nil)
 						writeMsg(&orpc.RPC)
 					}
 
@@ -301,7 +306,9 @@ func TestGossipsubAttackGRAFTNonExistentTopic(t *testing.T) {
 	attacker := hosts[1]
 
 	// Set up gossipsub on the legit host
-	ps, err := NewGossipSub(ctx, legit)
+	params := DefaultGossipSubParams()
+	params.Dannounce = 0
+	ps, err := NewGossipSub(ctx, legit, WithGossipSubParams(params))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -385,7 +392,10 @@ func TestGossipsubAttackGRAFTDuringBackoff(t *testing.T) {
 	attacker := hosts[1]
 
 	// Set up gossipsub on the legit host
+	params := DefaultGossipSubParams()
+	params.Dannounce = 0
 	ps, err := NewGossipSub(ctx, legit,
+		WithGossipSubParams(params),
 		WithPeerScore(
 			&PeerScoreParams{
 				AppSpecificScore:       func(peer.ID) float64 { return 0 },
@@ -666,7 +676,10 @@ func TestGossipsubAttackInvalidMessageSpam(t *testing.T) {
 
 	// Set up gossipsub on the legit host
 	tracer := &gsAttackInvalidMsgTracer{}
+	gossipsubParams := DefaultGossipSubParams()
+	gossipsubParams.Dannounce = 0
 	ps, err := NewGossipSub(ctx, legit,
+		WithGossipSubParams(gossipsubParams),
 		WithEventTracer(tracer),
 		WithPeerScore(params, thresholds),
 	)
@@ -942,7 +955,7 @@ func TestGossipsubHandleIDontwantSpam(t *testing.T) {
 type mockGSOnRead func(writeMsg func(*pb.RPC), irpc *pb.RPC)
 
 func newMockGS(ctx context.Context, t *testing.T, attacker host.Host, onReadMsg mockGSOnRead) {
-	newMockGSWithVersion(ctx, t, attacker, protocol.ID("/meshsub/1.2.0"), onReadMsg)
+	newMockGSWithVersion(ctx, t, attacker, protocol.ID("/meshsub/2.0.0"), onReadMsg)
 }
 
 func newMockGSWithVersion(ctx context.Context, t *testing.T, attacker host.Host, gossipSubID protocol.ID, onReadMsg mockGSOnRead) {
