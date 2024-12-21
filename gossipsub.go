@@ -287,6 +287,7 @@ func DefaultGossipSubRouter(h host.Host) *GossipSubRouter {
 		outbound:     make(map[peer.ID]bool),
 		connect:      make(chan connectInfo, params.MaxPendingConnections),
 		cab:          pstoremem.NewAddrBook(),
+		acache:       NewAnnounceCache(params.Timeout),
 		mcache:       NewMessageCache(params.HistoryGossip, params.HistoryLength),
 		protos:       GossipSubDefaultProtocols,
 		feature:      GossipSubDefaultFeatures,
@@ -500,6 +501,7 @@ type GossipSubRouter struct {
 	protos  []protocol.ID
 	feature GossipSubFeatureTest
 
+	acache       *AnnounceCache
 	mcache       *MessageCache
 	tracer       *pubsubTracer
 	score        *peerScore
@@ -577,6 +579,9 @@ func (gs *GossipSubRouter) Attach(p *PubSub) {
 	// Manage our address book from events emitted by libp2p
 	go gs.manageAddrBook()
 
+	// Manage events from the announce cache
+	go gs.manageAnnounceCache()
+
 	// connect to direct peers
 	if len(gs.direct) > 0 {
 		go func() {
@@ -633,6 +638,22 @@ func (gs *GossipSubRouter) manageAddrBook() {
 					gs.cab.UpdateAddrs(ev.Peer, peerstore.ConnectedAddrTTL, peerstore.RecentlyConnectedAddrTTL)
 				}
 			}
+		}
+	}
+}
+
+func (gs *GossipSubRouter) manageAnnounceCache() {
+	for {
+		select {
+		case <-gs.p.ctx.Done():
+			gs.acache.Stop()
+			return
+		case r := <-gs.acache.R:
+			ineed := []*pb.ControlINeed{{MessageID: &r.mid}}
+			out := rpcWithControl(nil, nil, nil, nil, nil, nil, nil, ineed)
+			gs.sendRPC(r.pid, out, false)
+		case <-gs.acache.T:
+			// TODO: penalize peers when timeout
 		}
 	}
 }
@@ -726,14 +747,19 @@ func (gs *GossipSubRouter) AcceptFrom(p peer.ID) AcceptStatus {
 // PreValidation sends the IDONTWANT control messages to all the mesh
 // peers. They need to be sent right before the validation because they
 // should be seen by the peers as soon as possible.
+//
+// It also clear the announce cache to prevent sending further INEEDs.
 func (gs *GossipSubRouter) PreValidation(msgs []*Message) {
 	tmids := make(map[string][]string)
 	for _, msg := range msgs {
+		mid := gs.p.idGen.ID(msg)
+		// Clear the announce cache
+		gs.acache.Clear(mid)
 		if len(msg.GetData()) < gs.params.IDontWantMessageThreshold {
 			continue
 		}
 		topic := msg.GetTopic()
-		tmids[topic] = append(tmids[topic], gs.p.idGen.ID(msg))
+		tmids[topic] = append(tmids[topic], mid)
 	}
 	for topic, mids := range tmids {
 		if len(mids) == 0 {
@@ -762,6 +788,7 @@ func (gs *GossipSubRouter) HandleRPC(rpc *RPC) {
 	iwant := gs.handleIHave(rpc.from, ctl)
 	ihave := gs.handleIWant(rpc.from, ctl)
 	prune := gs.handleGraft(rpc.from, ctl)
+	gs.handleIAnnounce(rpc.from, ctl)
 	gs.handlePrune(rpc.from, ctl)
 	gs.handleIDontWant(rpc.from, ctl)
 
@@ -1052,6 +1079,28 @@ mainIDWLoop:
 
 			totalUnwantedIds++
 			gs.unwanted[p][computeChecksum(mid)] = gs.params.IDontWantMessageTTL
+		}
+	}
+}
+
+func (gs *GossipSubRouter) handleIAnnounce(p peer.ID, ctl *pb.ControlMessage) {
+	for _, iannounce := range ctl.GetIannounce() {
+		gmap, ok := gs.mesh[iannounce.GetTopicID()]
+		if !ok {
+			// Not in mesh, no need ot handle IANNOUNCE
+			continue
+		}
+		_, isMesh := gmap[p]
+		_, isDirect := gs.direct[p]
+		// We handle IANNOUNCE only from mesh peers or direct peers
+		if !isMesh && !isDirect {
+			continue
+		}
+
+		mid := iannounce.GetMessageID()
+		if !gs.p.seenMessage(mid) {
+			// If the message has not been seen, add it to the announce cache
+			gs.acache.Add(mid, p)
 		}
 	}
 }
