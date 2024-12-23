@@ -25,19 +25,25 @@ import (
 
 const (
 	// GossipSubID_v10 is the protocol ID for version 1.0.0 of the GossipSub protocol.
-	// It is advertised along with GossipSubID_v11 and GossipSubID_v12 for backwards compatibility.
+	// It is advertised along with GossipSubID_v11, GossipSubID_v12, and GossipSubID_v20 for backwards compatibility.
 	GossipSubID_v10 = protocol.ID("/meshsub/1.0.0")
 
 	// GossipSubID_v11 is the protocol ID for version 1.1.0 of the GossipSub protocol.
-	// It is advertised along with GossipSubID_v12 for backwards compatibility.
+	// It is advertised along with GossipSubID_v12 and GossipSubID_v20 for backwards compatibility.
 	// See the spec for details about how v1.1.0 compares to v1.0.0:
 	// https://github.com/libp2p/specs/blob/master/pubsub/gossipsub/gossipsub-v1.1.md
 	GossipSubID_v11 = protocol.ID("/meshsub/1.1.0")
 
 	// GossipSubID_v12 is the protocol ID for version 1.2.0 of the GossipSub protocol.
+	// It is advertised along with GossipSubID_v20 for backwards compatibility.
 	// See the spec for details about how v1.2.0 compares to v1.1.0:
 	// https://github.com/libp2p/specs/blob/master/pubsub/gossipsub/gossipsub-v1.2.md
 	GossipSubID_v12 = protocol.ID("/meshsub/1.2.0")
+
+	// GossipSubID_v20 is the protocol ID for version 2.0.0 of the GossipSub protocol.
+	// See the spec for details about how v2.0.0 compares to v1.2.0:
+	// https://github.com/libp2p/specs/blob/master/pubsub/gossipsub/gossipsub-v2.0.md
+	GossipSubID_v20 = protocol.ID("/meshsub/2.0.0")
 )
 
 // Defines the default gossipsub parameters.
@@ -49,7 +55,9 @@ var (
 	GossipSubDout                             = 2
 	GossipSubHistoryLength                    = 5
 	GossipSubHistoryGossip                    = 3
+	GossipSubDannounce                        = 4
 	GossipSubDlazy                            = 6
+	GossipSubTimeout                          = 400 * time.Millisecond
 	GossipSubGossipFactor                     = 0.25
 	GossipSubGossipRetransmission             = 3
 	GossipSubHeartbeatInitialDelay            = 100 * time.Millisecond
@@ -126,11 +134,20 @@ type GossipSubParams struct {
 	// avoid a runtime panic.
 	HistoryGossip int
 
+	// Dannounce controls how many times a message is sent lazily to mesh peers. This number
+	// must be at most equal to D. Every time we want to forward a message to a particular
+	// peer, we will decide to forward it lazily with a probability Dannounce/D.
+	// Otherwise, we will forward eagerly.
+	Dannounce int
+
 	// Dlazy affects how many peers we will emit gossip to at each heartbeat.
 	// We will send gossip to at least Dlazy peers outside our mesh. The actual
 	// number may be more, depending on GossipFactor and how many peers we're
 	// connected to.
 	Dlazy int
+
+	// Timeout is the time limit to receive the message back after sending INEED out.
+	Timeout time.Duration
 
 	// GossipFactor affects how many peers we will emit gossip to at each heartbeat.
 	// We will send gossip to GossipFactor * (total number of non-mesh peers), or
@@ -265,6 +282,7 @@ func DefaultGossipSubRouter(h host.Host) *GossipSubRouter {
 		outbound:     make(map[peer.ID]bool),
 		connect:      make(chan connectInfo, params.MaxPendingConnections),
 		cab:          pstoremem.NewAddrBook(),
+		acache:       NewAnnounceCache(params.Timeout),
 		mcache:       NewMessageCache(params.HistoryGossip, params.HistoryLength),
 		protos:       GossipSubDefaultProtocols,
 		feature:      GossipSubDefaultFeatures,
@@ -284,7 +302,9 @@ func DefaultGossipSubParams() GossipSubParams {
 		Dout:                      GossipSubDout,
 		HistoryLength:             GossipSubHistoryLength,
 		HistoryGossip:             GossipSubHistoryGossip,
+		Dannounce:                 GossipSubDannounce,
 		Dlazy:                     GossipSubDlazy,
+		Timeout:                   GossipSubTimeout,
 		GossipFactor:              GossipSubGossipFactor,
 		GossipRetransmission:      GossipSubGossipRetransmission,
 		HeartbeatInitialDelay:     GossipSubHeartbeatInitialDelay,
@@ -475,6 +495,7 @@ type GossipSubRouter struct {
 	protos  []protocol.ID
 	feature GossipSubFeatureTest
 
+	acache       *AnnounceCache
 	mcache       *MessageCache
 	tracer       *pubsubTracer
 	score        *peerScore
@@ -552,6 +573,9 @@ func (gs *GossipSubRouter) Attach(p *PubSub) {
 	// Manage our address book from events emitted by libp2p
 	go gs.manageAddrBook()
 
+	// Manage events from the announce cache
+	go gs.manageAnnounceCache()
+
 	// connect to direct peers
 	if len(gs.direct) > 0 {
 		go func() {
@@ -608,6 +632,22 @@ func (gs *GossipSubRouter) manageAddrBook() {
 					gs.cab.UpdateAddrs(ev.Peer, peerstore.ConnectedAddrTTL, peerstore.RecentlyConnectedAddrTTL)
 				}
 			}
+		}
+	}
+}
+
+func (gs *GossipSubRouter) manageAnnounceCache() {
+	for {
+		select {
+		case <-gs.p.ctx.Done():
+			gs.acache.Stop()
+			return
+		case r := <-gs.acache.R:
+			ineed := []*pb.ControlINeed{{MessageID: &r.mid}}
+			out := rpcWithControl(nil, nil, nil, nil, nil, nil, nil, ineed)
+			gs.sendRPC(r.pid, out, false)
+		case <-gs.acache.T:
+			// TODO: penalize peers when timeout
 		}
 	}
 }
@@ -701,6 +741,8 @@ func (gs *GossipSubRouter) AcceptFrom(p peer.ID) AcceptStatus {
 // PreValidation sends the IDONTWANT control messages to all the mesh
 // peers. They need to be sent right before the validation because they
 // should be seen by the peers as soon as possible.
+//
+// It also clear the announce cache to prevent sending further INEEDs.
 func (gs *GossipSubRouter) PreValidation(msgs []*Message) {
 	tmids := make(map[string][]string)
 	for _, msg := range msgs {
@@ -708,7 +750,10 @@ func (gs *GossipSubRouter) PreValidation(msgs []*Message) {
 			continue
 		}
 		topic := msg.GetTopic()
-		tmids[topic] = append(tmids[topic], gs.p.idGen.ID(msg))
+		mid := gs.p.idGen.ID(msg)
+		tmids[topic] = append(tmids[topic], mid)
+		// Clear the announce cache
+		gs.acache.Clear(mid)
 	}
 	for topic, mids := range tmids {
 		if len(mids) == 0 {
@@ -721,7 +766,7 @@ func (gs *GossipSubRouter) PreValidation(msgs []*Message) {
 			// send to only peers that support IDONTWANT
 			if gs.feature(GossipSubFeatureIdontwant, gs.peers[p]) {
 				idontwant := []*pb.ControlIDontWant{{MessageIDs: mids}}
-				out := rpcWithControl(nil, nil, nil, nil, nil, idontwant)
+				out := rpcWithControl(nil, nil, nil, nil, nil, idontwant, nil, nil)
 				gs.sendRPC(p, out, true)
 			}
 		}
@@ -737,6 +782,7 @@ func (gs *GossipSubRouter) HandleRPC(rpc *RPC) {
 	iwant := gs.handleIHave(rpc.from, ctl)
 	ihave := gs.handleIWant(rpc.from, ctl)
 	prune := gs.handleGraft(rpc.from, ctl)
+	gs.handleIAnnounce(rpc.from, ctl)
 	gs.handlePrune(rpc.from, ctl)
 	gs.handleIDontWant(rpc.from, ctl)
 
@@ -744,7 +790,7 @@ func (gs *GossipSubRouter) HandleRPC(rpc *RPC) {
 		return
 	}
 
-	out := rpcWithControl(ihave, nil, iwant, nil, prune, nil)
+	out := rpcWithControl(ihave, nil, iwant, nil, prune, nil, nil, nil)
 	gs.sendRPC(rpc.from, out, false)
 }
 
@@ -1017,6 +1063,28 @@ func (gs *GossipSubRouter) handleIDontWant(p peer.ID, ctl *pb.ControlMessage) {
 	}
 }
 
+func (gs *GossipSubRouter) handleIAnnounce(p peer.ID, ctl *pb.ControlMessage) {
+	for _, iannounce := range ctl.GetIannounce() {
+		gmap, ok := gs.mesh[iannounce.GetTopicID()]
+		if !ok {
+			// Not in mesh, no need ot handle IANNOUNCE
+			continue
+		}
+		_, isMesh := gmap[p]
+		_, isDirect := gs.direct[p]
+		// We handle IANNOUNCE only from mesh peers or direct peers
+		if !isMesh && !isDirect {
+			continue
+		}
+
+		mid := iannounce.GetMessageID()
+		if !gs.p.seenMessage(mid) {
+			// If the message has not been seen, add it to the announce cache
+			gs.acache.Add(mid, p)
+		}
+	}
+}
+
 func (gs *GossipSubRouter) addBackoff(p peer.ID, topic string, isUnsubscribe bool) {
 	backoff := gs.params.PruneBackoff
 	if isUnsubscribe {
@@ -1187,13 +1255,43 @@ func (gs *GossipSubRouter) Publish(msg *Message) {
 		}
 	}
 
-	out := rpcWithMessages(msg.Message)
+	iannounce := []*pb.ControlIAnnounce{{MessageID: &msg.ID}}
+	lazyOut := rpcWithControl(nil, nil, nil, nil, nil, nil, iannounce, nil)
+
+	eagerOut := rpcWithMessages(msg.Message)
+
 	for pid := range tosend {
 		if pid == from || pid == peer.ID(msg.GetFrom()) {
 			continue
 		}
 
-		gs.sendRPC(pid, out, false)
+		// if the peer doesn't support IANNOUNCE, send eagerly
+		if !gs.feature(GossipSubFeatureAnnounce, gs.peers[pid]) {
+			gs.sendRPC(pid, eagerOut, false)
+			continue
+		}
+
+		gmap, ok := gs.mesh[topic]
+		// if sending using fanout peers, send eagerly
+		if !ok {
+			gs.sendRPC(pid, eagerOut, false)
+			continue
+		}
+
+		_, isMesh := gmap[pid]
+		_, isDirect := gs.direct[pid]
+		// if the peer is neither in mesh nor a direct peer, send eagerly
+		if !isMesh && !isDirect {
+			gs.sendRPC(pid, eagerOut, false)
+			continue
+		}
+
+		// toss a coin to decide whether to send eagerly or lazily
+		if gs.params.D > 0 && rand.Intn(gs.params.D) < gs.params.Dannounce {
+			gs.sendRPC(pid, lazyOut, false)
+		} else {
+			gs.sendRPC(pid, eagerOut, false)
+		}
 	}
 }
 
@@ -1278,13 +1376,13 @@ func (gs *GossipSubRouter) Leave(topic string) {
 
 func (gs *GossipSubRouter) sendGraft(p peer.ID, topic string) {
 	graft := []*pb.ControlGraft{{TopicID: &topic}}
-	out := rpcWithControl(nil, nil, nil, graft, nil, nil)
+	out := rpcWithControl(nil, nil, nil, graft, nil, nil, nil, nil)
 	gs.sendRPC(p, out, false)
 }
 
 func (gs *GossipSubRouter) sendPrune(p peer.ID, topic string, isUnsubscribe bool) {
 	prune := []*pb.ControlPrune{gs.makePrune(p, topic, gs.doPX, isUnsubscribe)}
-	out := rpcWithControl(nil, nil, nil, nil, prune, nil)
+	out := rpcWithControl(nil, nil, nil, nil, prune, nil, nil, nil)
 	gs.sendRPC(p, out, false)
 }
 
@@ -1886,7 +1984,7 @@ func (gs *GossipSubRouter) sendGraftPrune(tograft, toprune map[peer.ID][]string,
 			}
 		}
 
-		out := rpcWithControl(nil, nil, nil, graft, prune, nil)
+		out := rpcWithControl(nil, nil, nil, graft, prune, nil, nil, nil)
 		gs.sendRPC(p, out, false)
 	}
 
@@ -1896,7 +1994,7 @@ func (gs *GossipSubRouter) sendGraftPrune(tograft, toprune map[peer.ID][]string,
 			prune = append(prune, gs.makePrune(p, topic, gs.doPX && !noPX[p], false))
 		}
 
-		out := rpcWithControl(nil, nil, nil, nil, prune, nil)
+		out := rpcWithControl(nil, nil, nil, nil, prune, nil, nil, nil)
 		gs.sendRPC(p, out, false)
 	}
 }
@@ -1963,14 +2061,14 @@ func (gs *GossipSubRouter) flush() {
 	// send gossip first, which will also piggyback pending control
 	for p, ihave := range gs.gossip {
 		delete(gs.gossip, p)
-		out := rpcWithControl(nil, ihave, nil, nil, nil, nil)
+		out := rpcWithControl(nil, ihave, nil, nil, nil, nil, nil, nil)
 		gs.sendRPC(p, out, false)
 	}
 
 	// send the remaining control messages that wasn't merged with gossip
 	for p, ctl := range gs.control {
 		delete(gs.control, p)
-		out := rpcWithControl(nil, nil, nil, ctl.Graft, ctl.Prune, nil)
+		out := rpcWithControl(nil, nil, nil, ctl.Graft, ctl.Prune, nil, nil, nil)
 		gs.sendRPC(p, out, false)
 	}
 }
@@ -2134,7 +2232,7 @@ func (gs *GossipSubRouter) WithDefaultTagTracer() Option {
 //
 //	nothing.
 func (gs *GossipSubRouter) SendControl(p peer.ID, ctl *pb.ControlMessage, msgs ...*pb.Message) {
-	out := rpcWithControl(msgs, ctl.Ihave, ctl.Iwant, ctl.Graft, ctl.Prune, ctl.Idontwant)
+	out := rpcWithControl(msgs, ctl.Ihave, ctl.Iwant, ctl.Graft, ctl.Prune, ctl.Idontwant, nil, nil)
 	gs.sendRPC(p, out, false)
 }
 

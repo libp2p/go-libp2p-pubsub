@@ -413,12 +413,37 @@ func (t *pubsubTracer) traceRPCMeta(rpc *RPC) *pb.TraceEvent_RPCMeta {
 			})
 		}
 
+		var iannounce []*pb.TraceEvent_ControlIAnnounceMeta
+		for _, ctl := range rpc.Control.Iannounce {
+			var mid []byte
+			if ctl.MessageID != nil {
+				mid = []byte(*ctl.MessageID)
+			}
+			iannounce = append(iannounce, &pb.TraceEvent_ControlIAnnounceMeta{
+				Topic:     ctl.TopicID,
+				MessageID: mid,
+			})
+		}
+
+		var ineed []*pb.TraceEvent_ControlINeedMeta
+		for _, ctl := range rpc.Control.Ineed {
+			var mid []byte
+			if ctl.MessageID != nil {
+				mid = []byte(*ctl.MessageID)
+			}
+			ineed = append(ineed, &pb.TraceEvent_ControlINeedMeta{
+				MessageID: mid,
+			})
+		}
+
 		rpcMeta.Control = &pb.TraceEvent_ControlMeta{
 			Ihave:     ihave,
 			Iwant:     iwant,
 			Graft:     graft,
 			Prune:     prune,
 			Idontwant: idontwant,
+			Iannounce: iannounce,
+			Ineed:     ineed,
 		}
 	}
 
