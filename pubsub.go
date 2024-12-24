@@ -248,6 +248,10 @@ type RPC struct {
 	from peer.ID
 }
 
+func (r *RPC) From() peer.ID {
+	return r.from
+}
+
 type Option func(*PubSub) error
 
 // NewPubSub returns a new PubSub management object.
