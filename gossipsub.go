@@ -68,7 +68,8 @@ var (
 	GossipSubGraftFloodThreshold              = 10 * time.Second
 	GossipSubMaxIHaveLength                   = 5000
 	GossipSubMaxIHaveMessages                 = 10
-	GossipSubMaxIDontWantMessages             = 1000
+	GossipSubMaxIDontWantLength               = 100
+	GossipSubMaxIDontWantMessages             = 100
 	GossipSubIWantFollowupTime                = 3 * time.Second
 	GossipSubIDontWantMessageThreshold        = 1024 // 1KB
 	GossipSubIDontWantMessageTTL              = 3    // 3 heartbeats
@@ -218,6 +219,10 @@ type GossipSubParams struct {
 	// MaxIHaveMessages is the maximum number of IHAVE messages to accept from a peer within a heartbeat.
 	MaxIHaveMessages int
 
+	// MaxIDontWantLength is the maximum number of messages to include in an IDONTWANT message. Also controls
+	// the maximum number of IDONTWANT ids we will accept to protect against IDONTWANT floods. This value
+	// should be adjusted if your system anticipates a larger amount than specified per heartbeat.
+	MaxIDontWantLength int
 	// MaxIDontWantMessages is the maximum number of IDONTWANT messages to accept from a peer within a heartbeat.
 	MaxIDontWantMessages int
 
@@ -303,6 +308,7 @@ func DefaultGossipSubParams() GossipSubParams {
 		GraftFloodThreshold:       GossipSubGraftFloodThreshold,
 		MaxIHaveLength:            GossipSubMaxIHaveLength,
 		MaxIHaveMessages:          GossipSubMaxIHaveMessages,
+		MaxIDontWantLength:        GossipSubMaxIDontWantLength,
 		MaxIDontWantMessages:      GossipSubMaxIDontWantMessages,
 		IWantFollowupTime:         GossipSubIWantFollowupTime,
 		IDontWantMessageThreshold: GossipSubIDontWantMessageThreshold,
@@ -1009,9 +1015,18 @@ func (gs *GossipSubRouter) handleIDontWant(p peer.ID, ctl *pb.ControlMessage) {
 	}
 	gs.peerdontwant[p]++
 
+	totalUnwantedIds := 0
 	// Remember all the unwanted message ids
+mainIDWLoop:
 	for _, idontwant := range ctl.GetIdontwant() {
 		for _, mid := range idontwant.GetMessageIDs() {
+			// IDONTWANT flood protection
+			if totalUnwantedIds >= gs.params.MaxIDontWantLength {
+				log.Debugf("IDONWANT: peer %s has advertised too many ids (%d) within this message; ignoring", p, totalUnwantedIds)
+				break mainIDWLoop
+			}
+
+			totalUnwantedIds++
 			gs.unwanted[p][computeChecksum(mid)] = gs.params.IDontWantMessageTTL
 		}
 	}
