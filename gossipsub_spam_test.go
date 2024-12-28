@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/base64"
+	"fmt"
 	"strconv"
 	"sync"
 	"testing"
@@ -889,6 +890,53 @@ func TestGossipsubAttackSpamIDONTWANT(t *testing.T) {
 	connect(t, hosts[1], hosts[2])
 
 	<-ctx.Done()
+}
+
+func TestGossipsubHandleIDontwantSpam(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	hosts := getDefaultHosts(t, 2)
+
+	msgID := func(pmsg *pb.Message) string {
+		// silly content-based test message-ID: just use the data as whole
+		return base64.URLEncoding.EncodeToString(pmsg.Data)
+	}
+
+	psubs := make([]*PubSub, 2)
+	psubs[0] = getGossipsub(ctx, hosts[0], WithMessageIdFn(msgID))
+	psubs[1] = getGossipsub(ctx, hosts[1], WithMessageIdFn(msgID))
+
+	connect(t, hosts[0], hosts[1])
+
+	topic := "foobar"
+	for _, ps := range psubs {
+		_, err := ps.Subscribe(topic)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	exceededIDWLength := GossipSubMaxIDontWantLength + 1
+	var idwIds []string
+	for i := 0; i < exceededIDWLength; i++ {
+		idwIds = append(idwIds, fmt.Sprintf("idontwant-%d", i))
+	}
+	rPid := hosts[1].ID()
+	ctrlMessage := &pb.ControlMessage{Idontwant: []*pb.ControlIDontWant{{MessageIDs: idwIds}}}
+	grt := psubs[0].rt.(*GossipSubRouter)
+	grt.handleIDontWant(rPid, ctrlMessage)
+
+	if grt.peerdontwant[rPid] != 1 {
+		t.Errorf("Wanted message count of %d but received %d", 1, grt.peerdontwant[rPid])
+	}
+	mid := fmt.Sprintf("idontwant-%d", GossipSubMaxIDontWantLength-1)
+	if _, ok := grt.unwanted[rPid][computeChecksum(mid)]; !ok {
+		t.Errorf("Desired message id was not stored in the unwanted map: %s", mid)
+	}
+
+	mid = fmt.Sprintf("idontwant-%d", GossipSubMaxIDontWantLength)
+	if _, ok := grt.unwanted[rPid][computeChecksum(mid)]; ok {
+		t.Errorf("Unwanted message id was stored in the unwanted map: %s", mid)
+	}
 }
 
 type mockGSOnRead func(writeMsg func(*pb.RPC), irpc *pb.RPC)
