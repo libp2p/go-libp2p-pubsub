@@ -839,6 +839,11 @@ func (gs *GossipSubRouter) handleIWant(p peer.ID, ctl *pb.ControlMessage) []*pb.
 	ihave := make(map[string]*pb.Message)
 	for _, iwant := range ctl.GetIwant() {
 		for _, mid := range iwant.GetMessageIDs() {
+			// Check if that peer has sent IDONTWANT before, if so don't send them the message
+			if _, ok := gs.unwanted[p][computeChecksum(mid)]; ok {
+				continue
+			}
+
 			msg, count, ok := gs.mcache.GetForPeer(mid, p)
 			if !ok {
 				continue
