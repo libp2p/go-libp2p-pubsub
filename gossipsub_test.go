@@ -3338,7 +3338,7 @@ func TestGossipsubPruneMeshCorrectly(t *testing.T) {
 	}
 }
 
-// Test that IANNOUNCE is sent to mesh peers
+// Test that IANNOUNCE is sent to mesh peers and no message is sent if it doesn't send INEED
 func TestGossipsubIannounceMeshPeer(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -3414,6 +3414,89 @@ func TestGossipsubIannounceMeshPeer(t *testing.T) {
 				t.Fatalf("Wrong message id in IANNOUNCE expected %s got %s", mid, announce_mid)
 			}
 		}
+	})
+
+	connect(t, hosts[0], hosts[1])
+
+	<-ctx.Done()
+}
+
+// Test that IANNOUNCE is sent to mesh peers and the message is sent after sending INEED
+func TestGossipsubIannounceIneedMeshPeer(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	hosts := getDefaultHosts(t, 2)
+
+	msgID := func(pmsg *pb.Message) string {
+		// silly content-based test message-ID: just use the data as whole
+		return base64.URLEncoding.EncodeToString(pmsg.Data)
+	}
+
+	params := DefaultGossipSubParams()
+	params.Dannounce = params.D
+	psub := getGossipsub(ctx, hosts[0], WithGossipSubParams(params), WithMessageIdFn(msgID))
+	_, err := psub.Subscribe("foobar")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Wait a bit after the last message before checking we got the right messages
+	msgTimer := time.NewTimer(1 * time.Second)
+
+	// Checks we received the right messages
+	msgCount := 0
+	checkMsgs := func() {
+		if msgCount != 1 {
+			t.Fatalf("Expected one message received, got %d", msgCount)
+		}
+	}
+
+	// Wait for the timer to expire
+	go func() {
+		select {
+		case <-msgTimer.C:
+			checkMsgs()
+			cancel()
+			return
+		case <-ctx.Done():
+			checkMsgs()
+		}
+	}()
+
+	newMockGS(ctx, t, hosts[1], func(writeMsg func(*pb.RPC), irpc *pb.RPC) {
+		// When the first peer connects it will send us its subscriptions
+		for _, sub := range irpc.GetSubscriptions() {
+			if sub.GetSubscribe() {
+				// Reply by subcribing to the topic and grafting to the first peer
+				writeMsg(&pb.RPC{
+					Subscriptions: []*pb.RPC_SubOpts{{Subscribe: sub.Subscribe, Topicid: sub.Topicid}},
+					Control:       &pb.ControlMessage{Graft: []*pb.ControlGraft{{TopicID: sub.Topicid}}},
+				})
+
+				go func() {
+					// Wait for a short interval to make sure the first peer
+					// received and processed the subscribe + graft
+					time.Sleep(100 * time.Millisecond)
+					// Publish messages from the first peer
+					data := []byte("mymessage")
+					psub.Publish("foobar", data)
+				}()
+			}
+		}
+		if len(irpc.GetControl().GetIannounce()) > 0 {
+			var ineeds []*pb.ControlINeed
+			for _, iannounce := range irpc.GetControl().GetIannounce() {
+				mid := iannounce.GetMessageID()
+				ineed := &pb.ControlINeed{
+					MessageID: &mid,
+				}
+				ineeds = append(ineeds, ineed)
+			}
+			writeMsg(&pb.RPC{
+				Control: &pb.ControlMessage{Ineed: ineeds},
+			})
+		}
+		msgCount += len(irpc.GetPublish())
 	})
 
 	connect(t, hosts[0], hosts[1])
@@ -4250,6 +4333,92 @@ func TestGossipsubIneedIndirectNonmeshPeers(t *testing.T) {
 	connect(t, hosts[0], hosts[1])
 
 	<-ctx.Done()
+}
+
+func TestSparseGossipsubV2(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	hosts := getDefaultHosts(t, 20)
+
+	params := DefaultGossipSubParams()
+	params.Dannounce = params.D
+	psubs := getGossipsubs(ctx, hosts, WithGossipSubParams(params))
+
+	var msgs []*Subscription
+	for _, ps := range psubs {
+		subch, err := ps.Subscribe("foobar")
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		msgs = append(msgs, subch)
+	}
+
+	sparseConnect(t, hosts)
+
+	// wait for heartbeats to build mesh
+	time.Sleep(time.Second * 2)
+
+	for i := 0; i < 100; i++ {
+		msg := []byte(fmt.Sprintf("%d it's not a floooooood %d", i, i))
+
+		owner := mrand.Intn(len(psubs))
+
+		psubs[owner].Publish("foobar", msg)
+
+		for _, sub := range msgs {
+			got, err := sub.Next(ctx)
+			if err != nil {
+				t.Fatal(sub.err)
+			}
+			if !bytes.Equal(msg, got.Data) {
+				t.Fatal("got wrong message!")
+			}
+		}
+	}
+}
+
+func TestDenseGossipsubV2(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	hosts := getDefaultHosts(t, 20)
+
+	params := DefaultGossipSubParams()
+	params.Dannounce = params.D
+	psubs := getGossipsubs(ctx, hosts, WithGossipSubParams(params))
+
+	var msgs []*Subscription
+	for _, ps := range psubs {
+		subch, err := ps.Subscribe("foobar")
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		msgs = append(msgs, subch)
+	}
+
+	denseConnect(t, hosts)
+
+	// wait for heartbeats to build mesh
+	time.Sleep(time.Second * 2)
+
+	for i := 0; i < 100; i++ {
+		msg := []byte(fmt.Sprintf("%d it's not a floooooood %d", i, i))
+
+		owner := mrand.Intn(len(psubs))
+
+		psubs[owner].Publish("foobar", msg)
+
+		for _, sub := range msgs {
+			got, err := sub.Next(ctx)
+			if err != nil {
+				t.Fatal(sub.err)
+			}
+			if !bytes.Equal(msg, got.Data) {
+				t.Fatal("got wrong message!")
+			}
+		}
+	}
 }
 
 func BenchmarkAllocDoDropRPC(b *testing.B) {

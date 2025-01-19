@@ -787,6 +787,7 @@ func (gs *GossipSubRouter) HandleRPC(rpc *RPC) {
 
 	iwant := gs.handleIHave(rpc.from, ctl)
 	ihave := gs.handleIWant(rpc.from, ctl)
+	ihave = append(ihave, gs.handleINeed(rpc.from, ctl)...)
 	prune := gs.handleGraft(rpc.from, ctl)
 	gs.handleIAnnounce(rpc.from, ctl)
 	gs.handlePrune(rpc.from, ctl)
@@ -913,6 +914,37 @@ func (gs *GossipSubRouter) handleIWant(p peer.ID, ctl *pb.ControlMessage) []*pb.
 	}
 
 	log.Debugf("IWANT: Sending %d messages to %s", len(ihave), p)
+
+	msgs := make([]*pb.Message, 0, len(ihave))
+	for _, msg := range ihave {
+		msgs = append(msgs, msg)
+	}
+
+	return msgs
+}
+
+func (gs *GossipSubRouter) handleINeed(p peer.ID, ctl *pb.ControlMessage) []*pb.Message {
+	ihave := make(map[string]*pb.Message)
+	for _, ineed := range ctl.GetIneed() {
+		mid := ineed.GetMessageID()
+		// Check if that peer has sent IDONTWANT before, if so don't send them the message
+		if _, ok := gs.unwanted[p][computeChecksum(mid)]; ok {
+			continue
+		}
+
+		msg, _, ok := gs.mcache.GetForPeer(mid, p)
+		if !ok {
+			continue
+		}
+		if !gs.p.peerFilter(p, msg.GetTopic()) {
+			continue
+		}
+		ihave[mid] = msg.Message
+	}
+
+	if len(ihave) == 0 {
+		return nil
+	}
 
 	msgs := make([]*pb.Message, 0, len(ihave))
 	for _, msg := range ihave {
