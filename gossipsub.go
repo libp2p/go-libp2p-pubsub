@@ -467,6 +467,8 @@ func WithGossipSubParams(cfg GossipSubParams) Option {
 		// Overwrite current config and associated variables in the router.
 		gs.params = cfg
 		gs.connect = make(chan connectInfo, cfg.MaxPendingConnections)
+		gs.acache.Stop()
+		gs.acache = NewAnnounceCache(cfg.Timeout)
 		gs.mcache = NewMessageCache(cfg.HistoryGossip, cfg.HistoryLength)
 
 		return nil
