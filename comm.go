@@ -207,7 +207,9 @@ func rpcWithControl(msgs []*pb.Message,
 	iwant []*pb.ControlIWant,
 	graft []*pb.ControlGraft,
 	prune []*pb.ControlPrune,
-	idontwant []*pb.ControlIDontWant) *RPC {
+	idontwant []*pb.ControlIDontWant,
+	iannounce []*pb.ControlIAnnounce,
+	ineed []*pb.ControlINeed) *RPC {
 	return &RPC{
 		RPC: pb.RPC{
 			Publish: msgs,
@@ -217,6 +219,8 @@ func rpcWithControl(msgs []*pb.Message,
 				Graft:     graft,
 				Prune:     prune,
 				Idontwant: idontwant,
+				Iannounce: iannounce,
+				Ineed:     ineed,
 			},
 		},
 	}
