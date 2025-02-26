@@ -73,11 +73,13 @@ message TraceEvent {
   message RecvRPC {
     optional bytes receivedFrom = 1;
     optional RPCMeta meta = 2;
+    optional uint64 length = 3;
   }
 
   message SendRPC {
     optional bytes sendTo = 1;
     optional RPCMeta meta = 2;
+    optional uint64 length = 3;
   }
 
   message DropRPC {

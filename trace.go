@@ -260,6 +260,7 @@ func (t *pubsubTracer) RecvRPC(rpc *RPC) {
 		return
 	}
 
+	l := uint64(rpc.Size())
 	now := time.Now().UnixNano()
 	evt := &pb.TraceEvent{
 		Type:      pb.TraceEvent_RECV_RPC.Enum(),
@@ -268,6 +269,7 @@ func (t *pubsubTracer) RecvRPC(rpc *RPC) {
 		RecvRPC: &pb.TraceEvent_RecvRPC{
 			ReceivedFrom: []byte(rpc.from),
 			Meta:         t.traceRPCMeta(rpc),
+			Length:       &l,
 		},
 	}
 
@@ -287,6 +289,7 @@ func (t *pubsubTracer) SendRPC(rpc *RPC, p peer.ID) {
 		return
 	}
 
+	l := uint64(rpc.Size())
 	now := time.Now().UnixNano()
 	evt := &pb.TraceEvent{
 		Type:      pb.TraceEvent_SEND_RPC.Enum(),
@@ -295,6 +298,7 @@ func (t *pubsubTracer) SendRPC(rpc *RPC, p peer.ID) {
 		SendRPC: &pb.TraceEvent_SendRPC{
 			SendTo: []byte(p),
 			Meta:   t.traceRPCMeta(rpc),
+			Length: &l,
 		},
 	}
 
