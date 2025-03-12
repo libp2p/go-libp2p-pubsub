@@ -1163,7 +1163,7 @@ func (p *PubSub) handleIncomingRPC(rpc *RPC) {
 				continue
 			}
 
-			msg := &Message{pmsg, "", rpc.from, nil, false}
+			msg := &Message{pmsg, "", rpc.from, nil, false, nil}
 			if p.shouldPush(msg) {
 				toPush = append(toPush, msg)
 			}
