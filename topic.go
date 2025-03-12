@@ -346,9 +346,9 @@ func WithSecretKeyAndPeerId(key crypto.PrivKey, pid peer.ID) PubOpt {
 }
 
 // WithBatchPublishing returns a publishing option that allows multiple messages to be published as a batch
-// rather than sequentially. The desired messages have their message-ids provided as an argument. This allows
+// rather than sequentially. The desired messages are already added in to the batch message object. This allows
 // the different rpc messages to mesh or direct peers to be interleaved with each other. In order for the batch
-// to succeed, all messages in the batch must be published if not the routine would terminate.
+// to succeed, all messages in the batch must be published via the router if not the batch will never be published.
 func WithBatchPublishing(msgBatch *BatchMessage) PubOpt {
 	return func(pub *PublishOptions) error {
 		pub.batchedMessages = msgBatch
