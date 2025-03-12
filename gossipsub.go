@@ -1212,8 +1212,24 @@ func (gs *GossipSubRouter) Publish(msg *Message) {
 		if pid == from || pid == peer.ID(msg.GetFrom()) {
 			continue
 		}
-
+		// Add message to batch without sending it out
+		if msg.MessageBatch != nil {
+			msg.MessageBatch.AddRPC(pid, out)
+			continue
+		}
 		gs.sendRPC(pid, out, false)
+	}
+	if msg.MessageBatch != nil {
+		msg.MessageBatch.RemoveMessage(gs.p.idGen.ID(msg))
+		if msg.MessageBatch.BatchComplete() {
+			// Shuffle batched messages randomly and then send them out sequentially.
+			rpcMsgs := msg.MessageBatch.ShuffleQueuedRPC()
+			for _, pRPC := range rpcMsgs {
+				gs.sendRPC(pRPC.pid, pRPC.rpcMsg, false)
+			}
+			// Clear out queued rpc messages
+			msg.MessageBatch.Clear()
+		}
 	}
 }
 
