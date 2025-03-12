@@ -213,9 +213,10 @@ type RouterReady func(rt PubSubRouter, topic string) (bool, error)
 type ProvideKey func() (crypto.PrivKey, peer.ID)
 
 type PublishOptions struct {
-	ready     RouterReady
-	customKey ProvideKey
-	local     bool
+	ready           RouterReady
+	customKey       ProvideKey
+	local           bool
+	batchedMessages *BatchMessage
 }
 
 type PubOpt func(pub *PublishOptions) error
@@ -308,7 +309,7 @@ func (t *Topic) Publish(ctx context.Context, data []byte, opts ...PubOpt) error 
 		}
 	}
 
-	return t.p.val.PushLocal(&Message{m, "", t.p.host.ID(), nil, pub.local})
+	return t.p.val.PushLocal(&Message{m, "", t.p.host.ID(), nil, pub.local, pub.batchedMessages})
 }
 
 // WithReadiness returns a publishing option for only publishing when the router is ready.
@@ -340,6 +341,17 @@ func WithSecretKeyAndPeerId(key crypto.PrivKey, pid peer.ID) PubOpt {
 			return key, pid
 		}
 
+		return nil
+	}
+}
+
+// WithBatchPublishing returns a publishing option that allows multiple messages to be published as a batch
+// rather than sequentially. The desired messages have their message-ids provided as an argument. This allows
+// the different rpc messages to mesh or direct peers to be interleaved with each other. In order for the batch
+// to succeed, all messages in the batch must be published if not the routine would terminate.
+func WithBatchPublishing(msgBatch *BatchMessage) PubOpt {
+	return func(pub *PublishOptions) error {
+		pub.batchedMessages = msgBatch
 		return nil
 	}
 }

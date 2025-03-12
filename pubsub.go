@@ -235,10 +235,72 @@ type Message struct {
 	ReceivedFrom  peer.ID
 	ValidatorData interface{}
 	Local         bool
+	MessageBatch  *BatchMessage
 }
 
 func (m *Message) GetFrom() peer.ID {
 	return peer.ID(m.Message.GetFrom())
+}
+
+type BatchMessage struct {
+	sync.RWMutex
+	BatchedMessages map[string]bool
+	queuedRPC       []*peerRPC
+}
+
+type peerRPC struct {
+	pid    peer.ID
+	rpcMsg *RPC
+}
+
+func NewBatchMessage() *BatchMessage {
+	return &BatchMessage{
+		BatchedMessages: make(map[string]bool),
+		queuedRPC:       make([]*peerRPC, 0),
+	}
+}
+
+func (m *BatchMessage) AddMessage(msgid string) {
+	m.Lock()
+	defer m.Unlock()
+
+	m.BatchedMessages[msgid] = true
+}
+
+func (m *BatchMessage) RemoveMessage(msgid string) {
+	m.Lock()
+	defer m.Unlock()
+	delete(m.BatchedMessages, msgid)
+}
+
+func (m *BatchMessage) BatchComplete() bool {
+	m.RLock()
+	defer m.RUnlock()
+	return len(m.BatchedMessages) == 0
+}
+
+func (m *BatchMessage) AddRPC(pid peer.ID, rpc *RPC) {
+	m.Lock()
+	defer m.Unlock()
+
+	m.queuedRPC = append(m.queuedRPC, &peerRPC{pid, rpc})
+}
+
+func (m *BatchMessage) ShuffleQueuedRPC() []*peerRPC {
+	m.Lock()
+	defer m.Unlock()
+	for i := range m.queuedRPC {
+		j := rand.Intn(i + 1)
+		m.queuedRPC[i], m.queuedRPC[j] = m.queuedRPC[j], m.queuedRPC[i]
+	}
+	return m.queuedRPC
+}
+
+func (m *BatchMessage) Clear() {
+	m.Lock()
+	defer m.Unlock()
+	m.BatchedMessages = make(map[string]bool)
+	m.queuedRPC = make([]*peerRPC, 0)
 }
 
 type RPC struct {
