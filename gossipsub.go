@@ -1141,6 +1141,9 @@ func (gs *GossipSubRouter) connector() {
 
 func (gs *GossipSubRouter) Publish(msg *Message) {
 	gs.mcache.Put(msg)
+	if msg.MessageBatch != nil {
+		msg.MessageBatch.RemoveMessage(gs.p.idGen.ID(msg))
+	}
 
 	from := msg.ReceivedFrom
 	topic := msg.GetTopic()
@@ -1214,7 +1217,7 @@ func (gs *GossipSubRouter) Publish(msg *Message) {
 		}
 		// Add message to batch without sending it out
 		if msg.MessageBatch != nil {
-			msg.MessageBatch.AddRPC(pid, out)
+			msg.MessageBatch.AddRPC(pid, out, gs.p.idGen.ID(msg))
 			continue
 		}
 		gs.sendRPC(pid, out, false)
@@ -1223,7 +1226,8 @@ func (gs *GossipSubRouter) Publish(msg *Message) {
 		msg.MessageBatch.RemoveMessage(gs.p.idGen.ID(msg))
 		if msg.MessageBatch.BatchComplete() {
 			// Shuffle batched messages randomly and then send them out sequentially.
-			rpcMsgs := msg.MessageBatch.ShuffleQueuedRPC()
+			// rpcMsgs := msg.MessageBatch.ShuffleQueuedRPC()
+			rpcMsgs := msg.MessageBatch.RarestFirst()
 			for _, pRPC := range rpcMsgs {
 				gs.sendRPC(pRPC.pid, pRPC.rpcMsg, false)
 			}

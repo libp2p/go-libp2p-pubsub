@@ -246,6 +246,7 @@ type BatchMessage struct {
 	sync.RWMutex
 	BatchedMessages map[string]bool
 	queuedRPC       []*peerRPC
+	rpcByMsgID      map[string][]*peerRPC
 }
 
 type peerRPC struct {
@@ -279,11 +280,16 @@ func (m *BatchMessage) BatchComplete() bool {
 	return len(m.BatchedMessages) == 0
 }
 
-func (m *BatchMessage) AddRPC(pid peer.ID, rpc *RPC) {
+func (m *BatchMessage) AddRPC(pid peer.ID, rpc *RPC, msgid string) {
 	m.Lock()
 	defer m.Unlock()
 
 	m.queuedRPC = append(m.queuedRPC, &peerRPC{pid, rpc})
+
+	if m.rpcByMsgID == nil {
+		m.rpcByMsgID = make(map[string][]*peerRPC)
+	}
+	m.rpcByMsgID[msgid] = append(m.rpcByMsgID[msgid], &peerRPC{pid, rpc})
 }
 
 func (m *BatchMessage) ShuffleQueuedRPC() []*peerRPC {
@@ -296,11 +302,45 @@ func (m *BatchMessage) ShuffleQueuedRPC() []*peerRPC {
 	return m.queuedRPC
 }
 
+func (m *BatchMessage) RarestFirst() []*peerRPC {
+	m.Lock()
+	defer m.Unlock()
+	msgIDs := make([]string, 0, len(m.rpcByMsgID))
+	for msgID := range m.rpcByMsgID {
+		msgIDs = append(msgIDs, msgID)
+	}
+
+	outRPCs := make([]*peerRPC, 0, len(m.queuedRPC))
+
+	i := 0
+	for len(m.rpcByMsgID) > 0 {
+		msgID := msgIDs[i]
+		rpcs, ok := m.rpcByMsgID[msgID]
+		if len(rpcs) == 0 {
+			if ok {
+				// remove empty msgID from map
+				delete(m.rpcByMsgID, msgID)
+			}
+			i++
+			i %= len(msgIDs)
+			continue
+		}
+
+		outRPCs = append(outRPCs, rpcs[0])
+		m.rpcByMsgID[msgID] = rpcs[1:]
+		i++
+		i %= len(msgIDs)
+	}
+
+	return outRPCs
+}
+
 func (m *BatchMessage) Clear() {
 	m.Lock()
 	defer m.Unlock()
 	m.BatchedMessages = make(map[string]bool)
 	m.queuedRPC = make([]*peerRPC, 0)
+	m.rpcByMsgID = nil
 }
 
 type RPC struct {
@@ -1043,7 +1083,7 @@ func (p *PubSub) notifySubs(msg *Message) {
 		case f.ch <- msg:
 		default:
 			p.tracer.UndeliverableMessage(msg)
-			log.Infof("Can't deliver message to subscription for topic %s; subscriber too slow", topic)
+			log.Warnf("Can't deliver message to subscription for topic %s; subscriber too slow", topic)
 		}
 	}
 }
