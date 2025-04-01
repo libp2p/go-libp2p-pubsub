@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"math/rand"
+	"slices"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -243,6 +244,7 @@ func (m *Message) GetFrom() peer.ID {
 }
 
 type BatchMessage struct {
+	Strategy func() []*peerRPC
 	sync.RWMutex
 	BatchedMessages map[string]bool
 	queuedRPC       []*peerRPC
@@ -255,10 +257,12 @@ type peerRPC struct {
 }
 
 func NewBatchMessage() *BatchMessage {
-	return &BatchMessage{
+	bm := &BatchMessage{
 		BatchedMessages: make(map[string]bool),
 		queuedRPC:       make([]*peerRPC, 0),
 	}
+	bm.Strategy = bm.RarestFirst
+	return bm
 }
 
 func (m *BatchMessage) AddMessage(msgid string) {
@@ -333,6 +337,12 @@ func (m *BatchMessage) RarestFirst() []*peerRPC {
 	}
 
 	return outRPCs
+}
+
+func (m *BatchMessage) InOrder() []*peerRPC {
+	m.Lock()
+	defer m.Unlock()
+	return slices.Clone(m.queuedRPC)
 }
 
 func (m *BatchMessage) Clear() {

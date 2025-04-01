@@ -1227,7 +1227,7 @@ func (gs *GossipSubRouter) Publish(msg *Message) {
 		if msg.MessageBatch.BatchComplete() {
 			// Shuffle batched messages randomly and then send them out sequentially.
 			// rpcMsgs := msg.MessageBatch.ShuffleQueuedRPC()
-			rpcMsgs := msg.MessageBatch.RarestFirst()
+			rpcMsgs := msg.MessageBatch.Strategy()
 			for _, pRPC := range rpcMsgs {
 				gs.sendRPC(pRPC.pid, pRPC.rpcMsg, false)
 			}
