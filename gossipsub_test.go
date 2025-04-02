@@ -28,6 +28,11 @@ import (
 )
 
 func getGossipsub(ctx context.Context, h host.Host, opts ...Option) *PubSub {
+	params := DefaultGossipSubParams()
+	// since there was no lazy mesh propagation in gossipsub 1.x, we need to set Dannounce to 0 for all the old tests
+	params.Dannounce = 0
+	// prepend the options to allow overrides by users
+	opts = append([]Option{WithGossipSubParams(params)}, opts...)
 	ps, err := NewGossipSub(ctx, h, opts...)
 	if err != nil {
 		panic(err)
@@ -593,6 +598,7 @@ func TestGossipsubPruneBackoffTime(t *testing.T) {
 	currentScoreForHost0 := int32(0)
 
 	params := DefaultGossipSubParams()
+	params.Dannounce = 0
 	params.HeartbeatInitialDelay = time.Millisecond * 10
 	params.HeartbeatInterval = time.Millisecond * 100
 
@@ -1492,6 +1498,7 @@ func TestGossipsubCustomParams(t *testing.T) {
 	defer cancel()
 
 	params := DefaultGossipSubParams()
+	params.Dannounce = 0
 
 	wantedFollowTime := 1 * time.Second
 	params.IWantFollowupTime = wantedFollowTime
@@ -2329,7 +2336,7 @@ func (iwe *iwantEverything) handleStream(s network.Stream) {
 				}
 			}
 
-			out := rpcWithControl(nil, nil, iwants, nil, prunes, nil)
+			out := rpcWithControl(nil, nil, iwants, nil, prunes, nil, nil, nil)
 			err = w.WriteMsg(out)
 			if err != nil {
 				panic(err)
@@ -2612,6 +2619,7 @@ func TestGossipsubIdontwantSend(t *testing.T) {
 	}
 
 	params := DefaultGossipSubParams()
+	params.Dannounce = 0
 	params.IDontWantMessageThreshold = 16
 
 	psubs := make([]*PubSub, 2)
@@ -2822,6 +2830,7 @@ func TestGossipsubIdontwantNonMesh(t *testing.T) {
 	hosts := getDefaultHosts(t, 3)
 
 	params := DefaultGossipSubParams()
+	params.Dannounce = 0
 	params.IDontWantMessageThreshold = 16
 	psubs := getGossipsubs(ctx, hosts[:2], WithGossipSubParams(params))
 
@@ -2910,6 +2919,7 @@ func TestGossipsubIdontwantIncompat(t *testing.T) {
 	hosts := getDefaultHosts(t, 3)
 
 	params := DefaultGossipSubParams()
+	params.Dannounce = 0
 	params.IDontWantMessageThreshold = 16
 	psubs := getGossipsubs(ctx, hosts[:2], WithGossipSubParams(params))
 
@@ -2998,6 +3008,7 @@ func TestGossipsubIdontwantSmallMessage(t *testing.T) {
 	hosts := getDefaultHosts(t, 3)
 
 	params := DefaultGossipSubParams()
+	params.Dannounce = 0
 	params.IDontWantMessageThreshold = 16
 	psubs := getGossipsubs(ctx, hosts[:2], WithGossipSubParams(params))
 
@@ -3324,6 +3335,1089 @@ func TestGossipsubPruneMeshCorrectly(t *testing.T) {
 	}
 	if len(meshPeers) != params.D {
 		t.Fatalf("mesh does not have the correct number of peers. Wanted %d but got %d", params.D, len(meshPeers))
+	}
+}
+
+// Test that IANNOUNCE is sent to mesh peers and no message is sent if it doesn't send INEED
+func TestGossipsubIannounceMeshPeer(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	hosts := getDefaultHosts(t, 2)
+
+	msgID := func(pmsg *pb.Message) string {
+		// silly content-based test message-ID: just use the data as whole
+		return base64.URLEncoding.EncodeToString(pmsg.Data)
+	}
+
+	params := DefaultGossipSubParams()
+	params.Dannounce = params.D
+	psub := getGossipsub(ctx, hosts[0], WithGossipSubParams(params), WithMessageIdFn(msgID))
+	_, err := psub.Subscribe("foobar")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Wait a bit after the last message before checking we got the right messages
+	msgTimer := time.NewTimer(1 * time.Second)
+
+	// Checks we received the right messages
+	msgCount := 0
+	iannounceCount := 0
+	checkMsgs := func() {
+		if msgCount != 0 {
+			t.Fatalf("Expected no message received, got %d", msgCount)
+		}
+		if iannounceCount != 1 {
+			t.Fatalf("Expected 1 IANNOUNCE received, got %d", msgCount)
+		}
+	}
+
+	// Wait for the timer to expire
+	go func() {
+		select {
+		case <-msgTimer.C:
+			checkMsgs()
+			cancel()
+			return
+		case <-ctx.Done():
+			checkMsgs()
+		}
+	}()
+
+	var mid string
+	newMockGS(ctx, t, hosts[1], func(writeMsg func(*pb.RPC), irpc *pb.RPC) {
+		// When the first peer connects it will send us its subscriptions
+		for _, sub := range irpc.GetSubscriptions() {
+			if sub.GetSubscribe() {
+				// Reply by subcribing to the topic and grafting to the first peer
+				writeMsg(&pb.RPC{
+					Subscriptions: []*pb.RPC_SubOpts{{Subscribe: sub.Subscribe, Topicid: sub.Topicid}},
+					Control:       &pb.ControlMessage{Graft: []*pb.ControlGraft{{TopicID: sub.Topicid}}},
+				})
+
+				go func() {
+					// Wait for a short interval to make sure the first peer
+					// received and processed the subscribe + graft
+					time.Sleep(100 * time.Millisecond)
+					// Publish messages from the first peer
+					data := []byte("mymessage")
+					mid = msgID(&pb.Message{Data: data})
+					psub.Publish("foobar", data)
+				}()
+			}
+		}
+		msgCount += len(irpc.GetPublish())
+		iannounceCount += len(irpc.GetControl().GetIannounce())
+		if len(irpc.GetControl().GetIannounce()) > 0 {
+			announce_mid := irpc.GetControl().GetIannounce()[0].GetMessageID()
+			if mid != announce_mid {
+				t.Fatalf("Wrong message id in IANNOUNCE expected %s got %s", mid, announce_mid)
+			}
+		}
+	})
+
+	connect(t, hosts[0], hosts[1])
+
+	<-ctx.Done()
+}
+
+// Test that IANNOUNCE is sent to mesh peers and the message is sent after sending INEED
+func TestGossipsubIannounceIneedMeshPeer(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	hosts := getDefaultHosts(t, 2)
+
+	msgID := func(pmsg *pb.Message) string {
+		// silly content-based test message-ID: just use the data as whole
+		return base64.URLEncoding.EncodeToString(pmsg.Data)
+	}
+
+	params := DefaultGossipSubParams()
+	params.Dannounce = params.D
+	psub := getGossipsub(ctx, hosts[0], WithGossipSubParams(params), WithMessageIdFn(msgID))
+	_, err := psub.Subscribe("foobar")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Wait a bit after the last message before checking we got the right messages
+	msgTimer := time.NewTimer(1 * time.Second)
+
+	// Checks we received the right messages
+	msgCount := 0
+	checkMsgs := func() {
+		if msgCount != 1 {
+			t.Fatalf("Expected one message received, got %d", msgCount)
+		}
+	}
+
+	// Wait for the timer to expire
+	go func() {
+		select {
+		case <-msgTimer.C:
+			checkMsgs()
+			cancel()
+			return
+		case <-ctx.Done():
+			checkMsgs()
+		}
+	}()
+
+	newMockGS(ctx, t, hosts[1], func(writeMsg func(*pb.RPC), irpc *pb.RPC) {
+		// When the first peer connects it will send us its subscriptions
+		for _, sub := range irpc.GetSubscriptions() {
+			if sub.GetSubscribe() {
+				// Reply by subcribing to the topic and grafting to the first peer
+				writeMsg(&pb.RPC{
+					Subscriptions: []*pb.RPC_SubOpts{{Subscribe: sub.Subscribe, Topicid: sub.Topicid}},
+					Control:       &pb.ControlMessage{Graft: []*pb.ControlGraft{{TopicID: sub.Topicid}}},
+				})
+
+				go func() {
+					// Wait for a short interval to make sure the first peer
+					// received and processed the subscribe + graft
+					time.Sleep(100 * time.Millisecond)
+					// Publish messages from the first peer
+					data := []byte("mymessage")
+					psub.Publish("foobar", data)
+				}()
+			}
+		}
+		if len(irpc.GetControl().GetIannounce()) > 0 {
+			var ineeds []*pb.ControlINeed
+			for _, iannounce := range irpc.GetControl().GetIannounce() {
+				mid := iannounce.GetMessageID()
+				ineed := &pb.ControlINeed{
+					MessageID: &mid,
+				}
+				ineeds = append(ineeds, ineed)
+			}
+			writeMsg(&pb.RPC{
+				Control: &pb.ControlMessage{Ineed: ineeds},
+			})
+		}
+		msgCount += len(irpc.GetPublish())
+	})
+
+	connect(t, hosts[0], hosts[1])
+
+	<-ctx.Done()
+}
+
+// Test that IANNOUNCE is sent to direct peers
+func TestGossipsubIannounceDirectPeer(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	hosts := getDefaultHosts(t, 2)
+
+	msgID := func(pmsg *pb.Message) string {
+		// silly content-based test message-ID: just use the data as whole
+		return base64.URLEncoding.EncodeToString(pmsg.Data)
+	}
+
+	params := DefaultGossipSubParams()
+	params.Dannounce = params.D
+	psub := getGossipsub(ctx, hosts[0],
+		WithGossipSubParams(params),
+		WithMessageIdFn(msgID),
+		WithDirectPeers([]peer.AddrInfo{{ID: hosts[1].ID(), Addrs: hosts[1].Addrs()}}))
+	_, err := psub.Subscribe("foobar")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Wait a bit after the last message before checking we got the right messages
+	msgTimer := time.NewTimer(1 * time.Second)
+
+	// Checks we received the right messages
+	msgCount := 0
+	iannounceCount := 0
+	checkMsgs := func() {
+		if msgCount != 0 {
+			t.Fatalf("Expected no message received, got %d", msgCount)
+		}
+		if iannounceCount != 1 {
+			t.Fatalf("Expected 1 IANNOUNCE received, got %d", msgCount)
+		}
+	}
+
+	// Wait for the timer to expire
+	go func() {
+		select {
+		case <-msgTimer.C:
+			checkMsgs()
+			cancel()
+			return
+		case <-ctx.Done():
+			checkMsgs()
+		}
+	}()
+
+	var mid string
+	newMockGS(ctx, t, hosts[1], func(writeMsg func(*pb.RPC), irpc *pb.RPC) {
+		// When the first peer connects it will send us its subscriptions
+		for _, sub := range irpc.GetSubscriptions() {
+			if sub.GetSubscribe() {
+				// Reply by subcribing to the topic and grafting to the first peer
+				writeMsg(&pb.RPC{
+					Subscriptions: []*pb.RPC_SubOpts{{Subscribe: sub.Subscribe, Topicid: sub.Topicid}},
+				})
+
+				go func() {
+					// Wait for a short interval to make sure the first peer
+					// received and processed the subscribe + graft
+					time.Sleep(100 * time.Millisecond)
+					// Publish messages from the first peer
+					data := []byte("mymessage")
+					mid = msgID(&pb.Message{Data: data})
+					psub.Publish("foobar", data)
+				}()
+			}
+		}
+		msgCount += len(irpc.GetPublish())
+		iannounceCount += len(irpc.GetControl().GetIannounce())
+		if len(irpc.GetControl().GetIannounce()) > 0 {
+			announce_mid := irpc.GetControl().GetIannounce()[0].GetMessageID()
+			if mid != announce_mid {
+				t.Fatalf("Wrong message id in IANNOUNCE expected %s got %s", mid, announce_mid)
+			}
+		}
+	})
+
+	connect(t, hosts[0], hosts[1])
+
+	<-ctx.Done()
+}
+
+// Test that IANNOUNCE is not sent to incompatible peers
+func TestGossipsubIannounceIncompatiblePeer(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	hosts := getDefaultHosts(t, 2)
+
+	params := DefaultGossipSubParams()
+	params.Dannounce = params.D
+	psub := getGossipsub(ctx, hosts[0], WithGossipSubParams(params))
+	_, err := psub.Subscribe("foobar")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Wait a bit after the last message before checking we got the right messages
+	msgTimer := time.NewTimer(1 * time.Second)
+
+	// Checks we received the right messages
+	msgCount := 0
+	iannounceCount := 0
+	checkMsgs := func() {
+		if msgCount != 1 {
+			t.Fatalf("Expected 1 message received, got %d", msgCount)
+		}
+		if iannounceCount != 0 {
+			t.Fatalf("Expected no IANNOUNCE received, got %d", msgCount)
+		}
+	}
+
+	// Wait for the timer to expire
+	go func() {
+		select {
+		case <-msgTimer.C:
+			checkMsgs()
+			cancel()
+			return
+		case <-ctx.Done():
+			checkMsgs()
+		}
+	}()
+
+	newMockGSWithVersion(ctx, t, hosts[1], protocol.ID("/meshsub/1.2.0"), func(writeMsg func(*pb.RPC), irpc *pb.RPC) {
+		// When the first peer connects it will send us its subscriptions
+		for _, sub := range irpc.GetSubscriptions() {
+			if sub.GetSubscribe() {
+				// Reply by subcribing to the topic and grafting to the first peer
+				writeMsg(&pb.RPC{
+					Subscriptions: []*pb.RPC_SubOpts{{Subscribe: sub.Subscribe, Topicid: sub.Topicid}},
+					Control:       &pb.ControlMessage{Graft: []*pb.ControlGraft{{TopicID: sub.Topicid}}},
+				})
+
+				go func() {
+					// Wait for a short interval to make sure the first peer
+					// received and processed the subscribe + graft
+					time.Sleep(100 * time.Millisecond)
+					// Publish messages from the first peer
+					data := []byte("mymessage")
+					psub.Publish("foobar", data)
+				}()
+			}
+		}
+		msgCount += len(irpc.GetPublish())
+		iannounceCount += len(irpc.GetControl().GetIannounce())
+	})
+
+	connect(t, hosts[0], hosts[1])
+
+	<-ctx.Done()
+}
+
+// Test that IANNOUNCE is not sent to indirect non-mesh peers when flood publish
+func TestGossipsubIannounceFloodPublish(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	hosts := getDefaultHosts(t, 2)
+
+	params := DefaultGossipSubParams()
+	params.Dannounce = params.D
+	psub := getGossipsub(ctx, hosts[0], WithGossipSubParams(params), WithFloodPublish(true))
+	_, err := psub.Subscribe("foobar")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Wait a bit after the last message before checking we got the right messages
+	msgTimer := time.NewTimer(1 * time.Second)
+
+	// Checks we received the right messages
+	msgCount := 0
+	iannounceCount := 0
+	checkMsgs := func() {
+		if msgCount != 1 {
+			t.Fatalf("Expected 1 message received, got %d", msgCount)
+		}
+		if iannounceCount != 0 {
+			t.Fatalf("Expected no IANNOUNCE received, got %d", msgCount)
+		}
+	}
+
+	// Wait for the timer to expire
+	go func() {
+		select {
+		case <-msgTimer.C:
+			checkMsgs()
+			cancel()
+			return
+		case <-ctx.Done():
+			checkMsgs()
+		}
+	}()
+
+	newMockGS(ctx, t, hosts[1], func(writeMsg func(*pb.RPC), irpc *pb.RPC) {
+		// When the first peer connects it will send us its subscriptions
+		for _, sub := range irpc.GetSubscriptions() {
+			if sub.GetSubscribe() {
+				// Reply by subcribing to the topic and pruning to the first peer to make sure
+				// that it's not in the mesh
+				writeMsg(&pb.RPC{
+					Subscriptions: []*pb.RPC_SubOpts{{Subscribe: sub.Subscribe, Topicid: sub.Topicid}},
+					Control:       &pb.ControlMessage{Prune: []*pb.ControlPrune{{TopicID: sub.Topicid}}},
+				})
+
+				go func() {
+					// Wait for a short interval to make sure the first peer
+					// received and processed the subscribe + prune
+					time.Sleep(100 * time.Millisecond)
+					// Publish messages from the first peer
+					data := []byte("mymessage")
+					psub.Publish("foobar", data)
+				}()
+			}
+		}
+		msgCount += len(irpc.GetPublish())
+		iannounceCount += len(irpc.GetControl().GetIannounce())
+	})
+
+	connect(t, hosts[0], hosts[1])
+
+	<-ctx.Done()
+}
+
+// Test that no IANNOUNCE is sent if Dannounce is zero
+func TestGossipsubIannounceZeroDannounce(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	hosts := getDefaultHosts(t, 2)
+
+	params := DefaultGossipSubParams()
+	params.Dannounce = 0
+	psub := getGossipsub(ctx, hosts[0], WithGossipSubParams(params))
+	_, err := psub.Subscribe("foobar")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Wait a bit after the last message before checking we got the right messages
+	msgTimer := time.NewTimer(1 * time.Second)
+
+	// Checks we received the right messages
+	msgCount := 0
+	iannounceCount := 0
+	checkMsgs := func() {
+		if msgCount != 1 {
+			t.Fatalf("Expected 1 message received, got %d", msgCount)
+		}
+		if iannounceCount != 0 {
+			t.Fatalf("Expected no IANNOUNCE received, got %d", msgCount)
+		}
+	}
+
+	// Wait for the timer to expire
+	go func() {
+		select {
+		case <-msgTimer.C:
+			checkMsgs()
+			cancel()
+			return
+		case <-ctx.Done():
+			checkMsgs()
+		}
+	}()
+
+	newMockGS(ctx, t, hosts[1], func(writeMsg func(*pb.RPC), irpc *pb.RPC) {
+		// When the first peer connects it will send us its subscriptions
+		for _, sub := range irpc.GetSubscriptions() {
+			if sub.GetSubscribe() {
+				// Reply by subcribing to the topic and grafting to the first peer
+				writeMsg(&pb.RPC{
+					Subscriptions: []*pb.RPC_SubOpts{{Subscribe: sub.Subscribe, Topicid: sub.Topicid}},
+					Control:       &pb.ControlMessage{Graft: []*pb.ControlGraft{{TopicID: sub.Topicid}}},
+				})
+
+				go func() {
+					// Wait for a short interval to make sure the first peer
+					// received and processed the subscribe + graft
+					time.Sleep(100 * time.Millisecond)
+					// Publish messages from the first peer
+					data := []byte("mymessage")
+					psub.Publish("foobar", data)
+				}()
+			}
+		}
+		msgCount += len(irpc.GetPublish())
+		iannounceCount += len(irpc.GetControl().GetIannounce())
+	})
+
+	connect(t, hosts[0], hosts[1])
+
+	<-ctx.Done()
+}
+
+// Test that no IANNOUNCE is sent if publishing to fanout peers
+func TestGossipsubIannounceFanout(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	hosts := getDefaultHosts(t, 2)
+
+	params := DefaultGossipSubParams()
+	params.Dannounce = params.D
+	psub := getGossipsub(ctx, hosts[0], WithGossipSubParams(params))
+
+	// Wait a bit after the last message before checking we got the right messages
+	msgTimer := time.NewTimer(1 * time.Second)
+
+	// Checks we received the right messages
+	msgCount := 0
+	iannounceCount := 0
+	checkMsgs := func() {
+		if msgCount != 1 {
+			t.Fatalf("Expected 1 message received, got %d", msgCount)
+		}
+		if iannounceCount != 0 {
+			t.Fatalf("Expected no IANNOUNCE received, got %d", msgCount)
+		}
+	}
+
+	// Wait for the timer to expire
+	go func() {
+		select {
+		case <-msgTimer.C:
+			checkMsgs()
+			cancel()
+			return
+		case <-ctx.Done():
+			checkMsgs()
+		}
+	}()
+
+	var sentSubscribe bool
+	newMockGS(ctx, t, hosts[1], func(writeMsg func(*pb.RPC), irpc *pb.RPC) {
+		// When the first peer connects it will send us its subscriptions
+		// Reply by subcribing to the topic
+		topic := "foobar"
+		subscribe := true
+		if !sentSubscribe {
+			sentSubscribe = true
+
+			writeMsg(&pb.RPC{
+				Subscriptions: []*pb.RPC_SubOpts{{Subscribe: &subscribe, Topicid: &topic}},
+			})
+
+			go func() {
+				// Wait for a short interval to make sure the first peer
+				// received and processed the subscribe + graft
+				time.Sleep(100 * time.Millisecond)
+				// Publish messages from the first peer
+				data := []byte("mymessage")
+				psub.Publish(topic, data)
+			}()
+		}
+		msgCount += len(irpc.GetPublish())
+		iannounceCount += len(irpc.GetControl().GetIannounce())
+	})
+
+	connect(t, hosts[0], hosts[1])
+
+	<-ctx.Done()
+}
+
+// Test that INEED is sent only once when the message is responded back
+func TestGossipsubIneedOnceWhenSucceed(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	hosts := getDefaultHosts(t, 3)
+
+	msgID := func(pmsg *pb.Message) string {
+		// silly content-based test message-ID: just use the data as whole
+		return base64.URLEncoding.EncodeToString(pmsg.Data)
+	}
+
+	params := DefaultGossipSubParams()
+	params.Dannounce = params.D
+	psub := getGossipsub(ctx, hosts[0],
+		WithGossipSubParams(params),
+		WithMessageIdFn(msgID),
+		WithMessageSigning(false),
+	)
+	topic := "foobar"
+	_, err := psub.Subscribe(topic)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Wait a bit after the last message before checking we got the right messages
+	msgTimer := time.NewTimer(2 * time.Second)
+
+	// Checks we received the right messages
+	ineedCount := 0
+	checkMsgs := func() {
+		if ineedCount != 1 {
+			t.Fatalf("Expected 1 INEED received, got %d", ineedCount)
+		}
+	}
+
+	// Wait for the timer to expire
+	go func() {
+		select {
+		case <-msgTimer.C:
+			checkMsgs()
+			cancel()
+			return
+		case <-ctx.Done():
+			checkMsgs()
+		}
+	}()
+
+	msg := pb.Message{Topic: &topic, Data: []byte("mymessage")}
+	mid := msgID(&msg)
+	newMockGS(ctx, t, hosts[1], func(writeMsg func(*pb.RPC), irpc *pb.RPC) {
+		// When the first peer connects it will send us its subscriptions
+		for _, sub := range irpc.GetSubscriptions() {
+			if sub.GetSubscribe() {
+				// Reply by subcribing to the topic and grafting to the first peer
+				writeMsg(&pb.RPC{
+					Subscriptions: []*pb.RPC_SubOpts{{Subscribe: sub.Subscribe, Topicid: sub.Topicid}},
+					Control:       &pb.ControlMessage{Graft: []*pb.ControlGraft{{TopicID: sub.Topicid}}},
+				})
+
+				go func() {
+					// Wait for a short interval to make sure the first peer
+					// received and processed the subscribe + graft
+					time.Sleep(100 * time.Millisecond)
+					// Send IANNOUNCE
+					writeMsg(&pb.RPC{
+						Control: &pb.ControlMessage{Iannounce: []*pb.ControlIAnnounce{{TopicID: sub.Topicid, MessageID: &mid}}},
+					})
+				}()
+			}
+		}
+		ineedCount += len(irpc.GetControl().GetIneed())
+		for _, ineed := range irpc.GetControl().GetIneed() {
+			ineed_mid := ineed.GetMessageID()
+			if mid != ineed_mid {
+				t.Fatalf("Wrong message id in INEED expected %s got %s", mid, ineed_mid)
+			} else {
+				// Wait for a while so that all two IANNOUNCEs arrive
+				time.Sleep(200 * time.Millisecond)
+				writeMsg(&pb.RPC{
+					Publish: []*pb.Message{&msg},
+				})
+			}
+		}
+	})
+	newMockGS(ctx, t, hosts[2], func(writeMsg func(*pb.RPC), irpc *pb.RPC) {
+		// When the first peer connects it will send us its subscriptions
+		for _, sub := range irpc.GetSubscriptions() {
+			if sub.GetSubscribe() {
+				// Reply by subcribing to the topic and grafting to the first peer
+				writeMsg(&pb.RPC{
+					Subscriptions: []*pb.RPC_SubOpts{{Subscribe: sub.Subscribe, Topicid: sub.Topicid}},
+					Control:       &pb.ControlMessage{Graft: []*pb.ControlGraft{{TopicID: sub.Topicid}}},
+				})
+
+				go func() {
+					// Wait for a short interval to make sure the first peer
+					// received and processed the subscribe + graft
+					time.Sleep(100 * time.Millisecond)
+					// Send IANNOUNCE
+					writeMsg(&pb.RPC{
+						Control: &pb.ControlMessage{Iannounce: []*pb.ControlIAnnounce{{TopicID: sub.Topicid, MessageID: &mid}}},
+					})
+				}()
+			}
+		}
+		ineedCount += len(irpc.GetControl().GetIneed())
+		for _, ineed := range irpc.GetControl().GetIneed() {
+			ineed_mid := ineed.GetMessageID()
+			if mid != ineed_mid {
+				t.Fatalf("Wrong message id in INEED expected %s got %s", mid, ineed_mid)
+			} else {
+				// Wait for a while so that all two IANNOUNCEs arrive
+				time.Sleep(200 * time.Millisecond)
+				writeMsg(&pb.RPC{
+					Publish: []*pb.Message{&msg},
+				})
+			}
+		}
+	})
+
+	connect(t, hosts[0], hosts[1])
+	connect(t, hosts[0], hosts[2])
+
+	<-ctx.Done()
+}
+
+// Test that INEED is sent twice with appropriate delay when the message is not responded back and timeout occurs
+func TestGossipsubIneedTimeout(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	hosts := getDefaultHosts(t, 3)
+
+	msgID := func(pmsg *pb.Message) string {
+		// silly content-based test message-ID: just use the data as whole
+		return base64.URLEncoding.EncodeToString(pmsg.Data)
+	}
+
+	params := DefaultGossipSubParams()
+	params.Dannounce = params.D
+	psub := getGossipsub(ctx, hosts[0], WithGossipSubParams(params), WithMessageIdFn(msgID))
+	_, err := psub.Subscribe("foobar")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Wait a bit after the last message before checking we got the right messages
+	msgTimer := time.NewTimer(2 * time.Second)
+
+	// Checks we received the right messages
+	var ineeds []time.Time
+	checkMsgs := func() {
+		if len(ineeds) != 2 {
+			t.Fatalf("Expected 2 INEED received, got %d", len(ineeds))
+		}
+		diff := ineeds[0].Sub(ineeds[1])
+		if ineeds[1].After(ineeds[0]) {
+			diff = ineeds[1].Sub(ineeds[0])
+		}
+		if diff < params.Timeout-5*time.Millisecond {
+			t.Fatalf("The delay between INEEDs is not large enough which is %s", diff)
+		}
+	}
+
+	// Wait for the timer to expire
+	go func() {
+		select {
+		case <-msgTimer.C:
+			checkMsgs()
+			cancel()
+			return
+		case <-ctx.Done():
+			checkMsgs()
+		}
+	}()
+
+	msg := pb.Message{Data: []byte("mymessage")}
+	mid := msgID(&msg)
+	newMockGS(ctx, t, hosts[1], func(writeMsg func(*pb.RPC), irpc *pb.RPC) {
+		// When the first peer connects it will send us its subscriptions
+		for _, sub := range irpc.GetSubscriptions() {
+			if sub.GetSubscribe() {
+				// Reply by subcribing to the topic and grafting to the first peer
+				writeMsg(&pb.RPC{
+					Subscriptions: []*pb.RPC_SubOpts{{Subscribe: sub.Subscribe, Topicid: sub.Topicid}},
+					Control:       &pb.ControlMessage{Graft: []*pb.ControlGraft{{TopicID: sub.Topicid}}},
+				})
+
+				go func() {
+					// Wait for a short interval to make sure the first peer
+					// received and processed the subscribe + graft
+					time.Sleep(100 * time.Millisecond)
+					// Send IANNOUNCE
+					writeMsg(&pb.RPC{
+						Control: &pb.ControlMessage{Iannounce: []*pb.ControlIAnnounce{{TopicID: sub.Topicid, MessageID: &mid}}},
+					})
+				}()
+			}
+		}
+		if len(irpc.GetControl().GetIneed()) > 0 {
+			ineeds = append(ineeds, time.Now())
+		}
+	})
+	newMockGS(ctx, t, hosts[2], func(writeMsg func(*pb.RPC), irpc *pb.RPC) {
+		// When the first peer connects it will send us its subscriptions
+		for _, sub := range irpc.GetSubscriptions() {
+			if sub.GetSubscribe() {
+				// Reply by subcribing to the topic and grafting to the first peer
+				writeMsg(&pb.RPC{
+					Subscriptions: []*pb.RPC_SubOpts{{Subscribe: sub.Subscribe, Topicid: sub.Topicid}},
+					Control:       &pb.ControlMessage{Graft: []*pb.ControlGraft{{TopicID: sub.Topicid}}},
+				})
+
+				go func() {
+					// Wait for a short interval to make sure the first peer
+					// received and processed the subscribe + graft
+					time.Sleep(100 * time.Millisecond)
+					// Send IANNOUNCE
+					writeMsg(&pb.RPC{
+						Control: &pb.ControlMessage{Iannounce: []*pb.ControlIAnnounce{{TopicID: sub.Topicid, MessageID: &mid}}},
+					})
+				}()
+			}
+		}
+		if len(irpc.GetControl().GetIneed()) > 0 {
+			ineeds = append(ineeds, time.Now())
+		}
+	})
+
+	connect(t, hosts[0], hosts[1])
+	connect(t, hosts[0], hosts[2])
+
+	<-ctx.Done()
+}
+
+// Test that INEED is sent to mesh peers
+func TestGossipsubIneedMeshPeers(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	hosts := getDefaultHosts(t, 2)
+
+	msgID := func(pmsg *pb.Message) string {
+		// silly content-based test message-ID: just use the data as whole
+		return base64.URLEncoding.EncodeToString(pmsg.Data)
+	}
+
+	params := DefaultGossipSubParams()
+	params.Dannounce = params.D
+	psub := getGossipsub(ctx, hosts[0], WithGossipSubParams(params), WithMessageIdFn(msgID))
+	_, err := psub.Subscribe("foobar")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Wait a bit after the last message before checking we got the right messages
+	msgTimer := time.NewTimer(1 * time.Second)
+
+	// Checks we received the right messages
+	ineedCount := 0
+	checkMsgs := func() {
+		if ineedCount != 1 {
+			t.Fatalf("Expected 1 INEED received, got %d", ineedCount)
+		}
+	}
+
+	// Wait for the timer to expire
+	go func() {
+		select {
+		case <-msgTimer.C:
+			checkMsgs()
+			cancel()
+			return
+		case <-ctx.Done():
+			checkMsgs()
+		}
+	}()
+
+	var mid string
+	newMockGS(ctx, t, hosts[1], func(writeMsg func(*pb.RPC), irpc *pb.RPC) {
+		// When the first peer connects it will send us its subscriptions
+		for _, sub := range irpc.GetSubscriptions() {
+			if sub.GetSubscribe() {
+				// Reply by subcribing to the topic and grafting to the first peer
+				writeMsg(&pb.RPC{
+					Subscriptions: []*pb.RPC_SubOpts{{Subscribe: sub.Subscribe, Topicid: sub.Topicid}},
+					Control:       &pb.ControlMessage{Graft: []*pb.ControlGraft{{TopicID: sub.Topicid}}},
+				})
+
+				go func() {
+					// Wait for a short interval to make sure the first peer
+					// received and processed the subscribe + graft
+					time.Sleep(100 * time.Millisecond)
+					// Send IANNOUNCE
+					mid = msgID(&pb.Message{Data: []byte("mymessage")})
+					writeMsg(&pb.RPC{
+						Control: &pb.ControlMessage{Iannounce: []*pb.ControlIAnnounce{{TopicID: sub.Topicid, MessageID: &mid}}},
+					})
+				}()
+			}
+		}
+		ineedCount += len(irpc.GetControl().GetIneed())
+		if len(irpc.GetControl().GetIneed()) > 0 {
+			ineed_mid := irpc.GetControl().GetIneed()[0].GetMessageID()
+			if mid != ineed_mid {
+				t.Fatalf("Wrong message id in INEED expected %s got %s", mid, ineed_mid)
+			}
+		}
+	})
+
+	connect(t, hosts[0], hosts[1])
+
+	<-ctx.Done()
+}
+
+// Test that INEED is sent to direct peers
+func TestGossipsubIneedDirectPeers(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	hosts := getDefaultHosts(t, 2)
+
+	msgID := func(pmsg *pb.Message) string {
+		// silly content-based test message-ID: just use the data as whole
+		return base64.URLEncoding.EncodeToString(pmsg.Data)
+	}
+
+	params := DefaultGossipSubParams()
+	params.Dannounce = params.D
+	psub := getGossipsub(ctx, hosts[0],
+		WithGossipSubParams(params),
+		WithMessageIdFn(msgID),
+		WithDirectPeers([]peer.AddrInfo{{ID: hosts[1].ID(), Addrs: hosts[1].Addrs()}}))
+	_, err := psub.Subscribe("foobar")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Wait a bit after the last message before checking we got the right messages
+	msgTimer := time.NewTimer(1 * time.Second)
+
+	// Checks we received the right messages
+	ineedCount := 0
+	checkMsgs := func() {
+		if ineedCount != 1 {
+			t.Fatalf("Expected 1 INEED received, got %d", ineedCount)
+		}
+	}
+
+	// Wait for the timer to expire
+	go func() {
+		select {
+		case <-msgTimer.C:
+			checkMsgs()
+			cancel()
+			return
+		case <-ctx.Done():
+			checkMsgs()
+		}
+	}()
+
+	var mid string
+	newMockGS(ctx, t, hosts[1], func(writeMsg func(*pb.RPC), irpc *pb.RPC) {
+		// When the first peer connects it will send us its subscriptions
+		for _, sub := range irpc.GetSubscriptions() {
+			if sub.GetSubscribe() {
+				// Reply by subcribing to the topic and grafting to the first peer
+				writeMsg(&pb.RPC{
+					Subscriptions: []*pb.RPC_SubOpts{{Subscribe: sub.Subscribe, Topicid: sub.Topicid}},
+				})
+
+				go func() {
+					// Wait for a short interval to make sure the first peer
+					// received and processed the subscribe + graft
+					time.Sleep(100 * time.Millisecond)
+					// Send IANNOUNCE
+					mid = msgID(&pb.Message{Data: []byte("mymessage")})
+					writeMsg(&pb.RPC{
+						Control: &pb.ControlMessage{Iannounce: []*pb.ControlIAnnounce{{TopicID: sub.Topicid, MessageID: &mid}}},
+					})
+				}()
+			}
+		}
+		ineedCount += len(irpc.GetControl().GetIneed())
+		if len(irpc.GetControl().GetIneed()) > 0 {
+			ineed_mid := irpc.GetControl().GetIneed()[0].GetMessageID()
+			if mid != ineed_mid {
+				t.Fatalf("Wrong message id in INEED expected %s got %s", mid, ineed_mid)
+			}
+		}
+	})
+
+	connect(t, hosts[0], hosts[1])
+
+	<-ctx.Done()
+}
+
+// Test that INEED is not sent to indirect non-mesh peers
+func TestGossipsubIneedIndirectNonmeshPeers(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	hosts := getDefaultHosts(t, 2)
+
+	msgID := func(pmsg *pb.Message) string {
+		// silly content-based test message-ID: just use the data as whole
+		return base64.URLEncoding.EncodeToString(pmsg.Data)
+	}
+
+	params := DefaultGossipSubParams()
+	params.Dannounce = params.D
+	psub := getGossipsub(ctx, hosts[0], WithGossipSubParams(params), WithMessageIdFn(msgID))
+	_, err := psub.Subscribe("foobar")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Wait a bit after the last message before checking we got the right messages
+	msgTimer := time.NewTimer(1 * time.Second)
+
+	// Checks we received the right messages
+	ineedCount := 0
+	checkMsgs := func() {
+		if ineedCount != 0 {
+			t.Fatalf("Expected no INEED received, got %d", ineedCount)
+		}
+	}
+
+	// Wait for the timer to expire
+	go func() {
+		select {
+		case <-msgTimer.C:
+			checkMsgs()
+			cancel()
+			return
+		case <-ctx.Done():
+			checkMsgs()
+		}
+	}()
+
+	newMockGS(ctx, t, hosts[1], func(writeMsg func(*pb.RPC), irpc *pb.RPC) {
+		// When the first peer connects it will send us its subscriptions
+		for _, sub := range irpc.GetSubscriptions() {
+			if sub.GetSubscribe() {
+				// Reply by subcribing to the topic and pruning to the first peer to make sure
+				// that it's not in the mesh
+				writeMsg(&pb.RPC{
+					Subscriptions: []*pb.RPC_SubOpts{{Subscribe: sub.Subscribe, Topicid: sub.Topicid}},
+					Control:       &pb.ControlMessage{Prune: []*pb.ControlPrune{{TopicID: sub.Topicid}}},
+				})
+
+				go func() {
+					// Wait for a short interval to make sure the first peer
+					// received and processed the subscribe + graft
+					time.Sleep(100 * time.Millisecond)
+					// Send IANNOUNCE
+					mid := msgID(&pb.Message{Data: []byte("mymessage")})
+					writeMsg(&pb.RPC{
+						Control: &pb.ControlMessage{Iannounce: []*pb.ControlIAnnounce{{TopicID: sub.Topicid, MessageID: &mid}}},
+					})
+				}()
+			}
+		}
+		ineedCount += len(irpc.GetControl().GetIneed())
+	})
+
+	connect(t, hosts[0], hosts[1])
+
+	<-ctx.Done()
+}
+
+func TestSparseGossipsubV2(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	hosts := getDefaultHosts(t, 20)
+
+	params := DefaultGossipSubParams()
+	params.Dannounce = params.D
+	psubs := getGossipsubs(ctx, hosts, WithGossipSubParams(params))
+
+	var msgs []*Subscription
+	for _, ps := range psubs {
+		subch, err := ps.Subscribe("foobar")
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		msgs = append(msgs, subch)
+	}
+
+	sparseConnect(t, hosts)
+
+	// wait for heartbeats to build mesh
+	time.Sleep(time.Second * 2)
+
+	for i := 0; i < 100; i++ {
+		msg := []byte(fmt.Sprintf("%d it's not a floooooood %d", i, i))
+
+		owner := mrand.Intn(len(psubs))
+
+		psubs[owner].Publish("foobar", msg)
+
+		for _, sub := range msgs {
+			got, err := sub.Next(ctx)
+			if err != nil {
+				t.Fatal(sub.err)
+			}
+			if !bytes.Equal(msg, got.Data) {
+				t.Fatal("got wrong message!")
+			}
+		}
+	}
+}
+
+func TestDenseGossipsubV2(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	hosts := getDefaultHosts(t, 20)
+
+	params := DefaultGossipSubParams()
+	params.Dannounce = params.D
+	psubs := getGossipsubs(ctx, hosts, WithGossipSubParams(params))
+
+	var msgs []*Subscription
+	for _, ps := range psubs {
+		subch, err := ps.Subscribe("foobar")
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		msgs = append(msgs, subch)
+	}
+
+	denseConnect(t, hosts)
+
+	// wait for heartbeats to build mesh
+	time.Sleep(time.Second * 2)
+
+	for i := 0; i < 100; i++ {
+		msg := []byte(fmt.Sprintf("%d it's not a floooooood %d", i, i))
+
+		owner := mrand.Intn(len(psubs))
+
+		psubs[owner].Publish("foobar", msg)
+
+		for _, sub := range msgs {
+			got, err := sub.Next(ctx)
+			if err != nil {
+				t.Fatal(sub.err)
+			}
+			if !bytes.Equal(msg, got.Data) {
+				t.Fatal("got wrong message!")
+			}
+		}
 	}
 }
 
