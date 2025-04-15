@@ -3,10 +3,12 @@ package pubsub
 import (
 	"context"
 	"crypto/sha256"
+	"errors"
 	"fmt"
 	"io"
 	"math/rand"
 	"sort"
+	"sync"
 	"time"
 
 	pb "github.com/libp2p/go-libp2p-pubsub/pb"
@@ -1140,6 +1142,10 @@ func (gs *GossipSubRouter) connector() {
 }
 
 func (gs *GossipSubRouter) Publish(msg *Message) {
+	if msg.messageBatch != nil {
+		defer msg.messageBatch.doneWithMsg()
+	}
+
 	gs.mcache.Put(msg)
 
 	from := msg.ReceivedFrom
@@ -1213,6 +1219,10 @@ func (gs *GossipSubRouter) Publish(msg *Message) {
 			continue
 		}
 
+		if msg.messageBatch != nil {
+			msg.messageBatch.queueRPC(pid, gs.p.idGen.ID(msg), out)
+			continue
+		}
 		gs.sendRPC(pid, out, false)
 	}
 }
@@ -2203,4 +2213,81 @@ func computeChecksum(mid string) checksum {
 		cs.length = uint8(copy(cs.payload[:], mid))
 	}
 	return cs
+}
+
+type pendingRPC struct {
+	peer peer.ID
+	rpc  *RPC
+}
+
+// MessageBatch allows a user to batch related messages and then publish them
+// at once. This allows the system to prioritize sending a single copy of each
+// message before sending more copies. This helps bandwidth constrained peers.
+type MessageBatch struct {
+	sync.Mutex
+	// PendingRPCsToAdd is a waitgroup that is used to wait for all the RPCs to
+	// be added to the batch. This library's publish is async, so we need to be
+	// careful to not publish the batch before all the RPCs are added.
+	pendingRPCsToAdd sync.WaitGroup
+	sendRPC          func(peer peer.ID, rpc *RPC, urgent bool)
+	rpcs             map[string][]pendingRPC
+}
+
+// NewMessageBatch creates a new MessageBatch. This only works for GossipSub.
+func NewMessageBatch(ps *PubSub) (*MessageBatch, error) {
+	if ps == nil {
+		return nil, errors.New("pubsub is nil")
+	}
+	if gs, ok := ps.rt.(*GossipSubRouter); ok {
+		return &MessageBatch{
+			sendRPC: gs.sendRPC,
+		}, nil
+	}
+	return nil, errors.New("pubsub is not a GossipSubRouter")
+}
+
+// Add adds a message to the batch.
+func (p *MessageBatch) Add(ctx context.Context, topic *Topic, data []byte, opts ...PubOpt) error {
+	p.pendingRPCsToAdd.Add(1)
+	opts = append(opts, func(o *PublishOptions) error {
+		o.messageBatch = p
+		return nil
+	})
+	return topic.Publish(ctx, data, opts...)
+}
+
+// Publish publishes the messages in the batch.
+//
+// Users should make sure there is enough space in the Peer's outbound queue to
+// ensure messages are not dropped. WithPeerOutboundQueueSize should be set to
+// at least the expected number of batched messages per peer plus some slack to
+// account for gossip messages.
+func (p *MessageBatch) Publish() {
+	p.pendingRPCsToAdd.Wait()
+	p.Lock()
+	defer p.Unlock()
+
+	for len(p.rpcs) > 0 {
+		for msgID, rpcs := range p.rpcs {
+			if len(rpcs) == 0 {
+				delete(p.rpcs, msgID)
+				continue
+			}
+			p.sendRPC(rpcs[0].peer, rpcs[0].rpc, false)
+			p.rpcs[msgID] = rpcs[1:]
+		}
+	}
+}
+
+func (p *MessageBatch) doneWithMsg() {
+	p.pendingRPCsToAdd.Done()
+}
+
+func (p *MessageBatch) queueRPC(peer peer.ID, msgID string, rpc *RPC) {
+	p.Lock()
+	defer p.Unlock()
+	if p.rpcs == nil {
+		p.rpcs = make(map[string][]pendingRPC)
+	}
+	p.rpcs[msgID] = append(p.rpcs[msgID], pendingRPC{peer: peer, rpc: rpc})
 }

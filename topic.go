@@ -217,6 +217,7 @@ type PublishOptions struct {
 	customKey     ProvideKey
 	local         bool
 	validatorData any
+	messageBatch  *MessageBatch
 }
 
 type PubOpt func(pub *PublishOptions) error
@@ -309,7 +310,7 @@ func (t *Topic) Publish(ctx context.Context, data []byte, opts ...PubOpt) error 
 		}
 	}
 
-	return t.p.val.PushLocal(&Message{m, "", t.p.host.ID(), pub.validatorData, pub.local})
+	return t.p.val.PushLocal(&Message{m, "", t.p.host.ID(), pub.validatorData, pub.local, pub.messageBatch})
 }
 
 // WithReadiness returns a publishing option for only publishing when the router is ready.

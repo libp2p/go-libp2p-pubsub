@@ -9,9 +9,11 @@ import (
 	"io"
 	mrand "math/rand"
 	"sort"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
+	"testing/quick"
 	"time"
 
 	pb "github.com/libp2p/go-libp2p-pubsub/pb"
@@ -3333,4 +3335,246 @@ func BenchmarkAllocDoDropRPC(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		gs.doDropRPC(&RPC{}, "peerID", "reason")
 	}
+}
+
+func TestMessageBatchPublishesRarestFirst(t *testing.T) {
+	const maxNumPeers = 256
+	const maxNumMessages = 1_000
+
+	err := quick.Check(func(numPeers uint16, numMessages uint16) bool {
+		numPeers = numPeers % maxNumPeers
+		numMessages = numMessages % maxNumMessages
+
+		output := make([]pendingRPC, 0, numMessages*numPeers)
+		batch := &MessageBatch{
+			sendRPC: func(peer peer.ID, rpc *RPC, urgent bool) {
+				output = append(output, pendingRPC{
+					peer: peer,
+					rpc:  rpc,
+				})
+			},
+		}
+
+		peers := make([]peer.ID, numPeers)
+		for i := 0; i < int(numPeers); i++ {
+			peers[i] = peer.ID(fmt.Sprintf("peer%d", i))
+		}
+
+		getID := func(r pendingRPC) string {
+			return string(r.rpc.Publish[0].Data)
+		}
+
+		for i := 0; i < int(numMessages); i++ {
+			for j := 0; j < int(numPeers); j++ {
+				batch.queueRPC(peers[j], fmt.Sprintf("msg%d", i), &RPC{
+					RPC: pb.RPC{
+						Publish: []*pb.Message{
+							{
+								Data: []byte(fmt.Sprintf("msg%d", i)),
+							},
+						},
+					},
+				})
+			}
+		}
+
+		batch.Publish()
+
+		// Check invariants
+		// 1. The published rpcs count is the same as the number of messages added
+		// 2. Before all message IDs are seen, no message ID may be repeated
+		// 3. The set of message ID + peer ID combinations should be the same as the input
+
+		// 1.
+		expectedCount := int(numMessages) * int(numPeers)
+		if len(output) != expectedCount {
+			t.Logf("Expected %d RPCs, got %d", expectedCount, len(output))
+			return false
+		}
+
+		// 2.
+		seen := make(map[string]bool)
+		expected := make(map[string]bool)
+		for i := 0; i < int(numMessages); i++ {
+			expected[fmt.Sprintf("msg%d", i)] = true
+		}
+
+		for _, rpc := range output {
+			if expected[getID(rpc)] {
+				delete(expected, getID(rpc))
+			}
+			if seen[getID(rpc)] && len(expected) > 0 {
+				t.Logf("Message ID %s repeated before all message IDs are seen", getID(rpc))
+				return false
+			}
+			seen[getID(rpc)] = true
+		}
+
+		// 3.
+		inputSet := make(map[string]bool)
+		for i := 0; i < int(numMessages); i++ {
+			for j := 0; j < int(numPeers); j++ {
+				inputSet[fmt.Sprintf("msg%d:peer%d", i, j)] = true
+			}
+		}
+		for _, rpc := range output {
+			if !inputSet[getID(rpc)+":"+string(rpc.peer)] {
+				t.Logf("Message ID %s not in input", getID(rpc))
+				return false
+			}
+		}
+		return true
+	}, &quick.Config{MaxCount: 32})
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+func BenchmarkMessageBatchPublish(b *testing.B) {
+	const numPeers = 1_000
+	const numMessages = 1_000
+
+	batch := &MessageBatch{sendRPC: func(peer peer.ID, rpc *RPC, urgent bool) {}}
+
+	peers := make([]peer.ID, numPeers)
+	for i := 0; i < int(numPeers); i++ {
+		peers[i] = peer.ID(fmt.Sprintf("peer%d", i))
+	}
+	msgs := make([]string, numMessages)
+	for i := 0; i < numMessages; i++ {
+		msgs[i] = fmt.Sprintf("msg%d", i)
+	}
+
+	emptyRPC := &RPC{}
+	b.ResetTimer()
+
+	for i := 0; i < b.N; i++ {
+		j := i % len(peers)
+		msgIdx := i % numMessages
+		batch.queueRPC(peers[j], msgs[msgIdx], emptyRPC)
+		if i%100 == 0 {
+			batch.Publish()
+		}
+	}
+}
+
+func TestMessageBatchPublish(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	hosts := getDefaultHosts(t, 20)
+
+	msgIDFn := func(msg *pb.Message) string {
+		hdr := string(msg.Data[0:16])
+		msgID := strings.SplitN(hdr, " ", 2)
+		return msgID[0]
+	}
+	const numMessages = 100
+	// +8 to account for the gossiping overhead
+	psubs := getGossipsubs(ctx, hosts, WithMessageIdFn(msgIDFn), WithPeerOutboundQueueSize(numMessages+8))
+
+	var topics []*Topic
+	var msgs []*Subscription
+	for _, ps := range psubs {
+		topic, err := ps.Join("foobar")
+		if err != nil {
+			t.Fatal(err)
+		}
+		topics = append(topics, topic)
+
+		subch, err := topic.Subscribe(WithBufferSize(numMessages + 8))
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		msgs = append(msgs, subch)
+	}
+
+	sparseConnect(t, hosts)
+
+	// wait for heartbeats to build mesh
+	time.Sleep(time.Second * 2)
+
+	batch, err := NewMessageBatch(psubs[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for i := 0; i < numMessages; i++ {
+		msg := []byte(fmt.Sprintf("%d it's not a floooooood %d", i, i))
+		err := batch.Add(ctx, topics[0], msg)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	batch.Publish()
+
+	for i := 1; i < numMessages; i++ {
+		for _, sub := range msgs {
+			got, err := sub.Next(ctx)
+			if err != nil {
+				t.Fatal(sub.err)
+			}
+			id := msgIDFn(got.Message)
+			expected := []byte(fmt.Sprintf("%s it's not a floooooood %s", id, id))
+			if !bytes.Equal(expected, got.Data) {
+				t.Fatal("got wrong message!")
+			}
+		}
+	}
+}
+
+func TestMessageBatchAsyncAddMsg(t *testing.T) {
+	// Multiple runs because this is racey
+	const runs = 10
+	const expectedNumRPCsPerPeer = 10
+
+	peerCounts := []int{2, 3, 5}
+
+	for _, numPeers := range peerCounts {
+		t.Run(fmt.Sprintf("%d hosts", numPeers), func(t *testing.T) {
+			hosts := getDefaultHosts(t, numPeers)
+			psubs := getGossipsubs(context.Background(), hosts)
+			denseConnect(t, hosts)
+
+			var publisherTopic *Topic
+			for i, psub := range psubs {
+				topic, err := psub.Join("foobar")
+				if err != nil {
+					t.Fatal(err)
+				}
+				_, err = topic.Subscribe(WithBufferSize(runs * expectedNumRPCsPerPeer))
+				if err != nil {
+					t.Fatal(err)
+				}
+
+				if i == 0 {
+					publisherTopic = topic
+				}
+			}
+			// Give the nodes a second to bootstrap
+			time.Sleep(2 * time.Second)
+
+			for range runs {
+				var sentRPCs atomic.Int32
+				b, err := NewMessageBatch(psubs[0])
+				if err != nil {
+					t.Fatal(err)
+				}
+				b.sendRPC = func(peer peer.ID, rpc *RPC, urgent bool) {
+					sentRPCs.Add(1)
+				}
+
+				// publisher
+				for i := range expectedNumRPCsPerPeer {
+					b.Add(context.Background(), publisherTopic, []byte(fmt.Sprintf("msg%d", i)))
+				}
+				b.Publish()
+
+				if sentRPCs.Load() != int32(expectedNumRPCsPerPeer*(numPeers-1)) {
+					t.Fatalf("expected %d RPCs, got %d", expectedNumRPCsPerPeer, sentRPCs.Load())
+				}
+			}
+		})
+	}
+
 }
