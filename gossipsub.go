@@ -707,7 +707,7 @@ func (gs *GossipSubRouter) AcceptFrom(p peer.ID) AcceptStatus {
 // PreValidation sends the IDONTWANT control messages to all the mesh
 // peers. They need to be sent right before the validation because they
 // should be seen by the peers as soon as possible.
-func (gs *GossipSubRouter) PreValidation(msgs []*Message) {
+func (gs *GossipSubRouter) PreValidation(from peer.ID, msgs []*Message) {
 	tmids := make(map[string][]string)
 	for _, msg := range msgs {
 		if len(msg.GetData()) < gs.params.IDontWantMessageThreshold {
@@ -724,6 +724,10 @@ func (gs *GossipSubRouter) PreValidation(msgs []*Message) {
 		shuffleStrings(mids)
 		// send IDONTWANT to all the mesh peers
 		for p := range gs.mesh[topic] {
+			if p == from {
+				// We don't send IDONTWANT to the peer that sent us the messages
+				continue
+			}
 			// send to only peers that support IDONTWANT
 			if gs.feature(GossipSubFeatureIdontwant, gs.peers[p]) {
 				idontwant := []*pb.ControlIDontWant{{MessageIDs: mids}}

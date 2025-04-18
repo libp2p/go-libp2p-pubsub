@@ -203,7 +203,7 @@ type PubSubRouter interface {
 	AcceptFrom(peer.ID) AcceptStatus
 	// PreValidation is invoked on messages in the RPC envelope right before pushing it to
 	// the validation pipeline
-	PreValidation([]*Message)
+	PreValidation(from peer.ID, msgs []*Message)
 	// HandleRPC is invoked to process control messages in the RPC envelope.
 	// It is invoked after subscriptions and payload messages have been processed.
 	HandleRPC(*RPC)
@@ -1106,7 +1106,7 @@ func (p *PubSub) handleIncomingRPC(rpc *RPC) {
 				toPush = append(toPush, msg)
 			}
 		}
-		p.rt.PreValidation(toPush)
+		p.rt.PreValidation(rpc.from, toPush)
 		for _, msg := range toPush {
 			p.pushMsg(msg)
 		}

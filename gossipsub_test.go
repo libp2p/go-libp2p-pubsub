@@ -2815,6 +2815,78 @@ func TestGossipsubIdontwantReceive(t *testing.T) {
 	<-ctx.Done()
 }
 
+type mockRawTracer struct {
+	onRecvRPC func(*RPC)
+}
+
+func (m *mockRawTracer) RecvRPC(rpc *RPC) {
+	if m.onRecvRPC != nil {
+		m.onRecvRPC(rpc)
+	}
+}
+
+func (m *mockRawTracer) AddPeer(p peer.ID, proto protocol.ID)      {}
+func (m *mockRawTracer) DeliverMessage(msg *Message)               {}
+func (m *mockRawTracer) DropRPC(rpc *RPC, p peer.ID)               {}
+func (m *mockRawTracer) DuplicateMessage(msg *Message)             {}
+func (m *mockRawTracer) Graft(p peer.ID, topic string)             {}
+func (m *mockRawTracer) Join(topic string)                         {}
+func (m *mockRawTracer) Leave(topic string)                        {}
+func (m *mockRawTracer) Prune(p peer.ID, topic string)             {}
+func (m *mockRawTracer) RejectMessage(msg *Message, reason string) {}
+func (m *mockRawTracer) RemovePeer(p peer.ID)                      {}
+func (m *mockRawTracer) SendRPC(rpc *RPC, p peer.ID)               {}
+func (m *mockRawTracer) ThrottlePeer(p peer.ID)                    {}
+func (m *mockRawTracer) UndeliverableMessage(msg *Message)         {}
+func (m *mockRawTracer) ValidateMessage(msg *Message)              {}
+
+var _ RawTracer = &mockRawTracer{}
+
+func TestGossipsubNoIDONTWANTToMessageSender(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	hosts := getDefaultHosts(t, 3)
+	denseConnect(t, hosts)
+
+	psubs := make([]*PubSub, 2)
+
+	receivedIDONTWANT := make(chan struct{})
+	psubs[0] = getGossipsub(ctx, hosts[0], WithRawTracer(&mockRawTracer{
+		onRecvRPC: func(rpc *RPC) {
+			if len(rpc.GetControl().GetIdontwant()) > 0 {
+				close(receivedIDONTWANT)
+			}
+		},
+	}))
+	psubs[1] = getGossipsub(ctx, hosts[1])
+
+	topicString := "foobar"
+	var topics []*Topic
+	for _, ps := range psubs {
+		topic, err := ps.Join(topicString)
+		if err != nil {
+			t.Fatal(err)
+		}
+		topics = append(topics, topic)
+
+		_, err = ps.Subscribe(topicString)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	time.Sleep(time.Second)
+
+	msg := make([]byte, GossipSubIDontWantMessageThreshold+1)
+	topics[0].Publish(ctx, msg)
+
+	select {
+	case <-receivedIDONTWANT:
+		t.Fatal("IDONTWANT should not be sent to the message sender")
+	case <-time.After(time.Second):
+	}
+
+}
+
 // Test that non-mesh peers will not get IDONTWANT
 func TestGossipsubIdontwantNonMesh(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
