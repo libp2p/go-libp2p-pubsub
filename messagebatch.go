@@ -28,12 +28,12 @@ type pendingRPC struct {
 	rpc  *RPC
 }
 
-type RarestFirstStrategy struct {
+type RarestFirstRPCScheduler struct {
 	sync.Mutex
 	rpcs map[string][]pendingRPC
 }
 
-func (s *RarestFirstStrategy) AddRPC(peer peer.ID, msgID string, rpc *RPC) {
+func (s *RarestFirstRPCScheduler) AddRPC(peer peer.ID, msgID string, rpc *RPC) {
 	s.Lock()
 	defer s.Unlock()
 	if s.rpcs == nil {
@@ -42,7 +42,7 @@ func (s *RarestFirstStrategy) AddRPC(peer peer.ID, msgID string, rpc *RPC) {
 	s.rpcs[msgID] = append(s.rpcs[msgID], pendingRPC{peer: peer, rpc: rpc})
 }
 
-func (s *RarestFirstStrategy) All() iter.Seq2[peer.ID, *RPC] {
+func (s *RarestFirstRPCScheduler) All() iter.Seq2[peer.ID, *RPC] {
 	return func(yield func(peer.ID, *RPC) bool) {
 		s.Lock()
 		defer s.Unlock()

@@ -1399,7 +1399,7 @@ func (p *PubSub) PublishBatch(batch *MessageBatch) error {
 
 	if copy.Scheduler == nil {
 		// Default to RarestFirstStrategy
-		copy.Scheduler = &RarestFirstStrategy{}
+		copy.Scheduler = &RarestFirstRPCScheduler{}
 	}
 
 	p.sendMessageBatch <- &copy

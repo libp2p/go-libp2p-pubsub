@@ -3337,7 +3337,7 @@ func BenchmarkAllocDoDropRPC(b *testing.B) {
 	}
 }
 
-func TestRarestFirstPublishStrategy(t *testing.T) {
+func TestRarestFirstRPCScheduler(t *testing.T) {
 	const maxNumPeers = 256
 	const maxNumMessages = 1_000
 
@@ -3347,7 +3347,7 @@ func TestRarestFirstPublishStrategy(t *testing.T) {
 
 		output := make([]pendingRPC, 0, numMessages*numPeers)
 
-		var strategy RarestFirstStrategy
+		var strategy RarestFirstRPCScheduler
 
 		peers := make([]peer.ID, numPeers)
 		for i := 0; i < int(numPeers); i++ {
@@ -3429,10 +3429,10 @@ func TestRarestFirstPublishStrategy(t *testing.T) {
 	}
 }
 
-func BenchmarkRarestFirstPublishStrategy(b *testing.B) {
+func BenchmarkRarestFirstRPCScheduler(b *testing.B) {
 	const numPeers = 1_000
 	const numMessages = 1_000
-	var strategy RarestFirstStrategy
+	var strategy RarestFirstRPCScheduler
 
 	peers := make([]peer.ID, numPeers)
 	for i := 0; i < int(numPeers); i++ {
