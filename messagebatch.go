@@ -8,18 +8,18 @@ import (
 )
 
 // MessageBatch allows a user to batch related messages and then publish them at
-// once. This allows the Scheduler to define an order for the outgoing RPCs.
+// once. This allows the Scheduler to define an order for outgoing RPCs.
 // This helps bandwidth constrained peers.
 type MessageBatch struct {
 	Scheduler RPCScheduler
 	messages  []*Message
 }
 
-// RPCScheduler is the publishing strategy publishing a set of RPCs.
+// RPCScheduler schedules outgoing RPCs.
 type RPCScheduler interface {
-	// AddRPC adds an RPC to the strategy.
+	// AddRPC adds an RPC to the scheduler.
 	AddRPC(peer peer.ID, msgID string, rpc *RPC)
-	// All returns an ordered iterator of RPCs to publish.
+	// All returns an ordered iterator of RPCs.
 	All() iter.Seq2[peer.ID, *RPC]
 }
 

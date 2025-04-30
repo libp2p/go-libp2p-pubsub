@@ -1390,7 +1390,7 @@ func (p *PubSub) PublishBatch(batch *MessageBatch) error {
 		return fmt.Errorf("pubsub router is not a BatchPublisher")
 	}
 
-	// Copy the batch to avoid the footgun of reusing strategy state across batches
+	// Copy the batch to avoid the footgun of reusing scheduler state across batches
 	var copy MessageBatch
 	copy.Scheduler = batch.Scheduler
 	copy.messages = batch.messages
@@ -1398,7 +1398,7 @@ func (p *PubSub) PublishBatch(batch *MessageBatch) error {
 	batch.messages = nil
 
 	if copy.Scheduler == nil {
-		// Default to RarestFirstStrategy
+		// Default to Rarest first
 		copy.Scheduler = &RarestFirstRPCScheduler{}
 	}
 
