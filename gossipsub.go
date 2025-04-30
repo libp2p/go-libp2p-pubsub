@@ -1146,11 +1146,11 @@ func (gs *GossipSubRouter) PublishBatch(batch *MessageBatch) {
 	for _, msg := range batch.messages {
 		msgID := gs.p.idGen.ID(msg)
 		for p, rpc := range gs.rpcs(msg) {
-			batch.Strategy.AddRPC(p, msgID, rpc)
+			batch.Scheduler.AddRPC(p, msgID, rpc)
 		}
 	}
 
-	for p, rpc := range batch.Strategy.All() {
+	for p, rpc := range batch.Scheduler.All() {
 		gs.sendRPC(p, rpc, false)
 	}
 }

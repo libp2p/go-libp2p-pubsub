@@ -1392,14 +1392,14 @@ func (p *PubSub) PublishBatch(batch *MessageBatch) error {
 
 	// Copy the batch to avoid the footgun of reusing strategy state across batches
 	var copy MessageBatch
-	copy.Strategy = batch.Strategy
+	copy.Scheduler = batch.Scheduler
 	copy.messages = batch.messages
-	batch.Strategy = nil
+	batch.Scheduler = nil
 	batch.messages = nil
 
-	if copy.Strategy == nil {
+	if copy.Scheduler == nil {
 		// Default to RarestFirstStrategy
-		copy.Strategy = &RarestFirstStrategy{}
+		copy.Scheduler = &RarestFirstStrategy{}
 	}
 
 	p.sendMessageBatch <- &copy

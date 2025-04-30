@@ -7,19 +7,19 @@ import (
 	"github.com/libp2p/go-libp2p/core/peer"
 )
 
-// MessageBatch allows a user to batch related messages and then publish them
-// at once. This allows the system to prioritize sending a single copy of each
-// message before sending more copies. This helps bandwidth constrained peers.
+// MessageBatch allows a user to batch related messages and then publish them at
+// once. This allows the Scheduler to define an order for the outgoing RPCs.
+// This helps bandwidth constrained peers.
 type MessageBatch struct {
-	Strategy BatchPublishStrategy
-	messages []*Message
+	Scheduler RPCScheduler
+	messages  []*Message
 }
 
-// BatchPublishStrategy is the publishing strategy publishing a batch of messages.
-type BatchPublishStrategy interface {
+// RPCScheduler is the publishing strategy publishing a set of RPCs.
+type RPCScheduler interface {
 	// AddRPC adds an RPC to the strategy.
 	AddRPC(peer peer.ID, msgID string, rpc *RPC)
-	// All returns an ordered sequence of RPCs to publish.
+	// All returns an ordered iterator of RPCs to publish.
 	All() iter.Seq2[peer.ID, *RPC]
 }
 
