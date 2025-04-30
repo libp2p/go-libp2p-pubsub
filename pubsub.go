@@ -134,6 +134,9 @@ type PubSub struct {
 	// sendMsg handles messages that have been validated
 	sendMsg chan *Message
 
+	// sendMessageBatch publishes a batch of messages
+	sendMessageBatch chan *MessageBatch
+
 	// addVal handles validator registration requests
 	addVal chan *addValReq
 
@@ -239,7 +242,6 @@ type Message struct {
 	ReceivedFrom  peer.ID
 	ValidatorData interface{}
 	Local         bool
-	messageBatch  *MessageBatch
 }
 
 func (m *Message) GetFrom() peer.ID {
@@ -286,6 +288,7 @@ func NewPubSub(ctx context.Context, h host.Host, rt PubSubRouter, opts ...Option
 		rmTopic:               make(chan *rmTopicReq),
 		getTopics:             make(chan *topicReq),
 		sendMsg:               make(chan *Message, 32),
+		sendMessageBatch:      make(chan *MessageBatch, 1),
 		addVal:                make(chan *addValReq),
 		rmVal:                 make(chan *rmValReq),
 		eval:                  make(chan func()),
@@ -646,6 +649,9 @@ func (p *PubSub) processLoop(ctx context.Context) {
 
 		case msg := <-p.sendMsg:
 			p.publishMessage(msg)
+
+		case batch := <-p.sendMessageBatch:
+			p.publishMessageBatch(batch)
 
 		case req := <-p.addVal:
 			p.val.AddValidator(req)
@@ -1106,7 +1112,7 @@ func (p *PubSub) handleIncomingRPC(rpc *RPC) {
 				continue
 			}
 
-			msg := &Message{pmsg, "", rpc.from, nil, false, nil}
+			msg := &Message{pmsg, "", rpc.from, nil, false}
 			if p.shouldPush(msg) {
 				toPush = append(toPush, msg)
 			}
@@ -1224,6 +1230,15 @@ func (p *PubSub) publishMessage(msg *Message) {
 	if !msg.Local {
 		p.rt.Publish(msg)
 	}
+}
+
+func (p *PubSub) publishMessageBatch(batch *MessageBatch) {
+	for _, msg := range batch.messages {
+		p.tracer.DeliverMessage(msg)
+		p.notifySubs(msg)
+	}
+	// We type checked when pushing the batch to the channel
+	p.rt.(BatchPublisher).PublishBatch(batch)
 }
 
 type addTopicReq struct {
@@ -1363,24 +1378,6 @@ func (p *PubSub) Publish(topic string, data []byte, opts ...PubOpt) error {
 	return t.Publish(context.TODO(), data, opts...)
 }
 
-// NewMessageBatch creates a new MessageBatch. This only works for GossipSub.
-func (p *PubSub) NewMessageBatch(opts ...func(*MessageBatch)) (*MessageBatch, error) {
-	if p == nil {
-		return nil, errors.New("pubsub is nil")
-	}
-	if _, ok := p.rt.(*GossipSubRouter); ok {
-		b := &MessageBatch{
-			// Default strategy
-			Strategy: &RarestFirstStrategy{},
-		}
-		for _, opt := range opts {
-			opt(b)
-		}
-		return b, nil
-	}
-	return nil, errors.New("pubsub is not a GossipSubRouter")
-}
-
 // PublishBatch publishes a batch of messages. This only works for routers that
 // implement the BatchPublisher interface.
 //
@@ -1389,14 +1386,24 @@ func (p *PubSub) NewMessageBatch(opts ...func(*MessageBatch)) (*MessageBatch, er
 // at least the expected number of batched messages per peer plus some slack to
 // account for gossip messages.
 func (p *PubSub) PublishBatch(batch *MessageBatch) error {
-	if p == nil {
-		return errors.New("pubsub is nil")
+	if _, ok := p.rt.(BatchPublisher); !ok {
+		return fmt.Errorf("pubsub router is not a BatchPublisher")
 	}
-	if pb, ok := p.rt.(BatchPublisher); ok {
-		pb.PublishBatch(batch)
-		return nil
+
+	// Copy the batch to avoid the footgun of reusing strategy state across batches
+	var copy MessageBatch
+	copy.Strategy = batch.Strategy
+	copy.messages = batch.messages
+	batch.Strategy = nil
+	batch.messages = nil
+
+	if copy.Strategy == nil {
+		// Default to RarestFirstStrategy
+		copy.Strategy = &RarestFirstStrategy{}
 	}
-	return errors.New("router is not a BatchPublisher")
+
+	p.sendMessageBatch <- &copy
+	return nil
 }
 
 func (p *PubSub) nextSeqno() []byte {

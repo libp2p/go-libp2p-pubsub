@@ -5,9 +5,9 @@ import (
 	"crypto/sha256"
 	"fmt"
 	"io"
+	"iter"
 	"math/rand"
 	"sort"
-	"sync"
 	"time"
 
 	pb "github.com/libp2p/go-libp2p-pubsub/pb"
@@ -1143,103 +1143,103 @@ func (gs *GossipSubRouter) connector() {
 }
 
 func (gs *GossipSubRouter) PublishBatch(batch *MessageBatch) {
-	batch.pendingMsgs.Wait()
-	batch.Strategy.PublishRPCsWithFn(func(peer peer.ID, rpc *RPC) {
-		gs.sendRPC(peer, rpc, false)
-	})
+	for _, msg := range batch.messages {
+		msgID := gs.p.idGen.ID(msg)
+		for p, rpc := range gs.rpcs(msg) {
+			batch.Strategy.AddRPC(p, msgID, rpc)
+		}
+	}
+
+	for p, rpc := range batch.Strategy.All() {
+		gs.sendRPC(p, rpc, false)
+	}
 }
 
 func (gs *GossipSubRouter) Publish(msg *Message) {
-	if msg.messageBatch != nil {
-		defer msg.messageBatch.pendingMsgs.Done()
-		// This message is part of a batch. Instead of sending the related RPCs
-		// immediately, we queue them.
-		gs.publish(msg, func(p peer.ID, msgID string, rpc *RPC, urgent bool) {
-			msg.messageBatch.Strategy.QueueRPC(p, msgID, rpc)
-		})
-		return
+	for p, rpc := range gs.rpcs(msg) {
+		gs.sendRPC(p, rpc, false)
 	}
-
-	gs.publish(msg, func(p peer.ID, msgID string, rpc *RPC, urgent bool) {
-		gs.sendRPC(p, rpc, urgent)
-	})
 }
 
-func (gs *GossipSubRouter) publish(msg *Message, sendRPC func(p peer.ID, msgID string, rpc *RPC, urgent bool)) {
-	gs.mcache.Put(msg)
+func (gs *GossipSubRouter) rpcs(msg *Message) iter.Seq2[peer.ID, *RPC] {
+	return func(yield func(peer.ID, *RPC) bool) {
+		gs.mcache.Put(msg)
 
-	from := msg.ReceivedFrom
-	topic := msg.GetTopic()
+		from := msg.ReceivedFrom
+		topic := msg.GetTopic()
 
-	tosend := make(map[peer.ID]struct{})
+		tosend := make(map[peer.ID]struct{})
 
-	// any peers in the topic?
-	tmap, ok := gs.p.topics[topic]
-	if !ok {
-		return
-	}
-
-	if gs.floodPublish && from == gs.p.host.ID() {
-		for p := range tmap {
-			_, direct := gs.direct[p]
-			if direct || gs.score.Score(p) >= gs.publishThreshold {
-				tosend[p] = struct{}{}
-			}
-		}
-	} else {
-		// direct peers
-		for p := range gs.direct {
-			_, inTopic := tmap[p]
-			if inTopic {
-				tosend[p] = struct{}{}
-			}
-		}
-
-		// floodsub peers
-		for p := range tmap {
-			if !gs.feature(GossipSubFeatureMesh, gs.peers[p]) && gs.score.Score(p) >= gs.publishThreshold {
-				tosend[p] = struct{}{}
-			}
-		}
-
-		// gossipsub peers
-		gmap, ok := gs.mesh[topic]
+		// any peers in the topic?
+		tmap, ok := gs.p.topics[topic]
 		if !ok {
-			// we are not in the mesh for topic, use fanout peers
-			gmap, ok = gs.fanout[topic]
-			if !ok || len(gmap) == 0 {
-				// we don't have any, pick some with score above the publish threshold
-				peers := gs.getPeers(topic, gs.params.D, func(p peer.ID) bool {
-					_, direct := gs.direct[p]
-					return !direct && gs.score.Score(p) >= gs.publishThreshold
-				})
+			return
+		}
 
-				if len(peers) > 0 {
-					gmap = peerListToMap(peers)
-					gs.fanout[topic] = gmap
+		if gs.floodPublish && from == gs.p.host.ID() {
+			for p := range tmap {
+				_, direct := gs.direct[p]
+				if direct || gs.score.Score(p) >= gs.publishThreshold {
+					tosend[p] = struct{}{}
 				}
 			}
-			gs.lastpub[topic] = time.Now().UnixNano()
+		} else {
+			// direct peers
+			for p := range gs.direct {
+				_, inTopic := tmap[p]
+				if inTopic {
+					tosend[p] = struct{}{}
+				}
+			}
+
+			// floodsub peers
+			for p := range tmap {
+				if !gs.feature(GossipSubFeatureMesh, gs.peers[p]) && gs.score.Score(p) >= gs.publishThreshold {
+					tosend[p] = struct{}{}
+				}
+			}
+
+			// gossipsub peers
+			gmap, ok := gs.mesh[topic]
+			if !ok {
+				// we are not in the mesh for topic, use fanout peers
+				gmap, ok = gs.fanout[topic]
+				if !ok || len(gmap) == 0 {
+					// we don't have any, pick some with score above the publish threshold
+					peers := gs.getPeers(topic, gs.params.D, func(p peer.ID) bool {
+						_, direct := gs.direct[p]
+						return !direct && gs.score.Score(p) >= gs.publishThreshold
+					})
+
+					if len(peers) > 0 {
+						gmap = peerListToMap(peers)
+						gs.fanout[topic] = gmap
+					}
+				}
+				gs.lastpub[topic] = time.Now().UnixNano()
+			}
+
+			csum := computeChecksum(gs.p.idGen.ID(msg))
+			for p := range gmap {
+				// Check if it has already received an IDONTWANT for the message.
+				// If so, don't send it to the peer
+				if _, ok := gs.unwanted[p][csum]; ok {
+					continue
+				}
+				tosend[p] = struct{}{}
+			}
 		}
 
-		csum := computeChecksum(gs.p.idGen.ID(msg))
-		for p := range gmap {
-			// Check if it has already received an IDONTWANT for the message.
-			// If so, don't send it to the peer
-			if _, ok := gs.unwanted[p][csum]; ok {
+		out := rpcWithMessages(msg.Message)
+		for pid := range tosend {
+			if pid == from || pid == peer.ID(msg.GetFrom()) {
 				continue
 			}
-			tosend[p] = struct{}{}
-		}
-	}
 
-	out := rpcWithMessages(msg.Message)
-	for pid := range tosend {
-		if pid == from || pid == peer.ID(msg.GetFrom()) {
-			continue
+			if !yield(pid, out) {
+				return
+			}
 		}
-
-		sendRPC(pid, msg.ID, out, false)
 	}
 }
 
@@ -2229,58 +2229,4 @@ func computeChecksum(mid string) checksum {
 		cs.length = uint8(copy(cs.payload[:], mid))
 	}
 	return cs
-}
-
-// MessageBatch allows a user to batch related messages and then publish them
-// at once. This allows the system to prioritize sending a single copy of each
-// message before sending more copies. This helps bandwidth constrained peers.
-type MessageBatch struct {
-	Strategy BatchPublishStrategy
-
-	// PendingMsgs is a waitgroup that is used to wait for all rpcs related to a
-	// meessage to be added to the batch. This library's publish is async, so we
-	// need to be careful to not publish the batch before all the rpcs have been
-	// added.
-	pendingMsgs sync.WaitGroup
-}
-
-// BatchPublishStrategy is the publishing strategy publishing a batch of messages.
-type BatchPublishStrategy interface {
-	QueueRPC(peer peer.ID, msgID string, rpc *RPC)
-	PublishRPCsWithFn(sendRPC func(peer peer.ID, rpc *RPC))
-}
-
-type pendingRPC struct {
-	peer peer.ID
-	rpc  *RPC
-}
-
-type RarestFirstStrategy struct {
-	sync.Mutex
-	rpcs map[string][]pendingRPC
-}
-
-func (s *RarestFirstStrategy) QueueRPC(peer peer.ID, msgID string, rpc *RPC) {
-	s.Lock()
-	defer s.Unlock()
-	if s.rpcs == nil {
-		s.rpcs = make(map[string][]pendingRPC)
-	}
-	s.rpcs[msgID] = append(s.rpcs[msgID], pendingRPC{peer: peer, rpc: rpc})
-}
-
-func (s *RarestFirstStrategy) PublishRPCsWithFn(sendRPC func(peer peer.ID, rpc *RPC)) {
-	s.Lock()
-	defer s.Unlock()
-
-	for len(s.rpcs) > 0 {
-		for msgID, rpcs := range s.rpcs {
-			if len(rpcs) == 0 {
-				delete(s.rpcs, msgID)
-				continue
-			}
-			sendRPC(rpcs[0].peer, rpcs[0].rpc)
-			s.rpcs[msgID] = rpcs[1:]
-		}
-	}
 }
