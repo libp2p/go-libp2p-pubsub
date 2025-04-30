@@ -3451,7 +3451,7 @@ func BenchmarkRarestFirstRPCScheduler(b *testing.B) {
 		msgIdx := i % numMessages
 		strategy.AddRPC(peers[j], msgs[msgIdx], emptyRPC)
 		if i%100 == 0 {
-			for _, _ = range strategy.All() {
+			for range strategy.All() {
 			}
 		}
 	}
