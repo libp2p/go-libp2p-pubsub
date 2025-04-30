@@ -217,6 +217,10 @@ type PubSubRouter interface {
 	Leave(topic string)
 }
 
+type BatchPublisher interface {
+	PublishBatch(*MessageBatch)
+}
+
 type AcceptStatus int
 
 const (
@@ -1357,6 +1361,42 @@ func (p *PubSub) Publish(topic string, data []byte, opts ...PubOpt) error {
 	}
 
 	return t.Publish(context.TODO(), data, opts...)
+}
+
+// NewMessageBatch creates a new MessageBatch. This only works for GossipSub.
+func (p *PubSub) NewMessageBatch(opts ...func(*MessageBatch)) (*MessageBatch, error) {
+	if p == nil {
+		return nil, errors.New("pubsub is nil")
+	}
+	if _, ok := p.rt.(*GossipSubRouter); ok {
+		b := &MessageBatch{
+			// Default strategy
+			Strategy: &RarestFirstStrategy{},
+		}
+		for _, opt := range opts {
+			opt(b)
+		}
+		return b, nil
+	}
+	return nil, errors.New("pubsub is not a GossipSubRouter")
+}
+
+// PublishBatch publishes a batch of messages. This only works for routers that
+// implement the BatchPublisher interface.
+//
+// Users should make sure there is enough space in the Peer's outbound queue to
+// ensure messages are not dropped. WithPeerOutboundQueueSize should be set to
+// at least the expected number of batched messages per peer plus some slack to
+// account for gossip messages.
+func (p *PubSub) PublishBatch(batch *MessageBatch) error {
+	if p == nil {
+		return errors.New("pubsub is nil")
+	}
+	if pb, ok := p.rt.(BatchPublisher); ok {
+		pb.PublishBatch(batch)
+		return nil
+	}
+	return errors.New("router is not a BatchPublisher")
 }
 
 func (p *PubSub) nextSeqno() []byte {

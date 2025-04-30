@@ -3337,7 +3337,7 @@ func BenchmarkAllocDoDropRPC(b *testing.B) {
 	}
 }
 
-func TestMessageBatchPublishesRarestFirst(t *testing.T) {
+func TestRarestFirstPublishStrategy(t *testing.T) {
 	const maxNumPeers = 256
 	const maxNumMessages = 1_000
 
@@ -3346,14 +3346,14 @@ func TestMessageBatchPublishesRarestFirst(t *testing.T) {
 		numMessages = numMessages % maxNumMessages
 
 		output := make([]pendingRPC, 0, numMessages*numPeers)
-		batch := &MessageBatch{
-			sendRPC: func(peer peer.ID, rpc *RPC, urgent bool) {
-				output = append(output, pendingRPC{
-					peer: peer,
-					rpc:  rpc,
-				})
-			},
+
+		sendRPC := func(peer peer.ID, rpc *RPC) {
+			output = append(output, pendingRPC{
+				peer: peer,
+				rpc:  rpc,
+			})
 		}
+		var strategy RarestFirstStrategy
 
 		peers := make([]peer.ID, numPeers)
 		for i := 0; i < int(numPeers); i++ {
@@ -3366,7 +3366,7 @@ func TestMessageBatchPublishesRarestFirst(t *testing.T) {
 
 		for i := 0; i < int(numMessages); i++ {
 			for j := 0; j < int(numPeers); j++ {
-				batch.queueRPC(peers[j], fmt.Sprintf("msg%d", i), &RPC{
+				strategy.QueueRPC(peers[j], fmt.Sprintf("msg%d", i), &RPC{
 					RPC: pb.RPC{
 						Publish: []*pb.Message{
 							{
@@ -3378,7 +3378,7 @@ func TestMessageBatchPublishesRarestFirst(t *testing.T) {
 			}
 		}
 
-		batch.Publish()
+		strategy.PublishRPCsWithFn(sendRPC)
 
 		// Check invariants
 		// 1. The published rpcs count is the same as the number of messages added
@@ -3430,11 +3430,10 @@ func TestMessageBatchPublishesRarestFirst(t *testing.T) {
 	}
 }
 
-func BenchmarkMessageBatchPublish(b *testing.B) {
+func BenchmarkRarestFirstPublishStrategy(b *testing.B) {
 	const numPeers = 1_000
 	const numMessages = 1_000
-
-	batch := &MessageBatch{sendRPC: func(peer peer.ID, rpc *RPC, urgent bool) {}}
+	var strategy RarestFirstStrategy
 
 	peers := make([]peer.ID, numPeers)
 	for i := 0; i < int(numPeers); i++ {
@@ -3451,9 +3450,9 @@ func BenchmarkMessageBatchPublish(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		j := i % len(peers)
 		msgIdx := i % numMessages
-		batch.queueRPC(peers[j], msgs[msgIdx], emptyRPC)
+		strategy.QueueRPC(peers[j], msgs[msgIdx], emptyRPC)
 		if i%100 == 0 {
-			batch.Publish()
+			strategy.PublishRPCsWithFn(func(peer peer.ID, rpc *RPC) {})
 		}
 	}
 }
@@ -3494,21 +3493,24 @@ func TestMessageBatchPublish(t *testing.T) {
 	// wait for heartbeats to build mesh
 	time.Sleep(time.Second * 2)
 
-	batch, err := NewMessageBatch(psubs[0])
+	batch, err := psubs[0].NewMessageBatch()
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	for i := 0; i < numMessages; i++ {
 		msg := []byte(fmt.Sprintf("%d it's not a floooooood %d", i, i))
-		err := batch.Add(ctx, topics[0], msg)
+		err := topics[0].AddToBatch(ctx, batch, msg)
 		if err != nil {
 			t.Fatal(err)
 		}
 	}
-	batch.Publish()
+	err = psubs[0].PublishBatch(batch)
+	if err != nil {
+		t.Fatal(err)
+	}
 
-	for i := 1; i < numMessages; i++ {
+	for range numMessages {
 		for _, sub := range msgs {
 			got, err := sub.Next(ctx)
 			if err != nil {
@@ -3556,25 +3558,46 @@ func TestMessageBatchAsyncAddMsg(t *testing.T) {
 
 			for range runs {
 				var sentRPCs atomic.Int32
-				b, err := NewMessageBatch(psubs[0])
+				var queuedRPCs atomic.Int32
+				b, err := psubs[0].NewMessageBatch(func(mb *MessageBatch) {
+					mb.Strategy = &mockStrategy{
+						queued: &queuedRPCs,
+						sent:   &sentRPCs,
+					}
+				})
 				if err != nil {
 					t.Fatal(err)
-				}
-				b.sendRPC = func(peer peer.ID, rpc *RPC, urgent bool) {
-					sentRPCs.Add(1)
 				}
 
 				// publisher
 				for i := range expectedNumRPCsPerPeer {
-					b.Add(context.Background(), publisherTopic, []byte(fmt.Sprintf("msg%d", i)))
+					err := publisherTopic.AddToBatch(context.Background(), b, []byte(fmt.Sprintf("msg%d", i)))
+					if err != nil {
+						t.Fatal(err)
+					}
 				}
-				b.Publish()
+				err = psubs[0].PublishBatch(b)
+				if err != nil {
+					t.Fatal(err)
+				}
 
-				if sentRPCs.Load() != int32(expectedNumRPCsPerPeer*(numPeers-1)) {
+				if sentRPCs.Load() != int32(expectedNumRPCsPerPeer*(numPeers-1)) || queuedRPCs.Load() != int32(expectedNumRPCsPerPeer*(numPeers-1)) {
 					t.Fatalf("expected %d RPCs, got %d", expectedNumRPCsPerPeer, sentRPCs.Load())
 				}
 			}
 		})
 	}
+}
 
+type mockStrategy struct {
+	queued *atomic.Int32
+	sent   *atomic.Int32
+}
+
+func (s *mockStrategy) QueueRPC(peer peer.ID, msgID string, rpc *RPC) {
+	s.queued.Add(1)
+}
+
+func (s *mockStrategy) PublishRPCsWithFn(sendRPC func(peer peer.ID, rpc *RPC)) {
+	s.sent.Store(s.queued.Load())
 }

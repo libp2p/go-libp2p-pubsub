@@ -224,6 +224,19 @@ type PubOpt func(pub *PublishOptions) error
 
 // Publish publishes data to topic.
 func (t *Topic) Publish(ctx context.Context, data []byte, opts ...PubOpt) error {
+	return t.publish(ctx, data, opts...)
+}
+
+func (t *Topic) AddToBatch(ctx context.Context, batch *MessageBatch, data []byte, opts ...PubOpt) error {
+	batch.pendingMsgs.Add(1)
+	opts = append(opts, func(o *PublishOptions) error {
+		o.messageBatch = batch
+		return nil
+	})
+	return t.publish(ctx, data, opts...)
+}
+
+func (t *Topic) publish(ctx context.Context, data []byte, opts ...PubOpt) error {
 	t.mux.RLock()
 	defer t.mux.RUnlock()
 	if t.closed {
