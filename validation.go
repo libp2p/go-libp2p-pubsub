@@ -226,6 +226,18 @@ func (v *validation) RemoveValidator(req *rmValReq) {
 	}
 }
 
+// PushLocal synchronously pushes a locally published message and performs applicable
+// validations.
+// Returns an error if validation fails
+func (v *validation) PushLocal(msg *Message) error {
+	err := v.ValidateLocal(msg)
+	if err != nil {
+		return err
+	}
+
+	return v.sendMsgBlocking(msg)
+}
+
 // ValidateLocal synchronously validates a locally published message and
 // performs applicable validations. Returns an error if validation fails.
 func (v *validation) ValidateLocal(msg *Message) error {
@@ -283,7 +295,7 @@ func (v *validation) validateWorker() {
 	for {
 		select {
 		case req := <-v.validateQ:
-			v.validate(req.vals, req.src, req.msg, false, v.sendMsgBlocking)
+			_ = v.validate(req.vals, req.src, req.msg, false, v.sendMsgBlocking)
 		case <-v.p.ctx.Done():
 			return
 		}
