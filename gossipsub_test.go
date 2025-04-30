@@ -3530,13 +3530,27 @@ func TestMessageBatchAsyncAddMsg(t *testing.T) {
 	const runs = 10
 	const expectedNumRPCsPerPeer = 10
 
-	peerCounts := []int{2, 3, 5}
+	peerCounts := []int{2, 3, 5, 100}
 
 	for _, numPeers := range peerCounts {
 		t.Run(fmt.Sprintf("%d hosts", numPeers), func(t *testing.T) {
 			hosts := getDefaultHosts(t, numPeers)
-			psubs := getGossipsubs(context.Background(), hosts)
-			denseConnect(t, hosts)
+
+			psubs := make([]*PubSub, numPeers)
+			publisherParams := DefaultGossipSubParams()
+			publisherParams.D = numPeers
+			publisherParams.Dhi = numPeers
+			publisherParams.Dlo = numPeers
+
+			psubs[0] = getGossipsub(context.Background(), hosts[0], WithGossipSubParams(publisherParams))
+			for i := 1; i < numPeers; i++ {
+				psubs[i] = getGossipsub(context.Background(), hosts[i])
+			}
+
+			// Connect the publisher to all the other peers
+			for i := 1; i < numPeers; i++ {
+				connect(t, hosts[0], hosts[i])
+			}
 
 			var publisherTopic *Topic
 			for i, psub := range psubs {
@@ -3581,8 +3595,12 @@ func TestMessageBatchAsyncAddMsg(t *testing.T) {
 					t.Fatal(err)
 				}
 
-				if sentRPCs.Load() != int32(expectedNumRPCsPerPeer*(numPeers-1)) || queuedRPCs.Load() != int32(expectedNumRPCsPerPeer*(numPeers-1)) {
-					t.Fatalf("expected %d RPCs, got %d", expectedNumRPCsPerPeer, sentRPCs.Load())
+				expectedNumRPCs := int32(expectedNumRPCsPerPeer * (numPeers - 1))
+				if queuedRPCs.Load() != expectedNumRPCs {
+					t.Fatalf("expected queued %d RPCs, got %d", expectedNumRPCs, queuedRPCs.Load())
+				}
+				if sentRPCs.Load() != expectedNumRPCs {
+					t.Fatalf("expected %d RPCs, got %d", expectedNumRPCs, sentRPCs.Load())
 				}
 			}
 		})
