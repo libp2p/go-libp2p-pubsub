@@ -2886,6 +2886,67 @@ func TestGossipsubNoIDONTWANTToMessageSender(t *testing.T) {
 		t.Fatal("IDONTWANT should not be sent to the message sender")
 	case <-time.After(time.Second):
 	}
+}
+
+func TestGossipsubIDONTWANTBeforeFirstPublish(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	hosts := getDefaultHosts(t, 3)
+	denseConnect(t, hosts)
+
+	psubs := make([]*PubSub, 2)
+
+	psubs[0] = getGossipsub(ctx, hosts[0])
+	rpcsReceived := make(chan string)
+	psubs[1] = getGossipsub(ctx, hosts[1], WithRawTracer(&mockRawTracer{
+		onRecvRPC: func(rpc *RPC) {
+			if len(rpc.GetControl().GetIdontwant()) > 0 {
+				rpcsReceived <- "idontwant"
+			}
+			if len(rpc.GetPublish()) > 0 {
+				rpcsReceived <- "publish"
+			}
+		},
+	}))
+
+	topicString := "foobar"
+	var topics []*Topic
+	for _, ps := range psubs {
+		topic, err := ps.Join(topicString)
+		if err != nil {
+			t.Fatal(err)
+		}
+		topics = append(topics, topic)
+
+		_, err = ps.Subscribe(topicString)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	time.Sleep(2 * time.Second)
+
+	msg := make([]byte, GossipSubIDontWantMessageThreshold+1)
+	_ = topics[0].Publish(ctx, msg)
+
+	timeout := time.After(5 * time.Second)
+
+	select {
+	case kind := <-rpcsReceived:
+		if kind == "publish" {
+			t.Fatal("IDONTWANT should be sent before publish")
+		}
+	case <-timeout:
+		t.Fatal("IDONTWANT should be sent on first publish")
+	}
+
+	select {
+	case kind := <-rpcsReceived:
+		if kind != "publish" {
+			t.Fatal("Expected publish after IDONTWANT")
+		}
+	case <-timeout:
+		t.Fatal("Expected publish after IDONTWANT")
+	}
 
 }
 
