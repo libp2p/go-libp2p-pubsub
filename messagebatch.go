@@ -31,18 +31,19 @@ type pendingRPC struct {
 	rpc  *RPC
 }
 
-type RarestFirstRPCScheduler struct {
+// RoundRobinMessageIDScheduler schedules outgoing RPCs in round-robin order of message IDs.
+type RoundRobinMessageIDScheduler struct {
 	rpcs map[string][]pendingRPC
 }
 
-func (s *RarestFirstRPCScheduler) AddRPC(peer peer.ID, msgID string, rpc *RPC) {
+func (s *RoundRobinMessageIDScheduler) AddRPC(peer peer.ID, msgID string, rpc *RPC) {
 	if s.rpcs == nil {
 		s.rpcs = make(map[string][]pendingRPC)
 	}
 	s.rpcs[msgID] = append(s.rpcs[msgID], pendingRPC{peer: peer, rpc: rpc})
 }
 
-func (s *RarestFirstRPCScheduler) All() iter.Seq2[peer.ID, *RPC] {
+func (s *RoundRobinMessageIDScheduler) All() iter.Seq2[peer.ID, *RPC] {
 	return func(yield func(peer.ID, *RPC) bool) {
 		for len(s.rpcs) > 0 {
 			for msgID, rpcs := range s.rpcs {

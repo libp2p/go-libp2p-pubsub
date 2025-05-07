@@ -3337,7 +3337,7 @@ func BenchmarkAllocDoDropRPC(b *testing.B) {
 	}
 }
 
-func TestRarestFirstRPCScheduler(t *testing.T) {
+func TestRoundRobinMessageIDScheduler(t *testing.T) {
 	const maxNumPeers = 256
 	const maxNumMessages = 1_000
 
@@ -3347,7 +3347,7 @@ func TestRarestFirstRPCScheduler(t *testing.T) {
 
 		output := make([]pendingRPC, 0, numMessages*numPeers)
 
-		var strategy RarestFirstRPCScheduler
+		var strategy RoundRobinMessageIDScheduler
 
 		peers := make([]peer.ID, numPeers)
 		for i := 0; i < int(numPeers); i++ {
@@ -3429,10 +3429,10 @@ func TestRarestFirstRPCScheduler(t *testing.T) {
 	}
 }
 
-func BenchmarkRarestFirstRPCScheduler(b *testing.B) {
+func BenchmarkRoundRobinMessageIDScheduler(b *testing.B) {
 	const numPeers = 1_000
 	const numMessages = 1_000
-	var strategy RarestFirstRPCScheduler
+	var strategy RoundRobinMessageIDScheduler
 
 	peers := make([]peer.ID, numPeers)
 	for i := range int(numPeers) {

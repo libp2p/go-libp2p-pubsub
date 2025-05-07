@@ -228,7 +228,7 @@ type BatchPubOpt func(pub *BatchPublishOptions) error
 
 func setDefaultBatchPublishOptions(opts *BatchPublishOptions) {
 	if opts.Strategy == nil {
-		opts.Strategy = &RarestFirstRPCScheduler{}
+		opts.Strategy = &RoundRobinMessageIDScheduler{}
 	}
 }
 
