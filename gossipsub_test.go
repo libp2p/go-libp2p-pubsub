@@ -2348,6 +2348,15 @@ func validRPCSizes(slice []*RPC, limit int) bool {
 	return true
 }
 
+func validRPCToPublishSizes(slice []RPCToPublish, limit int) bool {
+	for _, rpc := range slice {
+		if rpc.toPB().Size() > limit {
+			return false
+		}
+	}
+	return true
+}
+
 func TestFragmentRPCFunction(t *testing.T) {
 	fragmentRPC := func(rpc *RPC, limit int) ([]*RPC, error) {
 		rpcs := appendOrMergeRPC(nil, limit, *rpc)
@@ -2551,6 +2560,34 @@ func FuzzAppendOrMergeRPC(f *testing.F) {
 		rpcs := appendOrMergeRPC(nil, maxSize, *rpc)
 
 		if !validRPCSizes(rpcs, maxSize) {
+			t.Fatalf("invalid RPC size")
+		}
+	})
+}
+
+func FuzzRPCToPublish(f *testing.F) {
+	minMaxMsgSize := 100
+	maxMaxMsgSize := 2048
+	f.Fuzz(func(t *testing.T, data []byte) {
+		maxSize := int(generateU16(&data)) % maxMaxMsgSize
+		if maxSize < minMaxMsgSize {
+			maxSize = minMaxMsgSize
+		}
+		rpc := generateRPC(data, maxSize)
+		publishMsgs := make([]*Message, len(rpc.Publish))
+		for i, msg := range rpc.Publish {
+			publishMsgs[i] = &Message{
+				Message: msg,
+			}
+		}
+		rpcToPublish := &RPCToPublish{
+			publish: publishMsgs,
+			subs:    rpc.Subscriptions,
+			control: rpc.Control,
+		}
+		rpcs := rpcToPublish.split(maxSize)
+
+		if !validRPCToPublishSizes(rpcs, maxSize) {
 			t.Fatalf("invalid RPC size")
 		}
 	})
