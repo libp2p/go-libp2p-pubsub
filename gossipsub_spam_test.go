@@ -929,12 +929,12 @@ func TestGossipsubHandleIDontwantSpam(t *testing.T) {
 		t.Errorf("Wanted message count of %d but received %d", 1, grt.peerdontwant[rPid])
 	}
 	mid := fmt.Sprintf("idontwant-%d", GossipSubMaxIDontWantLength-1)
-	if _, ok := grt.unwanted[rPid][computeChecksum(mid)]; !ok {
+	if !grt.unwanted.has(rPid, computeChecksum(mid)) {
 		t.Errorf("Desired message id was not stored in the unwanted map: %s", mid)
 	}
 
 	mid = fmt.Sprintf("idontwant-%d", GossipSubMaxIDontWantLength)
-	if _, ok := grt.unwanted[rPid][computeChecksum(mid)]; ok {
+	if grt.unwanted.has(rPid, computeChecksum(mid)) {
 		t.Errorf("Unwanted message id was stored in the unwanted map: %s", mid)
 	}
 }

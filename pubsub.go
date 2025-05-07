@@ -245,7 +245,8 @@ type RPC struct {
 	pb.RPC
 
 	// unexported on purpose, not sending this over the wire
-	from peer.ID
+	from      peer.ID
+	cancelled func() bool
 }
 
 type Option func(*PubSub) error

@@ -7,6 +7,7 @@ import (
 	"io"
 	"math/rand"
 	"sort"
+	"sync"
 	"time"
 
 	pb "github.com/libp2p/go-libp2p-pubsub/pb"
@@ -265,7 +266,7 @@ func DefaultGossipSubRouter(h host.Host) *GossipSubRouter {
 		backoff:      make(map[string]map[peer.ID]time.Time),
 		peerhave:     make(map[peer.ID]int),
 		peerdontwant: make(map[peer.ID]int),
-		unwanted:     make(map[peer.ID]map[checksum]int),
+		unwanted:     newUnwantedState(),
 		iasked:       make(map[peer.ID]int),
 		outbound:     make(map[peer.ID]bool),
 		connect:      make(chan connectInfo, params.MaxPendingConnections),
@@ -471,7 +472,7 @@ type GossipSubRouter struct {
 	control      map[peer.ID]*pb.ControlMessage   // pending control messages
 	peerhave     map[peer.ID]int                  // number of IHAVEs received from peer in the last heartbeat
 	peerdontwant map[peer.ID]int                  // number of IDONTWANTs received from peer in the last heartbeat
-	unwanted     map[peer.ID]map[checksum]int     // TTL of the message ids peers don't want
+	unwanted     *unwantedState                   // TTL of the message ids peers don't want
 	iasked       map[peer.ID]int                  // number of messages we have asked from peer in the last heartbeat
 	outbound     map[peer.ID]bool                 // connection direction cache, marks peers with outbound connections
 	backoff      map[string]map[peer.ID]time.Time // prune backoff
@@ -520,6 +521,48 @@ type GossipSubRouter struct {
 	// number of heartbeats since the beginning of time; this allows us to amortize some resource
 	// clean up -- eg backoff clean up.
 	heartbeatTicks uint64
+}
+
+type unwantedState struct {
+	sync.RWMutex
+	m map[peer.ID]map[checksum]int // TTL of the message ids peers don't want
+}
+
+func newUnwantedState() *unwantedState {
+	return &unwantedState{
+		m: make(map[peer.ID]map[checksum]int),
+	}
+}
+
+func (u *unwantedState) add(peer peer.ID, id checksum, ttl int) {
+	u.Lock()
+	defer u.Unlock()
+	if u.m[peer] == nil {
+		u.m[peer] = make(map[checksum]int)
+	}
+	u.m[peer][id] = ttl
+}
+
+func (u *unwantedState) gc() {
+	u.Lock()
+	defer u.Unlock()
+
+	// decrement TTLs of all the IDONTWANTs and delete it from the cache when it reaches zero
+	for _, mids := range u.m {
+		for mid := range mids {
+			mids[mid]--
+			if mids[mid] == 0 {
+				delete(mids, mid)
+			}
+		}
+	}
+}
+
+func (u *unwantedState) has(peer peer.ID, id checksum) bool {
+	u.RLock()
+	defer u.RUnlock()
+	_, ok := u.m[peer][id]
+	return ok
 }
 
 type connectInfo struct {
@@ -844,7 +887,7 @@ func (gs *GossipSubRouter) handleIWant(p peer.ID, ctl *pb.ControlMessage) []*pb.
 	for _, iwant := range ctl.GetIwant() {
 		for _, mid := range iwant.GetMessageIDs() {
 			// Check if that peer has sent IDONTWANT before, if so don't send them the message
-			if _, ok := gs.unwanted[p][computeChecksum(mid)]; ok {
+			if gs.unwanted.has(p, computeChecksum(mid)) {
 				continue
 			}
 
@@ -1013,10 +1056,6 @@ func (gs *GossipSubRouter) handlePrune(p peer.ID, ctl *pb.ControlMessage) {
 }
 
 func (gs *GossipSubRouter) handleIDontWant(p peer.ID, ctl *pb.ControlMessage) {
-	if gs.unwanted[p] == nil {
-		gs.unwanted[p] = make(map[checksum]int)
-	}
-
 	// IDONTWANT flood protection
 	if gs.peerdontwant[p] >= gs.params.MaxIDontWantMessages {
 		log.Debugf("IDONWANT: peer %s has advertised too many times (%d) within this heartbeat interval; ignoring", p, gs.peerdontwant[p])
@@ -1036,7 +1075,7 @@ mainIDWLoop:
 			}
 
 			totalUnwantedIds++
-			gs.unwanted[p][computeChecksum(mid)] = gs.params.IDontWantMessageTTL
+			gs.unwanted.add(p, computeChecksum(mid), gs.params.IDontWantMessageTTL)
 		}
 	}
 }
@@ -1204,7 +1243,7 @@ func (gs *GossipSubRouter) Publish(msg *Message) {
 		for p := range gmap {
 			// Check if it has already received an IDONTWANT for the message.
 			// If so, don't send it to the peer
-			if _, ok := gs.unwanted[p][csum]; ok {
+			if gs.unwanted.has(p, csum) {
 				continue
 			}
 			tosend[p] = struct{}{}
@@ -1217,6 +1256,11 @@ func (gs *GossipSubRouter) Publish(msg *Message) {
 			continue
 		}
 
+		csum := computeChecksum(gs.p.idGen.ID(msg))
+		cancelled := func() bool {
+			return gs.unwanted.has(pid, csum)
+		}
+		out.cancelled = cancelled
 		gs.sendRPC(pid, out, false)
 	}
 }
@@ -1355,6 +1399,7 @@ func (gs *GossipSubRouter) sendRPC(p peer.ID, out *RPC, urgent bool) {
 			gs.doDropRPC(out, p, fmt.Sprintf("Dropping oversized RPC. Size: %d, limit: %d. (Over by %d bytes)", rpc.Size(), gs.p.maxMessageSize, rpc.Size()-gs.p.maxMessageSize))
 			continue
 		}
+		rpc.cancelled = out.cancelled
 		gs.doSendRPC(rpc, p, q, urgent)
 	}
 }
@@ -1824,16 +1869,7 @@ func (gs *GossipSubRouter) clearIDontWantCounters() {
 		// throw away the old map and make a new one
 		gs.peerdontwant = make(map[peer.ID]int)
 	}
-
-	// decrement TTLs of all the IDONTWANTs and delete it from the cache when it reaches zero
-	for _, mids := range gs.unwanted {
-		for mid := range mids {
-			mids[mid]--
-			if mids[mid] == 0 {
-				delete(mids, mid)
-			}
-		}
-	}
+	gs.unwanted.gc()
 }
 
 func (gs *GossipSubRouter) applyIwantPenalties() {

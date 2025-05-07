@@ -169,6 +169,11 @@ func (p *PubSub) handleSendingMessages(ctx context.Context, s network.Stream, ou
 			return err
 		}
 
+		if rpc.cancelled != nil && rpc.cancelled() {
+			// This rpc has been cancelled, so we don't need to send it
+			return nil
+		}
+
 		_, err = s.Write(buf)
 		return err
 	}
@@ -228,6 +233,9 @@ func copyRPC(rpc *RPC) *RPC {
 	if rpc.Control != nil {
 		res.Control = new(pb.ControlMessage)
 		*res.Control = *rpc.Control
+	}
+	if rpc.cancelled != nil {
+		res.cancelled = rpc.cancelled
 	}
 	return res
 }
