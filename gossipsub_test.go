@@ -3435,11 +3435,11 @@ func BenchmarkRarestFirstRPCScheduler(b *testing.B) {
 	var strategy RarestFirstRPCScheduler
 
 	peers := make([]peer.ID, numPeers)
-	for i := 0; i < int(numPeers); i++ {
+	for i := range int(numPeers) {
 		peers[i] = peer.ID(fmt.Sprintf("peer%d", i))
 	}
 	msgs := make([]string, numMessages)
-	for i := 0; i < numMessages; i++ {
+	for i := range numMessages {
 		msgs[i] = fmt.Sprintf("msg%d", i)
 	}
 
