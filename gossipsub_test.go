@@ -3411,8 +3411,8 @@ func TestRarestFirstRPCScheduler(t *testing.T) {
 
 		// 3.
 		inputSet := make(map[string]bool)
-		for i := 0; i < int(numMessages); i++ {
-			for j := 0; j < int(numPeers); j++ {
+		for i := range int(numMessages) {
+			for j := range int(numPeers) {
 				inputSet[fmt.Sprintf("msg%d:peer%d", i, j)] = true
 			}
 		}
