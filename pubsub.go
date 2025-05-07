@@ -1385,6 +1385,8 @@ func (p *PubSub) Publish(topic string, data []byte, opts ...PubOpt) error {
 // ensure messages are not dropped. WithPeerOutboundQueueSize should be set to
 // at least the expected number of batched messages per peer plus some slack to
 // account for gossip messages.
+//
+// The default publish strategy is RoundRobinMessageIDScheduler.
 func (p *PubSub) PublishBatch(batch *MessageBatch, opts ...BatchPubOpt) error {
 	if _, ok := p.rt.(BatchPublisher); !ok {
 		return fmt.Errorf("pubsub router is not a BatchPublisher")
@@ -1392,7 +1394,10 @@ func (p *PubSub) PublishBatch(batch *MessageBatch, opts ...BatchPubOpt) error {
 
 	publishOptions := &BatchPublishOptions{}
 	for _, o := range opts {
-		o(publishOptions)
+		err := o(publishOptions)
+		if err != nil {
+			return err
+		}
 	}
 	setDefaultBatchPublishOptions(publishOptions)
 
