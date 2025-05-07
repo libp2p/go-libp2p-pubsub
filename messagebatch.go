@@ -10,8 +10,12 @@ import (
 // once. This allows the Scheduler to define an order for outgoing RPCs.
 // This helps bandwidth constrained peers.
 type MessageBatch struct {
-	Scheduler RPCScheduler
-	messages  []*Message
+	messages []*Message
+}
+
+type messageBatchAndPublishOptions struct {
+	messages []*Message
+	opts     *BatchPublishOptions
 }
 
 // RPCScheduler schedules outgoing RPCs.

@@ -1142,15 +1142,16 @@ func (gs *GossipSubRouter) connector() {
 	}
 }
 
-func (gs *GossipSubRouter) PublishBatch(batch *MessageBatch) {
-	for _, msg := range batch.messages {
+func (gs *GossipSubRouter) PublishBatch(messages []*Message, opts *BatchPublishOptions) {
+	strategy := opts.Strategy
+	for _, msg := range messages {
 		msgID := gs.p.idGen.ID(msg)
 		for p, rpc := range gs.rpcs(msg) {
-			batch.Scheduler.AddRPC(p, msgID, rpc)
+			strategy.AddRPC(p, msgID, rpc)
 		}
 	}
 
-	for p, rpc := range batch.Scheduler.All() {
+	for p, rpc := range strategy.All() {
 		gs.sendRPC(p, rpc, false)
 	}
 }

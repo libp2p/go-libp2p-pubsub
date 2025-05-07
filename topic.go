@@ -219,7 +219,18 @@ type PublishOptions struct {
 	validatorData any
 }
 
+type BatchPublishOptions struct {
+	Strategy RPCScheduler
+}
+
 type PubOpt func(pub *PublishOptions) error
+type BatchPubOpt func(pub *BatchPublishOptions) error
+
+func setDefaultBatchPublishOptions(opts *BatchPublishOptions) {
+	if opts.Strategy == nil {
+		opts.Strategy = &RarestFirstRPCScheduler{}
+	}
+}
 
 // Publish publishes data to topic.
 func (t *Topic) Publish(ctx context.Context, data []byte, opts ...PubOpt) error {

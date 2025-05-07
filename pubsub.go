@@ -135,7 +135,7 @@ type PubSub struct {
 	sendMsg chan *Message
 
 	// sendMessageBatch publishes a batch of messages
-	sendMessageBatch chan *MessageBatch
+	sendMessageBatch chan messageBatchAndPublishOptions
 
 	// addVal handles validator registration requests
 	addVal chan *addValReq
@@ -221,7 +221,7 @@ type PubSubRouter interface {
 }
 
 type BatchPublisher interface {
-	PublishBatch(*MessageBatch)
+	PublishBatch(messages []*Message, opts *BatchPublishOptions)
 }
 
 type AcceptStatus int
@@ -288,7 +288,7 @@ func NewPubSub(ctx context.Context, h host.Host, rt PubSubRouter, opts ...Option
 		rmTopic:               make(chan *rmTopicReq),
 		getTopics:             make(chan *topicReq),
 		sendMsg:               make(chan *Message, 32),
-		sendMessageBatch:      make(chan *MessageBatch, 1),
+		sendMessageBatch:      make(chan messageBatchAndPublishOptions, 1),
 		addVal:                make(chan *addValReq),
 		rmVal:                 make(chan *rmValReq),
 		eval:                  make(chan func()),
@@ -650,8 +650,8 @@ func (p *PubSub) processLoop(ctx context.Context) {
 		case msg := <-p.sendMsg:
 			p.publishMessage(msg)
 
-		case batch := <-p.sendMessageBatch:
-			p.publishMessageBatch(batch)
+		case batchAndOpts := <-p.sendMessageBatch:
+			p.publishMessageBatch(batchAndOpts)
 
 		case req := <-p.addVal:
 			p.val.AddValidator(req)
@@ -1232,13 +1232,13 @@ func (p *PubSub) publishMessage(msg *Message) {
 	}
 }
 
-func (p *PubSub) publishMessageBatch(batch *MessageBatch) {
-	for _, msg := range batch.messages {
+func (p *PubSub) publishMessageBatch(batchAndOpts messageBatchAndPublishOptions) {
+	for _, msg := range batchAndOpts.messages {
 		p.tracer.DeliverMessage(msg)
 		p.notifySubs(msg)
 	}
 	// We type checked when pushing the batch to the channel
-	p.rt.(BatchPublisher).PublishBatch(batch)
+	p.rt.(BatchPublisher).PublishBatch(batchAndOpts.messages, batchAndOpts.opts)
 }
 
 type addTopicReq struct {
@@ -1385,24 +1385,24 @@ func (p *PubSub) Publish(topic string, data []byte, opts ...PubOpt) error {
 // ensure messages are not dropped. WithPeerOutboundQueueSize should be set to
 // at least the expected number of batched messages per peer plus some slack to
 // account for gossip messages.
-func (p *PubSub) PublishBatch(batch *MessageBatch) error {
+func (p *PubSub) PublishBatch(batch *MessageBatch, opts ...BatchPubOpt) error {
 	if _, ok := p.rt.(BatchPublisher); !ok {
 		return fmt.Errorf("pubsub router is not a BatchPublisher")
 	}
 
-	// Copy the batch to avoid the footgun of reusing scheduler state across batches
-	var copy MessageBatch
-	copy.Scheduler = batch.Scheduler
-	copy.messages = batch.messages
-	batch.Scheduler = nil
-	batch.messages = nil
+	publishOptions := &BatchPublishOptions{}
+	for _, o := range opts {
+		o(publishOptions)
+	}
+	setDefaultBatchPublishOptions(publishOptions)
 
-	if copy.Scheduler == nil {
-		// Default to Rarest first
-		copy.Scheduler = &RarestFirstRPCScheduler{}
+	p.sendMessageBatch <- messageBatchAndPublishOptions{
+		messages: batch.messages,
+		opts:     publishOptions,
 	}
 
-	p.sendMessageBatch <- &copy
+	// Clear the batch's messages in case a user reuses the same batch object
+	batch.messages = nil
 	return nil
 }
 
