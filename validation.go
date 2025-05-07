@@ -26,6 +26,12 @@ func (e ValidationError) Error() string {
 	return e.Reason
 }
 
+type dupeErr struct{}
+
+func (dupeErr) Error() string {
+	return "duplicate message"
+}
+
 // Validator is a function that validates a message with a binary decision: accept or reject.
 type Validator func(context.Context, peer.ID, *Message) bool
 
@@ -226,18 +232,6 @@ func (v *validation) RemoveValidator(req *rmValReq) {
 	}
 }
 
-// PushLocal synchronously pushes a locally published message and performs applicable
-// validations.
-// Returns an error if validation fails
-func (v *validation) PushLocal(msg *Message) error {
-	err := v.ValidateLocal(msg)
-	if err != nil {
-		return err
-	}
-
-	return v.sendMsgBlocking(msg)
-}
-
 // ValidateLocal synchronously validates a locally published message and
 // performs applicable validations. Returns an error if validation fails.
 func (v *validation) ValidateLocal(msg *Message) error {
@@ -330,7 +324,7 @@ func (v *validation) validate(vals []*validatorImpl, src peer.ID, msg *Message, 
 	id := v.p.idGen.ID(msg)
 	if !v.p.markSeen(id) {
 		v.tracer.DuplicateMessage(msg)
-		return ValidationError{Reason: RejectValidationIgnoredDuplicate}
+		return dupeErr{}
 	} else {
 		v.tracer.ValidateMessage(msg)
 	}

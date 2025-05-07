@@ -3520,3 +3520,25 @@ func TestMessageBatchPublish(t *testing.T) {
 		}
 	}
 }
+
+func TestPublishDuplicateMessage(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	hosts := getDefaultHosts(t, 1)
+	psubs := getGossipsubs(ctx, hosts, WithMessageIdFn(func(msg *pb.Message) string {
+		return string(msg.Data)
+	}))
+	topic, err := psubs[0].Join("foobar")
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = topic.Publish(ctx, []byte("hello"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = topic.Publish(ctx, []byte("hello"))
+	if err != nil {
+		t.Fatal("Duplicate message should not return an error")
+	}
+}

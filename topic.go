@@ -225,6 +225,11 @@ type PubOpt func(pub *PublishOptions) error
 func (t *Topic) Publish(ctx context.Context, data []byte, opts ...PubOpt) error {
 	msg, err := t.validate(ctx, data, opts...)
 	if err != nil {
+		if errors.Is(err, dupeErr{}) {
+			// If it was a duplicate, we return nil to indicate success.
+			// Semantically the message was published by us or someone else.
+			return nil
+		}
 		return err
 	}
 	return t.p.val.sendMsgBlocking(msg)
@@ -233,6 +238,12 @@ func (t *Topic) Publish(ctx context.Context, data []byte, opts ...PubOpt) error 
 func (t *Topic) AddToBatch(ctx context.Context, batch *MessageBatch, data []byte, opts ...PubOpt) error {
 	msg, err := t.validate(ctx, data, opts...)
 	if err != nil {
+		if errors.Is(err, dupeErr{}) {
+			// If it was a duplicate, we return nil to indicate success.
+			// Semantically the message was published by us or someone else.
+			// We won't add it to the batch. Since it's already been published.
+			return nil
+		}
 		return err
 	}
 	batch.messages = append(batch.messages, msg)
