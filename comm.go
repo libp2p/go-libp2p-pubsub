@@ -158,6 +158,7 @@ func (p *PubSub) handlePeerDead(s network.Stream) {
 
 func (p *PubSub) handleSendingMessages(ctx context.Context, s network.Stream, outgoing *rpcQueue) {
 	writeRpc := func(rpc *RPC) error {
+		rpc = rpc.filterUnwanted(s.Conn().RemotePeer())
 		size := uint64(rpc.Size())
 
 		buf := pool.Get(varint.UvarintSize(size) + int(size))
@@ -167,11 +168,6 @@ func (p *PubSub) handleSendingMessages(ctx context.Context, s network.Stream, ou
 		_, err := rpc.MarshalTo(buf[n:])
 		if err != nil {
 			return err
-		}
-
-		if rpc.cancelled != nil && rpc.cancelled() {
-			// This rpc has been cancelled, so we don't need to send it
-			return nil
 		}
 
 		_, err = s.Write(buf)
@@ -227,15 +223,13 @@ func rpcWithControl(msgs []*pb.Message,
 	}
 }
 
+// copyRPC shallow copies a RPC message.
 func copyRPC(rpc *RPC) *RPC {
 	res := new(RPC)
 	*res = *rpc
 	if rpc.Control != nil {
 		res.Control = new(pb.ControlMessage)
 		*res.Control = *rpc.Control
-	}
-	if rpc.cancelled != nil {
-		res.cancelled = rpc.cancelled
 	}
 	return res
 }

@@ -1256,11 +1256,6 @@ func (gs *GossipSubRouter) Publish(msg *Message) {
 			continue
 		}
 
-		csum := computeChecksum(gs.p.idGen.ID(msg))
-		cancelled := func() bool {
-			return gs.unwanted.has(pid, csum)
-		}
-		out.cancelled = cancelled
 		gs.sendRPC(pid, out, false)
 	}
 }
@@ -1392,15 +1387,14 @@ func (gs *GossipSubRouter) sendRPC(p peer.ID, out *RPC, urgent bool) {
 	}
 
 	// Potentially split the RPC into multiple RPCs that are below the max message size
-	outRPCs := appendOrMergeRPC(nil, gs.p.maxMessageSize, *out)
+	outRPCs := out.split(gs.p.maxMessageSize)
 	for _, rpc := range outRPCs {
 		if rpc.Size() > gs.p.maxMessageSize {
 			// This should only happen if a single message/control is above the maxMessageSize.
 			gs.doDropRPC(out, p, fmt.Sprintf("Dropping oversized RPC. Size: %d, limit: %d. (Over by %d bytes)", rpc.Size(), gs.p.maxMessageSize, rpc.Size()-gs.p.maxMessageSize))
 			continue
 		}
-		rpc.cancelled = out.cancelled
-		gs.doSendRPC(rpc, p, q, urgent)
+		gs.doSendRPC(&rpc, p, q, urgent)
 	}
 }
 

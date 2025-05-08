@@ -2348,9 +2348,9 @@ func validRPCSizes(slice []*RPC, limit int) bool {
 	return true
 }
 
-func validRPCToPublishSizes(slice []RPCToPublish, limit int) bool {
+func validRPCSizesStructSlice(slice []RPC, limit int) bool {
 	for _, rpc := range slice {
-		if rpc.toPB().Size() > limit {
+		if rpc.Size() > limit {
 			return false
 		}
 	}
@@ -2565,7 +2565,7 @@ func FuzzAppendOrMergeRPC(f *testing.F) {
 	})
 }
 
-func FuzzRPCToPublish(f *testing.F) {
+func FuzzRPCSplit(f *testing.F) {
 	minMaxMsgSize := 100
 	maxMaxMsgSize := 2048
 	f.Fuzz(func(t *testing.T, data []byte) {
@@ -2574,20 +2574,9 @@ func FuzzRPCToPublish(f *testing.F) {
 			maxSize = minMaxMsgSize
 		}
 		rpc := generateRPC(data, maxSize)
-		publishMsgs := make([]*Message, len(rpc.Publish))
-		for i, msg := range rpc.Publish {
-			publishMsgs[i] = &Message{
-				Message: msg,
-			}
-		}
-		rpcToPublish := &RPCToPublish{
-			publish: publishMsgs,
-			subs:    rpc.Subscriptions,
-			control: rpc.Control,
-		}
-		rpcs := rpcToPublish.split(maxSize)
+		rpcs := rpc.split(maxSize)
 
-		if !validRPCToPublishSizes(rpcs, maxSize) {
+		if !validRPCSizesStructSlice(rpcs, maxSize) {
 			t.Fatalf("invalid RPC size")
 		}
 	})
