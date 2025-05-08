@@ -29,6 +29,8 @@ message ControlMessage {
 	repeated ControlGraft graft = 3;
 	repeated ControlPrune prune = 4;
 	repeated ControlIDontWant idontwant = 5;
+	repeated ControlChoke choke = 6;
+	repeated ControlUnchoke unchoke = 7;
 }
 
 message ControlIHave {
@@ -55,6 +57,14 @@ message ControlPrune {
 message ControlIDontWant {
 	// implementors from other languages should use bytes here - go protobuf emits invalid utf8 strings
 	repeated string messageIDs = 1;
+}
+
+message ControlChoke {
+    required string topicID = 1;
+}
+
+ message ControlUnchoke {
+    required string topicID = 1;
 }
 
 message PeerInfo {

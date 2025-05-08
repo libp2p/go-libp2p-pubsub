@@ -5,11 +5,11 @@ package pubsub_pb
 
 import (
 	fmt "fmt"
+	github_com_gogo_protobuf_proto "github.com/gogo/protobuf/proto"
+	proto "github.com/gogo/protobuf/proto"
 	io "io"
 	math "math"
 	math_bits "math/bits"
-
-	proto "github.com/gogo/protobuf/proto"
 )
 
 // Reference imports to suppress errors if they are not otherwise used.
@@ -234,6 +234,8 @@ type ControlMessage struct {
 	Graft                []*ControlGraft     `protobuf:"bytes,3,rep,name=graft" json:"graft,omitempty"`
 	Prune                []*ControlPrune     `protobuf:"bytes,4,rep,name=prune" json:"prune,omitempty"`
 	Idontwant            []*ControlIDontWant `protobuf:"bytes,5,rep,name=idontwant" json:"idontwant,omitempty"`
+	Choke                []*ControlChoke     `protobuf:"bytes,6,rep,name=choke" json:"choke,omitempty"`
+	Unchoke              []*ControlUnchoke   `protobuf:"bytes,7,rep,name=unchoke" json:"unchoke,omitempty"`
 	XXX_NoUnkeyedLiteral struct{}            `json:"-"`
 	XXX_unrecognized     []byte              `json:"-"`
 	XXX_sizecache        int32               `json:"-"`
@@ -303,6 +305,20 @@ func (m *ControlMessage) GetPrune() []*ControlPrune {
 func (m *ControlMessage) GetIdontwant() []*ControlIDontWant {
 	if m != nil {
 		return m.Idontwant
+	}
+	return nil
+}
+
+func (m *ControlMessage) GetChoke() []*ControlChoke {
+	if m != nil {
+		return m.Choke
+	}
+	return nil
+}
+
+func (m *ControlMessage) GetUnchoke() []*ControlUnchoke {
+	if m != nil {
+		return m.Unchoke
 	}
 	return nil
 }
@@ -569,6 +585,100 @@ func (m *ControlIDontWant) GetMessageIDs() []string {
 	return nil
 }
 
+type ControlChoke struct {
+	TopicID              *string  `protobuf:"bytes,1,req,name=topicID" json:"topicID,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_unrecognized     []byte   `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
+}
+
+func (m *ControlChoke) Reset()         { *m = ControlChoke{} }
+func (m *ControlChoke) String() string { return proto.CompactTextString(m) }
+func (*ControlChoke) ProtoMessage()    {}
+func (*ControlChoke) Descriptor() ([]byte, []int) {
+	return fileDescriptor_77a6da22d6a3feb1, []int{8}
+}
+func (m *ControlChoke) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *ControlChoke) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_ControlChoke.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *ControlChoke) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_ControlChoke.Merge(m, src)
+}
+func (m *ControlChoke) XXX_Size() int {
+	return m.Size()
+}
+func (m *ControlChoke) XXX_DiscardUnknown() {
+	xxx_messageInfo_ControlChoke.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_ControlChoke proto.InternalMessageInfo
+
+func (m *ControlChoke) GetTopicID() string {
+	if m != nil && m.TopicID != nil {
+		return *m.TopicID
+	}
+	return ""
+}
+
+type ControlUnchoke struct {
+	TopicID              *string  `protobuf:"bytes,1,req,name=topicID" json:"topicID,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_unrecognized     []byte   `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
+}
+
+func (m *ControlUnchoke) Reset()         { *m = ControlUnchoke{} }
+func (m *ControlUnchoke) String() string { return proto.CompactTextString(m) }
+func (*ControlUnchoke) ProtoMessage()    {}
+func (*ControlUnchoke) Descriptor() ([]byte, []int) {
+	return fileDescriptor_77a6da22d6a3feb1, []int{9}
+}
+func (m *ControlUnchoke) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *ControlUnchoke) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_ControlUnchoke.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *ControlUnchoke) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_ControlUnchoke.Merge(m, src)
+}
+func (m *ControlUnchoke) XXX_Size() int {
+	return m.Size()
+}
+func (m *ControlUnchoke) XXX_DiscardUnknown() {
+	xxx_messageInfo_ControlUnchoke.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_ControlUnchoke proto.InternalMessageInfo
+
+func (m *ControlUnchoke) GetTopicID() string {
+	if m != nil && m.TopicID != nil {
+		return *m.TopicID
+	}
+	return ""
+}
+
 type PeerInfo struct {
 	PeerID               []byte   `protobuf:"bytes,1,opt,name=peerID" json:"peerID,omitempty"`
 	SignedPeerRecord     []byte   `protobuf:"bytes,2,opt,name=signedPeerRecord" json:"signedPeerRecord,omitempty"`
@@ -581,7 +691,7 @@ func (m *PeerInfo) Reset()         { *m = PeerInfo{} }
 func (m *PeerInfo) String() string { return proto.CompactTextString(m) }
 func (*PeerInfo) ProtoMessage()    {}
 func (*PeerInfo) Descriptor() ([]byte, []int) {
-	return fileDescriptor_77a6da22d6a3feb1, []int{8}
+	return fileDescriptor_77a6da22d6a3feb1, []int{10}
 }
 func (m *PeerInfo) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -634,45 +744,50 @@ func init() {
 	proto.RegisterType((*ControlGraft)(nil), "pubsub.pb.ControlGraft")
 	proto.RegisterType((*ControlPrune)(nil), "pubsub.pb.ControlPrune")
 	proto.RegisterType((*ControlIDontWant)(nil), "pubsub.pb.ControlIDontWant")
+	proto.RegisterType((*ControlChoke)(nil), "pubsub.pb.ControlChoke")
+	proto.RegisterType((*ControlUnchoke)(nil), "pubsub.pb.ControlUnchoke")
 	proto.RegisterType((*PeerInfo)(nil), "pubsub.pb.PeerInfo")
 }
 
 func init() { proto.RegisterFile("rpc.proto", fileDescriptor_77a6da22d6a3feb1) }
 
 var fileDescriptor_77a6da22d6a3feb1 = []byte{
-	// 511 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x84, 0x92, 0xcd, 0x6e, 0x13, 0x31,
-	0x10, 0xc7, 0xe5, 0x7c, 0x34, 0xdd, 0xe9, 0x82, 0x22, 0x83, 0x8a, 0xf9, 0x50, 0x14, 0xed, 0x29,
-	0x20, 0xd8, 0x43, 0x38, 0x21, 0x71, 0x81, 0x44, 0xa2, 0x39, 0x00, 0x91, 0x39, 0x70, 0xde, 0xdd,
-	0x38, 0xe9, 0xaa, 0x8d, 0x6d, 0x6c, 0x6f, 0x11, 0x4f, 0xc0, 0x89, 0xf7, 0xe2, 0xc8, 0x23, 0xa0,
-	0xdc, 0x78, 0x0b, 0xe4, 0x59, 0xe7, 0xa3, 0x4d, 0x03, 0x37, 0xcf, 0xf8, 0x37, 0xfe, 0xff, 0x67,
-	0xc6, 0x10, 0x19, 0x5d, 0xa4, 0xda, 0x28, 0xa7, 0x68, 0xa4, 0xab, 0xdc, 0x56, 0x79, 0xaa, 0xf3,
-	0xe4, 0x0f, 0x81, 0x26, 0x9f, 0x8e, 0xe8, 0x6b, 0xb8, 0x63, 0xab, 0xdc, 0x16, 0xa6, 0xd4, 0xae,
-	0x54, 0xd2, 0x32, 0xd2, 0x6f, 0x0e, 0x4e, 0x86, 0xa7, 0xe9, 0x06, 0x4d, 0xf9, 0x74, 0x94, 0x7e,
-	0xaa, 0xf2, 0x8f, 0xda, 0x59, 0x7e, 0x1d, 0xa6, 0xcf, 0xa1, 0xa3, 0xab, 0xfc, 0xb2, 0xb4, 0xe7,
-	0xac, 0x81, 0x75, 0x74, 0xa7, 0xee, 0xbd, 0xb0, 0x36, 0x5b, 0x08, 0xbe, 0x46, 0xe8, 0x4b, 0xe8,
-	0x14, 0x4a, 0x3a, 0xa3, 0x2e, 0x59, 0xb3, 0x4f, 0x06, 0x27, 0xc3, 0x87, 0x3b, 0xf4, 0xa8, 0xbe,
-	0xd9, 0x14, 0x05, 0xf2, 0xd1, 0x1b, 0xe8, 0x04, 0x71, 0xfa, 0x04, 0xa2, 0x20, 0x9f, 0x0b, 0x46,
-	0xfa, 0x64, 0x70, 0xcc, 0xb7, 0x09, 0xca, 0xa0, 0xe3, 0x94, 0x2e, 0x8b, 0x72, 0xc6, 0x1a, 0x7d,
-	0x32, 0x88, 0xf8, 0x3a, 0x4c, 0x7e, 0x10, 0xe8, 0x84, 0x77, 0x29, 0x85, 0xd6, 0xdc, 0xa8, 0x25,
-	0x96, 0xc7, 0x1c, 0xcf, 0x3e, 0x37, 0xcb, 0x5c, 0x86, 0x65, 0x31, 0xc7, 0x33, 0xbd, 0x0f, 0x6d,
-	0x2b, 0xbe, 0x48, 0x85, 0x4e, 0x63, 0x5e, 0x07, 0x3e, 0x8b, 0x8f, 0xb2, 0x16, 0x2a, 0xd4, 0x01,
-	0xfa, 0x2a, 0x17, 0x32, 0x73, 0x95, 0x11, 0xac, 0x8d, 0xfc, 0x36, 0x41, 0xbb, 0xd0, 0xbc, 0x10,
-	0xdf, 0xd8, 0x11, 0xe6, 0xfd, 0x31, 0xf9, 0xde, 0x80, 0xbb, 0xd7, 0xdb, 0xa5, 0x2f, 0xa0, 0x5d,
-	0x9e, 0x67, 0x57, 0x22, 0x8c, 0xff, 0xc1, 0xfe, 0x60, 0x26, 0x67, 0xd9, 0x95, 0xe0, 0x35, 0x85,
-	0xf8, 0xd7, 0x4c, 0xba, 0x30, 0xf5, 0xdb, 0xf0, 0xcf, 0x99, 0x74, 0xbc, 0xa6, 0x3c, 0xbe, 0x30,
-	0xd9, 0xdc, 0xb1, 0xe6, 0x21, 0xfc, 0x9d, 0xbf, 0xe6, 0x35, 0xe5, 0x71, 0x6d, 0x2a, 0x29, 0x58,
-	0xeb, 0x10, 0x3e, 0xf5, 0xd7, 0xbc, 0xa6, 0xe8, 0x2b, 0x88, 0xca, 0x99, 0x92, 0x0e, 0x0d, 0xb5,
-	0xb1, 0xe4, 0xf1, 0x2d, 0x86, 0xc6, 0x4a, 0x3a, 0x34, 0xb5, 0xa5, 0x93, 0x33, 0x88, 0x77, 0xdb,
-	0xdb, 0xec, 0x70, 0x32, 0xc6, 0x05, 0xad, 0x77, 0x38, 0x19, 0xd3, 0x1e, 0xc0, 0xb2, 0x9e, 0xd5,
-	0x64, 0x6c, 0xb1, 0xed, 0x88, 0xef, 0x64, 0x92, 0x74, 0xfb, 0x92, 0x17, 0xb9, 0xc1, 0x93, 0x3d,
-	0x7e, 0xb0, 0xe1, 0xb1, 0xf5, 0xc3, 0xca, 0xc9, 0x72, 0x43, 0x62, 0xd7, 0xff, 0xf0, 0xf8, 0x14,
-	0xda, 0x5a, 0x08, 0x63, 0xc3, 0x56, 0xee, 0xed, 0x0c, 0x61, 0x2a, 0x84, 0x99, 0xc8, 0xb9, 0xe2,
-	0x35, 0xe1, 0x1f, 0xc9, 0xb3, 0xe2, 0x42, 0xcd, 0xe7, 0xf8, 0xc1, 0x5a, 0x7c, 0x1d, 0x26, 0x43,
-	0xe8, 0xde, 0x9c, 0xd8, 0x7f, 0x9b, 0xf9, 0x00, 0xc7, 0x6b, 0x01, 0x7a, 0x0a, 0x47, 0x5e, 0x22,
-	0xb8, 0x8b, 0x79, 0x88, 0xe8, 0x33, 0xe8, 0xfa, 0x3f, 0x29, 0x66, 0x9e, 0xe4, 0xa2, 0x50, 0x66,
-	0x16, 0x3e, 0xfc, 0x5e, 0xfe, 0x6d, 0xfc, 0x73, 0xd5, 0x23, 0xbf, 0x56, 0x3d, 0xf2, 0x7b, 0xd5,
-	0x23, 0x7f, 0x03, 0x00, 0x00, 0xff, 0xff, 0xba, 0x73, 0x8e, 0xbf, 0x41, 0x04, 0x00, 0x00,
+	// 559 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x94, 0x93, 0x4d, 0x8f, 0xd3, 0x3c,
+	0x10, 0xc7, 0x95, 0xbe, 0x6c, 0x36, 0xb3, 0x79, 0x1e, 0xad, 0x0c, 0x5a, 0xcc, 0x8b, 0xaa, 0x2a,
+	0xa7, 0xb2, 0x82, 0x1c, 0xca, 0x09, 0x89, 0x0b, 0xb4, 0x12, 0xdb, 0x03, 0x50, 0x19, 0x21, 0xce,
+	0x49, 0xea, 0xb6, 0x51, 0xb7, 0x71, 0x88, 0x9d, 0x45, 0x7c, 0x08, 0xbe, 0x17, 0x47, 0x3e, 0x02,
+	0xea, 0x0d, 0xf1, 0x25, 0x90, 0xc7, 0x4e, 0x9a, 0x6e, 0xdb, 0x95, 0xb8, 0x79, 0xc6, 0xbf, 0xf1,
+	0xfc, 0xe7, 0xc5, 0xe0, 0x15, 0x79, 0x12, 0xe6, 0x85, 0x50, 0x82, 0x78, 0x79, 0x19, 0xcb, 0x32,
+	0x0e, 0xf3, 0x38, 0xf8, 0xed, 0x40, 0x9b, 0x4d, 0x47, 0xe4, 0x15, 0xfc, 0x27, 0xcb, 0x58, 0x26,
+	0x45, 0x9a, 0xab, 0x54, 0x64, 0x92, 0x3a, 0xfd, 0xf6, 0xe0, 0x6c, 0x78, 0x11, 0xd6, 0x68, 0xc8,
+	0xa6, 0xa3, 0xf0, 0x63, 0x19, 0x7f, 0xc8, 0x95, 0x64, 0xbb, 0x30, 0x79, 0x06, 0x6e, 0x5e, 0xc6,
+	0xd7, 0xa9, 0x5c, 0xd2, 0x16, 0xc6, 0x91, 0x46, 0xdc, 0x3b, 0x2e, 0x65, 0xb4, 0xe0, 0xac, 0x42,
+	0xc8, 0x0b, 0x70, 0x13, 0x91, 0xa9, 0x42, 0x5c, 0xd3, 0x76, 0xdf, 0x19, 0x9c, 0x0d, 0x1f, 0x36,
+	0xe8, 0x91, 0xb9, 0xa9, 0x83, 0x2c, 0xf9, 0xe8, 0x35, 0xb8, 0x36, 0x39, 0x79, 0x02, 0x9e, 0x4d,
+	0x1f, 0x73, 0xea, 0xf4, 0x9d, 0xc1, 0x29, 0xdb, 0x3a, 0x08, 0x05, 0x57, 0x89, 0x3c, 0x4d, 0xd2,
+	0x19, 0x6d, 0xf5, 0x9d, 0x81, 0xc7, 0x2a, 0x33, 0xf8, 0xee, 0x80, 0x6b, 0xdf, 0x25, 0x04, 0x3a,
+	0xf3, 0x42, 0xac, 0x31, 0xdc, 0x67, 0x78, 0xd6, 0xbe, 0x59, 0xa4, 0x22, 0x0c, 0xf3, 0x19, 0x9e,
+	0xc9, 0x7d, 0xe8, 0x4a, 0xfe, 0x25, 0x13, 0xa8, 0xd4, 0x67, 0xc6, 0xd0, 0x5e, 0x7c, 0x94, 0x76,
+	0x30, 0x83, 0x31, 0x50, 0x57, 0xba, 0xc8, 0x22, 0x55, 0x16, 0x9c, 0x76, 0x91, 0xdf, 0x3a, 0xc8,
+	0x39, 0xb4, 0x57, 0xfc, 0x1b, 0x3d, 0x41, 0xbf, 0x3e, 0x06, 0x7f, 0x5a, 0xf0, 0xff, 0x6e, 0xb9,
+	0xe4, 0x39, 0x74, 0xd3, 0x65, 0x74, 0xc3, 0x6d, 0xfb, 0x1f, 0xec, 0x37, 0x66, 0x72, 0x15, 0xdd,
+	0x70, 0x66, 0x28, 0xc4, 0xbf, 0x46, 0x99, 0xb2, 0x5d, 0x3f, 0x84, 0x7f, 0x8e, 0x32, 0xc5, 0x0c,
+	0xa5, 0xf1, 0x45, 0x11, 0xcd, 0x15, 0x6d, 0x1f, 0xc3, 0xdf, 0xea, 0x6b, 0x66, 0x28, 0x8d, 0xe7,
+	0x45, 0x99, 0x71, 0xda, 0x39, 0x86, 0x4f, 0xf5, 0x35, 0x33, 0x14, 0x79, 0x09, 0x5e, 0x3a, 0x13,
+	0x99, 0x42, 0x41, 0x5d, 0x0c, 0x79, 0x7c, 0x40, 0xd0, 0x58, 0x64, 0x0a, 0x45, 0x6d, 0x69, 0x9d,
+	0x29, 0x59, 0x8a, 0x15, 0xa7, 0x27, 0xc7, 0x32, 0x8d, 0xf4, 0x35, 0x33, 0x94, 0x5e, 0xa0, 0x32,
+	0x33, 0x01, 0x2e, 0x06, 0x1c, 0x58, 0xa0, 0x4f, 0x06, 0x60, 0x15, 0x19, 0x5c, 0x81, 0xdf, 0x6c,
+	0x61, 0xbd, 0x27, 0x93, 0x31, 0x2e, 0x41, 0xb5, 0x27, 0x93, 0x31, 0xe9, 0x01, 0xac, 0xcd, 0x3c,
+	0x26, 0x63, 0x89, 0xad, 0xf5, 0x58, 0xc3, 0x13, 0x84, 0xdb, 0x97, 0x74, 0x21, 0xb7, 0x78, 0x67,
+	0x8f, 0x1f, 0xd4, 0x3c, 0xb6, 0xf7, 0x78, 0xe6, 0x60, 0x5d, 0x93, 0xd8, 0xd9, 0x3b, 0x34, 0x3e,
+	0x85, 0x6e, 0xce, 0x79, 0x21, 0xed, 0xe4, 0xef, 0x35, 0x1a, 0x30, 0xe5, 0xbc, 0x98, 0x64, 0x73,
+	0xc1, 0x0c, 0xa1, 0x1f, 0x89, 0xa3, 0x64, 0x25, 0xe6, 0x73, 0x5c, 0xe2, 0x0e, 0xab, 0xcc, 0x60,
+	0x08, 0xe7, 0xb7, 0xa7, 0xf2, 0x0f, 0xc5, 0xe0, 0x48, 0x76, 0x25, 0xb6, 0x9a, 0xc5, 0x5c, 0xd6,
+	0xdb, 0x6d, 0x67, 0x71, 0x07, 0xfb, 0x1e, 0x4e, 0x2b, 0xd9, 0xe4, 0x02, 0x4e, 0xb4, 0x70, 0x5b,
+	0xb3, 0xcf, 0xac, 0x45, 0x2e, 0xe1, 0x5c, 0xff, 0x26, 0x3e, 0xd3, 0x24, 0xe3, 0x89, 0x28, 0x66,
+	0xf6, 0xab, 0xee, 0xf9, 0xdf, 0xf8, 0x3f, 0x36, 0x3d, 0xe7, 0xe7, 0xa6, 0xe7, 0xfc, 0xda, 0xf4,
+	0x9c, 0xbf, 0x01, 0x00, 0x00, 0xff, 0xff, 0xf4, 0xf9, 0xb5, 0x7a, 0xfb, 0x04, 0x00, 0x00,
 }
 
 func (m *RPC) Marshal() (dAtA []byte, err error) {
@@ -878,6 +993,34 @@ func (m *ControlMessage) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	if m.XXX_unrecognized != nil {
 		i -= len(m.XXX_unrecognized)
 		copy(dAtA[i:], m.XXX_unrecognized)
+	}
+	if len(m.Unchoke) > 0 {
+		for iNdEx := len(m.Unchoke) - 1; iNdEx >= 0; iNdEx-- {
+			{
+				size, err := m.Unchoke[iNdEx].MarshalToSizedBuffer(dAtA[:i])
+				if err != nil {
+					return 0, err
+				}
+				i -= size
+				i = encodeVarintRpc(dAtA, i, uint64(size))
+			}
+			i--
+			dAtA[i] = 0x3a
+		}
+	}
+	if len(m.Choke) > 0 {
+		for iNdEx := len(m.Choke) - 1; iNdEx >= 0; iNdEx-- {
+			{
+				size, err := m.Choke[iNdEx].MarshalToSizedBuffer(dAtA[:i])
+				if err != nil {
+					return 0, err
+				}
+				i -= size
+				i = encodeVarintRpc(dAtA, i, uint64(size))
+			}
+			i--
+			dAtA[i] = 0x32
+		}
 	}
 	if len(m.Idontwant) > 0 {
 		for iNdEx := len(m.Idontwant) - 1; iNdEx >= 0; iNdEx-- {
@@ -1154,6 +1297,78 @@ func (m *ControlIDontWant) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	return len(dAtA) - i, nil
 }
 
+func (m *ControlChoke) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *ControlChoke) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *ControlChoke) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if m.XXX_unrecognized != nil {
+		i -= len(m.XXX_unrecognized)
+		copy(dAtA[i:], m.XXX_unrecognized)
+	}
+	if m.TopicID == nil {
+		return 0, github_com_gogo_protobuf_proto.NewRequiredNotSetError("topicID")
+	} else {
+		i -= len(*m.TopicID)
+		copy(dAtA[i:], *m.TopicID)
+		i = encodeVarintRpc(dAtA, i, uint64(len(*m.TopicID)))
+		i--
+		dAtA[i] = 0xa
+	}
+	return len(dAtA) - i, nil
+}
+
+func (m *ControlUnchoke) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *ControlUnchoke) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *ControlUnchoke) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if m.XXX_unrecognized != nil {
+		i -= len(m.XXX_unrecognized)
+		copy(dAtA[i:], m.XXX_unrecognized)
+	}
+	if m.TopicID == nil {
+		return 0, github_com_gogo_protobuf_proto.NewRequiredNotSetError("topicID")
+	} else {
+		i -= len(*m.TopicID)
+		copy(dAtA[i:], *m.TopicID)
+		i = encodeVarintRpc(dAtA, i, uint64(len(*m.TopicID)))
+		i--
+		dAtA[i] = 0xa
+	}
+	return len(dAtA) - i, nil
+}
+
 func (m *PeerInfo) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
@@ -1325,6 +1540,18 @@ func (m *ControlMessage) Size() (n int) {
 			n += 1 + l + sovRpc(uint64(l))
 		}
 	}
+	if len(m.Choke) > 0 {
+		for _, e := range m.Choke {
+			l = e.Size()
+			n += 1 + l + sovRpc(uint64(l))
+		}
+	}
+	if len(m.Unchoke) > 0 {
+		for _, e := range m.Unchoke {
+			l = e.Size()
+			n += 1 + l + sovRpc(uint64(l))
+		}
+	}
 	if m.XXX_unrecognized != nil {
 		n += len(m.XXX_unrecognized)
 	}
@@ -1423,6 +1650,38 @@ func (m *ControlIDontWant) Size() (n int) {
 			l = len(s)
 			n += 1 + l + sovRpc(uint64(l))
 		}
+	}
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
+	return n
+}
+
+func (m *ControlChoke) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	if m.TopicID != nil {
+		l = len(*m.TopicID)
+		n += 1 + l + sovRpc(uint64(l))
+	}
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
+	return n
+}
+
+func (m *ControlUnchoke) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	if m.TopicID != nil {
+		l = len(*m.TopicID)
+		n += 1 + l + sovRpc(uint64(l))
 	}
 	if m.XXX_unrecognized != nil {
 		n += len(m.XXX_unrecognized)
@@ -2169,6 +2428,74 @@ func (m *ControlMessage) Unmarshal(dAtA []byte) error {
 				return err
 			}
 			iNdEx = postIndex
+		case 6:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Choke", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowRpc
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthRpc
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthRpc
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Choke = append(m.Choke, &ControlChoke{})
+			if err := m.Choke[len(m.Choke)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 7:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Unchoke", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowRpc
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthRpc
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthRpc
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Unchoke = append(m.Unchoke, &ControlUnchoke{})
+			if err := m.Unchoke[len(m.Unchoke)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
 			skippy, err := skipRpc(dAtA[iNdEx:])
@@ -2688,6 +3015,184 @@ func (m *ControlIDontWant) Unmarshal(dAtA []byte) error {
 			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *ControlChoke) Unmarshal(dAtA []byte) error {
+	var hasFields [1]uint64
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowRpc
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: ControlChoke: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: ControlChoke: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field TopicID", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowRpc
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthRpc
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthRpc
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			s := string(dAtA[iNdEx:postIndex])
+			m.TopicID = &s
+			iNdEx = postIndex
+			hasFields[0] |= uint64(0x00000001)
+		default:
+			iNdEx = preIndex
+			skippy, err := skipRpc(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthRpc
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
+			iNdEx += skippy
+		}
+	}
+	if hasFields[0]&uint64(0x00000001) == 0 {
+		return github_com_gogo_protobuf_proto.NewRequiredNotSetError("topicID")
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *ControlUnchoke) Unmarshal(dAtA []byte) error {
+	var hasFields [1]uint64
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowRpc
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: ControlUnchoke: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: ControlUnchoke: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field TopicID", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowRpc
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthRpc
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthRpc
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			s := string(dAtA[iNdEx:postIndex])
+			m.TopicID = &s
+			iNdEx = postIndex
+			hasFields[0] |= uint64(0x00000001)
+		default:
+			iNdEx = preIndex
+			skippy, err := skipRpc(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthRpc
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
+			iNdEx += skippy
+		}
+	}
+	if hasFields[0]&uint64(0x00000001) == 0 {
+		return github_com_gogo_protobuf_proto.NewRequiredNotSetError("topicID")
 	}
 
 	if iNdEx > l {
