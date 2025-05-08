@@ -2847,7 +2847,7 @@ var _ RawTracer = &mockRawTracer{}
 func TestGossipsubNoIDONTWANTToMessageSender(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	hosts := getDefaultHosts(t, 3)
+	hosts := getDefaultHosts(t, 2)
 	denseConnect(t, hosts)
 
 	psubs := make([]*PubSub, 2)
@@ -2891,7 +2891,7 @@ func TestGossipsubNoIDONTWANTToMessageSender(t *testing.T) {
 func TestGossipsubIDONTWANTBeforeFirstPublish(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	hosts := getDefaultHosts(t, 3)
+	hosts := getDefaultHosts(t, 2)
 	denseConnect(t, hosts)
 
 	psubs := make([]*PubSub, 2)
