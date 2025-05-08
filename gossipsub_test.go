@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	mrand "math/rand"
+	mrand2 "math/rand/v2"
 	"sort"
 	"sync"
 	"sync/atomic"
@@ -2580,6 +2581,42 @@ func FuzzRPCSplit(f *testing.F) {
 			t.Fatalf("invalid RPC size")
 		}
 	})
+}
+
+func genNRpcs(tb testing.TB, n int, maxSize int) []*RPC {
+	r := mrand2.NewChaCha8([32]byte{})
+	rpcs := make([]*RPC, n)
+	for i := range rpcs {
+		var data [64]byte
+		_, err := r.Read(data[:])
+		if err != nil {
+			tb.Fatal(err)
+		}
+		rpcs[i] = generateRPC(data[:], maxSize)
+	}
+	return rpcs
+}
+
+func BenchmarkSplitRPC(b *testing.B) {
+	maxSize := 2048
+	rpcs := genNRpcs(b, 100, maxSize)
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		rpc := rpcs[i%len(rpcs)]
+		rpc.split(maxSize)
+	}
+}
+
+func BenchmarkAppendOrMergeRPC(b *testing.B) {
+	maxSize := 2048
+	rpcs := genNRpcs(b, 100, maxSize)
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		rpc := rpcs[i%len(rpcs)]
+		appendOrMergeRPC(nil, maxSize, *rpc)
+	}
 }
 
 func TestGossipsubManagesAnAddressBook(t *testing.T) {

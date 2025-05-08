@@ -1453,7 +1453,7 @@ func appendOrMergeRPC(slice []*RPC, limit int, elems ...RPC) []*RPC {
 		// old behavior. In the future let's not merge messages. Since,
 		// it may increase message latency.
 		for _, msg := range elem.GetPublish() {
-			if lastRPC.Publish = append(lastRPC.Publish, msg); lastRPC.Size() > limit {
+			if lastRPC.Publish = append(lastRPC.Publish, msg); lastRPC.RPC.Size() > limit {
 				lastRPC.Publish = lastRPC.Publish[:len(lastRPC.Publish)-1]
 				lastRPC = &RPC{RPC: pb.RPC{}, from: elem.from}
 				lastRPC.Publish = append(lastRPC.Publish, msg)
@@ -1463,7 +1463,7 @@ func appendOrMergeRPC(slice []*RPC, limit int, elems ...RPC) []*RPC {
 
 		// Merge/Append Subscriptions
 		for _, sub := range elem.GetSubscriptions() {
-			if lastRPC.Subscriptions = append(lastRPC.Subscriptions, sub); lastRPC.Size() > limit {
+			if lastRPC.Subscriptions = append(lastRPC.Subscriptions, sub); lastRPC.RPC.Size() > limit {
 				lastRPC.Subscriptions = lastRPC.Subscriptions[:len(lastRPC.Subscriptions)-1]
 				lastRPC = &RPC{RPC: pb.RPC{}, from: elem.from}
 				lastRPC.Subscriptions = append(lastRPC.Subscriptions, sub)
@@ -1475,7 +1475,7 @@ func appendOrMergeRPC(slice []*RPC, limit int, elems ...RPC) []*RPC {
 		if ctl := elem.GetControl(); ctl != nil {
 			if lastRPC.Control == nil {
 				lastRPC.Control = &pb.ControlMessage{}
-				if lastRPC.Size() > limit {
+				if lastRPC.RPC.Size() > limit {
 					lastRPC.Control = nil
 					lastRPC = &RPC{RPC: pb.RPC{Control: &pb.ControlMessage{}}, from: elem.from}
 					out = append(out, lastRPC)
@@ -1483,7 +1483,7 @@ func appendOrMergeRPC(slice []*RPC, limit int, elems ...RPC) []*RPC {
 			}
 
 			for _, graft := range ctl.GetGraft() {
-				if lastRPC.Control.Graft = append(lastRPC.Control.Graft, graft); lastRPC.Size() > limit {
+				if lastRPC.Control.Graft = append(lastRPC.Control.Graft, graft); lastRPC.RPC.Size() > limit {
 					lastRPC.Control.Graft = lastRPC.Control.Graft[:len(lastRPC.Control.Graft)-1]
 					lastRPC = &RPC{RPC: pb.RPC{Control: &pb.ControlMessage{}}, from: elem.from}
 					lastRPC.Control.Graft = append(lastRPC.Control.Graft, graft)
@@ -1492,7 +1492,7 @@ func appendOrMergeRPC(slice []*RPC, limit int, elems ...RPC) []*RPC {
 			}
 
 			for _, prune := range ctl.GetPrune() {
-				if lastRPC.Control.Prune = append(lastRPC.Control.Prune, prune); lastRPC.Size() > limit {
+				if lastRPC.Control.Prune = append(lastRPC.Control.Prune, prune); lastRPC.RPC.Size() > limit {
 					lastRPC.Control.Prune = lastRPC.Control.Prune[:len(lastRPC.Control.Prune)-1]
 					lastRPC = &RPC{RPC: pb.RPC{Control: &pb.ControlMessage{}}, from: elem.from}
 					lastRPC.Control.Prune = append(lastRPC.Control.Prune, prune)
@@ -1506,7 +1506,7 @@ func appendOrMergeRPC(slice []*RPC, limit int, elems ...RPC) []*RPC {
 					// For IWANTs we don't need more than a single one,
 					// since there are no topic IDs here.
 					newIWant := &pb.ControlIWant{}
-					if lastRPC.Control.Iwant = append(lastRPC.Control.Iwant, newIWant); lastRPC.Size() > limit {
+					if lastRPC.Control.Iwant = append(lastRPC.Control.Iwant, newIWant); lastRPC.RPC.Size() > limit {
 						lastRPC.Control.Iwant = lastRPC.Control.Iwant[:len(lastRPC.Control.Iwant)-1]
 						lastRPC = &RPC{RPC: pb.RPC{Control: &pb.ControlMessage{
 							Iwant: []*pb.ControlIWant{newIWant},
@@ -1515,7 +1515,7 @@ func appendOrMergeRPC(slice []*RPC, limit int, elems ...RPC) []*RPC {
 					}
 				}
 				for _, msgID := range iwant.GetMessageIDs() {
-					if lastRPC.Control.Iwant[0].MessageIDs = append(lastRPC.Control.Iwant[0].MessageIDs, msgID); lastRPC.Size() > limit {
+					if lastRPC.Control.Iwant[0].MessageIDs = append(lastRPC.Control.Iwant[0].MessageIDs, msgID); lastRPC.RPC.Size() > limit {
 						lastRPC.Control.Iwant[0].MessageIDs = lastRPC.Control.Iwant[0].MessageIDs[:len(lastRPC.Control.Iwant[0].MessageIDs)-1]
 						lastRPC = &RPC{RPC: pb.RPC{Control: &pb.ControlMessage{
 							Iwant: []*pb.ControlIWant{{MessageIDs: []string{msgID}}},
