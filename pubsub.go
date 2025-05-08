@@ -377,6 +377,8 @@ func (r *RPC) split(maxRPCSize int) []RPC {
 	// Set common fields for all RPCs
 	for i := range out {
 		out[i].from = r.from
+		out[i].unwanted = r.unwanted
+		out[i].messageChecksums = r.messageChecksums
 	}
 	return out
 }

@@ -199,6 +199,13 @@ func rpcWithSubs(subs ...*pb.RPC_SubOpts) *RPC {
 	}
 }
 
+func rpcWithMessagesAndChecksums(msgs []*pb.Message, checksums []checksum) *RPC {
+	return &RPC{
+		RPC:              pb.RPC{Publish: msgs},
+		messageChecksums: checksums,
+	}
+}
+
 func rpcWithMessages(msgs ...*pb.Message) *RPC {
 	return &RPC{RPC: pb.RPC{Publish: msgs}}
 }

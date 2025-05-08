@@ -1195,6 +1195,7 @@ func (gs *GossipSubRouter) Publish(msg *Message) {
 	if !ok {
 		return
 	}
+	messageChecksum := computeChecksum(gs.p.idGen.ID(msg))
 
 	if gs.floodPublish && from == gs.p.host.ID() {
 		for p := range tmap {
@@ -1239,18 +1240,17 @@ func (gs *GossipSubRouter) Publish(msg *Message) {
 			gs.lastpub[topic] = time.Now().UnixNano()
 		}
 
-		csum := computeChecksum(gs.p.idGen.ID(msg))
 		for p := range gmap {
 			// Check if it has already received an IDONTWANT for the message.
 			// If so, don't send it to the peer
-			if gs.unwanted.has(p, csum) {
+			if gs.unwanted.has(p, messageChecksum) {
 				continue
 			}
 			tosend[p] = struct{}{}
 		}
 	}
 
-	out := rpcWithMessages(msg.Message)
+	out := rpcWithMessagesAndChecksums([]*pb.Message{msg.Message}, []checksum{messageChecksum})
 	for pid := range tosend {
 		if pid == from || pid == peer.ID(msg.GetFrom()) {
 			continue
