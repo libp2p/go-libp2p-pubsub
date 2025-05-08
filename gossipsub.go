@@ -1250,7 +1250,7 @@ func (gs *GossipSubRouter) Publish(msg *Message) {
 		}
 	}
 
-	out := rpcWithMessagesAndChecksums([]*pb.Message{msg.Message}, []checksum{messageChecksum})
+	out := rpcWithMessagesAndChecksums([]*pb.Message{msg.Message}, []checksum{messageChecksum}, gs.unwanted)
 	for pid := range tosend {
 		if pid == from || pid == peer.ID(msg.GetFrom()) {
 			continue

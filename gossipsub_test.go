@@ -5,11 +5,13 @@ import (
 	"context"
 	crand "crypto/rand"
 	"encoding/base64"
+	"encoding/binary"
 	"fmt"
 	"io"
 	mrand "math/rand"
 	mrand2 "math/rand/v2"
 	"sort"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -3467,5 +3469,167 @@ func BenchmarkAllocDoDropRPC(b *testing.B) {
 
 	for i := 0; i < b.N; i++ {
 		gs.doDropRPC(&RPC{}, "peerID", "reason")
+	}
+}
+
+type blockableHost struct {
+	host.Host
+	streams []blockableStream
+}
+
+func (bh *blockableHost) NewStream(ctx context.Context, p peer.ID, pids ...protocol.ID) (network.Stream, error) {
+	s, err := bh.Host.NewStream(ctx, p, pids...)
+	if err != nil {
+		return nil, err
+	}
+
+	bh.streams = append(bh.streams, blockableStream{Stream: s})
+	return &bh.streams[len(bh.streams)-1], nil
+}
+
+func (bh *blockableHost) BlockAll() {
+	for i := range bh.streams {
+		bh.streams[i].Block()
+	}
+}
+
+func (bh *blockableHost) UnblockAll() {
+	for i := range bh.streams {
+		bh.streams[i].Unblock()
+	}
+}
+
+type blockableStream struct {
+	network.Stream
+	blocked sync.Mutex
+}
+
+func (bs *blockableStream) Block() {
+	bs.blocked.Lock()
+}
+
+func (bs *blockableStream) Unblock() {
+	bs.blocked.Unlock()
+}
+
+func (bs *blockableStream) Write(p []byte) (int, error) {
+	bs.blocked.Lock()
+	defer bs.blocked.Unlock()
+	return bs.Stream.Write(p)
+}
+
+func TestGossipsubIDONTWANTCancelsQueuedRPC(t *testing.T) {
+	msgCount := 3
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	hosts := getDefaultHosts(t, 2)
+	denseConnect(t, hosts)
+
+	psubs := make([]*PubSub, 2)
+
+	publisherHost := &blockableHost{Host: hosts[0]}
+	messageIDFn := func(msg *pb.Message) string {
+		return strconv.FormatUint(binary.BigEndian.Uint64(msg.Data), 10)
+	}
+	psubs[0] = getGossipsub(ctx, publisherHost, WithMessageIdFn(messageIDFn))
+	msgIDsReceived := make(chan string, msgCount)
+	psubs[1] = getGossipsub(ctx, hosts[1], WithMessageIdFn(messageIDFn), WithRawTracer(&mockRawTracer{
+		onRecvRPC: func(rpc *RPC) {
+			if len(rpc.GetPublish()) > 0 {
+				for _, msg := range rpc.GetPublish() {
+					msgIDsReceived <- messageIDFn(msg)
+				}
+			}
+		},
+	}))
+
+	topicString := "foobar"
+	var topics []*Topic
+	for _, ps := range psubs {
+		topic, err := ps.Join(topicString)
+		if err != nil {
+			t.Fatal(err)
+		}
+		topics = append(topics, topic)
+
+		_, err = ps.Subscribe(topicString, WithBufferSize(msgCount+1))
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	time.Sleep(2 * time.Second)
+
+	publisherHost.BlockAll()
+	// Have the publisher queue up a bunch of mesages. The actual sending will
+	// be blocked on the call to stream.Write
+	for i := range msgCount {
+		msg := make([]byte, GossipSubIDontWantMessageThreshold+1)
+		binary.BigEndian.AppendUint64(msg[:0], uint64(i))
+		err := topics[0].Publish(ctx, msg)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// Now have the receiver cancel these messages by sending IDONTWANTs
+	idontwantIDs := make([]string, msgCount)
+	for i := range idontwantIDs {
+		idontwantIDs[i] = strconv.Itoa(i)
+	}
+	idontwantRPC := &RPC{
+		RPC: pb.RPC{
+			Control: &pb.ControlMessage{
+				Idontwant: []*pb.ControlIDontWant{&pb.ControlIDontWant{
+					MessageIDs: idontwantIDs,
+				}},
+			},
+		},
+	}
+	q := psubs[1].peers[publisherHost.ID()]
+	psubs[1].rt.(*GossipSubRouter).doSendRPC(idontwantRPC, publisherHost.ID(), q, true)
+
+	// Wait for the RPCs to send
+	time.Sleep(time.Second)
+
+	// Unblock writes
+	publisherHost.UnblockAll()
+
+	// Have the publisher send one more message. We expect this one to make it
+	msg := make([]byte, GossipSubIDontWantMessageThreshold+1)
+	binary.BigEndian.AppendUint64(msg[:0], uint64(msgCount+1))
+	err := topics[0].Publish(ctx, msg)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// We should get the last message
+outerExpectMsg:
+	for {
+		select {
+		case msgID := <-msgIDsReceived:
+			if msgID == "0" {
+				// one early message that got sent before we could cancel it
+				continue
+			}
+			if msgID != strconv.FormatUint(uint64(msgCount)+1, 10) {
+				t.Fatal("received unexpected message: ", msgID)
+			}
+			break outerExpectMsg
+		case <-time.After(5 * time.Second):
+			t.Fatal("Should have received the last message")
+		}
+	}
+
+	// We should not get any more messages
+outer:
+	for {
+		select {
+		case <-msgIDsReceived:
+			t.Fatal("Should not have received a publish as the node sent IDONTWANT")
+		case <-time.After(5 * time.Second):
+			break outer
+		}
 	}
 }

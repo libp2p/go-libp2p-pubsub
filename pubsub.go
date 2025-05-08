@@ -253,7 +253,7 @@ type RPC struct {
 }
 
 func (r *RPC) filterUnwanted(to peer.ID) *RPC {
-	if len(r.Publish) != len(r.messageChecksums) {
+	if len(r.Publish) != len(r.messageChecksums) || r.unwanted == nil {
 		return r
 	}
 	// First check if there are any unwanted messages.
@@ -341,7 +341,7 @@ func (r *RPC) split(maxRPCSize int) []RPC {
 
 	var currentSize int
 	if ctrlSize > 0 {
-		currentSize = ctrlSize + sovRpc(uint64(ctrlSize)) + 1
+		currentSize = ctrlSize + 1 + sovRpc(uint64(ctrlSize))
 	}
 	// Split subscriptions.
 	for _, rpc := range r.Subscriptions {
@@ -443,21 +443,6 @@ func (r *RPC) rpcControlComponents() iter.Seq2[int, func(*pb.ControlMessage)] {
 			}
 		}
 	}
-}
-
-// Size returns the size of the pb encoded RPC in bytes.
-func (r *RPC) Size() int {
-	pbRPC := pb.RPC{
-		Subscriptions: r.Subscriptions,
-		Control:       r.Control,
-	}
-	size := pbRPC.Size()
-	for _, msg := range r.Publish {
-		mSize := msg.Size()
-		// +1 for the protobuf field number + wire type
-		size += mSize + 1 + sovRpc(uint64(mSize)) + 1
-	}
-	return size
 }
 
 type Option func(*PubSub) error

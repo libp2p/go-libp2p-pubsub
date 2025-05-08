@@ -160,6 +160,10 @@ func (p *PubSub) handleSendingMessages(ctx context.Context, s network.Stream, ou
 	writeRpc := func(rpc *RPC) error {
 		rpc = rpc.filterUnwanted(s.Conn().RemotePeer())
 		size := uint64(rpc.Size())
+		if size == 0 {
+			// Nothing to do, the peer cancelled all our messages
+			return nil
+		}
 
 		buf := pool.Get(varint.UvarintSize(size) + int(size))
 		defer pool.Put(buf)
@@ -199,10 +203,11 @@ func rpcWithSubs(subs ...*pb.RPC_SubOpts) *RPC {
 	}
 }
 
-func rpcWithMessagesAndChecksums(msgs []*pb.Message, checksums []checksum) *RPC {
+func rpcWithMessagesAndChecksums(msgs []*pb.Message, checksums []checksum, unwanted *unwantedState) *RPC {
 	return &RPC{
 		RPC:              pb.RPC{Publish: msgs},
 		messageChecksums: checksums,
+		unwanted:         unwanted,
 	}
 }
 
