@@ -253,6 +253,9 @@ type RPC struct {
 }
 
 func (r *RPC) filterUnwanted(to peer.ID) *RPC {
+	if len(r.Publish) != len(r.messageChecksums) {
+		return r
+	}
 	// First check if there are any unwanted messages.
 	// If all messages are wanted, we can return the original RPC.
 	anyUnwanted := false
