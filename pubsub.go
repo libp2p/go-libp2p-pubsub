@@ -134,6 +134,9 @@ type PubSub struct {
 	// sendMsg handles messages that have been validated
 	sendMsg chan *Message
 
+	// sendMessageBatch publishes a batch of messages
+	sendMessageBatch chan messageBatchAndPublishOptions
+
 	// addVal handles validator registration requests
 	addVal chan *addValReq
 
@@ -217,6 +220,10 @@ type PubSubRouter interface {
 	Leave(topic string)
 }
 
+type BatchPublisher interface {
+	PublishBatch(messages []*Message, opts *BatchPublishOptions)
+}
+
 type AcceptStatus int
 
 const (
@@ -281,6 +288,7 @@ func NewPubSub(ctx context.Context, h host.Host, rt PubSubRouter, opts ...Option
 		rmTopic:               make(chan *rmTopicReq),
 		getTopics:             make(chan *topicReq),
 		sendMsg:               make(chan *Message, 32),
+		sendMessageBatch:      make(chan messageBatchAndPublishOptions, 1),
 		addVal:                make(chan *addValReq),
 		rmVal:                 make(chan *rmValReq),
 		eval:                  make(chan func()),
@@ -641,6 +649,9 @@ func (p *PubSub) processLoop(ctx context.Context) {
 
 		case msg := <-p.sendMsg:
 			p.publishMessage(msg)
+
+		case batchAndOpts := <-p.sendMessageBatch:
+			p.publishMessageBatch(batchAndOpts)
 
 		case req := <-p.addVal:
 			p.val.AddValidator(req)
@@ -1221,6 +1232,15 @@ func (p *PubSub) publishMessage(msg *Message) {
 	}
 }
 
+func (p *PubSub) publishMessageBatch(batchAndOpts messageBatchAndPublishOptions) {
+	for _, msg := range batchAndOpts.messages {
+		p.tracer.DeliverMessage(msg)
+		p.notifySubs(msg)
+	}
+	// We type checked when pushing the batch to the channel
+	p.rt.(BatchPublisher).PublishBatch(batchAndOpts.messages, batchAndOpts.opts)
+}
+
 type addTopicReq struct {
 	topic *Topic
 	resp  chan *Topic
@@ -1356,6 +1376,39 @@ func (p *PubSub) Publish(topic string, data []byte, opts ...PubOpt) error {
 	}
 
 	return t.Publish(context.TODO(), data, opts...)
+}
+
+// PublishBatch publishes a batch of messages. This only works for routers that
+// implement the BatchPublisher interface.
+//
+// Users should make sure there is enough space in the Peer's outbound queue to
+// ensure messages are not dropped. WithPeerOutboundQueueSize should be set to
+// at least the expected number of batched messages per peer plus some slack to
+// account for gossip messages.
+//
+// The default publish strategy is RoundRobinMessageIDScheduler.
+func (p *PubSub) PublishBatch(batch *MessageBatch, opts ...BatchPubOpt) error {
+	if _, ok := p.rt.(BatchPublisher); !ok {
+		return fmt.Errorf("pubsub router is not a BatchPublisher")
+	}
+
+	publishOptions := &BatchPublishOptions{}
+	for _, o := range opts {
+		err := o(publishOptions)
+		if err != nil {
+			return err
+		}
+	}
+	setDefaultBatchPublishOptions(publishOptions)
+
+	p.sendMessageBatch <- messageBatchAndPublishOptions{
+		messages: batch.messages,
+		opts:     publishOptions,
+	}
+
+	// Clear the batch's messages in case a user reuses the same batch object
+	batch.messages = nil
+	return nil
 }
 
 func (p *PubSub) nextSeqno() []byte {

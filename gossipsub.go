@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"fmt"
 	"io"
+	"iter"
 	"math/rand"
 	"sort"
 	"time"
@@ -521,6 +522,8 @@ type GossipSubRouter struct {
 	// clean up -- eg backoff clean up.
 	heartbeatTicks uint64
 }
+
+var _ BatchPublisher = &GossipSubRouter{}
 
 type connectInfo struct {
 	p   peer.ID
@@ -1143,81 +1146,105 @@ func (gs *GossipSubRouter) connector() {
 	}
 }
 
-func (gs *GossipSubRouter) Publish(msg *Message) {
-	gs.mcache.Put(msg)
-
-	from := msg.ReceivedFrom
-	topic := msg.GetTopic()
-
-	tosend := make(map[peer.ID]struct{})
-
-	// any peers in the topic?
-	tmap, ok := gs.p.topics[topic]
-	if !ok {
-		return
+func (gs *GossipSubRouter) PublishBatch(messages []*Message, opts *BatchPublishOptions) {
+	strategy := opts.Strategy
+	for _, msg := range messages {
+		msgID := gs.p.idGen.ID(msg)
+		for p, rpc := range gs.rpcs(msg) {
+			strategy.AddRPC(p, msgID, rpc)
+		}
 	}
 
-	if gs.floodPublish && from == gs.p.host.ID() {
-		for p := range tmap {
-			_, direct := gs.direct[p]
-			if direct || gs.score.Score(p) >= gs.publishThreshold {
-				tosend[p] = struct{}{}
-			}
-		}
-	} else {
-		// direct peers
-		for p := range gs.direct {
-			_, inTopic := tmap[p]
-			if inTopic {
-				tosend[p] = struct{}{}
-			}
-		}
+	for p, rpc := range strategy.All() {
+		gs.sendRPC(p, rpc, false)
+	}
+}
 
-		// floodsub peers
-		for p := range tmap {
-			if !gs.feature(GossipSubFeatureMesh, gs.peers[p]) && gs.score.Score(p) >= gs.publishThreshold {
-				tosend[p] = struct{}{}
-			}
-		}
+func (gs *GossipSubRouter) Publish(msg *Message) {
+	for p, rpc := range gs.rpcs(msg) {
+		gs.sendRPC(p, rpc, false)
+	}
+}
 
-		// gossipsub peers
-		gmap, ok := gs.mesh[topic]
+func (gs *GossipSubRouter) rpcs(msg *Message) iter.Seq2[peer.ID, *RPC] {
+	return func(yield func(peer.ID, *RPC) bool) {
+		gs.mcache.Put(msg)
+
+		from := msg.ReceivedFrom
+		topic := msg.GetTopic()
+
+		tosend := make(map[peer.ID]struct{})
+
+		// any peers in the topic?
+		tmap, ok := gs.p.topics[topic]
 		if !ok {
-			// we are not in the mesh for topic, use fanout peers
-			gmap, ok = gs.fanout[topic]
-			if !ok || len(gmap) == 0 {
-				// we don't have any, pick some with score above the publish threshold
-				peers := gs.getPeers(topic, gs.params.D, func(p peer.ID) bool {
-					_, direct := gs.direct[p]
-					return !direct && gs.score.Score(p) >= gs.publishThreshold
-				})
+			return
+		}
 
-				if len(peers) > 0 {
-					gmap = peerListToMap(peers)
-					gs.fanout[topic] = gmap
+		if gs.floodPublish && from == gs.p.host.ID() {
+			for p := range tmap {
+				_, direct := gs.direct[p]
+				if direct || gs.score.Score(p) >= gs.publishThreshold {
+					tosend[p] = struct{}{}
 				}
 			}
-			gs.lastpub[topic] = time.Now().UnixNano()
+		} else {
+			// direct peers
+			for p := range gs.direct {
+				_, inTopic := tmap[p]
+				if inTopic {
+					tosend[p] = struct{}{}
+				}
+			}
+
+			// floodsub peers
+			for p := range tmap {
+				if !gs.feature(GossipSubFeatureMesh, gs.peers[p]) && gs.score.Score(p) >= gs.publishThreshold {
+					tosend[p] = struct{}{}
+				}
+			}
+
+			// gossipsub peers
+			gmap, ok := gs.mesh[topic]
+			if !ok {
+				// we are not in the mesh for topic, use fanout peers
+				gmap, ok = gs.fanout[topic]
+				if !ok || len(gmap) == 0 {
+					// we don't have any, pick some with score above the publish threshold
+					peers := gs.getPeers(topic, gs.params.D, func(p peer.ID) bool {
+						_, direct := gs.direct[p]
+						return !direct && gs.score.Score(p) >= gs.publishThreshold
+					})
+
+					if len(peers) > 0 {
+						gmap = peerListToMap(peers)
+						gs.fanout[topic] = gmap
+					}
+				}
+				gs.lastpub[topic] = time.Now().UnixNano()
+			}
+
+			csum := computeChecksum(gs.p.idGen.ID(msg))
+			for p := range gmap {
+				// Check if it has already received an IDONTWANT for the message.
+				// If so, don't send it to the peer
+				if _, ok := gs.unwanted[p][csum]; ok {
+					continue
+				}
+				tosend[p] = struct{}{}
+			}
 		}
 
-		csum := computeChecksum(gs.p.idGen.ID(msg))
-		for p := range gmap {
-			// Check if it has already received an IDONTWANT for the message.
-			// If so, don't send it to the peer
-			if _, ok := gs.unwanted[p][csum]; ok {
+		out := rpcWithMessages(msg.Message)
+		for pid := range tosend {
+			if pid == from || pid == peer.ID(msg.GetFrom()) {
 				continue
 			}
-			tosend[p] = struct{}{}
-		}
-	}
 
-	out := rpcWithMessages(msg.Message)
-	for pid := range tosend {
-		if pid == from || pid == peer.ID(msg.GetFrom()) {
-			continue
+			if !yield(pid, out) {
+				return
+			}
 		}
-
-		gs.sendRPC(pid, out, false)
 	}
 }
 
