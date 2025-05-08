@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	mrand "math/rand"
+	mrand2 "math/rand/v2"
 	"sort"
 	"sync"
 	"sync/atomic"
@@ -2348,6 +2349,15 @@ func validRPCSizes(slice []*RPC, limit int) bool {
 	return true
 }
 
+func validRPCSizesStructSlice(slice []RPC, limit int) bool {
+	for _, rpc := range slice {
+		if rpc.Size() > limit {
+			return false
+		}
+	}
+	return true
+}
+
 func TestFragmentRPCFunction(t *testing.T) {
 	fragmentRPC := func(rpc *RPC, limit int) ([]*RPC, error) {
 		rpcs := appendOrMergeRPC(nil, limit, *rpc)
@@ -2554,6 +2564,59 @@ func FuzzAppendOrMergeRPC(f *testing.F) {
 			t.Fatalf("invalid RPC size")
 		}
 	})
+}
+
+func FuzzRPCSplit(f *testing.F) {
+	minMaxMsgSize := 100
+	maxMaxMsgSize := 2048
+	f.Fuzz(func(t *testing.T, data []byte) {
+		maxSize := int(generateU16(&data)) % maxMaxMsgSize
+		if maxSize < minMaxMsgSize {
+			maxSize = minMaxMsgSize
+		}
+		rpc := generateRPC(data, maxSize)
+		rpcs := rpc.split(maxSize)
+
+		if !validRPCSizesStructSlice(rpcs, maxSize) {
+			t.Fatalf("invalid RPC size")
+		}
+	})
+}
+
+func genNRpcs(tb testing.TB, n int, maxSize int) []*RPC {
+	r := mrand2.NewChaCha8([32]byte{})
+	rpcs := make([]*RPC, n)
+	for i := range rpcs {
+		var data [64]byte
+		_, err := r.Read(data[:])
+		if err != nil {
+			tb.Fatal(err)
+		}
+		rpcs[i] = generateRPC(data[:], maxSize)
+	}
+	return rpcs
+}
+
+func BenchmarkSplitRPC(b *testing.B) {
+	maxSize := 2048
+	rpcs := genNRpcs(b, 100, maxSize)
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		rpc := rpcs[i%len(rpcs)]
+		rpc.split(maxSize)
+	}
+}
+
+func BenchmarkAppendOrMergeRPC(b *testing.B) {
+	maxSize := 2048
+	rpcs := genNRpcs(b, 100, maxSize)
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		rpc := rpcs[i%len(rpcs)]
+		appendOrMergeRPC(nil, maxSize, *rpc)
+	}
 }
 
 func TestGossipsubManagesAnAddressBook(t *testing.T) {

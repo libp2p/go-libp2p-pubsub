@@ -158,6 +158,7 @@ func (p *PubSub) handlePeerDead(s network.Stream) {
 
 func (p *PubSub) handleSendingMessages(ctx context.Context, s network.Stream, outgoing *rpcQueue) {
 	writeRpc := func(rpc *RPC) error {
+		rpc = rpc.filterUnwanted(s.Conn().RemotePeer())
 		size := uint64(rpc.Size())
 
 		buf := pool.Get(varint.UvarintSize(size) + int(size))
@@ -198,6 +199,13 @@ func rpcWithSubs(subs ...*pb.RPC_SubOpts) *RPC {
 	}
 }
 
+func rpcWithMessagesAndChecksums(msgs []*pb.Message, checksums []checksum) *RPC {
+	return &RPC{
+		RPC:              pb.RPC{Publish: msgs},
+		messageChecksums: checksums,
+	}
+}
+
 func rpcWithMessages(msgs ...*pb.Message) *RPC {
 	return &RPC{RPC: pb.RPC{Publish: msgs}}
 }
@@ -222,6 +230,7 @@ func rpcWithControl(msgs []*pb.Message,
 	}
 }
 
+// copyRPC shallow copies a RPC message.
 func copyRPC(rpc *RPC) *RPC {
 	res := new(RPC)
 	*res = *rpc

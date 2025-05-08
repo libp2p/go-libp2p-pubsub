@@ -5,7 +5,10 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"iter"
+	math_bits "math/bits"
 	"math/rand"
+	"slices"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -243,9 +246,218 @@ func (m *Message) GetFrom() peer.ID {
 
 type RPC struct {
 	pb.RPC
-
 	// unexported on purpose, not sending this over the wire
-	from peer.ID
+	from             peer.ID
+	messageChecksums []checksum
+	unwanted         *unwantedState
+}
+
+func (r *RPC) filterUnwanted(to peer.ID) *RPC {
+	if len(r.Publish) != len(r.messageChecksums) {
+		return r
+	}
+	// First check if there are any unwanted messages.
+	// If all messages are wanted, we can return the original RPC.
+	anyUnwanted := false
+	for i := range r.Publish {
+		csum := r.messageChecksums[i]
+		if r.unwanted.has(to, csum) {
+			anyUnwanted = true
+			break
+		}
+	}
+	if !anyUnwanted {
+		return r
+	}
+
+	// There are some unwanted messages, so we need to filter them out.
+	// We need to copy the RPC as other senders could be using the same RPC.
+	filtered := copyRPC(r)
+	filtered.Publish = slices.Clone(r.Publish)
+	// The filtered RPC will not need these checksums since it will not be
+	// filitered again. If we did need them, we'd have to close the slice and
+	// synchronize the deletes below
+	filtered.messageChecksums = nil
+
+	// Remove unwanted messages from the publish list.
+	i := slices.IndexFunc(r.messageChecksums, func(csum checksum) bool {
+		return r.unwanted.has(to, csum)
+	})
+	if i == -1 {
+		return r
+	}
+	for j := i + 1; j < len(filtered.Publish); j++ {
+		if !r.unwanted.has(to, r.messageChecksums[j]) {
+			filtered.Publish[i] = filtered.Publish[j]
+			i++
+		}
+	}
+	clear(filtered.Publish[i:])
+	filtered.Publish = filtered.Publish[:i]
+	return filtered
+}
+
+// split splits the RPC into multiple RPCs if the total size exceeds maxRPCSize.
+// It may still return a single RPC that is larger than maxRPCSize in case it
+// can't split the RPC up further. Caller should take care of handling oversized
+// RPCs appropriately.
+//
+// A note for maintainers:
+// The details of this are tied to Protobuf encoding. It is recommended to
+// familiarize yourself with the following resource: https://protobuf.dev/programming-guides/encoding/
+//
+// Also note that the +1 byte for the protobuf field number + wire type assumes the field
+// number is <= 15. If the field number is larger, it will use more than one byte. The formula is:
+// byteLengthOfVarint(varintEncode(fieldNumber << 3 | wireType)) or sovRpc(fieldNumber << 3 | wireType)
+//
+// Make sure to run the Fuzz test after any changes. It's very good at detecting issues.
+func (r *RPC) split(maxRPCSize int) []RPC {
+	// Fast path: if the RPC is smaller than maxRPCSize, return it as is.
+	if r.Size() <= maxRPCSize {
+		return []RPC{*r}
+	}
+
+	out := make([]RPC, 0, 1)
+	currentRPC := RPC{}
+
+	// Split control messages. This is trickier than other fields because we are
+	// splitting one level deeper.
+	var ctrlSize int
+	for incrementalSize, mergeFn := range r.rpcControlComponents() {
+		nextSize := ctrlSize + incrementalSize
+		nextLenPrefixSize := sovRpc(uint64(nextSize))
+		// +1 for the protobuf field number + wire type
+		if nextSize+nextLenPrefixSize+1 >= maxRPCSize && ctrlSize > 0 {
+			out = append(out, currentRPC)
+			currentRPC = RPC{}
+			ctrlSize = 0
+		}
+		ctrlSize += incrementalSize
+		if currentRPC.Control == nil {
+			currentRPC.Control = &pb.ControlMessage{}
+		}
+		mergeFn(currentRPC.Control)
+	}
+
+	var currentSize int
+	if ctrlSize > 0 {
+		currentSize = ctrlSize + sovRpc(uint64(ctrlSize)) + 1
+	}
+	// Split subscriptions.
+	for _, rpc := range r.Subscriptions {
+		subSize := rpc.Size()
+		// +1 for the protobuf field number + wire type
+		incrementalSize := subSize + 1 + sovRpc(uint64(subSize))
+		if currentSize+incrementalSize >= maxRPCSize && currentSize > 0 {
+			out = append(out, currentRPC)
+			currentRPC = RPC{}
+			currentSize = 0
+		}
+		currentSize += incrementalSize
+		currentRPC.Subscriptions = append(currentRPC.Subscriptions, rpc)
+	}
+
+	for _, msg := range r.Publish {
+		msgSize := msg.Size()
+		// +1 for the protobuf field number + wire type
+		incrementalSize := msgSize + 1 + sovRpc(uint64(msgSize))
+		if currentSize+incrementalSize >= maxRPCSize && currentSize > 0 {
+			out = append(out, currentRPC)
+			currentRPC = RPC{}
+			currentSize = 0
+		}
+		currentSize += incrementalSize
+		currentRPC.Publish = append(currentRPC.Publish, msg)
+	}
+
+	if currentSize > 0 {
+		out = append(out, currentRPC)
+	}
+
+	// Set common fields for all RPCs
+	for i := range out {
+		out[i].from = r.from
+		out[i].unwanted = r.unwanted
+		out[i].messageChecksums = r.messageChecksums
+	}
+	return out
+}
+
+func sovRpc(x uint64) (n int) {
+	return (math_bits.Len64(x|1) + 6) / 7
+}
+
+// rpcControlComponents returns an iterator over the control messages of the RPC.
+// The first item in the pair is the incremental size of adding this component to the control message.
+// The second item is a function that merges the component into an existing ControlMessage pb.
+//
+// Read the comment in RPC.split() before modifying this function.
+func (r *RPC) rpcControlComponents() iter.Seq2[int, func(*pb.ControlMessage)] {
+	return func(yield func(int, func(*pb.ControlMessage)) bool) {
+		if r.Control == nil {
+			return
+		}
+		for _, idontwant := range r.Control.Idontwant {
+			s := idontwant.Size()
+			incrementalSize := s + 1 + sovRpc(uint64(s))
+			if !yield(incrementalSize, func(a *pb.ControlMessage) {
+				a.Idontwant = append(a.Idontwant, idontwant)
+			}) {
+				return
+			}
+		}
+		for _, graft := range r.Control.Graft {
+			s := graft.Size()
+			incrementalSize := s + 1 + sovRpc(uint64(s))
+			if !yield(incrementalSize, func(a *pb.ControlMessage) {
+				a.Graft = append(a.Graft, graft)
+			}) {
+				return
+			}
+		}
+		for _, prune := range r.Control.Prune {
+			s := prune.Size()
+			incrementalSize := s + 1 + sovRpc(uint64(s))
+			if !yield(incrementalSize, func(a *pb.ControlMessage) {
+				a.Prune = append(a.Prune, prune)
+			}) {
+				return
+			}
+		}
+		for _, iwant := range r.Control.Iwant {
+			s := iwant.Size()
+			incrementalSize := s + 1 + sovRpc(uint64(s))
+			if !yield(incrementalSize, func(a *pb.ControlMessage) {
+				a.Iwant = append(a.Iwant, iwant)
+			}) {
+				return
+			}
+		}
+		for _, ihave := range r.Control.Ihave {
+			s := ihave.Size()
+			incrementalSize := s + 1 + sovRpc(uint64(s))
+			if !yield(incrementalSize, func(a *pb.ControlMessage) {
+				a.Ihave = append(a.Ihave, ihave)
+			}) {
+				return
+			}
+		}
+	}
+}
+
+// Size returns the size of the pb encoded RPC in bytes.
+func (r *RPC) Size() int {
+	pbRPC := pb.RPC{
+		Subscriptions: r.Subscriptions,
+		Control:       r.Control,
+	}
+	size := pbRPC.Size()
+	for _, msg := range r.Publish {
+		mSize := msg.Size()
+		// +1 for the protobuf field number + wire type
+		size += mSize + 1 + sovRpc(uint64(mSize)) + 1
+	}
+	return size
 }
 
 type Option func(*PubSub) error
