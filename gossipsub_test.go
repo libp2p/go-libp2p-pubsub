@@ -3588,7 +3588,11 @@ func TestGossipsubIDONTWANTCancelsQueuedRPC(t *testing.T) {
 		},
 	}
 	q := psubs[1].peers[publisherHost.ID()]
-	psubs[1].rt.(*GossipSubRouter).doSendRPC(idontwantRPC, publisherHost.ID(), q, true)
+
+	// Call this via the eval func to run it in the event loop
+	psubs[1].eval <- func() {
+		psubs[1].rt.(*GossipSubRouter).doSendRPC(idontwantRPC, publisherHost.ID(), q, true)
+	}
 
 	// Wait for the RPCs to send
 	time.Sleep(time.Second)
