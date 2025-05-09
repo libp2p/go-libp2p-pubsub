@@ -3614,3 +3614,134 @@ func TestPublishDuplicateMessage(t *testing.T) {
 		t.Fatal("Duplicate message should not return an error")
 	}
 }
+
+func TestHandleChokeUnchoke(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	hosts := getDefaultHosts(t, 2)
+	h0 := hosts[0] // publisher
+	h1 := hosts[1] // receiver
+
+	connect(t, h0, h1)
+
+	tracer := &mockRawTracer{}
+	recvdIHave := make(chan bool, 1)
+	recvdMsg := make(chan bool, 1)
+	tracer.onRecvRPC = func(rpc *RPC) {
+		ctl := rpc.GetControl()
+		if ctl != nil && len(ctl.Ihave) > 0 {
+			select {
+			case recvdIHave <- true:
+			default:
+			}
+		}
+		if len(rpc.GetPublish()) > 0 {
+			select {
+			case recvdMsg <- true:
+			default:
+			}
+		}
+	}
+
+	// Create pubsub instances
+	psub0 := getGossipsub(ctx, h0)
+	psub1 := getGossipsub(ctx, h1, WithRawTracer(tracer))
+
+	// Get routers for direct access
+	router1 := psub1.rt.(*GossipSubRouter)
+
+	// Create topic and subscriptions
+	topic := "test-topic"
+	sub0, err := psub0.Subscribe(topic)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer sub0.Cancel()
+
+	sub1, err := psub1.Subscribe(topic)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer sub1.Cancel()
+
+	// Wait for subscriptions to propagate
+	time.Sleep(time.Second)
+
+	// Send a choke message from h1 to h0
+	chokeMsg := &pb.ControlMessage{
+		Choke: []*pb.ControlChoke{
+			{TopicID: &topic},
+		},
+	}
+	chokeRPC := &RPC{RPC: pb.RPC{Control: chokeMsg}}
+
+	psub1.rt.(*GossipSubRouter).p.eval <- func() {
+		// This will send choke message directly
+		router1.doSendRPC(chokeRPC, h0.ID(), router1.p.peers[h0.ID()], false)
+	}
+
+	// Wait for choke to take effect
+	time.Sleep(time.Second)
+
+	// Publish a message from h0 while h1 has choked it
+	msg := []byte("message 1")
+	if err := psub0.Publish(topic, msg); err != nil {
+		t.Fatal(err)
+	}
+
+	// We should get an IHAVE because of the choke
+	select {
+	case <-recvdIHave:
+		// This is expected - we received an IHAVE because of the choke
+	case <-time.After(3 * time.Second):
+		t.Fatal("Did not receive IHAVE after choke")
+	}
+
+	// Verify we don't get the actual message due to choke
+	select {
+	case <-recvdMsg:
+	// expect a message because we will send an IWANT
+	case <-time.After(time.Second):
+		t.Fatal("didn't get the message after we requested it with IWANT")
+	}
+
+	// Now send an unchoke message
+	unchokeMsg := &pb.ControlMessage{
+		Unchoke: []*pb.ControlUnchoke{
+			{TopicID: &topic},
+		},
+	}
+	unchokeRPC := &RPC{RPC: pb.RPC{Control: unchokeMsg}}
+
+	peer0 := h0.ID()
+	psub1.rt.(*GossipSubRouter).p.eval <- func() {
+		// This will send unchoke message directly
+		router1.doSendRPC(unchokeRPC, peer0, router1.p.peers[peer0], false)
+	}
+
+	// Wait for unchoke to take effect
+	time.Sleep(time.Second)
+
+	// Publish a second message after unchoke
+	msg2 := []byte("message 2")
+	if err := psub0.Publish(topic, msg2); err != nil {
+		t.Fatal(err)
+	}
+
+	// After unchoke, we should receive the actual message, not an IHAVE
+	select {
+	case <-recvdMsg:
+		// This is expected - we got the message after unchoke
+	case <-time.After(3 * time.Second):
+		t.Fatal("Did not receive message after unchoke")
+	}
+
+	// Verify we don't receive an IHAVE because we're not choked anymore
+	select {
+	case <-recvdIHave:
+		t.Fatal("Received IHAVE after unchoke - this shouldn't happen")
+	case <-time.After(time.Second):
+		// This is expected - we don't receive IHAVE after unchoke
+	}
+}
