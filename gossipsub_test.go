@@ -1715,9 +1715,9 @@ func TestGossipsubPiggybackControl(t *testing.T) {
 		test1 := "test1"
 		test2 := "test2"
 		test3 := "test3"
-		gs.mesh[test1] = make(map[peer.ID]struct{})
-		gs.mesh[test2] = make(map[peer.ID]struct{})
-		gs.mesh[test1][blah] = struct{}{}
+		gs.mesh[test1] = make(map[peer.ID]meshPeerState)
+		gs.mesh[test2] = make(map[peer.ID]meshPeerState)
+		gs.mesh[test1][blah] = meshPeerState{}
 
 		rpc := &RPC{RPC: pb.RPC{}}
 		gs.piggybackControl(blah, rpc, &pb.ControlMessage{
@@ -1773,9 +1773,9 @@ func TestGossipsubMultipleGraftTopics(t *testing.T) {
 
 	p2Sub.eval <- func() {
 		// Add topics to second peer
-		p2Router.mesh[firstTopic] = map[peer.ID]struct{}{}
-		p2Router.mesh[secondTopic] = map[peer.ID]struct{}{}
-		p2Router.mesh[thirdTopic] = map[peer.ID]struct{}{}
+		p2Router.mesh[firstTopic] = map[peer.ID]meshPeerState{}
+		p2Router.mesh[secondTopic] = map[peer.ID]meshPeerState{}
+		p2Router.mesh[thirdTopic] = map[peer.ID]meshPeerState{}
 
 		finChan <- struct{}{}
 	}

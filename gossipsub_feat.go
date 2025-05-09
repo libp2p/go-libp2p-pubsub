@@ -20,6 +20,9 @@ const (
 	GossipSubFeaturePX
 	// Protocol supports IDONTWANT -- gossipsub-v1.2 compatible
 	GossipSubFeatureIdontwant
+
+	// Protocol supports Choke/Unchoke -- gossipsub-v1.3 compatible
+	GossipSubFeatureChoke
 )
 
 // GossipSubDefaultProtocols is the default gossipsub router protocol list
@@ -34,6 +37,8 @@ func GossipSubDefaultFeatures(feat GossipSubFeature, proto protocol.ID) bool {
 		return proto == GossipSubID_v12 || proto == GossipSubID_v11
 	case GossipSubFeatureIdontwant:
 		return proto == GossipSubID_v12
+	case GossipSubFeatureChoke:
+		return proto == GossipSubID_v13
 	default:
 		return false
 	}

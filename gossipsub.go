@@ -39,6 +39,11 @@ const (
 	// See the spec for details about how v1.2.0 compares to v1.1.0:
 	// https://github.com/libp2p/specs/blob/master/pubsub/gossipsub/gossipsub-v1.2.md
 	GossipSubID_v12 = protocol.ID("/meshsub/1.2.0")
+
+	// GossipSubID_v13 adds choke and unchoke control messages and the ability
+	// to send IHAVEs to mesh peers. See the spec for more details:
+	// https://github.com/libp2p/specs/blob/master/pubsub/gossipsub/gossipsub-v1.2.md
+	GossipSubID_v13 = protocol.ID("/meshsub/1.3.0")
 )
 
 // Defines the default gossipsub parameters.
@@ -258,8 +263,8 @@ func DefaultGossipSubRouter(h host.Host) *GossipSubRouter {
 	params := DefaultGossipSubParams()
 	return &GossipSubRouter{
 		peers:        make(map[peer.ID]protocol.ID),
-		mesh:         make(map[string]map[peer.ID]struct{}),
-		fanout:       make(map[string]map[peer.ID]struct{}),
+		mesh:         make(map[string]map[peer.ID]meshPeerState),
+		fanout:       make(map[string]map[peer.ID]meshPeerState),
 		lastpub:      make(map[string]int64),
 		gossip:       make(map[peer.ID][]*pb.ControlIHave),
 		control:      make(map[peer.ID]*pb.ControlMessage),
@@ -462,11 +467,16 @@ func WithGossipSubParams(cfg GossipSubParams) Option {
 // is the fanout map. Fanout peer lists are expired if we don't publish any
 // messages to their topic for GossipSubFanoutTTL.
 type GossipSubRouter struct {
-	p            *PubSub
-	peers        map[peer.ID]protocol.ID          // peer protocols
-	direct       map[peer.ID]struct{}             // direct peers
-	mesh         map[string]map[peer.ID]struct{}  // topic meshes
-	fanout       map[string]map[peer.ID]struct{}  // topic fanout
+	p      *PubSub
+	peers  map[peer.ID]protocol.ID // peer protocols
+	direct map[peer.ID]struct{}    // direct peers
+
+	mesh map[string]map[peer.ID]meshPeerState // topic meshes
+	// fanout tracks peers for topics we publish on, but aren't subscribed for.
+	// The meshPeerState is always a zero value. It's this type so that a fanout
+	// map can be cheaply upgraded to a mesh map.
+	fanout map[string]map[peer.ID]meshPeerState
+
 	lastpub      map[string]int64                 // last publish time for fanout topics
 	gossip       map[peer.ID][]*pb.ControlIHave   // pending gossip
 	control      map[peer.ID]*pb.ControlMessage   // pending control messages
@@ -524,6 +534,40 @@ type GossipSubRouter struct {
 }
 
 var _ BatchPublisher = &GossipSubRouter{}
+
+type meshPeerState struct {
+	// choked controls whether we eagerly push the full message to the peer, or
+	// we only send them an IHAVE with the message ID.
+	choked chokedState
+}
+
+type chokedState = uint8
+
+const (
+	iAmChoked chokedState = 1 << iota
+	theyAreChoked
+)
+
+func (s *meshPeerState) getIAmChoked() bool {
+	return s.choked&iAmChoked != 0
+}
+func (s *meshPeerState) getTheyAreChoked() bool {
+	return s.choked&theyAreChoked != 0
+}
+func (s *meshPeerState) setIAmChoked(choked bool) {
+	if choked {
+		s.choked |= iAmChoked
+	} else {
+		s.choked &^= iAmChoked
+	}
+}
+func (s *meshPeerState) setTheyAreChoked(choked bool) {
+	if choked {
+		s.choked |= theyAreChoked
+	} else {
+		s.choked &^= theyAreChoked
+	}
+}
 
 type connectInfo struct {
 	p   peer.ID
@@ -752,6 +796,7 @@ func (gs *GossipSubRouter) HandleRPC(rpc *RPC) {
 	prune := gs.handleGraft(rpc.from, ctl)
 	gs.handlePrune(rpc.from, ctl)
 	gs.handleIDontWant(rpc.from, ctl)
+	gs.handleChokeUnChoke(rpc.from, ctl)
 
 	if len(iwant) == 0 && len(ihave) == 0 && len(prune) == 0 {
 		return
@@ -966,7 +1011,7 @@ func (gs *GossipSubRouter) handleGraft(p peer.ID, ctl *pb.ControlMessage) []*pb.
 
 		log.Debugf("GRAFT: add mesh link from %s in %s", p, topic)
 		gs.tracer.Graft(p, topic)
-		peers[p] = struct{}{}
+		peers[p] = meshPeerState{}
 	}
 
 	if len(prune) == 0 {
@@ -1040,6 +1085,28 @@ mainIDWLoop:
 
 			totalUnwantedIds++
 			gs.unwanted[p][computeChecksum(mid)] = gs.params.IDontWantMessageTTL
+		}
+	}
+}
+
+func (gs *GossipSubRouter) handleChokeUnChoke(p peer.ID, ctl *pb.ControlMessage) {
+	for _, choke := range ctl.GetChoke() {
+		topic := choke.GetTopicID()
+		if peers, ok := gs.mesh[topic]; ok {
+			if s, ok := peers[p]; ok {
+				s.setIAmChoked(true)
+				peers[p] = s
+			}
+		}
+	}
+
+	for _, unchoke := range ctl.GetUnchoke() {
+		topic := unchoke.GetTopicID()
+		if peers, ok := gs.mesh[topic]; ok {
+			if s, ok := peers[p]; ok {
+				s.setIAmChoked(false)
+				peers[p] = s
+			}
 		}
 	}
 }
@@ -1173,7 +1240,8 @@ func (gs *GossipSubRouter) rpcs(msg *Message) iter.Seq2[peer.ID, *RPC] {
 		from := msg.ReceivedFrom
 		topic := msg.GetTopic()
 
-		tosend := make(map[peer.ID]struct{})
+		type peerMeta struct{ lazySend bool }
+		tosend := make(map[peer.ID]peerMeta)
 
 		// any peers in the topic?
 		tmap, ok := gs.p.topics[topic]
@@ -1185,7 +1253,7 @@ func (gs *GossipSubRouter) rpcs(msg *Message) iter.Seq2[peer.ID, *RPC] {
 			for p := range tmap {
 				_, direct := gs.direct[p]
 				if direct || gs.score.Score(p) >= gs.publishThreshold {
-					tosend[p] = struct{}{}
+					tosend[p] = peerMeta{}
 				}
 			}
 		} else {
@@ -1193,14 +1261,14 @@ func (gs *GossipSubRouter) rpcs(msg *Message) iter.Seq2[peer.ID, *RPC] {
 			for p := range gs.direct {
 				_, inTopic := tmap[p]
 				if inTopic {
-					tosend[p] = struct{}{}
+					tosend[p] = peerMeta{}
 				}
 			}
 
 			// floodsub peers
 			for p := range tmap {
 				if !gs.feature(GossipSubFeatureMesh, gs.peers[p]) && gs.score.Score(p) >= gs.publishThreshold {
-					tosend[p] = struct{}{}
+					tosend[p] = peerMeta{}
 				}
 			}
 
@@ -1217,7 +1285,7 @@ func (gs *GossipSubRouter) rpcs(msg *Message) iter.Seq2[peer.ID, *RPC] {
 					})
 
 					if len(peers) > 0 {
-						gmap = peerListToMap(peers)
+						gmap = peerListToStateMap(peers)
 						gs.fanout[topic] = gmap
 					}
 				}
@@ -1225,20 +1293,39 @@ func (gs *GossipSubRouter) rpcs(msg *Message) iter.Seq2[peer.ID, *RPC] {
 			}
 
 			csum := computeChecksum(gs.p.idGen.ID(msg))
-			for p := range gmap {
+			for p, s := range gmap {
 				// Check if it has already received an IDONTWANT for the message.
 				// If so, don't send it to the peer
 				if _, ok := gs.unwanted[p][csum]; ok {
 					continue
 				}
-				tosend[p] = struct{}{}
+				tosend[p] = peerMeta{
+					lazySend: s.getIAmChoked(),
+				}
 			}
 		}
 
-		out := rpcWithMessages(msg.Message)
-		for pid := range tosend {
+		eagerRPC := rpcWithMessages(msg.Message)
+		// lazily initialized. Nil until needed
+		var lazyRPC *RPC
+		for pid, meta := range tosend {
 			if pid == from || pid == peer.ID(msg.GetFrom()) {
 				continue
+			}
+
+			out := eagerRPC
+			if meta.lazySend {
+				if lazyRPC == nil {
+					lazyRPC = rpcWithControl(nil, []*pb.ControlIHave{
+						&pb.ControlIHave{
+							TopicID: &topic,
+							MessageIDs: []string{
+								gs.p.idGen.ID(msg),
+							},
+						},
+					}, nil, nil, nil, nil)
+				}
+				out = lazyRPC
 			}
 
 			if !yield(pid, out) {
@@ -1280,7 +1367,7 @@ func (gs *GossipSubRouter) Join(topic string) {
 				return !inMesh && !direct && !doBackOff && gs.score.Score(p) >= 0
 			})
 			for _, p := range more {
-				gmap[p] = struct{}{}
+				gmap[p] = meshPeerState{}
 			}
 		}
 		gs.mesh[topic] = gmap
@@ -1294,7 +1381,7 @@ func (gs *GossipSubRouter) Join(topic string) {
 			_, doBackOff := backoff[p]
 			return !direct && !doBackOff && gs.score.Score(p) >= 0
 		})
-		gmap = peerListToMap(peers)
+		gmap = peerListToStateMap(peers)
 		gs.mesh[topic] = gmap
 	}
 
@@ -1624,7 +1711,7 @@ func (gs *GossipSubRouter) heartbeat() {
 		graftPeer := func(p peer.ID) {
 			log.Debugf("HEARTBEAT: Add mesh link to %s in %s", p, topic)
 			gs.tracer.Graft(p, topic)
-			peers[p] = struct{}{}
+			peers[p] = meshPeerState{}
 			topics := tograft[p]
 			tograft[p] = append(topics, topic)
 		}
@@ -1657,7 +1744,7 @@ func (gs *GossipSubRouter) heartbeat() {
 
 		// do we have too many peers?
 		if len(peers) >= gs.params.Dhi {
-			plst := peerMapToList(peers)
+			plst := peerStateMapToList(peers)
 
 			// sort by score (but shuffle first for the case we don't use the score)
 			shufflePeers(plst)
@@ -1756,7 +1843,7 @@ func (gs *GossipSubRouter) heartbeat() {
 			// situations where we are stuck with poor peers and also recover from churn of good peers.
 
 			// now compute the median peer score in the mesh
-			plst := peerMapToList(peers)
+			plst := peerStateMapToList(peers)
 			sort.Slice(plst, func(i, j int) bool {
 				return score(plst[i]) < score(plst[j])
 			})
@@ -1815,7 +1902,7 @@ func (gs *GossipSubRouter) heartbeat() {
 			})
 
 			for _, p := range plst {
-				peers[p] = struct{}{}
+				peers[p] = meshPeerState{}
 			}
 		}
 
@@ -1954,7 +2041,7 @@ func (gs *GossipSubRouter) sendGraftPrune(tograft, toprune map[peer.ID][]string,
 
 // emitGossip emits IHAVE gossip advertising items in the message cache window
 // of this topic.
-func (gs *GossipSubRouter) emitGossip(topic string, exclude map[peer.ID]struct{}) {
+func (gs *GossipSubRouter) emitGossip(topic string, exclude map[peer.ID]meshPeerState) {
 	mids := gs.mcache.GetGossipIDs(topic)
 	if len(mids) == 0 {
 		return
@@ -2189,12 +2276,20 @@ func (gs *GossipSubRouter) SendControl(p peer.ID, ctl *pb.ControlMessage, msgs .
 	gs.sendRPC(p, out, false)
 }
 
-func peerListToMap(peers []peer.ID) map[peer.ID]struct{} {
-	pmap := make(map[peer.ID]struct{})
+func peerListToStateMap(peers []peer.ID) map[peer.ID]meshPeerState {
+	pmap := make(map[peer.ID]meshPeerState, len(peers))
 	for _, p := range peers {
-		pmap[p] = struct{}{}
+		pmap[p] = meshPeerState{}
 	}
 	return pmap
+}
+
+func peerStateMapToList(peers map[peer.ID]meshPeerState) []peer.ID {
+	plst := make([]peer.ID, 0, len(peers))
+	for p := range peers {
+		plst = append(plst, p)
+	}
+	return plst
 }
 
 func peerMapToList(peers map[peer.ID]struct{}) []peer.ID {
