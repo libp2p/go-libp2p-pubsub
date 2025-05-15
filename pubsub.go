@@ -204,9 +204,9 @@ type PubSubRouter interface {
 	// Allows routers with internal scoring to vet peers before committing any processing resources
 	// to the message and implement an effective graylist and react to validation queue overload.
 	AcceptFrom(peer.ID) AcceptStatus
-	// PreValidation is invoked on messages in the RPC envelope right before pushing it to
+	// Preprocess is invoked on messages in the RPC envelope right before pushing it to
 	// the validation pipeline
-	PreValidation(from peer.ID, msgs []*Message)
+	Preprocess(from peer.ID, msgs []*Message)
 	// HandleRPC is invoked to process control messages in the RPC envelope.
 	// It is invoked after subscriptions and payload messages have been processed.
 	HandleRPC(*RPC)
@@ -1117,7 +1117,7 @@ func (p *PubSub) handleIncomingRPC(rpc *RPC) {
 				toPush = append(toPush, msg)
 			}
 		}
-		p.rt.PreValidation(rpc.from, toPush)
+		p.rt.Preprocess(rpc.from, toPush)
 		for _, msg := range toPush {
 			p.pushMsg(msg)
 		}
