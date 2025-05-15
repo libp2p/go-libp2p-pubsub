@@ -707,10 +707,10 @@ func (gs *GossipSubRouter) AcceptFrom(p peer.ID) AcceptStatus {
 	return gs.gate.AcceptFrom(p)
 }
 
-// PreValidation sends the IDONTWANT control messages to all the mesh
+// Preprocess sends the IDONTWANT control messages to all the mesh
 // peers. They need to be sent right before the validation because they
 // should be seen by the peers as soon as possible.
-func (gs *GossipSubRouter) PreValidation(from peer.ID, msgs []*Message) {
+func (gs *GossipSubRouter) Preprocess(from peer.ID, msgs []*Message) {
 	tmids := make(map[string][]string)
 	for _, msg := range msgs {
 		if len(msg.GetData()) < gs.params.IDontWantMessageThreshold {
