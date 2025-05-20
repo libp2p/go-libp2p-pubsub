@@ -1362,10 +1362,15 @@ func (gs *GossipSubRouter) doSendRPC(rpc *RPC, p peer.ID, q *rpcQueue, urgent bo
 }
 
 // maxProtobufOverhead denotes the protobuf encoding overhead for a message.
-// it is based on the RPC.Size function excerpt:
+// it is based on the RPC.Size() function excerpt:
 // l = e.Size()
 // n += 1 + l + sovRpc(uint64(l))
-// where sovRpc is a number of bytes needed to encode some uint64 value.
+// where:
+//   - 1 is a feild key size (see https://github.com/gogo/protobuf/blob/f67b8970b736e53dbd7d0a27146c8f1ac52f74e5/plugin/size/size.go#L499)
+//
+// and appears to be 1 for all RPC's fields
+//   - sovRpc is a number of bytes needed to encode some uint64 value.
+//
 // Assuming that the message size is 10^10, the number of bytes needed to encode it is 5.
 const maxProtobufOverhead = 1 + 5
 
@@ -1390,9 +1395,9 @@ func appendOrMergeRPC(slice []*RPC, limit int, elems ...RPC) []*RPC {
 		out[0].from = elems[0].from
 	}
 
+	lastSize := out[len(out)-1].Size()
 	for _, elem := range elems {
 		lastRPC := out[len(out)-1]
-		lastSize := lastRPC.Size()
 
 		// Merge/Append publish messages
 		// TODO: Never merge messages. The current behavior is the same as the
@@ -1401,12 +1406,13 @@ func appendOrMergeRPC(slice []*RPC, limit int, elems ...RPC) []*RPC {
 		for _, msg := range elem.GetPublish() {
 			lastRPC.Publish = append(lastRPC.Publish, msg)
 			// do not use lastRPC.Size() here to avoid lastRPC.Publish iteration calling Size on each element.
+			// use msg.Size() + maxProtobufOverhead upper bound instead.
 			lastSize += msg.Size() + maxProtobufOverhead
 			if lastSize > limit {
 				lastRPC.Publish = lastRPC.Publish[:len(lastRPC.Publish)-1]
 				lastRPC = &RPC{RPC: pb.RPC{}, from: elem.from}
 				lastRPC.Publish = append(lastRPC.Publish, msg)
-				lastSize = lastRPC.Size() // single element calcualtion
+				lastSize = lastRPC.Size() // single lastRPC.Publish[] slice calcualtion
 				out = append(out, lastRPC)
 			}
 		}
