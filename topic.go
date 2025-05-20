@@ -213,19 +213,59 @@ type RouterReady func(rt PubSubRouter, topic string) (bool, error)
 type ProvideKey func() (crypto.PrivKey, peer.ID)
 
 type PublishOptions struct {
-	ready     RouterReady
-	customKey ProvideKey
-	local     bool
+	ready         RouterReady
+	customKey     ProvideKey
+	local         bool
+	validatorData any
+}
+
+type BatchPublishOptions struct {
+	Strategy RPCScheduler
 }
 
 type PubOpt func(pub *PublishOptions) error
+type BatchPubOpt func(pub *BatchPublishOptions) error
+
+func setDefaultBatchPublishOptions(opts *BatchPublishOptions) {
+	if opts.Strategy == nil {
+		opts.Strategy = &RoundRobinMessageIDScheduler{}
+	}
+}
 
 // Publish publishes data to topic.
 func (t *Topic) Publish(ctx context.Context, data []byte, opts ...PubOpt) error {
+	msg, err := t.validate(ctx, data, opts...)
+	if err != nil {
+		if errors.Is(err, dupeErr{}) {
+			// If it was a duplicate, we return nil to indicate success.
+			// Semantically the message was published by us or someone else.
+			return nil
+		}
+		return err
+	}
+	return t.p.val.sendMsgBlocking(msg)
+}
+
+func (t *Topic) AddToBatch(ctx context.Context, batch *MessageBatch, data []byte, opts ...PubOpt) error {
+	msg, err := t.validate(ctx, data, opts...)
+	if err != nil {
+		if errors.Is(err, dupeErr{}) {
+			// If it was a duplicate, we return nil to indicate success.
+			// Semantically the message was published by us or someone else.
+			// We won't add it to the batch. Since it's already been published.
+			return nil
+		}
+		return err
+	}
+	batch.messages = append(batch.messages, msg)
+	return nil
+}
+
+func (t *Topic) validate(ctx context.Context, data []byte, opts ...PubOpt) (*Message, error) {
 	t.mux.RLock()
 	defer t.mux.RUnlock()
 	if t.closed {
-		return ErrTopicClosed
+		return nil, ErrTopicClosed
 	}
 
 	pid := t.p.signID
@@ -235,17 +275,17 @@ func (t *Topic) Publish(ctx context.Context, data []byte, opts ...PubOpt) error 
 	for _, opt := range opts {
 		err := opt(pub)
 		if err != nil {
-			return err
+			return nil, err
 		}
 	}
 
 	if pub.customKey != nil && !pub.local {
 		key, pid = pub.customKey()
 		if key == nil {
-			return ErrNilSignKey
+			return nil, ErrNilSignKey
 		}
 		if len(pid) == 0 {
-			return ErrEmptyPeerID
+			return nil, ErrEmptyPeerID
 		}
 	}
 
@@ -263,7 +303,7 @@ func (t *Topic) Publish(ctx context.Context, data []byte, opts ...PubOpt) error 
 		m.From = []byte(pid)
 		err := signMessage(pid, key, m)
 		if err != nil {
-			return err
+			return nil, err
 		}
 	}
 
@@ -290,9 +330,9 @@ func (t *Topic) Publish(ctx context.Context, data []byte, opts ...PubOpt) error 
 						break readyLoop
 					}
 				case <-t.p.ctx.Done():
-					return t.p.ctx.Err()
+					return nil, t.p.ctx.Err()
 				case <-ctx.Done():
-					return ctx.Err()
+					return nil, ctx.Err()
 				}
 				if ticker == nil {
 					ticker = time.NewTicker(200 * time.Millisecond)
@@ -302,13 +342,19 @@ func (t *Topic) Publish(ctx context.Context, data []byte, opts ...PubOpt) error 
 				select {
 				case <-ticker.C:
 				case <-ctx.Done():
-					return fmt.Errorf("router is not ready: %w", ctx.Err())
+					return nil, fmt.Errorf("router is not ready: %w", ctx.Err())
 				}
 			}
 		}
 	}
 
-	return t.p.val.PushLocal(&Message{m, "", t.p.host.ID(), nil, pub.local})
+	msg := &Message{m, "", t.p.host.ID(), pub.validatorData, pub.local}
+	t.p.rt.Preprocess(t.p.host.ID(), []*Message{msg})
+	err := t.p.val.ValidateLocal(msg)
+	if err != nil {
+		return nil, err
+	}
+	return msg, nil
 }
 
 // WithReadiness returns a publishing option for only publishing when the router is ready.
@@ -328,6 +374,15 @@ func WithReadiness(ready RouterReady) PubOpt {
 func WithLocalPublication(local bool) PubOpt {
 	return func(pub *PublishOptions) error {
 		pub.local = local
+		return nil
+	}
+}
+
+// WithValidatorData returns a publishing option to set custom validator data for the message.
+// This allows users to avoid deserialization of the message data when validating the message locally.
+func WithValidatorData(data any) PubOpt {
+	return func(pub *PublishOptions) error {
+		pub.validatorData = data
 		return nil
 	}
 }

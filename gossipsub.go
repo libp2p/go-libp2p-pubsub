@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"fmt"
 	"io"
+	"iter"
 	"math/rand"
 	"sort"
 	"time"
@@ -68,6 +69,7 @@ var (
 	GossipSubGraftFloodThreshold              = 10 * time.Second
 	GossipSubMaxIHaveLength                   = 5000
 	GossipSubMaxIHaveMessages                 = 10
+	GossipSubMaxIDontWantLength               = 10
 	GossipSubMaxIDontWantMessages             = 1000
 	GossipSubIWantFollowupTime                = 3 * time.Second
 	GossipSubIDontWantMessageThreshold        = 1024 // 1KB
@@ -218,6 +220,10 @@ type GossipSubParams struct {
 	// MaxIHaveMessages is the maximum number of IHAVE messages to accept from a peer within a heartbeat.
 	MaxIHaveMessages int
 
+	// MaxIDontWantLength is the maximum number of messages to include in an IDONTWANT message. Also controls
+	// the maximum number of IDONTWANT ids we will accept to protect against IDONTWANT floods. This value
+	// should be adjusted if your system anticipates a larger amount than specified per heartbeat.
+	MaxIDontWantLength int
 	// MaxIDontWantMessages is the maximum number of IDONTWANT messages to accept from a peer within a heartbeat.
 	MaxIDontWantMessages int
 
@@ -303,6 +309,7 @@ func DefaultGossipSubParams() GossipSubParams {
 		GraftFloodThreshold:       GossipSubGraftFloodThreshold,
 		MaxIHaveLength:            GossipSubMaxIHaveLength,
 		MaxIHaveMessages:          GossipSubMaxIHaveMessages,
+		MaxIDontWantLength:        GossipSubMaxIDontWantLength,
 		MaxIDontWantMessages:      GossipSubMaxIDontWantMessages,
 		IWantFollowupTime:         GossipSubIWantFollowupTime,
 		IDontWantMessageThreshold: GossipSubIDontWantMessageThreshold,
@@ -516,6 +523,8 @@ type GossipSubRouter struct {
 	heartbeatTicks uint64
 }
 
+var _ BatchPublisher = &GossipSubRouter{}
+
 type connectInfo struct {
 	p   peer.ID
 	spr *record.Envelope
@@ -698,10 +707,10 @@ func (gs *GossipSubRouter) AcceptFrom(p peer.ID) AcceptStatus {
 	return gs.gate.AcceptFrom(p)
 }
 
-// PreValidation sends the IDONTWANT control messages to all the mesh
+// Preprocess sends the IDONTWANT control messages to all the mesh
 // peers. They need to be sent right before the validation because they
 // should be seen by the peers as soon as possible.
-func (gs *GossipSubRouter) PreValidation(msgs []*Message) {
+func (gs *GossipSubRouter) Preprocess(from peer.ID, msgs []*Message) {
 	tmids := make(map[string][]string)
 	for _, msg := range msgs {
 		if len(msg.GetData()) < gs.params.IDontWantMessageThreshold {
@@ -718,6 +727,10 @@ func (gs *GossipSubRouter) PreValidation(msgs []*Message) {
 		shuffleStrings(mids)
 		// send IDONTWANT to all the mesh peers
 		for p := range gs.mesh[topic] {
+			if p == from {
+				// We don't send IDONTWANT to the peer that sent us the messages
+				continue
+			}
 			// send to only peers that support IDONTWANT
 			if gs.feature(GossipSubFeatureIdontwant, gs.peers[p]) {
 				idontwant := []*pb.ControlIDontWant{{MessageIDs: mids}}
@@ -833,6 +846,11 @@ func (gs *GossipSubRouter) handleIWant(p peer.ID, ctl *pb.ControlMessage) []*pb.
 	ihave := make(map[string]*pb.Message)
 	for _, iwant := range ctl.GetIwant() {
 		for _, mid := range iwant.GetMessageIDs() {
+			// Check if that peer has sent IDONTWANT before, if so don't send them the message
+			if _, ok := gs.unwanted[p][computeChecksum(mid)]; ok {
+				continue
+			}
+
 			msg, count, ok := gs.mcache.GetForPeer(mid, p)
 			if !ok {
 				continue
@@ -1009,9 +1027,18 @@ func (gs *GossipSubRouter) handleIDontWant(p peer.ID, ctl *pb.ControlMessage) {
 	}
 	gs.peerdontwant[p]++
 
+	totalUnwantedIds := 0
 	// Remember all the unwanted message ids
+mainIDWLoop:
 	for _, idontwant := range ctl.GetIdontwant() {
 		for _, mid := range idontwant.GetMessageIDs() {
+			// IDONTWANT flood protection
+			if totalUnwantedIds >= gs.params.MaxIDontWantLength {
+				log.Debugf("IDONWANT: peer %s has advertised too many ids (%d) within this message; ignoring", p, totalUnwantedIds)
+				break mainIDWLoop
+			}
+
+			totalUnwantedIds++
 			gs.unwanted[p][computeChecksum(mid)] = gs.params.IDontWantMessageTTL
 		}
 	}
@@ -1119,81 +1146,105 @@ func (gs *GossipSubRouter) connector() {
 	}
 }
 
-func (gs *GossipSubRouter) Publish(msg *Message) {
-	gs.mcache.Put(msg)
-
-	from := msg.ReceivedFrom
-	topic := msg.GetTopic()
-
-	tosend := make(map[peer.ID]struct{})
-
-	// any peers in the topic?
-	tmap, ok := gs.p.topics[topic]
-	if !ok {
-		return
+func (gs *GossipSubRouter) PublishBatch(messages []*Message, opts *BatchPublishOptions) {
+	strategy := opts.Strategy
+	for _, msg := range messages {
+		msgID := gs.p.idGen.ID(msg)
+		for p, rpc := range gs.rpcs(msg) {
+			strategy.AddRPC(p, msgID, rpc)
+		}
 	}
 
-	if gs.floodPublish && from == gs.p.host.ID() {
-		for p := range tmap {
-			_, direct := gs.direct[p]
-			if direct || gs.score.Score(p) >= gs.publishThreshold {
-				tosend[p] = struct{}{}
-			}
-		}
-	} else {
-		// direct peers
-		for p := range gs.direct {
-			_, inTopic := tmap[p]
-			if inTopic {
-				tosend[p] = struct{}{}
-			}
-		}
+	for p, rpc := range strategy.All() {
+		gs.sendRPC(p, rpc, false)
+	}
+}
 
-		// floodsub peers
-		for p := range tmap {
-			if !gs.feature(GossipSubFeatureMesh, gs.peers[p]) && gs.score.Score(p) >= gs.publishThreshold {
-				tosend[p] = struct{}{}
-			}
-		}
+func (gs *GossipSubRouter) Publish(msg *Message) {
+	for p, rpc := range gs.rpcs(msg) {
+		gs.sendRPC(p, rpc, false)
+	}
+}
 
-		// gossipsub peers
-		gmap, ok := gs.mesh[topic]
+func (gs *GossipSubRouter) rpcs(msg *Message) iter.Seq2[peer.ID, *RPC] {
+	return func(yield func(peer.ID, *RPC) bool) {
+		gs.mcache.Put(msg)
+
+		from := msg.ReceivedFrom
+		topic := msg.GetTopic()
+
+		tosend := make(map[peer.ID]struct{})
+
+		// any peers in the topic?
+		tmap, ok := gs.p.topics[topic]
 		if !ok {
-			// we are not in the mesh for topic, use fanout peers
-			gmap, ok = gs.fanout[topic]
-			if !ok || len(gmap) == 0 {
-				// we don't have any, pick some with score above the publish threshold
-				peers := gs.getPeers(topic, gs.params.D, func(p peer.ID) bool {
-					_, direct := gs.direct[p]
-					return !direct && gs.score.Score(p) >= gs.publishThreshold
-				})
+			return
+		}
 
-				if len(peers) > 0 {
-					gmap = peerListToMap(peers)
-					gs.fanout[topic] = gmap
+		if gs.floodPublish && from == gs.p.host.ID() {
+			for p := range tmap {
+				_, direct := gs.direct[p]
+				if direct || gs.score.Score(p) >= gs.publishThreshold {
+					tosend[p] = struct{}{}
 				}
 			}
-			gs.lastpub[topic] = time.Now().UnixNano()
+		} else {
+			// direct peers
+			for p := range gs.direct {
+				_, inTopic := tmap[p]
+				if inTopic {
+					tosend[p] = struct{}{}
+				}
+			}
+
+			// floodsub peers
+			for p := range tmap {
+				if !gs.feature(GossipSubFeatureMesh, gs.peers[p]) && gs.score.Score(p) >= gs.publishThreshold {
+					tosend[p] = struct{}{}
+				}
+			}
+
+			// gossipsub peers
+			gmap, ok := gs.mesh[topic]
+			if !ok {
+				// we are not in the mesh for topic, use fanout peers
+				gmap, ok = gs.fanout[topic]
+				if !ok || len(gmap) == 0 {
+					// we don't have any, pick some with score above the publish threshold
+					peers := gs.getPeers(topic, gs.params.D, func(p peer.ID) bool {
+						_, direct := gs.direct[p]
+						return !direct && gs.score.Score(p) >= gs.publishThreshold
+					})
+
+					if len(peers) > 0 {
+						gmap = peerListToMap(peers)
+						gs.fanout[topic] = gmap
+					}
+				}
+				gs.lastpub[topic] = time.Now().UnixNano()
+			}
+
+			csum := computeChecksum(gs.p.idGen.ID(msg))
+			for p := range gmap {
+				// Check if it has already received an IDONTWANT for the message.
+				// If so, don't send it to the peer
+				if _, ok := gs.unwanted[p][csum]; ok {
+					continue
+				}
+				tosend[p] = struct{}{}
+			}
 		}
 
-		for p := range gmap {
-			mid := gs.p.idGen.ID(msg)
-			// Check if it has already received an IDONTWANT for the message.
-			// If so, don't send it to the peer
-			if _, ok := gs.unwanted[p][computeChecksum(mid)]; ok {
+		out := rpcWithMessages(msg.Message)
+		for pid := range tosend {
+			if pid == from || pid == peer.ID(msg.GetFrom()) {
 				continue
 			}
-			tosend[p] = struct{}{}
-		}
-	}
 
-	out := rpcWithMessages(msg.Message)
-	for pid := range tosend {
-		if pid == from || pid == peer.ID(msg.GetFrom()) {
-			continue
+			if !yield(pid, out) {
+				return
+			}
 		}
-
-		gs.sendRPC(pid, out, false)
 	}
 }
 
@@ -1624,7 +1675,7 @@ func (gs *GossipSubRouter) heartbeat() {
 		}
 
 		// do we have too many peers?
-		if len(peers) > gs.params.Dhi {
+		if len(peers) >= gs.params.Dhi {
 			plst := peerMapToList(peers)
 
 			// sort by score (but shuffle first for the case we don't use the score)
@@ -2138,6 +2189,23 @@ func (gs *GossipSubRouter) getPeers(topic string, count int, filter func(peer.ID
 // also injected into the GossipSub constructor as a PubSub option dependency.
 func (gs *GossipSubRouter) WithDefaultTagTracer() Option {
 	return WithRawTracer(gs.tagTracer)
+}
+
+// SendControl dispatches the given set of control messages to the given peer.
+// The control messages are sent as a single RPC, with the given (optional) messages.
+// Args:
+//
+//	p: the peer to send the control messages to.
+//	ctl: the control messages to send.
+//	msgs: the messages to send in the same RPC (optional).
+//	The control messages are piggybacked on the messages.
+//
+// Returns:
+//
+//	nothing.
+func (gs *GossipSubRouter) SendControl(p peer.ID, ctl *pb.ControlMessage, msgs ...*pb.Message) {
+	out := rpcWithControl(msgs, ctl.Ihave, ctl.Iwant, ctl.Graft, ctl.Prune, ctl.Idontwant)
+	gs.sendRPC(p, out, false)
 }
 
 func peerListToMap(peers []peer.ID) map[peer.ID]struct{} {

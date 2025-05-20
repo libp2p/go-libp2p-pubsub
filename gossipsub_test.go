@@ -9,9 +9,11 @@ import (
 	"io"
 	mrand "math/rand"
 	"sort"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
+	"testing/quick"
 	"time"
 
 	pb "github.com/libp2p/go-libp2p-pubsub/pb"
@@ -2816,6 +2818,139 @@ func TestGossipsubIdontwantReceive(t *testing.T) {
 	<-ctx.Done()
 }
 
+type mockRawTracer struct {
+	onRecvRPC func(*RPC)
+}
+
+func (m *mockRawTracer) RecvRPC(rpc *RPC) {
+	if m.onRecvRPC != nil {
+		m.onRecvRPC(rpc)
+	}
+}
+
+func (m *mockRawTracer) AddPeer(p peer.ID, proto protocol.ID)      {}
+func (m *mockRawTracer) DeliverMessage(msg *Message)               {}
+func (m *mockRawTracer) DropRPC(rpc *RPC, p peer.ID)               {}
+func (m *mockRawTracer) DuplicateMessage(msg *Message)             {}
+func (m *mockRawTracer) Graft(p peer.ID, topic string)             {}
+func (m *mockRawTracer) Join(topic string)                         {}
+func (m *mockRawTracer) Leave(topic string)                        {}
+func (m *mockRawTracer) Prune(p peer.ID, topic string)             {}
+func (m *mockRawTracer) RejectMessage(msg *Message, reason string) {}
+func (m *mockRawTracer) RemovePeer(p peer.ID)                      {}
+func (m *mockRawTracer) SendRPC(rpc *RPC, p peer.ID)               {}
+func (m *mockRawTracer) ThrottlePeer(p peer.ID)                    {}
+func (m *mockRawTracer) UndeliverableMessage(msg *Message)         {}
+func (m *mockRawTracer) ValidateMessage(msg *Message)              {}
+
+var _ RawTracer = &mockRawTracer{}
+
+func TestGossipsubNoIDONTWANTToMessageSender(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	hosts := getDefaultHosts(t, 2)
+	denseConnect(t, hosts)
+
+	psubs := make([]*PubSub, 2)
+
+	receivedIDONTWANT := make(chan struct{})
+	psubs[0] = getGossipsub(ctx, hosts[0], WithRawTracer(&mockRawTracer{
+		onRecvRPC: func(rpc *RPC) {
+			if len(rpc.GetControl().GetIdontwant()) > 0 {
+				close(receivedIDONTWANT)
+			}
+		},
+	}))
+	psubs[1] = getGossipsub(ctx, hosts[1])
+
+	topicString := "foobar"
+	var topics []*Topic
+	for _, ps := range psubs {
+		topic, err := ps.Join(topicString)
+		if err != nil {
+			t.Fatal(err)
+		}
+		topics = append(topics, topic)
+
+		_, err = ps.Subscribe(topicString)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	time.Sleep(time.Second)
+
+	msg := make([]byte, GossipSubIDontWantMessageThreshold+1)
+	topics[0].Publish(ctx, msg)
+
+	select {
+	case <-receivedIDONTWANT:
+		t.Fatal("IDONTWANT should not be sent to the message sender")
+	case <-time.After(time.Second):
+	}
+}
+
+func TestGossipsubIDONTWANTBeforeFirstPublish(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	hosts := getDefaultHosts(t, 2)
+	denseConnect(t, hosts)
+
+	psubs := make([]*PubSub, 2)
+
+	psubs[0] = getGossipsub(ctx, hosts[0])
+	rpcsReceived := make(chan string)
+	psubs[1] = getGossipsub(ctx, hosts[1], WithRawTracer(&mockRawTracer{
+		onRecvRPC: func(rpc *RPC) {
+			if len(rpc.GetControl().GetIdontwant()) > 0 {
+				rpcsReceived <- "idontwant"
+			}
+			if len(rpc.GetPublish()) > 0 {
+				rpcsReceived <- "publish"
+			}
+		},
+	}))
+
+	topicString := "foobar"
+	var topics []*Topic
+	for _, ps := range psubs {
+		topic, err := ps.Join(topicString)
+		if err != nil {
+			t.Fatal(err)
+		}
+		topics = append(topics, topic)
+
+		_, err = ps.Subscribe(topicString)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	time.Sleep(2 * time.Second)
+
+	msg := make([]byte, GossipSubIDontWantMessageThreshold+1)
+	_ = topics[0].Publish(ctx, msg)
+
+	timeout := time.After(5 * time.Second)
+
+	select {
+	case kind := <-rpcsReceived:
+		if kind == "publish" {
+			t.Fatal("IDONTWANT should be sent before publish")
+		}
+	case <-timeout:
+		t.Fatal("IDONTWANT should be sent on first publish")
+	}
+
+	select {
+	case kind := <-rpcsReceived:
+		if kind != "publish" {
+			t.Fatal("Expected publish after IDONTWANT")
+		}
+	case <-timeout:
+		t.Fatal("Expected publish after IDONTWANT")
+	}
+
+}
+
 // Test that non-mesh peers will not get IDONTWANT
 func TestGossipsubIdontwantNonMesh(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
@@ -3080,6 +3215,110 @@ func TestGossipsubIdontwantSmallMessage(t *testing.T) {
 	<-ctx.Done()
 }
 
+// Test that IWANT will have no effect after IDONTWANT is sent
+func TestGossipsubIdontwantBeforeIwant(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	hosts := getDefaultHosts(t, 3)
+
+	msgID := func(pmsg *pb.Message) string {
+		// silly content-based test message-ID: just use the data as whole
+		return base64.URLEncoding.EncodeToString(pmsg.Data)
+	}
+
+	psubs := make([]*PubSub, 2)
+	psubs[0] = getGossipsub(ctx, hosts[0], WithMessageIdFn(msgID))
+	psubs[1] = getGossipsub(ctx, hosts[1], WithMessageIdFn(msgID))
+
+	topic := "foobar"
+	for _, ps := range psubs {
+		_, err := ps.Subscribe(topic)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// Wait a bit after the last message before checking the result
+	msgWaitMax := 2 * time.Second
+	msgTimer := time.NewTimer(msgWaitMax)
+
+	// Checks we received right messages
+	msgReceived := false
+	ihaveReceived := false
+	checkMsgs := func() {
+		if msgReceived {
+			t.Fatalf("Expected no messages received after IDONWANT")
+		}
+		if !ihaveReceived {
+			t.Fatalf("Expected IHAVE received")
+		}
+	}
+
+	// Wait for the timer to expire
+	go func() {
+		select {
+		case <-msgTimer.C:
+			checkMsgs()
+			cancel()
+			return
+		case <-ctx.Done():
+			checkMsgs()
+		}
+	}()
+
+	newMockGS(ctx, t, hosts[2], func(writeMsg func(*pb.RPC), irpc *pb.RPC) {
+		// Check if it receives any message
+		if len(irpc.GetPublish()) > 0 {
+			msgReceived = true
+		}
+		// The middle peer is supposed to send IHAVE
+		for _, ihave := range irpc.GetControl().GetIhave() {
+			ihaveReceived = true
+			mids := ihave.GetMessageIDs()
+
+			writeMsg(&pb.RPC{
+				Control: &pb.ControlMessage{Idontwant: []*pb.ControlIDontWant{{MessageIDs: mids}}},
+			})
+			// Wait for the middle peer to process IDONTWANT
+			time.Sleep(100 * time.Millisecond)
+			writeMsg(&pb.RPC{
+				Control: &pb.ControlMessage{Iwant: []*pb.ControlIWant{{MessageIDs: mids}}},
+			})
+		}
+		// When the middle peer connects it will send us its subscriptions
+		for _, sub := range irpc.GetSubscriptions() {
+			if sub.GetSubscribe() {
+				// Reply by subcribing to the topic and pruning to the middle peer to make sure
+				// that it's not in the mesh
+				writeMsg(&pb.RPC{
+					Subscriptions: []*pb.RPC_SubOpts{{Subscribe: sub.Subscribe, Topicid: sub.Topicid}},
+					Control:       &pb.ControlMessage{Prune: []*pb.ControlPrune{{TopicID: sub.Topicid}}},
+				})
+
+				go func() {
+					// Wait for an interval to make sure the middle peer
+					// received and processed the subscribe
+					time.Sleep(100 * time.Millisecond)
+
+					data := make([]byte, 16)
+					crand.Read(data)
+
+					// Publish the message from the first peer
+					if err := psubs[0].Publish(topic, data); err != nil {
+						t.Error(err)
+						return // cannot call t.Fatal in a non-test goroutine
+					}
+				}()
+			}
+		}
+	})
+
+	connect(t, hosts[0], hosts[1])
+	connect(t, hosts[1], hosts[2])
+
+	<-ctx.Done()
+}
+
 // Test that IDONTWANT will cleared when it's old enough
 func TestGossipsubIdontwantClear(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
@@ -3177,10 +3416,263 @@ func TestGossipsubIdontwantClear(t *testing.T) {
 	<-ctx.Done()
 }
 
+func TestGossipsubPruneMeshCorrectly(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	hosts := getDefaultHosts(t, 9)
+
+	msgID := func(pmsg *pb.Message) string {
+		// silly content-based test message-ID: just use the data as whole
+		return base64.URLEncoding.EncodeToString(pmsg.Data)
+	}
+
+	params := DefaultGossipSubParams()
+	params.Dhi = 8
+
+	psubs := make([]*PubSub, 9)
+	for i := 0; i < 9; i++ {
+		psubs[i] = getGossipsub(ctx, hosts[i],
+			WithGossipSubParams(params),
+			WithMessageIdFn(msgID))
+	}
+
+	topic := "foobar"
+	for _, ps := range psubs {
+		_, err := ps.Subscribe(topic)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// Connect first peer with the rest of the 8 other
+	// peers.
+	for i := 1; i < 9; i++ {
+		connect(t, hosts[0], hosts[i])
+	}
+
+	// Wait for 2 heartbeats to be able to prune excess peers back down to D.
+	totalTimeToWait := params.HeartbeatInitialDelay + 2*params.HeartbeatInterval
+	time.Sleep(totalTimeToWait)
+
+	meshPeers, ok := psubs[0].rt.(*GossipSubRouter).mesh[topic]
+	if !ok {
+		t.Fatal("mesh does not exist for topic")
+	}
+	if len(meshPeers) != params.D {
+		t.Fatalf("mesh does not have the correct number of peers. Wanted %d but got %d", params.D, len(meshPeers))
+	}
+}
+
 func BenchmarkAllocDoDropRPC(b *testing.B) {
 	gs := GossipSubRouter{tracer: &pubsubTracer{}}
 
 	for i := 0; i < b.N; i++ {
 		gs.doDropRPC(&RPC{}, "peerID", "reason")
+	}
+}
+
+func TestRoundRobinMessageIDScheduler(t *testing.T) {
+	const maxNumPeers = 256
+	const maxNumMessages = 1_000
+
+	err := quick.Check(func(numPeers uint16, numMessages uint16) bool {
+		numPeers = numPeers % maxNumPeers
+		numMessages = numMessages % maxNumMessages
+
+		output := make([]pendingRPC, 0, numMessages*numPeers)
+
+		var strategy RoundRobinMessageIDScheduler
+
+		peers := make([]peer.ID, numPeers)
+		for i := 0; i < int(numPeers); i++ {
+			peers[i] = peer.ID(fmt.Sprintf("peer%d", i))
+		}
+
+		getID := func(r pendingRPC) string {
+			return string(r.rpc.Publish[0].Data)
+		}
+
+		for i := range int(numMessages) {
+			for j := range int(numPeers) {
+				strategy.AddRPC(peers[j], fmt.Sprintf("msg%d", i), &RPC{
+					RPC: pb.RPC{
+						Publish: []*pb.Message{
+							{
+								Data: []byte(fmt.Sprintf("msg%d", i)),
+							},
+						},
+					},
+				})
+			}
+		}
+
+		for p, rpc := range strategy.All() {
+			output = append(output, pendingRPC{
+				peer: p,
+				rpc:  rpc,
+			})
+		}
+
+		// Check invariants
+		// 1. The published rpcs count is the same as the number of messages added
+		// 2. Before all message IDs are seen, no message ID may be repeated
+		// 3. The set of message ID + peer ID combinations should be the same as the input
+
+		// 1.
+		expectedCount := int(numMessages) * int(numPeers)
+		if len(output) != expectedCount {
+			t.Logf("Expected %d RPCs, got %d", expectedCount, len(output))
+			return false
+		}
+
+		// 2.
+		seen := make(map[string]bool)
+		expected := make(map[string]bool)
+		for i := 0; i < int(numMessages); i++ {
+			expected[fmt.Sprintf("msg%d", i)] = true
+		}
+
+		for _, rpc := range output {
+			if expected[getID(rpc)] {
+				delete(expected, getID(rpc))
+			}
+			if seen[getID(rpc)] && len(expected) > 0 {
+				t.Logf("Message ID %s repeated before all message IDs are seen", getID(rpc))
+				return false
+			}
+			seen[getID(rpc)] = true
+		}
+
+		// 3.
+		inputSet := make(map[string]bool)
+		for i := range int(numMessages) {
+			for j := range int(numPeers) {
+				inputSet[fmt.Sprintf("msg%d:peer%d", i, j)] = true
+			}
+		}
+		for _, rpc := range output {
+			if !inputSet[getID(rpc)+":"+string(rpc.peer)] {
+				t.Logf("Message ID %s not in input", getID(rpc))
+				return false
+			}
+		}
+		return true
+	}, &quick.Config{MaxCount: 32})
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+func BenchmarkRoundRobinMessageIDScheduler(b *testing.B) {
+	const numPeers = 1_000
+	const numMessages = 1_000
+	var strategy RoundRobinMessageIDScheduler
+
+	peers := make([]peer.ID, numPeers)
+	for i := range int(numPeers) {
+		peers[i] = peer.ID(fmt.Sprintf("peer%d", i))
+	}
+	msgs := make([]string, numMessages)
+	for i := range numMessages {
+		msgs[i] = fmt.Sprintf("msg%d", i)
+	}
+
+	emptyRPC := &RPC{}
+	b.ResetTimer()
+
+	for i := 0; i < b.N; i++ {
+		j := i % len(peers)
+		msgIdx := i % numMessages
+		strategy.AddRPC(peers[j], msgs[msgIdx], emptyRPC)
+		if i%100 == 0 {
+			for range strategy.All() {
+			}
+		}
+	}
+}
+
+func TestMessageBatchPublish(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	hosts := getDefaultHosts(t, 20)
+
+	msgIDFn := func(msg *pb.Message) string {
+		hdr := string(msg.Data[0:16])
+		msgID := strings.SplitN(hdr, " ", 2)
+		return msgID[0]
+	}
+	const numMessages = 100
+	// +8 to account for the gossiping overhead
+	psubs := getGossipsubs(ctx, hosts, WithMessageIdFn(msgIDFn), WithPeerOutboundQueueSize(numMessages+8))
+
+	var topics []*Topic
+	var msgs []*Subscription
+	for _, ps := range psubs {
+		topic, err := ps.Join("foobar")
+		if err != nil {
+			t.Fatal(err)
+		}
+		topics = append(topics, topic)
+
+		subch, err := topic.Subscribe(WithBufferSize(numMessages + 8))
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		msgs = append(msgs, subch)
+	}
+
+	sparseConnect(t, hosts)
+
+	// wait for heartbeats to build mesh
+	time.Sleep(time.Second * 2)
+
+	var batch MessageBatch
+	for i := 0; i < numMessages; i++ {
+		msg := []byte(fmt.Sprintf("%d it's not a floooooood %d", i, i))
+		err := topics[0].AddToBatch(ctx, &batch, msg)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	err := psubs[0].PublishBatch(&batch)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for range numMessages {
+		for _, sub := range msgs {
+			got, err := sub.Next(ctx)
+			if err != nil {
+				t.Fatal(sub.err)
+			}
+			id := msgIDFn(got.Message)
+			expected := []byte(fmt.Sprintf("%s it's not a floooooood %s", id, id))
+			if !bytes.Equal(expected, got.Data) {
+				t.Fatal("got wrong message!")
+			}
+		}
+	}
+}
+
+func TestPublishDuplicateMessage(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	hosts := getDefaultHosts(t, 1)
+	psubs := getGossipsubs(ctx, hosts, WithMessageIdFn(func(msg *pb.Message) string {
+		return string(msg.Data)
+	}))
+	topic, err := psubs[0].Join("foobar")
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = topic.Publish(ctx, []byte("hello"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = topic.Publish(ctx, []byte("hello"))
+	if err != nil {
+		t.Fatal("Duplicate message should not return an error")
 	}
 }
