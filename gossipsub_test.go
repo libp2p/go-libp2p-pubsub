@@ -9,6 +9,7 @@ import (
 	"io"
 	mrand "math/rand"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -3675,4 +3676,49 @@ func TestPublishDuplicateMessage(t *testing.T) {
 	if err != nil {
 		t.Fatal("Duplicate message should not return an error")
 	}
+}
+
+func BenchmarkAppendOrMergeRPC(b *testing.B) {
+	makeTestRPC := func(numMsgs int, msgSize int) RPC {
+		msgs := make([]*pb.Message, numMsgs)
+		payload := make([]byte, msgSize)
+		for i := range msgs {
+			msgs[i] = &pb.Message{
+				Data: payload,
+				From: []byte(strconv.Itoa(i)),
+			}
+		}
+		return RPC{
+			RPC: pb.RPC{
+				Publish: msgs,
+			},
+		}
+	}
+	b.Run("small", func(b *testing.B) {
+		r := mrand.New(mrand.NewSource(99))
+		const numRPCs = 3
+		const msgSize = 1024
+		rpcs := make([]RPC, numRPCs)
+		for i := 0; i < numRPCs; i++ {
+			rpcs[i] = makeTestRPC(5, msgSize+r.Intn(100))
+		}
+		b.ResetTimer()
+		for i := 0; i < b.N; i++ {
+			_ = appendOrMergeRPC(nil, DefaultMaxMessageSize, rpcs...)
+		}
+	})
+
+	b.Run("large", func(b *testing.B) {
+		r := mrand.New(mrand.NewSource(99))
+		const numRPCs = 30
+		const msgSize = 50 * 1024
+		rpcs := make([]RPC, numRPCs)
+		for i := 0; i < numRPCs; i++ {
+			rpcs[i] = makeTestRPC(20, msgSize+r.Intn(100))
+		}
+		b.ResetTimer()
+		for i := 0; i < b.N; i++ {
+			_ = appendOrMergeRPC(nil, DefaultMaxMessageSize, rpcs...)
+		}
+	})
 }
