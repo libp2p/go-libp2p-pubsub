@@ -8,7 +8,9 @@ import (
 	"fmt"
 	"io"
 	mrand "math/rand"
+	mrand2 "math/rand/v2"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -2341,7 +2343,7 @@ func (iwe *iwantEverything) handleStream(s network.Stream) {
 	}
 }
 
-func validRPCSizes(slice []*RPC, limit int) bool {
+func validRPCSizes(slice []RPC, limit int) bool {
 	for _, rpc := range slice {
 		if rpc.Size() > limit {
 			return false
@@ -2351,8 +2353,8 @@ func validRPCSizes(slice []*RPC, limit int) bool {
 }
 
 func TestFragmentRPCFunction(t *testing.T) {
-	fragmentRPC := func(rpc *RPC, limit int) ([]*RPC, error) {
-		rpcs := appendOrMergeRPC(nil, limit, *rpc)
+	fragmentRPC := func(rpc *RPC, limit int) ([]RPC, error) {
+		rpcs := rpc.split(limit)
 		if allValid := validRPCSizes(rpcs, limit); !allValid {
 			return rpcs, fmt.Errorf("RPC size exceeds limit")
 		}
@@ -2371,7 +2373,7 @@ func TestFragmentRPCFunction(t *testing.T) {
 		return msg
 	}
 
-	ensureBelowLimit := func(rpcs []*RPC) {
+	ensureBelowLimit := func(rpcs []RPC) {
 		for _, r := range rpcs {
 			if r.Size() > limit {
 				t.Fatalf("expected fragmented RPC to be below %d bytes, was %d", limit, r.Size())
@@ -2514,7 +2516,7 @@ func TestFragmentRPCFunction(t *testing.T) {
 	// Now we return a the giant ID in a RPC by itself so that it can be
 	// dropped before actually sending the RPC. This lets us log the anamoly.
 	// To keep this test useful, we implement the old behavior here.
-	filtered := make([]*RPC, 0, len(results))
+	filtered := make([]RPC, 0, len(results))
 	for _, r := range results {
 		if r.Size() < limit {
 			filtered = append(filtered, r)
@@ -2539,23 +2541,6 @@ func TestFragmentRPCFunction(t *testing.T) {
 		t.Fatalf("expected small message ID to be included unaltered, got %s instead",
 			results[0].Control.Iwant[0].MessageIDs[0])
 	}
-}
-
-func FuzzAppendOrMergeRPC(f *testing.F) {
-	minMaxMsgSize := 100
-	maxMaxMsgSize := 2048
-	f.Fuzz(func(t *testing.T, data []byte) {
-		maxSize := int(generateU16(&data)) % maxMaxMsgSize
-		if maxSize < minMaxMsgSize {
-			maxSize = minMaxMsgSize
-		}
-		rpc := generateRPC(data, maxSize)
-		rpcs := appendOrMergeRPC(nil, maxSize, *rpc)
-
-		if !validRPCSizes(rpcs, maxSize) {
-			t.Fatalf("invalid RPC size")
-		}
-	})
 }
 
 func TestGossipsubManagesAnAddressBook(t *testing.T) {
@@ -3673,5 +3658,72 @@ func TestPublishDuplicateMessage(t *testing.T) {
 	err = topic.Publish(ctx, []byte("hello"))
 	if err != nil {
 		t.Fatal("Duplicate message should not return an error")
+	}
+}
+
+func BenchmarkSplitRPCLargeMessages(b *testing.B) {
+	addToRPC := func(rpc *RPC, numMsgs int, msgSize int) {
+		msgs := make([]*pb.Message, numMsgs)
+		payload := make([]byte, msgSize)
+		for i := range msgs {
+			rpc.Publish = append(rpc.Publish, &pb.Message{
+				Data: payload,
+				From: []byte(strconv.Itoa(i)),
+			})
+		}
+	}
+
+	r := mrand.New(mrand.NewSource(99))
+	const numRPCs = 30
+	const msgSize = 50 * 1024
+	rpc := &RPC{}
+	for i := 0; i < numRPCs; i++ {
+		addToRPC(rpc, 20, msgSize+r.Intn(100))
+	}
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		rpc.split(DefaultMaxMessageSize)
+	}
+}
+
+func FuzzRPCSplit(f *testing.F) {
+	minMaxMsgSize := 100
+	maxMaxMsgSize := 2048
+	f.Fuzz(func(t *testing.T, data []byte) {
+		maxSize := int(generateU16(&data)) % maxMaxMsgSize
+		if maxSize < minMaxMsgSize {
+			maxSize = minMaxMsgSize
+		}
+		rpc := generateRPC(data, maxSize)
+		rpcs := rpc.split(maxSize)
+
+		if !validRPCSizes(rpcs, maxSize) {
+			t.Fatalf("invalid RPC size")
+		}
+	})
+}
+
+func genNRpcs(tb testing.TB, n int, maxSize int) []*RPC {
+	r := mrand2.NewChaCha8([32]byte{})
+	rpcs := make([]*RPC, n)
+	for i := range rpcs {
+		var data [64]byte
+		_, err := r.Read(data[:])
+		if err != nil {
+			tb.Fatal(err)
+		}
+		rpcs[i] = generateRPC(data[:], maxSize)
+	}
+	return rpcs
+}
+
+func BenchmarkSplitRPC(b *testing.B) {
+	maxSize := 2048
+	rpcs := genNRpcs(b, 100, maxSize)
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		rpc := rpcs[i%len(rpcs)]
+		rpc.split(maxSize)
 	}
 }
