@@ -3715,16 +3715,38 @@ func BenchmarkSplitRPCLargeMessages(b *testing.B) {
 		}
 	}
 
-	r := mrand.New(mrand.NewSource(99))
-	const numRPCs = 30
-	const msgSize = 50 * 1024
-	rpc := &RPC{}
-	for i := 0; i < numRPCs; i++ {
-		addToRPC(rpc, 20, msgSize+r.Intn(100))
-	}
+	b.Run("Many large messages", func(b *testing.B) {
+		r := mrand.New(mrand.NewSource(99))
+		const numRPCs = 30
+		const msgSize = 50 * 1024
+		rpc := &RPC{}
+		for i := 0; i < numRPCs; i++ {
+			addToRPC(rpc, 20, msgSize+r.Intn(100))
+		}
 
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		_ = appendOrMergeRPC(nil, DefaultMaxMessageSize, *rpc)
-	}
+		b.ResetTimer()
+		for i := 0; i < b.N; i++ {
+			_ = appendOrMergeRPC(nil, DefaultMaxMessageSize, *rpc)
+		}
+	})
+
+	b.Run("2 large messages", func(b *testing.B) {
+		const numRPCs = 2
+		const msgSize = DefaultMaxMessageSize - 100
+		rpc := &RPC{}
+		for i := 0; i < numRPCs; i++ {
+			addToRPC(rpc, 1, msgSize)
+		}
+
+		b.ResetTimer()
+		for i := 0; i < b.N; i++ {
+			count := 0
+			for _ = range appendOrMergeRPC(nil, DefaultMaxMessageSize, *rpc) {
+				count++
+			}
+			if count != 2 {
+				b.Fatalf("expected 2 RPCs, got %d", count)
+			}
+		}
+	})
 }
