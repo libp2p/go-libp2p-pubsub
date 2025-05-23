@@ -10,6 +10,7 @@ import (
 	mrand "math/rand"
 	mrand2 "math/rand/v2"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -3699,5 +3700,31 @@ func BenchmarkSplitRPC(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		rpc := rpcs[i%len(rpcs)]
 		appendOrMergeRPC(nil, maxSize, *rpc)
+	}
+}
+
+func BenchmarkSplitRPCLargeMessages(b *testing.B) {
+	addToRPC := func(rpc *RPC, numMsgs int, msgSize int) {
+		msgs := make([]*pb.Message, numMsgs)
+		payload := make([]byte, msgSize)
+		for i := range msgs {
+			rpc.Publish = append(rpc.Publish, &pb.Message{
+				Data: payload,
+				From: []byte(strconv.Itoa(i)),
+			})
+		}
+	}
+
+	r := mrand.New(mrand.NewSource(99))
+	const numRPCs = 30
+	const msgSize = 50 * 1024
+	rpc := &RPC{}
+	for i := 0; i < numRPCs; i++ {
+		addToRPC(rpc, 20, msgSize+r.Intn(100))
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_ = appendOrMergeRPC(nil, DefaultMaxMessageSize, *rpc)
 	}
 }
