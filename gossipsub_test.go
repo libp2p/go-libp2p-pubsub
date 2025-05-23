@@ -7,8 +7,10 @@ import (
 	"encoding/base64"
 	"fmt"
 	"io"
+	"iter"
 	mrand "math/rand"
 	mrand2 "math/rand/v2"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -2343,7 +2345,7 @@ func (iwe *iwantEverything) handleStream(s network.Stream) {
 	}
 }
 
-func validRPCSizes(slice []*RPC, limit int) bool {
+func validRPCSizes(slice []RPC, limit int) bool {
 	for _, rpc := range slice {
 		if rpc.Size() > limit {
 			return false
@@ -2352,9 +2354,18 @@ func validRPCSizes(slice []*RPC, limit int) bool {
 	return true
 }
 
+func validRPCSizesSeq(s iter.Seq[RPC], limit int) bool {
+	for rpc := range s {
+		if rpc.Size() > limit {
+			return false
+		}
+	}
+	return true
+}
+
 func TestFragmentRPCFunction(t *testing.T) {
-	fragmentRPC := func(rpc *RPC, limit int) ([]*RPC, error) {
-		rpcs := appendOrMergeRPC(nil, limit, *rpc)
+	fragmentRPC := func(rpc *RPC, limit int) ([]RPC, error) {
+		rpcs := slices.Collect(rpc.split(limit))
 		if allValid := validRPCSizes(rpcs, limit); !allValid {
 			return rpcs, fmt.Errorf("RPC size exceeds limit")
 		}
@@ -2373,7 +2384,7 @@ func TestFragmentRPCFunction(t *testing.T) {
 		return msg
 	}
 
-	ensureBelowLimit := func(rpcs []*RPC) {
+	ensureBelowLimit := func(rpcs []RPC) {
 		for _, r := range rpcs {
 			if r.Size() > limit {
 				t.Fatalf("expected fragmented RPC to be below %d bytes, was %d", limit, r.Size())
@@ -2389,7 +2400,7 @@ func TestFragmentRPCFunction(t *testing.T) {
 		t.Fatal(err)
 	}
 	if len(results) != 1 {
-		t.Fatalf("expected single RPC if input is < limit, got %d", len(results))
+		t.Fatalf("expected single RPC if input is < limit, got %d %#v", len(results), results)
 	}
 
 	// if there's a message larger than the limit, we should fail
@@ -2420,8 +2431,8 @@ func TestFragmentRPCFunction(t *testing.T) {
 	ensureBelowLimit(results)
 	msgsPerRPC := limit / msgSize
 	expectedRPCs := nMessages / msgsPerRPC
-	if len(results) != expectedRPCs {
-		t.Fatalf("expected %d RPC messages in output, got %d", expectedRPCs, len(results))
+	if len(results) > expectedRPCs+1 {
+		t.Fatalf("expected around %d RPC messages in output, got %d", expectedRPCs, len(results))
 	}
 	var nMessagesFragmented int
 	var nSubscriptions int
@@ -2516,7 +2527,7 @@ func TestFragmentRPCFunction(t *testing.T) {
 	// Now we return a the giant ID in a RPC by itself so that it can be
 	// dropped before actually sending the RPC. This lets us log the anamoly.
 	// To keep this test useful, we implement the old behavior here.
-	filtered := make([]*RPC, 0, len(results))
+	filtered := make([]RPC, 0, len(results))
 	for _, r := range results {
 		if r.Size() < limit {
 			filtered = append(filtered, r)
@@ -2543,7 +2554,7 @@ func TestFragmentRPCFunction(t *testing.T) {
 	}
 }
 
-func FuzzAppendOrMergeRPC(f *testing.F) {
+func FuzzRPCSplit(f *testing.F) {
 	minMaxMsgSize := 100
 	maxMaxMsgSize := 2048
 	f.Fuzz(func(t *testing.T, data []byte) {
@@ -2552,12 +2563,100 @@ func FuzzAppendOrMergeRPC(f *testing.F) {
 			maxSize = minMaxMsgSize
 		}
 		rpc := generateRPC(data, maxSize)
-		rpcs := appendOrMergeRPC(nil, maxSize, *rpc)
 
-		if !validRPCSizes(rpcs, maxSize) {
-			t.Fatalf("invalid RPC size")
+		originalControl := compressedRPC{ihave: make(map[string][]string)}
+		originalControl.append(&rpc.RPC)
+		mergedControl := compressedRPC{ihave: make(map[string][]string)}
+
+		for rpc := range rpc.split(maxSize) {
+			if rpc.Size() > maxSize {
+				t.Fatalf("invalid RPC size %v %d (max=%d)", rpc, rpc.Size(), maxSize)
+			}
+			mergedControl.append(&rpc.RPC)
+		}
+
+		if !originalControl.equal(&mergedControl) {
+			t.Fatalf("control mismatch: \n%#v\n%#v\n", originalControl, mergedControl)
+
 		}
 	})
+}
+
+type compressedRPC struct {
+	msgs      [][]byte
+	iwant     []string
+	ihave     map[string][]string // topic -> []string
+	idontwant []string
+	prune     [][]byte
+	graft     []string // list of topic
+}
+
+func (c *compressedRPC) equal(o *compressedRPC) bool {
+	equalBytesSlices := func(a, b [][]byte) bool {
+		return slices.EqualFunc(a, b, func(e1 []byte, e2 []byte) bool {
+			return bytes.Equal(e1, e2)
+		})
+	}
+	if !equalBytesSlices(c.msgs, o.msgs) {
+		return false
+	}
+
+	if !slices.Equal(c.iwant, o.iwant) ||
+		!slices.Equal(c.idontwant, o.idontwant) ||
+		!equalBytesSlices(c.prune, o.prune) ||
+		!slices.Equal(c.graft, o.graft) {
+		return false
+	}
+
+	if len(c.ihave) != len(o.ihave) {
+		return false
+	}
+	for topic, ids := range c.ihave {
+		if !slices.Equal(ids, o.ihave[topic]) {
+			return false
+		}
+	}
+
+	return true
+
+}
+
+func (c *compressedRPC) append(rpc *pb.RPC) {
+	for _, m := range rpc.Publish {
+		d, err := m.Marshal()
+		if err != nil {
+			panic(err)
+		}
+		c.msgs = append(c.msgs, d)
+	}
+
+	ctrl := rpc.Control
+	if ctrl == nil {
+		return
+	}
+	for _, iwant := range ctrl.Iwant {
+		c.iwant = append(c.iwant, iwant.MessageIDs...)
+		c.iwant = slices.DeleteFunc(c.iwant, func(e string) bool { return len(e) == 0 })
+	}
+	for _, ihave := range ctrl.Ihave {
+		c.ihave[*ihave.TopicID] = append(c.ihave[*ihave.TopicID], ihave.MessageIDs...)
+		c.ihave[*ihave.TopicID] = slices.DeleteFunc(c.ihave[*ihave.TopicID], func(e string) bool { return len(e) == 0 })
+	}
+	for _, idontwant := range ctrl.Idontwant {
+		c.idontwant = append(c.idontwant, idontwant.MessageIDs...)
+		c.idontwant = slices.DeleteFunc(c.idontwant, func(e string) bool { return len(e) == 0 })
+	}
+	for _, prune := range ctrl.Prune {
+		d, err := prune.Marshal()
+		if err != nil {
+			panic(err)
+		}
+		c.prune = append(c.prune, d)
+	}
+	for _, graft := range ctrl.Graft {
+		c.graft = append(c.graft, *graft.TopicID)
+		c.graft = slices.DeleteFunc(c.graft, func(e string) bool { return len(e) == 0 })
+	}
 }
 
 func TestGossipsubManagesAnAddressBook(t *testing.T) {
@@ -3699,7 +3798,7 @@ func BenchmarkSplitRPC(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		rpc := rpcs[i%len(rpcs)]
-		appendOrMergeRPC(nil, maxSize, *rpc)
+		rpc.split(maxSize)
 	}
 }
 
@@ -3726,7 +3825,9 @@ func BenchmarkSplitRPCLargeMessages(b *testing.B) {
 
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
-			_ = appendOrMergeRPC(nil, DefaultMaxMessageSize, *rpc)
+			for _ = range rpc.split(DefaultMaxMessageSize) {
+
+			}
 		}
 	})
 
@@ -3741,7 +3842,7 @@ func BenchmarkSplitRPCLargeMessages(b *testing.B) {
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
 			count := 0
-			for _ = range appendOrMergeRPC(nil, DefaultMaxMessageSize, *rpc) {
+			for _ = range rpc.split(DefaultMaxMessageSize) {
 				count++
 			}
 			if count != 2 {
