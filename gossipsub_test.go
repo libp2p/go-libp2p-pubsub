@@ -3591,7 +3591,7 @@ func BenchmarkRoundRobinMessageIDScheduler(b *testing.B) {
 }
 
 func TestMessageBatchPublish(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	hosts := getDefaultHosts(t, 20)
 
