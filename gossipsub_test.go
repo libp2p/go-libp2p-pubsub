@@ -7,7 +7,6 @@ import (
 	"encoding/base64"
 	"fmt"
 	"io"
-	"iter"
 	mrand "math/rand"
 	mrand2 "math/rand/v2"
 	"slices"
@@ -2347,15 +2346,6 @@ func (iwe *iwantEverything) handleStream(s network.Stream) {
 
 func validRPCSizes(slice []RPC, limit int) bool {
 	for _, rpc := range slice {
-		if rpc.Size() > limit {
-			return false
-		}
-	}
-	return true
-}
-
-func validRPCSizesSeq(s iter.Seq[RPC], limit int) bool {
-	for rpc := range s {
 		if rpc.Size() > limit {
 			return false
 		}
