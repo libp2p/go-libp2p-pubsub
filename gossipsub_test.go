@@ -3591,7 +3591,7 @@ func BenchmarkRoundRobinMessageIDScheduler(b *testing.B) {
 }
 
 func TestMessageBatchPublish(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	hosts := getDefaultHosts(t, 20)
 
@@ -3602,7 +3602,7 @@ func TestMessageBatchPublish(t *testing.T) {
 	}
 	const numMessages = 100
 	// +8 to account for the gossiping overhead
-	psubs := getGossipsubs(ctx, hosts, WithMessageIdFn(msgIDFn), WithPeerOutboundQueueSize(numMessages+8))
+	psubs := getGossipsubs(ctx, hosts, WithMessageIdFn(msgIDFn), WithPeerOutboundQueueSize(numMessages+8), WithValidateQueueSize(numMessages+8))
 
 	var topics []*Topic
 	var msgs []*Subscription
@@ -3643,7 +3643,7 @@ func TestMessageBatchPublish(t *testing.T) {
 		for _, sub := range msgs {
 			got, err := sub.Next(ctx)
 			if err != nil {
-				t.Fatal(sub.err)
+				t.Fatal(err)
 			}
 			id := msgIDFn(got.Message)
 			expected := []byte(fmt.Sprintf("%s it's not a floooooood %s", id, id))
