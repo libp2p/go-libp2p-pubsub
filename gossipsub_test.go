@@ -3815,7 +3815,7 @@ func BenchmarkSplitRPCLargeMessages(b *testing.B) {
 
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
-			for _ = range rpc.split(DefaultMaxMessageSize) {
+			for range rpc.split(DefaultMaxMessageSize) {
 
 			}
 		}
@@ -3832,7 +3832,7 @@ func BenchmarkSplitRPCLargeMessages(b *testing.B) {
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
 			count := 0
-			for _ = range rpc.split(DefaultMaxMessageSize) {
+			for range rpc.split(DefaultMaxMessageSize) {
 				count++
 			}
 			if count != 2 {
