@@ -1460,6 +1460,19 @@ func (rpc *RPC) split(limit int) iter.Seq[RPC] {
 			}
 		}
 
+		// Fast path check. It's possible the original RPC is now small enough
+		// without the messages to publish
+		nextRPC = *rpc
+		nextRPC.Publish = nil
+		if s := nextRPC.Size(); s < limit {
+			if s != 0 {
+				yield(nextRPC)
+			}
+			return
+		}
+		// We have to split the RPC into multiple parts
+		nextRPC = RPC{from: rpc.from}
+
 		// Merge/Append Subscriptions
 		for _, sub := range rpc.Subscriptions {
 			if nextRPC.Subscriptions = append(nextRPC.Subscriptions, sub); nextRPC.Size() > limit {
