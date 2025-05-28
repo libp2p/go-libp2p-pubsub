@@ -1589,7 +1589,12 @@ func (rpc *RPC) split(limit int) iter.Seq[RPC] {
 }
 
 // pbFieldNumberLT15Size is the number of bytes required to encode a protobuf
-// field number less than or equal to 15.
+// field number less than or equal to 15 along with its wire type. This is 1
+// byte because the protobuf encoding of field numbers is a varint encoding of:
+// fieldNumber << 3 | wireType
+// Refer to https://protobuf.dev/programming-guides/encoding/#structure
+// for more details on the encoding of messages. You may also reference the
+// concrete implementation of pb.RPC.Size()
 const pbFieldNumberLT15Size = 1
 
 func sovRpc(x uint64) (n int) {
