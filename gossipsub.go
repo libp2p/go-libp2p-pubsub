@@ -1430,7 +1430,7 @@ func (rpc *RPC) split(limit int) iter.Seq[RPC] {
 			// splitting a message.
 			for _, msg := range rpc.Publish {
 				// We know the message field number is <15 so this is safe.
-				incrementalSize := pbFieldNumberLT15Size + SizeOfEmbeddedMsg(msg.Size())
+				incrementalSize := pbFieldNumberLT15Size + sizeOfEmbeddedMsg(msg.Size())
 				if nextRPCSize+incrementalSize > limit {
 					// The message doesn't fit. Let's set the messages that did fit
 					// into this RPC, yield it, then make a new one
@@ -1596,7 +1596,7 @@ func sovRpc(x uint64) (n int) {
 	return (bits.Len64(x) + 6) / 7
 }
 
-func SizeOfEmbeddedMsg(
+func sizeOfEmbeddedMsg(
 	msgSize int,
 ) int {
 	prefixSize := sovRpc(uint64(msgSize))
