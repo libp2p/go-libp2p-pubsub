@@ -3615,6 +3615,186 @@ func TestPublishDuplicateMessage(t *testing.T) {
 	}
 }
 
+func TestChokeUnchoke(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// Set up 3 hosts
+	hosts := getDefaultHosts(t, 3)
+	h0 := hosts[0] // receiver
+	h1 := hosts[1] // sender 1
+	h2 := hosts[2] // sender 2
+
+	// Connect all hosts
+	connect(t, h0, h1)
+	connect(t, h0, h2)
+	connect(t, h1, h2)
+
+	t.Logf("Host 1 ID: %s", h1.ID())
+	t.Logf("Host 2 ID: %s", h2.ID())
+
+	// Track choke/unchoke messages received by each host
+	chokeReceived := make(map[peer.ID]chan bool)
+	unchokeReceived := make(map[peer.ID]chan bool)
+
+	chokeReceived[h1.ID()] = make(chan bool, 1)
+	chokeReceived[h2.ID()] = make(chan bool, 1)
+	unchokeReceived[h1.ID()] = make(chan bool, 1)
+	unchokeReceived[h2.ID()] = make(chan bool, 1)
+
+	// Create pubsub instances with identical message ID function to ensure duplicates are detected
+	msgIDFn := func(msg *pb.Message) string {
+		return string(msg.Data)
+	}
+
+	// Create tracer for h0 to log all received RPCs
+	tracer0 := &mockRawTracer{}
+	tracer0.onRecvRPC = func(rpc *RPC) {
+		for _, msg := range rpc.GetPublish() {
+			t.Logf("Host h0 received publish message %v from %s", msgIDFn(msg), rpc.from)
+		}
+		ctl := rpc.GetControl()
+		if ctl != nil && ctl.Size() != 0 {
+			t.Logf("Host h0 received control message: choke=%d, unchoke=%d, ihave=%d, iwant=%d, graft=%d, prune=%d",
+				len(ctl.Choke), len(ctl.Unchoke), len(ctl.Ihave), len(ctl.Iwant), len(ctl.Graft), len(ctl.Prune))
+		}
+	}
+
+	// Create tracers for h1 and h2 to detect choke/unchoke messages
+	tracer1 := &mockRawTracer{}
+	tracer1.onRecvRPC = func(rpc *RPC) {
+		ctl := rpc.GetControl()
+		if ctl != nil {
+			if len(ctl.Choke) > 0 {
+				select {
+				case chokeReceived[h1.ID()] <- true:
+				default:
+				}
+			}
+			if len(ctl.Unchoke) > 0 {
+				select {
+				case unchokeReceived[h1.ID()] <- true:
+				default:
+				}
+			}
+		}
+	}
+
+	tracer2 := &mockRawTracer{}
+	tracer2.onRecvRPC = func(rpc *RPC) {
+		ctl := rpc.GetControl()
+		if ctl != nil {
+			if len(ctl.Choke) > 0 {
+				select {
+				case chokeReceived[h2.ID()] <- true:
+				default:
+				}
+			}
+			if len(ctl.Unchoke) > 0 {
+				select {
+				case unchokeReceived[h2.ID()] <- true:
+				default:
+				}
+			}
+		}
+	}
+
+	setChokeThresholdTo0 := func(pubsub *PubSub) error {
+		// always send choke/unchoke messages. This is just for testing. This would cause too much churn normally
+		pubsub.rt.(*GossipSubRouter).chokeStrategy.ChokeThreshold = 0
+		pubsub.rt.(*GossipSubRouter).chokeStrategy.UnchokeThreshold = 0
+		return nil
+	}
+
+	psub0 := getGossipsub(ctx, h0, WithMessageSigning(false), WithNoAuthor(), WithRawTracer(tracer0), WithMessageIdFn(msgIDFn), setChokeThresholdTo0)
+	psub1 := getGossipsub(ctx, h1, WithMessageSigning(false), WithNoAuthor(), WithRawTracer(tracer1), WithMessageIdFn(msgIDFn))
+	psub2 := getGossipsub(ctx, h2, WithMessageSigning(false), WithNoAuthor(), WithRawTracer(tracer2), WithMessageIdFn(msgIDFn))
+
+	// Create topic and subscriptions
+	topic := "test-topic"
+	sub0, err := psub0.Subscribe(topic)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer sub0.Cancel()
+
+	sub1, err := psub1.Subscribe(topic)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer sub1.Cancel()
+
+	sub2, err := psub2.Subscribe(topic)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer sub2.Cancel()
+
+	// Wait for subscriptions to propagate and mesh to form
+	time.Sleep(2 * time.Second)
+
+	// Publish the same message from h1 first, then h2 with a delay to trigger choke
+	msg := []byte("msg 1")
+
+	// Publish from h1 first
+	if err := psub1.Publish(topic, msg); err != nil {
+		t.Fatal(err)
+	}
+
+	// Wait for the message to be processed and cached (longer than choke threshold of 10ms)
+	time.Sleep(100 * time.Millisecond)
+
+	// Publish the same message from h2 to trigger choke
+	if err := psub2.Publish(topic, msg); err != nil {
+		t.Fatal(err)
+	}
+
+	// Wait for messages to propagate and choke to be triggered
+	time.Sleep(2 * time.Second)
+
+	// Verify that either h1 or h2 received a choke message (but not necessarily both)
+	chokedPeer := ""
+	select {
+	case <-chokeReceived[h1.ID()]:
+		chokedPeer = "h1"
+	case <-chokeReceived[h2.ID()]:
+		chokedPeer = "h2"
+	case <-time.After(3 * time.Second):
+		t.Fatal("No choke message received by either host")
+	}
+
+	t.Logf("Host %s received choke message", chokedPeer)
+
+	// Determine which host was choked and send a novel message from it
+	var chokedPsub *PubSub
+	var unchokeChannel chan bool
+
+	if chokedPeer == "h1" {
+		chokedPsub = psub1
+		unchokeChannel = unchokeReceived[h1.ID()]
+	} else {
+		chokedPsub = psub2
+		unchokeChannel = unchokeReceived[h2.ID()]
+	}
+
+	// Send a novel message from the choked host
+	novelMsg := []byte("novel message from choked host")
+	if err := chokedPsub.Publish(topic, novelMsg); err != nil {
+		t.Fatal(err)
+	}
+
+	// Wait for the novel message to propagate and trigger unchoke
+	time.Sleep(2 * time.Second)
+
+	// Verify that the choked host receives an unchoke message
+	select {
+	case <-unchokeChannel:
+		t.Logf("Host %s received unchoke message", chokedPeer)
+	case <-time.After(3 * time.Second):
+		t.Fatal("Choked host did not receive unchoke message")
+	}
+}
+
 func TestHandleChokeUnchoke(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

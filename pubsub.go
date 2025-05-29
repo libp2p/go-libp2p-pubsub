@@ -240,6 +240,7 @@ type Message struct {
 	*pb.Message
 	ID            string
 	ReceivedFrom  peer.ID
+	ReceivedAt    time.Time
 	ValidatorData interface{}
 	Local         bool
 }
@@ -1112,10 +1113,19 @@ func (p *PubSub) handleIncomingRPC(rpc *RPC) {
 				continue
 			}
 
-			msg := &Message{pmsg, "", rpc.from, nil, false}
+			msg := &Message{
+				Message:       pmsg,
+				ID:            "",
+				ReceivedFrom:  rpc.from,
+				ReceivedAt:    time.Now(),
+				ValidatorData: nil,
+				Local:         false,
+			}
 			if p.shouldPush(msg) {
 				toPush = append(toPush, msg)
 			}
+
+			p.rt.(interface{ queueChoke(peer.ID, *Message) }).queueChoke(rpc.from, msg)
 		}
 		p.rt.PreValidation(rpc.from, toPush)
 		for _, msg := range toPush {

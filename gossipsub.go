@@ -261,7 +261,12 @@ func NewGossipSubWithRouter(ctx context.Context, h host.Host, rt PubSubRouter, o
 // DefaultGossipSubRouter returns a new GossipSubRouter with default parameters.
 func DefaultGossipSubRouter(h host.Host) *GossipSubRouter {
 	params := DefaultGossipSubParams()
+	mcache := NewMessageCache(params.HistoryGossip, params.HistoryLength)
 	return &GossipSubRouter{
+		chokeStrategy: chokeStrategy{
+			ChokeThreshold:   10 * time.Millisecond,
+			UnchokeThreshold: 10 * time.Millisecond,
+		},
 		peers:        make(map[peer.ID]protocol.ID),
 		mesh:         make(map[string]map[peer.ID]meshPeerState),
 		fanout:       make(map[string]map[peer.ID]meshPeerState),
@@ -276,7 +281,7 @@ func DefaultGossipSubRouter(h host.Host) *GossipSubRouter {
 		outbound:     make(map[peer.ID]bool),
 		connect:      make(chan connectInfo, params.MaxPendingConnections),
 		cab:          pstoremem.NewAddrBook(),
-		mcache:       NewMessageCache(params.HistoryGossip, params.HistoryLength),
+		mcache:       mcache,
 		protos:       GossipSubDefaultProtocols,
 		feature:      GossipSubDefaultFeatures,
 		tagTracer:    newTagTracer(h.ConnManager()),
@@ -471,6 +476,9 @@ type GossipSubRouter struct {
 	peers  map[peer.ID]protocol.ID // peer protocols
 	direct map[peer.ID]struct{}    // direct peers
 
+	// chokestrategy
+	chokeStrategy chokeStrategy
+
 	mesh map[string]map[peer.ID]meshPeerState // topic meshes
 	// fanout tracks peers for topics we publish on, but aren't subscribed for.
 	// The meshPeerState is always a zero value. It's this type so that a fanout
@@ -579,6 +587,9 @@ func (gs *GossipSubRouter) Protocols() []protocol.ID {
 }
 
 func (gs *GossipSubRouter) Attach(p *PubSub) {
+	gs.chokeStrategy.MCache = gs.mcache
+	gs.chokeStrategy.MsgIDFn = p.idGen.ID
+
 	gs.p = p
 	gs.tracer = p.tracer
 
@@ -785,12 +796,26 @@ func (gs *GossipSubRouter) PreValidation(from peer.ID, msgs []*Message) {
 	}
 }
 
+func (gs *GossipSubRouter) queueChoke(from peer.ID, msg *Message) {
+	if from == gs.p.host.ID() {
+		return
+	}
+
+	if gs.chokeStrategy.shouldChoke(msg) {
+		ctl := gs.queuedControl(from)
+		ctl.Choke = append(ctl.Choke, &pb.ControlChoke{TopicID: msg.Topic})
+	}
+}
+
 func (gs *GossipSubRouter) HandleRPC(rpc *RPC) {
 	ctl := rpc.GetControl()
 	if ctl == nil {
 		return
 	}
 
+	for _, ihave := range ctl.Ihave {
+		gs.chokeStrategy.handleIHAVE(rpc.from, ihave)
+	}
 	iwant := gs.handleIHave(rpc.from, ctl)
 	ihave := gs.handleIWant(rpc.from, ctl)
 	prune := gs.handleGraft(rpc.from, ctl)
@@ -1870,6 +1895,14 @@ func (gs *GossipSubRouter) heartbeat() {
 		// 2nd arg are mesh peers excluded from gossip. We already push
 		// messages to them, so its redundant to gossip IHAVEs.
 		gs.emitGossip(topic, peers)
+
+		// Add unchoke messages if any
+		for p := range peers {
+			ctl := gs.queuedControl(p)
+			for unchokeTopic := range gs.chokeStrategy.unchokeMessagesFor(p) {
+				ctl.Unchoke = append(ctl.Unchoke, unchokeTopic)
+			}
+		}
 	}
 
 	// expire fanout for topics we haven't published to in a while
@@ -2108,9 +2141,20 @@ func (gs *GossipSubRouter) flush() {
 	// send the remaining control messages that wasn't merged with gossip
 	for p, ctl := range gs.control {
 		delete(gs.control, p)
-		out := rpcWithControl(nil, nil, nil, ctl.Graft, ctl.Prune, nil)
+		out := &RPC{
+			RPC: pb.RPC{Control: ctl},
+		}
 		gs.sendRPC(p, out, false)
 	}
+}
+
+func (gs *GossipSubRouter) queuedControl(to peer.ID) *pb.ControlMessage {
+	ctl, ok := gs.control[to]
+	if !ok {
+		ctl = &pb.ControlMessage{}
+	}
+	gs.control[to] = ctl
+	return ctl
 }
 
 func (gs *GossipSubRouter) enqueueGossip(p peer.ID, ihave *pb.ControlIHave) {

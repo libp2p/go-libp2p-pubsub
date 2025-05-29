@@ -348,7 +348,14 @@ func (t *Topic) validate(ctx context.Context, data []byte, opts ...PubOpt) (*Mes
 		}
 	}
 
-	msg := &Message{m, "", t.p.host.ID(), pub.validatorData, pub.local}
+	msg := &Message{
+		Message:       m,
+		ID:            "",
+		ReceivedFrom:  t.p.host.ID(),
+		ReceivedAt:    time.Now(),
+		ValidatorData: pub.validatorData,
+		Local:         pub.local,
+	}
 	err := t.p.val.ValidateLocal(msg)
 	if err != nil {
 		return nil, err
