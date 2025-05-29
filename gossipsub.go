@@ -1375,14 +1375,13 @@ func (gs *GossipSubRouter) sendRPC(p peer.ID, out *RPC, urgent bool) {
 	}
 
 	// Potentially split the RPC into multiple RPCs that are below the max message size
-	outRPCs := appendOrMergeRPC(nil, gs.p.maxMessageSize, *out)
-	for _, rpc := range outRPCs {
+	for rpc := range out.split(gs.p.maxMessageSize) {
 		if rpc.Size() > gs.p.maxMessageSize {
 			// This should only happen if a single message/control is above the maxMessageSize.
 			gs.doDropRPC(out, p, fmt.Sprintf("Dropping oversized RPC. Size: %d, limit: %d. (Over by %d bytes)", rpc.Size(), gs.p.maxMessageSize, rpc.Size()-gs.p.maxMessageSize))
 			continue
 		}
-		gs.doSendRPC(rpc, p, q, urgent)
+		gs.doSendRPC(&rpc, p, q, urgent)
 	}
 }
 
@@ -1410,137 +1409,6 @@ func (gs *GossipSubRouter) doSendRPC(rpc *RPC, p peer.ID, q *rpcQueue, urgent bo
 		return
 	}
 	gs.tracer.SendRPC(rpc, p)
-}
-
-// appendOrMergeRPC appends the given RPCs to the slice, merging them if possible.
-// If any elem is too large to fit in a single RPC, it will be split into multiple RPCs.
-// If an RPC is too large and can't be split further (e.g. Message data is
-// bigger than the RPC limit), then it will be returned as an oversized RPC.
-// The caller should filter out oversized RPCs.
-func appendOrMergeRPC(slice []*RPC, limit int, elems ...RPC) []*RPC {
-	if len(elems) == 0 {
-		return slice
-	}
-
-	if len(slice) == 0 && len(elems) == 1 && elems[0].Size() < limit {
-		// Fast path: no merging needed and only one element
-		return append(slice, &elems[0])
-	}
-
-	out := slice
-	if len(out) == 0 {
-		out = append(out, &RPC{RPC: pb.RPC{}})
-		out[0].from = elems[0].from
-	}
-
-	for _, elem := range elems {
-		lastRPC := out[len(out)-1]
-
-		// Merge/Append publish messages
-		// TODO: Never merge messages. The current behavior is the same as the
-		// old behavior. In the future let's not merge messages. Since,
-		// it may increase message latency.
-		for _, msg := range elem.GetPublish() {
-			if lastRPC.Publish = append(lastRPC.Publish, msg); lastRPC.Size() > limit {
-				lastRPC.Publish = lastRPC.Publish[:len(lastRPC.Publish)-1]
-				lastRPC = &RPC{RPC: pb.RPC{}, from: elem.from}
-				lastRPC.Publish = append(lastRPC.Publish, msg)
-				out = append(out, lastRPC)
-			}
-		}
-
-		// Merge/Append Subscriptions
-		for _, sub := range elem.GetSubscriptions() {
-			if lastRPC.Subscriptions = append(lastRPC.Subscriptions, sub); lastRPC.Size() > limit {
-				lastRPC.Subscriptions = lastRPC.Subscriptions[:len(lastRPC.Subscriptions)-1]
-				lastRPC = &RPC{RPC: pb.RPC{}, from: elem.from}
-				lastRPC.Subscriptions = append(lastRPC.Subscriptions, sub)
-				out = append(out, lastRPC)
-			}
-		}
-
-		// Merge/Append Control messages
-		if ctl := elem.GetControl(); ctl != nil {
-			if lastRPC.Control == nil {
-				lastRPC.Control = &pb.ControlMessage{}
-				if lastRPC.Size() > limit {
-					lastRPC.Control = nil
-					lastRPC = &RPC{RPC: pb.RPC{Control: &pb.ControlMessage{}}, from: elem.from}
-					out = append(out, lastRPC)
-				}
-			}
-
-			for _, graft := range ctl.GetGraft() {
-				if lastRPC.Control.Graft = append(lastRPC.Control.Graft, graft); lastRPC.Size() > limit {
-					lastRPC.Control.Graft = lastRPC.Control.Graft[:len(lastRPC.Control.Graft)-1]
-					lastRPC = &RPC{RPC: pb.RPC{Control: &pb.ControlMessage{}}, from: elem.from}
-					lastRPC.Control.Graft = append(lastRPC.Control.Graft, graft)
-					out = append(out, lastRPC)
-				}
-			}
-
-			for _, prune := range ctl.GetPrune() {
-				if lastRPC.Control.Prune = append(lastRPC.Control.Prune, prune); lastRPC.Size() > limit {
-					lastRPC.Control.Prune = lastRPC.Control.Prune[:len(lastRPC.Control.Prune)-1]
-					lastRPC = &RPC{RPC: pb.RPC{Control: &pb.ControlMessage{}}, from: elem.from}
-					lastRPC.Control.Prune = append(lastRPC.Control.Prune, prune)
-					out = append(out, lastRPC)
-				}
-			}
-
-			for _, iwant := range ctl.GetIwant() {
-				if len(lastRPC.Control.Iwant) == 0 {
-					// Initialize with a single IWANT.
-					// For IWANTs we don't need more than a single one,
-					// since there are no topic IDs here.
-					newIWant := &pb.ControlIWant{}
-					if lastRPC.Control.Iwant = append(lastRPC.Control.Iwant, newIWant); lastRPC.Size() > limit {
-						lastRPC.Control.Iwant = lastRPC.Control.Iwant[:len(lastRPC.Control.Iwant)-1]
-						lastRPC = &RPC{RPC: pb.RPC{Control: &pb.ControlMessage{
-							Iwant: []*pb.ControlIWant{newIWant},
-						}}, from: elem.from}
-						out = append(out, lastRPC)
-					}
-				}
-				for _, msgID := range iwant.GetMessageIDs() {
-					if lastRPC.Control.Iwant[0].MessageIDs = append(lastRPC.Control.Iwant[0].MessageIDs, msgID); lastRPC.Size() > limit {
-						lastRPC.Control.Iwant[0].MessageIDs = lastRPC.Control.Iwant[0].MessageIDs[:len(lastRPC.Control.Iwant[0].MessageIDs)-1]
-						lastRPC = &RPC{RPC: pb.RPC{Control: &pb.ControlMessage{
-							Iwant: []*pb.ControlIWant{{MessageIDs: []string{msgID}}},
-						}}, from: elem.from}
-						out = append(out, lastRPC)
-					}
-				}
-			}
-
-			for _, ihave := range ctl.GetIhave() {
-				if len(lastRPC.Control.Ihave) == 0 ||
-					lastRPC.Control.Ihave[len(lastRPC.Control.Ihave)-1].TopicID != ihave.TopicID {
-					// Start a new IHAVE if we are referencing a new topic ID
-					newIhave := &pb.ControlIHave{TopicID: ihave.TopicID}
-					if lastRPC.Control.Ihave = append(lastRPC.Control.Ihave, newIhave); lastRPC.Size() > limit {
-						lastRPC.Control.Ihave = lastRPC.Control.Ihave[:len(lastRPC.Control.Ihave)-1]
-						lastRPC = &RPC{RPC: pb.RPC{Control: &pb.ControlMessage{
-							Ihave: []*pb.ControlIHave{newIhave},
-						}}, from: elem.from}
-						out = append(out, lastRPC)
-					}
-				}
-				for _, msgID := range ihave.GetMessageIDs() {
-					lastIHave := lastRPC.Control.Ihave[len(lastRPC.Control.Ihave)-1]
-					if lastIHave.MessageIDs = append(lastIHave.MessageIDs, msgID); lastRPC.Size() > limit {
-						lastIHave.MessageIDs = lastIHave.MessageIDs[:len(lastIHave.MessageIDs)-1]
-						lastRPC = &RPC{RPC: pb.RPC{Control: &pb.ControlMessage{
-							Ihave: []*pb.ControlIHave{{TopicID: ihave.TopicID, MessageIDs: []string{msgID}}},
-						}}, from: elem.from}
-						out = append(out, lastRPC)
-					}
-				}
-			}
-		}
-	}
-
-	return out
 }
 
 func (gs *GossipSubRouter) heartbeatTimer() {
