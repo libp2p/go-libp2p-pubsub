@@ -341,6 +341,10 @@ func (t *pubsubTracer) UndeliverableMessage(msg *Message) {
 func (t *pubsubTracer) traceRPCMeta(rpc *RPC) *pb.TraceEvent_RPCMeta {
 	rpcMeta := new(pb.TraceEvent_RPCMeta)
 
+	if rpc != nil {
+		ms := uint64(rpc.timeToReceive.Milliseconds())
+		rpcMeta.MillisecondsToReceive = &ms
+	}
 	var msgs []*pb.TraceEvent_MessageMeta
 	for _, m := range rpc.Publish {
 		msgSize := uint64(len(m.Data))
