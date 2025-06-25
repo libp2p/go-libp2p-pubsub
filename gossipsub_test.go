@@ -3682,66 +3682,85 @@ func BenchmarkRoundRobinMessageIDScheduler(b *testing.B) {
 }
 
 func TestMessageBatchPublish(t *testing.T) {
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-	hosts := getDefaultHosts(t, 20)
+	concurrentAdds := []bool{false, true}
+	for _, concurrentAdd := range concurrentAdds {
+		t.Run(fmt.Sprintf("WithConcurrentAdd=%v", concurrentAdd), func(t *testing.T) {
+			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			defer cancel()
+			hosts := getDefaultHosts(t, 20)
 
-	msgIDFn := func(msg *pb.Message) string {
-		hdr := string(msg.Data[0:16])
-		msgID := strings.SplitN(hdr, " ", 2)
-		return msgID[0]
-	}
-	const numMessages = 100
-	// +8 to account for the gossiping overhead
-	psubs := getGossipsubs(ctx, hosts, WithMessageIdFn(msgIDFn), WithPeerOutboundQueueSize(numMessages+8), WithValidateQueueSize(numMessages+8))
+			msgIDFn := func(msg *pb.Message) string {
+				hdr := string(msg.Data[0:16])
+				msgID := strings.SplitN(hdr, " ", 2)
+				return msgID[0]
+			}
+			const numMessages = 100
+			// +8 to account for the gossiping overhead
+			psubs := getGossipsubs(ctx, hosts, WithMessageIdFn(msgIDFn), WithPeerOutboundQueueSize(numMessages+8), WithValidateQueueSize(numMessages+8))
 
-	var topics []*Topic
-	var msgs []*Subscription
-	for _, ps := range psubs {
-		topic, err := ps.Join("foobar")
-		if err != nil {
-			t.Fatal(err)
-		}
-		topics = append(topics, topic)
+			var topics []*Topic
+			var msgs []*Subscription
+			for _, ps := range psubs {
+				topic, err := ps.Join("foobar")
+				if err != nil {
+					t.Fatal(err)
+				}
+				topics = append(topics, topic)
 
-		subch, err := topic.Subscribe(WithBufferSize(numMessages + 8))
-		if err != nil {
-			t.Fatal(err)
-		}
+				subch, err := topic.Subscribe(WithBufferSize(numMessages + 8))
+				if err != nil {
+					t.Fatal(err)
+				}
 
-		msgs = append(msgs, subch)
-	}
+				msgs = append(msgs, subch)
+			}
 
-	sparseConnect(t, hosts)
+			sparseConnect(t, hosts)
 
-	// wait for heartbeats to build mesh
-	time.Sleep(time.Second * 2)
+			// wait for heartbeats to build mesh
+			time.Sleep(time.Second * 2)
 
-	var batch MessageBatch
-	for i := 0; i < numMessages; i++ {
-		msg := []byte(fmt.Sprintf("%d it's not a floooooood %d", i, i))
-		err := topics[0].AddToBatch(ctx, &batch, msg)
-		if err != nil {
-			t.Fatal(err)
-		}
-	}
-	err := psubs[0].PublishBatch(&batch)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	for range numMessages {
-		for _, sub := range msgs {
-			got, err := sub.Next(ctx)
+			var batch MessageBatch
+			var wg sync.WaitGroup
+			for i := 0; i < numMessages; i++ {
+				msg := []byte(fmt.Sprintf("%d it's not a floooooood %d", i, i))
+				if concurrentAdd {
+					wg.Add(1)
+					go func() {
+						defer wg.Done()
+						err := topics[0].AddToBatch(ctx, &batch, msg)
+						if err != nil {
+							t.Log(err)
+							t.Fail()
+						}
+					}()
+				} else {
+					err := topics[0].AddToBatch(ctx, &batch, msg)
+					if err != nil {
+						t.Fatal(err)
+					}
+				}
+			}
+			wg.Wait()
+			err := psubs[0].PublishBatch(&batch)
 			if err != nil {
 				t.Fatal(err)
 			}
-			id := msgIDFn(got.Message)
-			expected := []byte(fmt.Sprintf("%s it's not a floooooood %s", id, id))
-			if !bytes.Equal(expected, got.Data) {
-				t.Fatal("got wrong message!")
+
+			for range numMessages {
+				for _, sub := range msgs {
+					got, err := sub.Next(ctx)
+					if err != nil {
+						t.Fatal(err)
+					}
+					id := msgIDFn(got.Message)
+					expected := []byte(fmt.Sprintf("%s it's not a floooooood %s", id, id))
+					if !bytes.Equal(expected, got.Data) {
+						t.Fatal("got wrong message!")
+					}
+				}
 			}
-		}
+		})
 	}
 }
 
