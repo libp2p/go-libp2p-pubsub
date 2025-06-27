@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"sync"
 	"testing"
@@ -307,7 +308,7 @@ func TestRemoteTracer(t *testing.T) {
 	mrt := &mockRemoteTracer{}
 	h1.SetStreamHandler(RemoteTracerProtoID, mrt.handleStream)
 
-	tracer, err := NewRemoteTracer(ctx, h2, peer.AddrInfo{ID: h1.ID(), Addrs: h1.Addrs()})
+	tracer, err := NewRemoteTracer(ctx, h2, peer.AddrInfo{ID: h1.ID(), Addrs: h1.Addrs()}, slog.Default())
 	if err != nil {
 		t.Fatal(err)
 	}

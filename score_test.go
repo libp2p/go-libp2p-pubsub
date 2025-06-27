@@ -1,6 +1,7 @@
 package pubsub
 
 import (
+	"log/slog"
 	"math"
 	"net"
 	"sync"
@@ -28,7 +29,7 @@ func TestScoreTimeInMesh(t *testing.T) {
 	peerA := peer.ID("A")
 
 	// Peer score should start at 0
-	ps := newPeerScore(params)
+	ps := newPeerScore(params, slog.Default())
 	ps.AddPeer(peerA, "myproto")
 
 	aScore := ps.Score(peerA)
@@ -67,7 +68,7 @@ func TestScoreTimeInMeshCap(t *testing.T) {
 
 	peerA := peer.ID("A")
 
-	ps := newPeerScore(params)
+	ps := newPeerScore(params, slog.Default())
 	ps.AddPeer(peerA, "myproto")
 	ps.Graft(peerA, mytopic)
 	elapsed := topicScoreParams.TimeInMeshQuantum * 40
@@ -101,7 +102,7 @@ func TestScoreFirstMessageDeliveries(t *testing.T) {
 	params.Topics[mytopic] = topicScoreParams
 	peerA := peer.ID("A")
 
-	ps := newPeerScore(params)
+	ps := newPeerScore(params, slog.Default())
 	ps.AddPeer(peerA, "myproto")
 	ps.Graft(peerA, mytopic)
 
@@ -141,7 +142,7 @@ func TestScoreFirstMessageDeliveriesCap(t *testing.T) {
 	params.Topics[mytopic] = topicScoreParams
 	peerA := peer.ID("A")
 
-	ps := newPeerScore(params)
+	ps := newPeerScore(params, slog.Default())
 	ps.AddPeer(peerA, "myproto")
 	ps.Graft(peerA, mytopic)
 
@@ -181,7 +182,7 @@ func TestScoreFirstMessageDeliveriesDecay(t *testing.T) {
 	params.Topics[mytopic] = topicScoreParams
 	peerA := peer.ID("A")
 
-	ps := newPeerScore(params)
+	ps := newPeerScore(params, slog.Default())
 	ps.AddPeer(peerA, "myproto")
 	ps.Graft(peerA, mytopic)
 
@@ -246,7 +247,7 @@ func TestScoreMeshMessageDeliveries(t *testing.T) {
 	peerC := peer.ID("C")
 	peers := []peer.ID{peerA, peerB, peerC}
 
-	ps := newPeerScore(params)
+	ps := newPeerScore(params, slog.Default())
 	for _, p := range peers {
 		ps.AddPeer(p, "myproto")
 		ps.Graft(p, mytopic)
@@ -331,7 +332,7 @@ func TestScoreMeshMessageDeliveriesDecay(t *testing.T) {
 
 	peerA := peer.ID("A")
 
-	ps := newPeerScore(params)
+	ps := newPeerScore(params, slog.Default())
 	ps.AddPeer(peerA, "myproto")
 	ps.Graft(peerA, mytopic)
 
@@ -403,7 +404,7 @@ func TestScoreMeshFailurePenalty(t *testing.T) {
 	peerB := peer.ID("B")
 	peers := []peer.ID{peerA, peerB}
 
-	ps := newPeerScore(params)
+	ps := newPeerScore(params, slog.Default())
 	for _, p := range peers {
 		ps.AddPeer(p, "myproto")
 		ps.Graft(p, mytopic)
@@ -466,7 +467,7 @@ func TestScoreInvalidMessageDeliveries(t *testing.T) {
 
 	peerA := peer.ID("A")
 
-	ps := newPeerScore(params)
+	ps := newPeerScore(params, slog.Default())
 	ps.AddPeer(peerA, "myproto")
 	ps.Graft(peerA, mytopic)
 
@@ -503,7 +504,7 @@ func TestScoreInvalidMessageDeliveriesDecay(t *testing.T) {
 
 	peerA := peer.ID("A")
 
-	ps := newPeerScore(params)
+	ps := newPeerScore(params, slog.Default())
 	ps.AddPeer(peerA, "myproto")
 	ps.Graft(peerA, mytopic)
 
@@ -551,7 +552,7 @@ func TestScoreRejectMessageDeliveries(t *testing.T) {
 	peerA := peer.ID("A")
 	peerB := peer.ID("B")
 
-	ps := newPeerScore(params)
+	ps := newPeerScore(params, slog.Default())
 	ps.AddPeer(peerA, "myproto")
 	ps.AddPeer(peerB, "myproto")
 
@@ -678,7 +679,7 @@ func TestScoreApplicationScore(t *testing.T) {
 
 	peerA := peer.ID("A")
 
-	ps := newPeerScore(params)
+	ps := newPeerScore(params, slog.Default())
 	ps.AddPeer(peerA, "myproto")
 	ps.Graft(peerA, mytopic)
 
@@ -710,7 +711,7 @@ func TestScoreIPColocation(t *testing.T) {
 	peerD := peer.ID("D")
 	peers := []peer.ID{peerA, peerB, peerC, peerD}
 
-	ps := newPeerScore(params)
+	ps := newPeerScore(params, slog.Default())
 	for _, p := range peers {
 		ps.AddPeer(p, "myproto")
 		ps.Graft(p, mytopic)
@@ -766,7 +767,7 @@ func TestScoreIPColocationWhitelist(t *testing.T) {
 	peerD := peer.ID("D")
 	peers := []peer.ID{peerA, peerB, peerC, peerD}
 
-	ps := newPeerScore(params)
+	ps := newPeerScore(params, slog.Default())
 	for _, p := range peers {
 		ps.AddPeer(p, "myproto")
 		ps.Graft(p, mytopic)
@@ -821,7 +822,7 @@ func TestScoreBehaviourPenalty(t *testing.T) {
 	}
 
 	// instantiate the peerScore
-	ps = newPeerScore(params)
+	ps = newPeerScore(params, slog.Default())
 
 	// next AddPenalty on a non-existent peer
 	ps.AddPenalty(peerA, 1)
@@ -871,7 +872,7 @@ func TestScoreRetention(t *testing.T) {
 
 	peerA := peer.ID("A")
 
-	ps := newPeerScore(params)
+	ps := newPeerScore(params, slog.Default())
 	ps.AddPeer(peerA, "myproto")
 	ps.Graft(peerA, mytopic)
 
@@ -937,7 +938,7 @@ func TestScoreRecapTopicParams(t *testing.T) {
 	peerB := peer.ID("B")
 	peers := []peer.ID{peerA, peerB}
 
-	ps := newPeerScore(params)
+	ps := newPeerScore(params, slog.Default())
 	for _, p := range peers {
 		ps.AddPeer(p, "myproto")
 		ps.Graft(p, mytopic)
@@ -1022,7 +1023,7 @@ func TestScoreResetTopicParams(t *testing.T) {
 	// Peer C should have a negative score.
 	peerA := peer.ID("A")
 
-	ps := newPeerScore(params)
+	ps := newPeerScore(params, slog.Default())
 	ps.AddPeer(peerA, "myproto")
 
 	// reject a bunch of messages
