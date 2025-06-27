@@ -2,6 +2,7 @@ package pubsub
 
 import (
 	"context"
+	"log/slog"
 	"testing"
 	"time"
 
@@ -21,7 +22,7 @@ func TestPeerGater(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	pg := newPeerGater(ctx, nil, params)
+	pg := newPeerGater(ctx, nil, params, slog.Default())
 	pg.getIP = func(p peer.ID) string {
 		switch p {
 		case peerA:

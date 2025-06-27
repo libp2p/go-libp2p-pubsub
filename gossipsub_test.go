@@ -7,8 +7,10 @@ import (
 	"encoding/base64"
 	"fmt"
 	"io"
+	"log/slog"
 	mrand "math/rand"
 	mrand2 "math/rand/v2"
+	"os"
 	"slices"
 	"sort"
 	"strconv"
@@ -19,6 +21,7 @@ import (
 	"testing/quick"
 	"time"
 
+	"github.com/libp2p/go-libp2p-pubsub/internal/gologshim"
 	pb "github.com/libp2p/go-libp2p-pubsub/pb"
 
 	"github.com/libp2p/go-libp2p/core/host"
@@ -42,7 +45,21 @@ func getGossipsub(ctx context.Context, h host.Host, opts ...Option) *PubSub {
 
 func getGossipsubs(ctx context.Context, hs []host.Host, opts ...Option) []*PubSub {
 	var psubs []*PubSub
+	optsCopy := make([]Option, len(opts)+1)
+	copy(optsCopy[1:], opts)
+	logger := gologshim.Logger("pubsub")
 	for _, h := range hs {
+		// Set WithLogger option first so that later options can override it
+		optsCopy[0] = WithLogger(logger.With("id", h.ID()))
+		psubs = append(psubs, getGossipsub(ctx, h, optsCopy...))
+	}
+	return psubs
+}
+
+func getGossipsubsOptFn(ctx context.Context, hs []host.Host, optFn func(int, host.Host) []Option) []*PubSub {
+	var psubs []*PubSub
+	for i, h := range hs {
+		opts := optFn(i, h)
 		psubs = append(psubs, getGossipsub(ctx, h, opts...))
 	}
 	return psubs
@@ -74,7 +91,13 @@ func TestSparseGossipsub(t *testing.T) {
 	defer cancel()
 	hosts := getDefaultHosts(t, 20)
 
-	psubs := getGossipsubs(ctx, hosts)
+	psubs := getGossipsubsOptFn(ctx, hosts, func(i int, h host.Host) []Option {
+		lh := slog.NewJSONHandler(os.Stdout, nil)
+		logger := slog.New(lh.WithAttrs([]slog.Attr{slog.String("id", h.ID().String())}))
+		return []Option{
+			WithRPCLogger(logger),
+		}
+	})
 
 	var msgs []*Subscription
 	for _, ps := range psubs {

@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/binary"
 	"fmt"
+	"log/slog"
 	"math/rand"
 	"sync"
 	"testing"
@@ -54,7 +55,7 @@ func testBasicSeqnoValidator(t *testing.T, ttl time.Duration) {
 	hosts := getDefaultHosts(t, 20)
 	psubs := getPubsubsWithOptionC(ctx, hosts,
 		func(i int) Option {
-			return WithDefaultValidator(NewBasicSeqnoValidator(newMockPeerMetadataStore()))
+			return WithDefaultValidator(NewBasicSeqnoValidator(newMockPeerMetadataStore(), slog.Default()))
 		},
 		func(i int) Option {
 			return WithSeenMessagesTTL(ttl)
@@ -102,7 +103,7 @@ func TestBasicSeqnoValidatorReplay(t *testing.T) {
 	hosts := getDefaultHosts(t, 20)
 	psubs := getPubsubsWithOptionC(ctx, hosts[:19],
 		func(i int) Option {
-			return WithDefaultValidator(NewBasicSeqnoValidator(newMockPeerMetadataStore()))
+			return WithDefaultValidator(NewBasicSeqnoValidator(newMockPeerMetadataStore(), slog.Default()))
 		},
 		func(i int) Option {
 			return WithSeenMessagesTTL(time.Nanosecond)
