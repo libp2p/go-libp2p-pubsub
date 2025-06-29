@@ -255,6 +255,9 @@ type RPC struct {
 
 	// unexported on purpose, not sending this over the wire
 	from peer.ID
+
+	// timeToReceive is how long it took to receive the message.
+	timeToReceive time.Duration
 }
 
 // split splits the given RPC If a sub RPC is too large and can't be split
