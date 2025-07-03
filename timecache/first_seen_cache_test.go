@@ -17,9 +17,7 @@ func TestFirstSeenCacheFound(t *testing.T) {
 }
 
 func TestFirstSeenCacheExpire(t *testing.T) {
-	backgroundSweepInterval = time.Second
-
-	tc := newFirstSeenCache(time.Second)
+	tc := newFirstSeenCacheWithSweepInterval(time.Second, time.Second)
 	for i := 0; i < 10; i++ {
 		tc.Add(fmt.Sprint(i))
 		time.Sleep(time.Millisecond * 100)
@@ -34,9 +32,7 @@ func TestFirstSeenCacheExpire(t *testing.T) {
 }
 
 func TestFirstSeenCacheNotFoundAfterExpire(t *testing.T) {
-	backgroundSweepInterval = time.Second
-
-	tc := newFirstSeenCache(time.Second)
+	tc := newFirstSeenCacheWithSweepInterval(time.Second, time.Second)
 	tc.Add(fmt.Sprint(0))
 
 	time.Sleep(2 * time.Second)
