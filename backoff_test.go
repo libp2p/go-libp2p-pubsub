@@ -96,11 +96,17 @@ func TestBackoff_Clean(t *testing.T) {
 		if err != nil {
 			t.Fatalf("unexpected error post update: %s", err)
 		}
+		b.mu.Lock()
 		b.info[id].lastTried = time.Now().Add(-TimeToLive) // enforces expiry
+		b.mu.Unlock()
 	}
 
-	if len(b.info) != size {
-		t.Fatalf("info map size mismatch, expected: %d, got: %d", size, len(b.info))
+	b.mu.Lock()
+	infoLen := len(b.info)
+	b.mu.Unlock()
+
+	if infoLen != size {
+		t.Fatalf("info map size mismatch, expected: %d, got: %d", size, infoLen)
 	}
 
 	// waits for a cleanup loop to kick-in

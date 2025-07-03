@@ -797,7 +797,10 @@ func TestGossipsubAttackSpamIDONTWANT(t *testing.T) {
 	// Checks we received some messages
 	var expMid string
 	var actMids []string
+	var mu sync.Mutex
 	checkMsgs := func() {
+		mu.Lock()
+		defer mu.Unlock()
 		if len(actMids) == 0 {
 			t.Fatalf("Expected some messages when the maximum number of IDONTWANTs is reached")
 		}
@@ -822,6 +825,8 @@ func TestGossipsubAttackSpamIDONTWANT(t *testing.T) {
 	}()
 
 	newMockGS(ctx, t, hosts[2], func(writeMsg func(*pb.RPC), irpc *pb.RPC) {
+		mu.Lock()
+		defer mu.Unlock()
 		// Each time the host receives a message
 		for _, msg := range irpc.GetPublish() {
 			actMids = append(actMids, msgID(msg))

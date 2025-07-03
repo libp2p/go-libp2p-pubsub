@@ -268,8 +268,11 @@ func TestReconnects(t *testing.T) {
 		t.Fatal("timed out waiting for B chan to be closed")
 	}
 
-	nSubs := len(psubs[2].mySubs["cats"])
-	if nSubs > 0 {
+	nSubs := make(chan int)
+	psubs[2].eval <- func() {
+		nSubs <- len(psubs[2].mySubs["cats"])
+	}
+	if <-nSubs > 0 {
 		t.Fatal(`B should have 0 subscribers for channel "cats", has`, nSubs)
 	}
 
@@ -866,9 +869,14 @@ func TestImproperlySignedMessageRejected(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	var adversaryMessages []*Message
+	adversaryMessagesCh := make(chan []*Message)
+
 	adversaryContext, adversaryCancel := context.WithCancel(ctx)
 	go func(ctx context.Context) {
+		var adversaryMessages []*Message
+		defer func() {
+			adversaryMessagesCh <- adversaryMessages
+		}()
 		for {
 			select {
 			case <-ctx.Done():
@@ -885,6 +893,7 @@ func TestImproperlySignedMessageRejected(t *testing.T) {
 
 	<-time.After(1 * time.Second)
 	adversaryCancel()
+	adversaryMessages := <-adversaryMessagesCh
 
 	// Ensure the adversary successfully publishes the incorrectly signed
 	// message. If the adversary "sees" this, we successfully got through
@@ -895,9 +904,13 @@ func TestImproperlySignedMessageRejected(t *testing.T) {
 
 	// the honest peer's validation process will drop the message;
 	// next will never furnish the incorrect message.
-	var honestPeerMessages []*Message
+	honestPeerMessagesCh := make(chan []*Message)
 	honestPeerContext, honestPeerCancel := context.WithCancel(ctx)
 	go func(ctx context.Context) {
+		var honestPeerMessages []*Message
+		defer func() {
+			honestPeerMessagesCh <- honestPeerMessages
+		}()
 		for {
 			select {
 			case <-ctx.Done():
@@ -915,6 +928,7 @@ func TestImproperlySignedMessageRejected(t *testing.T) {
 	<-time.After(1 * time.Second)
 	honestPeerCancel()
 
+	honestPeerMessages := <-honestPeerMessagesCh
 	if len(honestPeerMessages) != 1 {
 		t.Fatalf("got %d messages, expected 1", len(honestPeerMessages))
 	}

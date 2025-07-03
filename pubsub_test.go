@@ -40,7 +40,9 @@ func TestPubSubRemovesBlacklistedPeer(t *testing.T) {
 	// Bad peer is blacklisted after it has connected.
 	// Calling p.BlacklistPeer directly does the right thing but we should also clean
 	// up the peer if it has been added the the blacklist by another means.
-	bl.Add(hosts[0].ID())
+	withRouter(psubs1, func(r PubSubRouter) {
+		bl.Add(hosts[0].ID())
+	})
 
 	_, err := psubs0.Subscribe("test")
 	if err != nil {

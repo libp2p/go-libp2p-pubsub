@@ -20,10 +20,23 @@ import (
 	pb "github.com/libp2p/go-libp2p-pubsub/pb"
 )
 
-var rng *rand.Rand
+var rng *concurrentRNG
+
+type concurrentRNG struct {
+	mu  sync.Mutex
+	rng *rand.Rand
+}
+
+func (r *concurrentRNG) Intn(n int) int {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.rng.Intn(n)
+}
 
 func init() {
-	rng = rand.New(rand.NewSource(314159))
+	rng = &concurrentRNG{
+		rng: rand.New(rand.NewSource(314159)),
+	}
 }
 
 func TestBasicSeqnoValidator1(t *testing.T) {
