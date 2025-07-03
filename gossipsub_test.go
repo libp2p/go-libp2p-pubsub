@@ -1989,6 +1989,27 @@ func TestGossipSubLeaveTopic(t *testing.T) {
 	<-done
 }
 
+// withRouter is a race-free way of accessing state from the PubSubRouter.
+// It runs the callback synchronously
+func withRouter(p *PubSub, f func(r PubSubRouter)) {
+	done := make(chan struct{})
+	p.eval <- func() {
+		defer close(done)
+		router := p.rt
+		f(router)
+	}
+	<-done
+}
+
+// withGSRouter is a race-free way of accessing state from the GossipSubRouter.
+// It runs the callback synchronously
+func withGSRouter(p *PubSub, f func(r *GossipSubRouter)) {
+	withRouter(p, func(r PubSubRouter) {
+		router := p.rt.(*GossipSubRouter)
+		f(router)
+	})
+}
+
 func TestGossipSubJoinTopic(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -2003,13 +2024,15 @@ func TestGossipSubJoinTopic(t *testing.T) {
 	connect(t, h[0], h[1])
 	connect(t, h[0], h[2])
 
-	router0 := psubs[0].rt.(*GossipSubRouter)
-
 	// Add in backoff for peer.
 	peerMap := make(map[peer.ID]time.Time)
-	peerMap[h[1].ID()] = time.Now().Add(router0.params.UnsubscribeBackoff)
+	withGSRouter(psubs[0], func(router0 *GossipSubRouter) {
+		peerMap[h[1].ID()] = time.Now().Add(router0.params.UnsubscribeBackoff)
+	})
 
-	router0.backoff["test"] = peerMap
+	withGSRouter(psubs[0], func(router0 *GossipSubRouter) {
+		router0.backoff["test"] = peerMap
+	})
 
 	// Join all peers
 	for _, ps := range psubs {
@@ -2021,15 +2044,16 @@ func TestGossipSubJoinTopic(t *testing.T) {
 
 	time.Sleep(time.Second)
 
-	meshMap := router0.mesh["test"]
-	if len(meshMap) != 1 {
-		t.Fatalf("Unexpect peer included in the mesh")
-	}
-
-	_, ok := meshMap[h[1].ID()]
-	if ok {
-		t.Fatalf("Peer that was to be backed off is included in the mesh")
-	}
+	withGSRouter(psubs[0], func(router0 *GossipSubRouter) {
+		meshMap := router0.mesh["test"]
+		if len(meshMap) != 1 {
+			t.Fatalf("Unexpect peer included in the mesh")
+		}
+		_, ok := meshMap[h[1].ID()]
+		if ok {
+			t.Fatalf("Peer that was to be backed off is included in the mesh")
+		}
+	})
 }
 
 type sybilSquatter struct {
@@ -2697,10 +2721,10 @@ func TestGossipsubIdontwantSend(t *testing.T) {
 		return base64.URLEncoding.EncodeToString(pmsg.Data)
 	}
 
-	validated := false
+	var validated atomic.Bool
 	validate := func(context.Context, peer.ID, *Message) bool {
 		time.Sleep(100 * time.Millisecond)
-		validated = true
+		validated.Store(true)
 		return true
 	}
 
@@ -2798,7 +2822,7 @@ func TestGossipsubIdontwantSend(t *testing.T) {
 		for _, idonthave := range irpc.GetControl().GetIdontwant() {
 			// If true, it means that, when we get IDONTWANT, the middle peer has done validation
 			// already, which should not be the case
-			if validated {
+			if validated.Load() {
 				t.Fatalf("IDONTWANT should be sent before doing validation")
 			}
 			for _, mid := range idonthave.GetMessageIDs() {
@@ -3333,13 +3357,13 @@ func TestGossipsubIdontwantBeforeIwant(t *testing.T) {
 	msgTimer := time.NewTimer(msgWaitMax)
 
 	// Checks we received right messages
-	msgReceived := false
-	ihaveReceived := false
+	var msgReceived atomic.Bool
+	var ihaveReceived atomic.Bool
 	checkMsgs := func() {
-		if msgReceived {
+		if msgReceived.Load() {
 			t.Fatalf("Expected no messages received after IDONWANT")
 		}
-		if !ihaveReceived {
+		if !ihaveReceived.Load() {
 			t.Fatalf("Expected IHAVE received")
 		}
 	}
@@ -3359,11 +3383,11 @@ func TestGossipsubIdontwantBeforeIwant(t *testing.T) {
 	newMockGS(ctx, t, hosts[2], func(writeMsg func(*pb.RPC), irpc *pb.RPC) {
 		// Check if it receives any message
 		if len(irpc.GetPublish()) > 0 {
-			msgReceived = true
+			msgReceived.Store(true)
 		}
 		// The middle peer is supposed to send IHAVE
 		for _, ihave := range irpc.GetControl().GetIhave() {
-			ihaveReceived = true
+			ihaveReceived.Store(true)
 			mids := ihave.GetMessageIDs()
 
 			writeMsg(&pb.RPC{
@@ -3437,9 +3461,9 @@ func TestGossipsubIdontwantClear(t *testing.T) {
 	msgTimer := time.NewTimer(msgWaitMax)
 
 	// Checks we received some message after the IDONTWANT is cleared
-	received := false
+	var received atomic.Bool
 	checkMsgs := func() {
-		if !received {
+		if !received.Load() {
 			t.Fatalf("Expected some message after the IDONTWANT is cleared")
 		}
 	}
@@ -3459,7 +3483,7 @@ func TestGossipsubIdontwantClear(t *testing.T) {
 	newMockGS(ctx, t, hosts[2], func(writeMsg func(*pb.RPC), irpc *pb.RPC) {
 		// Check if it receives any message
 		if len(irpc.GetPublish()) > 0 {
-			received = true
+			received.Store(true)
 		}
 		// When the middle peer connects it will send us its subscriptions
 		for _, sub := range irpc.GetSubscriptions() {
@@ -3544,13 +3568,15 @@ func TestGossipsubPruneMeshCorrectly(t *testing.T) {
 	totalTimeToWait := params.HeartbeatInitialDelay + 2*params.HeartbeatInterval
 	time.Sleep(totalTimeToWait)
 
-	meshPeers, ok := psubs[0].rt.(*GossipSubRouter).mesh[topic]
-	if !ok {
-		t.Fatal("mesh does not exist for topic")
-	}
-	if len(meshPeers) != params.D {
-		t.Fatalf("mesh does not have the correct number of peers. Wanted %d but got %d", params.D, len(meshPeers))
-	}
+	withGSRouter(psubs[0], func(rt *GossipSubRouter) {
+		meshPeers, ok := rt.mesh[topic]
+		if !ok {
+			t.Fatal("mesh does not exist for topic")
+		}
+		if len(meshPeers) != params.D {
+			t.Fatalf("mesh does not have the correct number of peers. Wanted %d but got %d", params.D, len(meshPeers))
+		}
+	})
 }
 
 func BenchmarkAllocDoDropRPC(b *testing.B) {
