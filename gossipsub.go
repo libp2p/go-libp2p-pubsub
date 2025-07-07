@@ -11,6 +11,7 @@ import (
 	"time"
 
 	pb "github.com/libp2p/go-libp2p-pubsub/pb"
+	"github.com/libp2p/go-yamux/v5"
 
 	"github.com/libp2p/go-libp2p/core/event"
 	"github.com/libp2p/go-libp2p/core/host"
@@ -48,6 +49,7 @@ var (
 	GossipSubDhi                              = 12
 	GossipSubDscore                           = 4
 	GossipSubDout                             = 2
+	GossipSubDRobust                          = 3
 	GossipSubHistoryLength                    = 5
 	GossipSubHistoryGossip                    = 3
 	GossipSubDlazy                            = 6
@@ -111,6 +113,10 @@ type GossipSubParams struct {
 	//
 	// Dout must be set below Dlo, and must not exceed D / 2.
 	Dout int
+
+	// For WFR, the number of peers we always eager-push to. We pick the
+	// D_robust lowest latency peers.
+	Drobust int
 
 	// gossip parameters
 
@@ -288,6 +294,7 @@ func DefaultGossipSubParams() GossipSubParams {
 		Dhi:                       GossipSubDhi,
 		Dscore:                    GossipSubDscore,
 		Dout:                      GossipSubDout,
+		Drobust:                   GossipSubDRobust,
 		HistoryLength:             GossipSubHistoryLength,
 		HistoryGossip:             GossipSubHistoryGossip,
 		Dlazy:                     GossipSubDlazy,
@@ -454,6 +461,17 @@ func WithGossipSubParams(cfg GossipSubParams) Option {
 	}
 }
 
+func WithWFR() Option {
+	return func(ps *PubSub) error {
+		gs, ok := ps.rt.(*GossipSubRouter)
+		if !ok {
+			return fmt.Errorf("pubsub router is not gossipsub")
+		}
+		gs.wfrEnabled = true
+		return nil
+	}
+}
+
 // GossipSubRouter is a router that implements the gossipsub protocol.
 // For each topic we have joined, we maintain an overlay through which
 // messages flow; this is the mesh map.
@@ -491,6 +509,8 @@ type GossipSubRouter struct {
 
 	// config for gossipsub parameters
 	params GossipSubParams
+
+	wfrEnabled bool
 
 	// whether PX is enabled; this should be enabled in bootstrappers and other well connected/trusted
 	// nodes.
@@ -1235,6 +1255,39 @@ func (gs *GossipSubRouter) rpcs(msg *Message) iter.Seq2[peer.ID, *RPC] {
 			}
 		}
 
+		delete(tosend, from)
+
+		if gs.wfrEnabled && from != gs.p.host.ID() && len(tosend) > gs.params.Drobust {
+			toSendList := make([]peer.ID, 0, len(tosend))
+			for p := range tosend {
+				toSendList = append(toSendList, p)
+			}
+			rand.Shuffle(len(toSendList), func(i, j int) {
+				toSendList[i], toSendList[j] = toSendList[j], toSendList[i]
+			})
+			robust, rest := toSendList[:gs.params.Drobust], toSendList[gs.params.Drobust:]
+
+			clear(tosend)
+			for _, p := range robust {
+				tosend[p] = struct{}{}
+			}
+
+			fromLatency, ok := gs.peerRTT(from)
+			if !ok {
+				// We don't have an RTT estimate for the sender. Gracefully
+				// fallback by giving them a large latency.
+				fromLatency = 10 * time.Second
+			}
+			for _, p := range rest {
+				// In case we don't have the peer latency, this will be 0
+				peerLatency, _ := gs.peerRTT(p)
+
+				if peerLatency < fromLatency {
+					tosend[p] = struct{}{}
+				}
+			}
+		}
+
 		out := rpcWithMessages(msg.Message)
 		for pid := range tosend {
 			if pid == from || pid == peer.ID(msg.GetFrom()) {
@@ -1246,6 +1299,20 @@ func (gs *GossipSubRouter) rpcs(msg *Message) iter.Seq2[peer.ID, *RPC] {
 			}
 		}
 	}
+}
+
+func (gs *GossipSubRouter) peerRTT(p peer.ID) (time.Duration, bool) {
+	var yamuxConn *yamux.Session
+	for _, c := range gs.p.host.Network().ConnsToPeer(p) {
+		if network.ConnAs(c, &yamuxConn) {
+			d := yamuxConn.RTT()
+			if d != time.Duration(0) {
+				return d, true
+			}
+		}
+	}
+
+	return time.Duration(0), false
 }
 
 func (gs *GossipSubRouter) Join(topic string) {
