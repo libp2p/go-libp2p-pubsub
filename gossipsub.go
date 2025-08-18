@@ -1535,11 +1535,14 @@ func (gs *GossipSubRouter) heartbeat() {
 
 			// We keep the first D_score peers by score and the remaining up to D randomly
 			// under the constraint that we keep D_out peers in the mesh (if we have that many)
-			shufflePeers(plst[gs.params.Dscore:])
+			if len(plst) > gs.params.Dscore {
+				shufflePeers(plst[gs.params.Dscore:])
+			}
 
 			// count the outbound peers we are keeping
 			outbound := 0
-			for _, p := range plst[:gs.params.D] {
+			retainedPeers := min(gs.params.D, len(plst))
+			for _, p := range plst[:retainedPeers] {
 				if gs.outbound[p] {
 					outbound++
 				}
@@ -1559,7 +1562,7 @@ func (gs *GossipSubRouter) heartbeat() {
 				// first bubble up all outbound peers already in the selection to the front
 				if outbound > 0 {
 					ihave := outbound
-					for i := 1; i < gs.params.D && ihave > 0; i++ {
+					for i := 1; i < retainedPeers && ihave > 0; i++ {
 						p := plst[i]
 						if gs.outbound[p] {
 							rotate(i)
@@ -1570,7 +1573,7 @@ func (gs *GossipSubRouter) heartbeat() {
 
 				// now bubble up enough outbound peers outside the selection to the front
 				ineed := gs.params.Dout - outbound
-				for i := gs.params.D; i < len(plst) && ineed > 0; i++ {
+				for i := retainedPeers; i < len(plst) && ineed > 0; i++ {
 					p := plst[i]
 					if gs.outbound[p] {
 						rotate(i)
@@ -1580,9 +1583,11 @@ func (gs *GossipSubRouter) heartbeat() {
 			}
 
 			// prune the excess peers
-			for _, p := range plst[gs.params.D:] {
-				log.Debugf("HEARTBEAT: Remove mesh link to %s in %s", p, topic)
-				prunePeer(p)
+			if len(plst) > retainedPeers {
+				for _, p := range plst[retainedPeers:] {
+					log.Debugf("HEARTBEAT: Remove mesh link to %s in %s", p, topic)
+					prunePeer(p)
+				}
 			}
 		}
 
