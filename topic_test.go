@@ -951,6 +951,23 @@ func TestTopicPublishWithKeyInvalidParameters(t *testing.T) {
 	})
 }
 
+func TestTopicPublishWithContextCanceled(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	const topic = "foobar"
+	const numHosts = 5
+
+	hosts := getDefaultHosts(t, numHosts)
+	topics := getTopics(getPubsubs(ctx, hosts), topic)
+	cancel()
+
+	err := topics[0].Publish(ctx, []byte("buff"))
+	if err != context.Canceled {
+		t.Fatal("error should have been of type context.Canceled", err)
+	}
+}
+
 func TestTopicRelayPublishWithKey(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
