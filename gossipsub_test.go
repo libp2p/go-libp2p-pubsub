@@ -48,6 +48,15 @@ func getGossipsubs(ctx context.Context, hs []host.Host, opts ...Option) []*PubSu
 	return psubs
 }
 
+func TestGossipSubParamsValidate(t *testing.T) {
+	params := DefaultGossipSubParams()
+	params.Dhi = 1
+	params.Dscore = 10
+	if params.Validate() == nil {
+		t.Fatal("Params should be invalid")
+	}
+}
+
 func TestSparseGossipsub(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
