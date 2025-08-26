@@ -4281,3 +4281,116 @@ func newSkeletonGossipsub(ctx context.Context, h host.Host) *skeletonGossipsub {
 		inRPC:  sendRPC,
 	}
 }
+
+func TestExtensionsControlMessage(t *testing.T) {
+	for _, wellBehaved := range []bool{true, false} {
+		t.Run(fmt.Sprintf("wellBehaved=%t", wellBehaved), func(t *testing.T) {
+
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			hosts := getDefaultHosts(t, 2)
+			psub0 := getGossipsub(ctx, hosts[0],
+				WithPeerScore(
+					&PeerScoreParams{
+						AppSpecificScore:       func(peer.ID) float64 { return 0 },
+						BehaviourPenaltyWeight: -1,
+						BehaviourPenaltyDecay:  ScoreParameterDecay(time.Minute),
+						DecayInterval:          DefaultDecayInterval,
+						DecayToZero:            DefaultDecayToZero,
+					},
+					&PeerScoreThresholds{
+						GossipThreshold:   -100,
+						PublishThreshold:  -500,
+						GraylistThreshold: -1000,
+					}),
+				WithMessageIdFn(func(msg *pb.Message) string {
+					return string(msg.Data)
+				}))
+
+			psub1 := newSkeletonGossipsub(ctx, hosts[1])
+
+			connect(t, hosts[0], hosts[1])
+			time.Sleep(time.Second)
+
+			loopTimes := 3
+
+			for i := range loopTimes {
+				rpcToSend := &pb.RPC{
+					Control: &pb.ControlMessage{
+						Extensions: &pb.ControlExtensions{},
+					},
+				}
+				if wellBehaved && i > 0 {
+					// A well behaved node does not repeat the control
+					// extension message
+					rpcToSend.Control.Extensions = nil
+				}
+				psub1.inRPC <- rpcToSend
+			}
+
+			time.Sleep(time.Second)
+
+			peerScore := psub0.rt.(*GossipSubRouter).score.Score(hosts[1].ID())
+			t.Log("Peer score:", peerScore)
+			if wellBehaved {
+				if peerScore < 0 {
+					t.Fatal("Peer score should not be negative")
+				}
+			} else {
+				if peerScore >= 0 {
+					t.Fatal("Peer score should not be positive")
+				}
+			}
+		})
+	}
+}
+
+func TestTestExtension(t *testing.T) {
+	hosts := getDefaultHosts(t, 2)
+	var receivedTestExtension atomic.Bool
+	c := TestExtensionConfig{
+		OnReceiveTestExtension: func(_ peer.ID) {
+			receivedTestExtension.Store(true)
+		},
+	}
+	psub := getGossipsub(context.Background(), hosts[0], WithTestExtension(c))
+	_ = psub
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	psub1 := newSkeletonGossipsub(ctx, hosts[1])
+
+	connect(t, hosts[0], hosts[1])
+
+	const timeout = 3 * time.Second
+	select {
+	case <-time.After(timeout):
+		t.Fatal("Timeout")
+	case r := <-psub1.outRPC:
+		if !*r.Control.Extensions.TestExtension {
+			t.Fatal("Unexpected RPC. First RPC should be the Extensions Control Message")
+		}
+	}
+
+	truePtr := true
+	psub1.inRPC <- &pb.RPC{
+		Control: &pb.ControlMessage{
+			Extensions: &pb.ControlExtensions{
+				TestExtension: &truePtr,
+			},
+		},
+	}
+
+	select {
+	case <-time.After(timeout):
+		t.Fatal("Timeout")
+	case r := <-psub1.outRPC:
+		if r.TestExtension == nil {
+			t.Fatal("Unexpected RPC. Next RPC should be the TestExtension Message")
+		}
+	}
+
+	if !receivedTestExtension.Load() {
+		t.Fatal("TestExtension not received")
+	}
+}
