@@ -45,9 +45,10 @@ func (rs *RandomSubRouter) Attach(p *PubSub) {
 	rs.tracer = p.tracer
 }
 
-func (rs *RandomSubRouter) AddPeer(p peer.ID, proto protocol.ID) {
+func (rs *RandomSubRouter) AddPeer(p peer.ID, proto protocol.ID, hello *RPC) *RPC {
 	rs.tracer.AddPeer(p, proto)
 	rs.peers[p] = proto
+	return hello
 }
 
 func (rs *RandomSubRouter) RemovePeer(p peer.ID) {

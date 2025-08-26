@@ -196,8 +196,11 @@ type PubSubRouter interface {
 	// Attach is invoked by the PubSub constructor to attach the router to a
 	// freshly initialized PubSub instance.
 	Attach(*PubSub)
-	// AddPeer notifies the router that a new peer has been connected.
-	AddPeer(peer.ID, protocol.ID)
+	// AddPeer notifies the router that a new peer has been connected. It
+	// includes a reference to the initial RPC that will be sent to the peer.
+	// Routers may add messages to the RPC to try to have them sent in the
+	// initial packet. This is also referred to as the "hello packet."
+	AddPeer(peer.ID, protocol.ID, *RPC) *RPC
 	// RemovePeer notifies the router that a peer has been disconnected.
 	RemovePeer(peer.ID)
 	// EnoughPeers returns whether the router needs more peers before it's ready to publish new records.
@@ -824,7 +827,9 @@ func (p *PubSub) processLoop(ctx context.Context) {
 				continue
 			}
 
-			p.rt.AddPeer(pid, s.Protocol())
+			helloPacket := p.getHelloPacket()
+			helloPacket = p.rt.AddPeer(pid, s.Protocol(), helloPacket)
+			q.Push(helloPacket, true)
 
 		case pid := <-p.newPeerError:
 			delete(p.peers, pid)
