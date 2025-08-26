@@ -944,9 +944,8 @@ func (p *PubSub) handlePendingPeers() {
 		}
 
 		rpcQueue := newRpcQueue(p.peerOutboundQueueSize)
-		rpcQueue.Push(p.getHelloPacket(), true)
-		go p.handleNewPeer(p.ctx, pid, rpcQueue)
 		p.peers[pid] = rpcQueue
+		go p.handleNewPeer(p.ctx, pid, rpcQueue)
 	}
 }
 
@@ -991,7 +990,6 @@ func (p *PubSub) handleDeadPeers() {
 			// we respawn the writer as we need to ensure there is a stream active
 			p.logger.Debug("peer declared dead but still connected; respawning writer", "peer", pid)
 			rpcQueue := newRpcQueue(p.peerOutboundQueueSize)
-			rpcQueue.Push(p.getHelloPacket(), true)
 			p.peers[pid] = rpcQueue
 			go p.handleNewPeerWithBackoff(p.ctx, pid, backoffDelay, rpcQueue)
 		}
