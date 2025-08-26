@@ -41,6 +41,10 @@ const (
 	// See the spec for details about how v1.2.0 compares to v1.1.0:
 	// https://github.com/libp2p/specs/blob/master/pubsub/gossipsub/gossipsub-v1.2.md
 	GossipSubID_v12 = protocol.ID("/meshsub/1.2.0")
+
+	// GossipSubID_v13 is the protocol ID for version 1.3.0 of the GossipSub
+	// protocol. It adds the extensions control message.
+	GossipSubID_v13 = protocol.ID("/meshsub/1.3.0")
 )
 
 // Defines the default gossipsub parameters.
