@@ -24,6 +24,7 @@ import (
 	"github.com/libp2p/go-libp2p-pubsub/internal/gologshim"
 	pb "github.com/libp2p/go-libp2p-pubsub/pb"
 	"github.com/libp2p/go-libp2p/core/crypto"
+	"github.com/libp2p/go-msgio"
 
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/network"
@@ -4204,4 +4205,79 @@ func TestPublicAddrsPXRecordReducer(t *testing.T) {
 			}
 		}
 	})
+}
+
+type skeletonGossipsub struct {
+	outRPC <-chan *pb.RPC
+	inRPC  chan<- *pb.RPC
+}
+
+func newSkeletonGossipsub(ctx context.Context, h host.Host) *skeletonGossipsub {
+	recvRPC := make(chan *pb.RPC, 16)
+	sendRPC := make(chan *pb.RPC, 16)
+	logger := slog.Default().With("id", h.ID())
+
+	h.SetStreamHandler(GossipSubID_v13, func(s network.Stream) {
+		// Open outbound stream to send writes too
+		outboundStream, err := h.NewStream(context.Background(), s.Conn().RemotePeer(), GossipSubID_v13)
+		if err != nil {
+			panic(err)
+		}
+		ctx, cancel := context.WithCancel(ctx)
+		defer cancel()
+		go func(ctx context.Context) {
+			defer outboundStream.Close()
+			w := msgio.NewVarintWriter(outboundStream)
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				case r := <-sendRPC:
+					b, err := r.Marshal()
+					if err != nil {
+						panic(err)
+					}
+					err = w.WriteMsg(b)
+					if err != nil {
+						panic(err)
+					}
+				}
+			}
+		}(ctx)
+
+		r := msgio.NewVarintReaderSize(s, DefaultMaxMessageSize)
+		for {
+			msgbytes, err := r.ReadMsg()
+			if err != nil {
+				r.ReleaseMsg(msgbytes)
+				if err != io.EOF {
+					s.Reset()
+					logger.Debug("error reading rpc", "from", s.Conn().RemotePeer(), "err", err)
+				} else {
+					// Just be nice. They probably won't read this
+					// but it doesn't hurt to send it.
+					s.Close()
+				}
+
+				return
+			}
+			if len(msgbytes) == 0 {
+				continue
+			}
+
+			rpc := new(pb.RPC)
+			err = rpc.Unmarshal(msgbytes)
+			r.ReleaseMsg(msgbytes)
+			if err != nil {
+				s.Reset()
+				panic(err)
+			}
+			recvRPC <- rpc
+		}
+	})
+
+	return &skeletonGossipsub{
+		outRPC: recvRPC,
+		inRPC:  sendRPC,
+	}
 }
