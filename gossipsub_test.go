@@ -5,6 +5,8 @@ import (
 	"context"
 	crand "crypto/rand"
 	"encoding/base64"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -22,6 +24,7 @@ import (
 	"time"
 
 	"github.com/libp2p/go-libp2p-pubsub/internal/gologshim"
+	"github.com/libp2p/go-libp2p-pubsub/partialmessages"
 	pb "github.com/libp2p/go-libp2p-pubsub/pb"
 	"github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/libp2p/go-msgio"
@@ -60,15 +63,6 @@ func getGossipsubs(ctx context.Context, hs []host.Host, opts ...Option) []*PubSu
 	return psubs
 }
 
-func getGossipsubsOptFn(ctx context.Context, hs []host.Host, optFn func(int, host.Host) []Option) []*PubSub {
-	var psubs []*PubSub
-	for i, h := range hs {
-		opts := optFn(i, h)
-		psubs = append(psubs, getGossipsub(ctx, h, opts...))
-	}
-	return psubs
-}
-
 func TestGossipSubParamsValidate(t *testing.T) {
 	params := DefaultGossipSubParams()
 	params.Dhi = 1
@@ -88,6 +82,15 @@ func TestGossipSubBootstrapParamsValidate(t *testing.T) {
 	if err := params.validate(); err != nil {
 		t.Fatalf("Params should be valid: %v", err)
 	}
+}
+
+func getGossipsubsOptFn(ctx context.Context, hs []host.Host, optFn func(int, host.Host) []Option) []*PubSub {
+	var psubs []*PubSub
+	for i, h := range hs {
+		opts := optFn(i, h)
+		psubs = append(psubs, getGossipsub(ctx, h, opts...))
+	}
+	return psubs
 }
 
 func TestSparseGossipsub(t *testing.T) {
@@ -4392,5 +4395,398 @@ func TestTestExtension(t *testing.T) {
 
 	if !receivedTestExtension.Load() {
 		t.Fatal("TestExtension not received")
+	}
+}
+
+type minimalTestPartialMessage struct {
+	Group []byte
+	Parts [2][]byte
+}
+
+func (m *minimalTestPartialMessage) complete() bool {
+	return len(m.Parts[0]) > 0 && len(m.Parts[1]) > 0
+}
+
+// PartsMetadata implements partialmessages.PartialMessage.
+func (m *minimalTestPartialMessage) PartsMetadata() []byte {
+	out := byte(0)
+	if len(m.Parts[0]) > 0 {
+		out |= 1
+	}
+	if len(m.Parts[1]) > 0 {
+		out |= 2
+	}
+	return []byte{out}
+}
+
+func (m *minimalTestPartialMessage) extendFromEncodedPartialMessage(_ peer.ID, data []byte) (extended bool) {
+	var temp minimalTestPartialMessage
+	json.Unmarshal(data, &temp)
+	for i := range m.Parts {
+		if len(temp.Parts[i]) > 0 && m.Parts[i] == nil {
+			extended = true
+			m.Parts[i] = temp.Parts[i]
+		}
+	}
+	return
+}
+
+// onIncomingRPC handle an incoming rpc and will return a non-nil publish
+// options if the caller should republish this partial message.
+func (m *minimalTestPartialMessage) onIncomingRPC(from peer.ID, rpc *pb.PartialMessagesExtension) *partialmessages.PublishOptions {
+	var extended bool
+	if len(rpc.PartialMessage) > 0 {
+		extended = m.extendFromEncodedPartialMessage(from, rpc.PartialMessage)
+	}
+
+	var publishOpts partialmessages.PublishOptions
+
+	if !extended {
+		var peerHasUsefulData, iHaveUsefulData bool
+		// Only do these checks if we didn't extend our partial message.
+		// Since, otherwise, we simply publish again to all peers.
+		if len(rpc.PartsMetadata) > 0 {
+			iHave := m.PartsMetadata()[0]
+			iWant := ^iHave
+
+			peerHas := rpc.PartsMetadata[0]
+			peerWants := ^peerHas
+
+			iHaveUsefulData = iHave&peerWants != 0
+			peerHasUsefulData = iWant&peerHas != 0
+		}
+		if peerHasUsefulData || iHaveUsefulData {
+			publishOpts.PublishToPeers = []peer.ID{from}
+		}
+	}
+
+	if extended || len(publishOpts.PublishToPeers) > 0 {
+		return &publishOpts
+	}
+	return nil
+}
+
+// GroupID implements partialmessages.PartialMessage.
+func (m *minimalTestPartialMessage) GroupID() []byte {
+	return m.Group
+}
+
+func (m *minimalTestPartialMessage) PartialMessageBytes(peerPartsMetadata []byte) ([]byte, []byte, error) {
+	if len(peerPartsMetadata) == 0 {
+		return nil, nil, errors.New("invalid metadata")
+	}
+	peerWants := ^peerPartsMetadata[0]
+
+	var temp minimalTestPartialMessage
+	temp.Group = m.Group
+	if peerWants&1 == 1 && m.Parts[0] != nil {
+		peerWants ^= 1
+		temp.Parts[0] = m.Parts[0]
+	}
+	if peerWants&2 == 2 && m.Parts[1] != nil {
+		peerWants ^= 2
+		temp.Parts[1] = m.Parts[1]
+	}
+
+	restMetadata := []byte{^peerWants}
+
+	if temp.Parts[0] == nil && temp.Parts[1] == nil {
+		return nil, restMetadata, nil
+	}
+
+	b, err := json.Marshal(temp)
+	if err != nil {
+		return nil, nil, err
+	}
+	return b, restMetadata, nil
+}
+
+func (m *minimalTestPartialMessage) shouldRequest(_ peer.ID, peerHasMetadata []byte) bool {
+	if len(peerHasMetadata) == 0 {
+		return false
+	}
+	peerHas := peerHasMetadata[0]
+	iWant := ^m.PartsMetadata()[0]
+	return iWant&peerHas != 0
+}
+
+var _ partialmessages.Message = (*minimalTestPartialMessage)(nil)
+
+type minimalTestPartialMessageChecker struct {
+	fullMessage *minimalTestPartialMessage
+}
+
+// EmptyMessage implements partialmessages.InvariantChecker.
+func (m *minimalTestPartialMessageChecker) EmptyMessage() *minimalTestPartialMessage {
+	return &minimalTestPartialMessage{
+		Group: m.fullMessage.Group,
+	}
+}
+
+// Equal implements partialmessages.InvariantChecker.
+func (m *minimalTestPartialMessageChecker) Equal(a *minimalTestPartialMessage, b *minimalTestPartialMessage) bool {
+	return bytes.Equal(a.Group, b.Group) && (slices.CompareFunc(a.Parts[:], b.Parts[:], func(e1 []byte, e2 []byte) int {
+		return bytes.Compare(e1, e2)
+	}) == 0)
+}
+
+// ExtendFromBytes implements partialmessages.InvariantChecker.
+func (m *minimalTestPartialMessageChecker) ExtendFromBytes(a *minimalTestPartialMessage, data []byte) (*minimalTestPartialMessage, error) {
+	a.extendFromEncodedPartialMessage("", data)
+	return a, nil
+}
+
+// FullMessage implements partialmessages.InvariantChecker.
+func (m *minimalTestPartialMessageChecker) FullMessage() (*minimalTestPartialMessage, error) {
+	return m.fullMessage, nil
+}
+
+// SplitIntoParts implements partialmessages.InvariantChecker.
+func (m *minimalTestPartialMessageChecker) SplitIntoParts(in *minimalTestPartialMessage) ([]*minimalTestPartialMessage, error) {
+	var parts [2]*minimalTestPartialMessage
+	for i := range parts {
+		parts[i] = &minimalTestPartialMessage{
+			Group: in.Group,
+		}
+		parts[i].Parts[i] = in.Parts[i]
+	}
+	return parts[:], nil
+}
+
+func (m *minimalTestPartialMessageChecker) ShouldRequest(a *minimalTestPartialMessage, from peer.ID, partsMetadata []byte) bool {
+	return a.shouldRequest(from, partsMetadata)
+}
+
+var _ partialmessages.InvariantChecker[*minimalTestPartialMessage] = (*minimalTestPartialMessageChecker)(nil)
+
+func TestMinimalPartialMessageImpl(t *testing.T) {
+	group := []byte("test-group")
+	full := &minimalTestPartialMessage{
+		Group: group,
+		Parts: [2][]byte{
+			[]byte("Hello"),
+			[]byte("World"),
+		},
+	}
+	checker := &minimalTestPartialMessageChecker{
+		fullMessage: full,
+	}
+	partialmessages.TestPartialMessageInvariants(t, checker)
+}
+
+func TestPartialMessages(t *testing.T) {
+	topic := "test-topic"
+	const hostCount = 5
+	hosts := getDefaultHosts(t, hostCount)
+	psubs := make([]*PubSub, 0, len(hosts))
+
+	gossipsubCtx, closeGossipsub := context.WithCancel(context.Background())
+	go func() {
+		<-gossipsubCtx.Done()
+		for _, h := range hosts {
+			h.Close()
+		}
+	}()
+
+	partialExt := make([]*partialmessages.PartialMessageExtension, hostCount)
+	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelDebug}))
+
+	// A list of maps from topic+groupID to partialMessage. One map per peer
+	// var partialMessageStoreMu sync.Mutex
+	partialMessageStore := make([]map[string]*minimalTestPartialMessage, hostCount)
+	for i := range hostCount {
+		partialMessageStore[i] = make(map[string]*minimalTestPartialMessage)
+	}
+
+	for i := range partialExt {
+		partialExt[i] = &partialmessages.PartialMessageExtension{
+			Logger: logger.With("id", i),
+			ValidateRPC: func(from peer.ID, rpc *pb.PartialMessagesExtension) error {
+				// No validation. Only for this test. In production you should
+				// have some basic fast rules here.
+				return nil
+			},
+			OnIncomingRPC: func(from peer.ID, rpc *pb.PartialMessagesExtension) error {
+				groupID := rpc.GroupID
+				pm, ok := partialMessageStore[i][topic+string(groupID)]
+				if !ok {
+					pm = &minimalTestPartialMessage{
+						Group: groupID,
+					}
+					partialMessageStore[i][topic+string(groupID)] = pm
+				}
+				if publishOpts := pm.onIncomingRPC(from, rpc); publishOpts != nil {
+					go psubs[i].PublishPartialMessage(topic, pm, *publishOpts)
+				}
+				return nil
+			},
+		}
+	}
+
+	for i, h := range hosts {
+		psub := getGossipsub(gossipsubCtx, h, WithPartialMessagesExtension(partialExt[i]))
+		topic, err := psub.Join(topic, RequestPartialMessages())
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, err = topic.Subscribe()
+		if err != nil {
+			t.Fatal(err)
+		}
+		psubs = append(psubs, psub)
+	}
+
+	denseConnect(t, hosts)
+	time.Sleep(2 * time.Second)
+
+	group := []byte("test-group")
+	msg1 := &minimalTestPartialMessage{
+		Group: group,
+		Parts: [2][]byte{
+			[]byte("Hello"),
+			[]byte("World"),
+		},
+	}
+	partialMessageStore[0][topic+string(group)] = msg1
+	err := psubs[0].PublishPartialMessage(topic, msg1, partialmessages.PublishOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	time.Sleep(2 * time.Second)
+
+	// Close gossipsub before we inspect the state to avoid race conditions
+	closeGossipsub()
+	time.Sleep(1 * time.Second)
+
+	if len(partialMessageStore) != hostCount {
+		t.Errorf("One host is missing the partial message")
+	}
+
+	for i, msgStore := range partialMessageStore {
+		if len(msgStore) == 0 {
+			t.Errorf("Host %d is missing the partial message", i)
+		}
+		for _, partialMessage := range msgStore {
+			if !partialMessage.complete() {
+				t.Errorf("expected complete message, but %v is incomplete", partialMessage)
+			}
+		}
+	}
+}
+
+func TestSkipPublishingToPeersWithPartialMessageSupport(t *testing.T) {
+	topicName := "test-topic"
+
+	// 3 hosts.
+	// hosts[0]: Publisher. Supports partial messages
+	// hosts[1]: Subscriber. Supports partial messages
+	// hosts[2]: Alternate publisher. Does not support partial messages. Only
+	//   connected to hosts[0]
+	hosts := getDefaultHosts(t, 3)
+
+	const hostsWithPartialMessageSupport = 2
+	partialExt := make([]*partialmessages.PartialMessageExtension, hostsWithPartialMessageSupport)
+	// A list of maps from topic+groupID to partialMessage. One map per peer
+	partialMessageStore := make([]map[string]*minimalTestPartialMessage, hostsWithPartialMessageSupport)
+	for i := range hostsWithPartialMessageSupport {
+		partialMessageStore[i] = make(map[string]*minimalTestPartialMessage)
+	}
+
+	// Only hosts with partial message support
+	psubs := make([]*PubSub, 0, len(hosts)-1)
+
+	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
+		Level: slog.LevelDebug,
+	}))
+
+	for i := range partialExt {
+		partialExt[i] = &partialmessages.PartialMessageExtension{
+			Logger: logger,
+			ValidateRPC: func(from peer.ID, rpc *pb.PartialMessagesExtension) error {
+				return nil
+			},
+			OnIncomingRPC: func(from peer.ID, rpc *pb.PartialMessagesExtension) error {
+				topicID := rpc.GetTopicID()
+				groupID := rpc.GetGroupID()
+				pm, ok := partialMessageStore[i][topicID+string(groupID)]
+				if !ok {
+					pm = &minimalTestPartialMessage{
+						Group: groupID,
+					}
+					partialMessageStore[i][topicID+string(groupID)] = pm
+				}
+				if publishOpts := pm.onIncomingRPC(from, rpc); publishOpts != nil {
+					go psubs[i].PublishPartialMessage(topicID, pm, *publishOpts)
+				}
+				return nil
+			},
+		}
+	}
+
+	for i, h := range hosts[:2] {
+		psub := getGossipsub(context.Background(), h, WithPartialMessagesExtension(partialExt[i]))
+		psubs = append(psubs, psub)
+	}
+
+	nonPartialPubsub := getGossipsub(context.Background(), hosts[2])
+
+	denseConnect(t, hosts[:2])
+	time.Sleep(2 * time.Second)
+
+	// Connect nonPartialPubsub to the publisher
+	connect(t, hosts[0], hosts[2])
+
+	var topics []*Topic
+	var subs []*Subscription
+	for _, psub := range psubs {
+		topic, err := psub.Join(topicName, RequestPartialMessages())
+		if err != nil {
+			t.Fatal(err)
+		}
+		topics = append(topics, topic)
+		s, err := topic.Subscribe()
+		if err != nil {
+			t.Fatal(err)
+		}
+		subs = append(subs, s)
+	}
+
+	topicForNonPartial, err := nonPartialPubsub.Join(topicName)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Wait for subscriptions to propagate
+	time.Sleep(time.Second)
+
+	topics[0].Publish(context.Background(), []byte("Hello"))
+
+	// Publish from another peer, the publisher (psub[0]) should not forward this to psub[1].
+	// The application has to handle the interaction of getting a standard
+	// gossipsub message and republishing it with partial messages.
+	topicForNonPartial.Publish(context.Background(), []byte("from non-partial"))
+
+	recvdMessage := make(chan struct{}, 1)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go func() {
+		msg, err := subs[1].Next(ctx)
+		if err == context.Canceled {
+			return
+		}
+		if err != nil {
+			t.Log(err)
+			t.Fail()
+			return
+		}
+		t.Log("Received msg", string(msg.Data))
+		recvdMessage <- struct{}{}
+	}()
+
+	select {
+	case <-recvdMessage:
+		t.Fatal("Received message")
+	case <-time.After(2 * time.Second):
 	}
 }

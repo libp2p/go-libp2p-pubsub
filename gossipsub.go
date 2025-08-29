@@ -1375,6 +1375,10 @@ func (gs *GossipSubRouter) rpcs(msg *Message) iter.Seq2[peer.ID, *RPC] {
 			if pid == from || pid == peer.ID(msg.GetFrom()) {
 				continue
 			}
+			if peerStates, ok := gs.p.topics[topic]; ok && peerStates[pid].requestsPartial {
+				// The peer requested partial messages. We'll skip sending them full messages
+				continue
+			}
 
 			if !yield(pid, out) {
 				return
@@ -1833,6 +1837,8 @@ func (gs *GossipSubRouter) heartbeat() {
 
 	// advance the message history window
 	gs.mcache.Shift()
+
+	gs.extensions.Heartbeat()
 }
 
 func (gs *GossipSubRouter) clearIHaveCounters() {

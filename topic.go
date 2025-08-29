@@ -32,6 +32,8 @@ type Topic struct {
 
 	mux    sync.RWMutex
 	closed bool
+
+	requestPartialMessages bool
 }
 
 // String returns the topic associated with t
@@ -348,7 +350,14 @@ func (t *Topic) validate(ctx context.Context, data []byte, opts ...PubOpt) (*Mes
 		}
 	}
 
-	msg := &Message{m, "", t.p.host.ID(), pub.validatorData, pub.local}
+	msg := &Message{
+		Message:       m,
+		ID:            "",
+		ReceivedFrom:  t.p.host.ID(),
+		ValidatorData: pub.validatorData,
+		Local:         pub.local,
+	}
+
 	select {
 	case t.p.eval <- func() {
 		t.p.rt.Preprocess(t.p.host.ID(), []*Message{msg})
