@@ -262,6 +262,35 @@ type RPC struct {
 	from peer.ID
 }
 
+// LogValue implements slog.LogValuer.
+func (rpc *RPC) LogValue() slog.Value {
+	// Messages
+	msgs := make([]any, 0, len(rpc.Publish))
+	for _, msg := range rpc.Publish {
+		msgs = append(msgs, slog.Group(
+			"message",
+			slog.Any("topic", msg.Topic),
+			slog.Any("dataPrefix", msg.Data[0:min(len(msg.Data), 32)]),
+			slog.Any("dataLen", len(msg.Data)),
+		))
+	}
+
+	fields := make([]slog.Attr, 0, len(msgs)+3)
+	if len(msgs) > 0 {
+		fields = append(fields, slog.Group("publish", msgs...))
+	}
+	if rpc.Control != nil {
+		fields = append(fields, slog.Any("control", rpc.Control))
+	}
+	if rpc.Subscriptions != nil {
+		fields = append(fields, slog.Any("subscriptions", rpc.Subscriptions))
+	}
+	if rpc.Partial != nil {
+		fields = append(fields, slog.Any("Partial", rpc.Partial))
+	}
+	return slog.GroupValue(fields...)
+}
+
 // split splits the given RPC If a sub RPC is too large and can't be split
 // further (e.g. Message data is bigger than the RPC limit), then it will be
 // returned as an oversized RPC. The caller should filter out oversized RPCs.
