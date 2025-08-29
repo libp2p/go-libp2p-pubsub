@@ -32,9 +32,14 @@ func (p *PubSub) getHelloPacket() *RPC {
 	}
 
 	for t := range subscriptions {
+		var requestPartial bool
+		if ts, ok := p.myTopics[t]; ok {
+			requestPartial = ts.requestPartialMessages
+		}
 		as := &pb.RPC_SubOpts{
 			Topicid:   proto.String(t),
 			Subscribe: proto.Bool(true),
+			Partial:   &requestPartial,
 		}
 		rpc.Subscriptions = append(rpc.Subscriptions, as)
 	}

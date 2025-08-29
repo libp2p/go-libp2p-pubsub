@@ -1,12 +1,17 @@
 package pubsub
 
 import (
+	"errors"
+	"iter"
+
+	"github.com/libp2p/go-libp2p-pubsub/partialmessages"
 	pubsub_pb "github.com/libp2p/go-libp2p-pubsub/pb"
 	"github.com/libp2p/go-libp2p/core/peer"
 )
 
 type PeerExtensions struct {
-	TestExtension bool
+	TestExtension   bool
+	PartialMessages bool
 }
 
 type TestExtensionConfig struct {
@@ -37,6 +42,7 @@ func peerExtensionsFromRPC(rpc *RPC) PeerExtensions {
 	out := PeerExtensions{}
 	if hasPeerExtensions(rpc) {
 		out.TestExtension = rpc.Control.Extensions.GetTestExtension()
+		out.PartialMessages = rpc.Control.Extensions.GetPartialMessages()
 	}
 	return out
 }
@@ -46,9 +52,19 @@ func (pe *PeerExtensions) ExtendRPC(rpc *RPC) *RPC {
 		if rpc.Control == nil {
 			rpc.Control = &pubsub_pb.ControlMessage{}
 		}
-		rpc.Control.Extensions = &pubsub_pb.ControlExtensions{
-			TestExtension: &pe.TestExtension,
+		if rpc.Control.Extensions == nil {
+			rpc.Control.Extensions = &pubsub_pb.ControlExtensions{}
 		}
+		rpc.Control.Extensions.TestExtension = &pe.TestExtension
+	}
+	if pe.PartialMessages {
+		if rpc.Control == nil {
+			rpc.Control = &pubsub_pb.ControlMessage{}
+		}
+		if rpc.Control.Extensions == nil {
+			rpc.Control.Extensions = &pubsub_pb.ControlExtensions{}
+		}
+		rpc.Control.Extensions.PartialMessages = &pe.PartialMessages
 	}
 	return rpc
 }
@@ -59,8 +75,9 @@ type extensionsState struct {
 	sentExtensions    map[peer.ID]struct{}
 	reportMisbehavior func(peer.ID)
 	sendRPC           func(p peer.ID, r *RPC, urgent bool)
+	testExtension     *testExtension
 
-	testExtension *testExtension
+	partialMessagesExtension *partialmessages.PartialMessageExtension
 }
 
 func newExtensionsState(myExtensions PeerExtensions, reportMisbehavior func(peer.ID), sendRPC func(peer.ID, *RPC, bool)) *extensionsState {
@@ -132,14 +149,79 @@ func (es *extensionsState) extensionsAddPeer(id peer.ID) {
 	if es.myExtensions.TestExtension && es.peerExtensions[id].TestExtension {
 		es.testExtension.AddPeer(id)
 	}
+
+	if es.myExtensions.PartialMessages && es.peerExtensions[id].PartialMessages {
+		es.partialMessagesExtension.AddPeer(id)
+	}
 }
 
 // extensionsRemovePeer is always called after extensionsAddPeer.
 func (es *extensionsState) extensionsRemovePeer(id peer.ID) {
+	if es.myExtensions.PartialMessages && es.peerExtensions[id].PartialMessages {
+		es.partialMessagesExtension.RemovePeer(id)
+	}
 }
 
 func (es *extensionsState) extensionsHandleRPC(rpc *RPC) {
 	if es.myExtensions.TestExtension && es.peerExtensions[rpc.from].TestExtension {
 		es.testExtension.HandleRPC(rpc.from, rpc.TestExtension)
 	}
+
+	if es.myExtensions.PartialMessages && es.peerExtensions[rpc.from].PartialMessages && rpc.Partial != nil {
+		es.partialMessagesExtension.HandleRPC(rpc.from, rpc.Partial)
+	}
 }
+
+func (es *extensionsState) Heartbeat() {
+	if es.myExtensions.PartialMessages {
+		es.partialMessagesExtension.Heartbeat()
+	}
+}
+
+func WithPartialMessagesExtension(pm *partialmessages.PartialMessageExtension) Option {
+	return func(ps *PubSub) error {
+		gs, ok := ps.rt.(*GossipSubRouter)
+		if !ok {
+			return errors.New("pubsub router is not gossipsub")
+		}
+		err := pm.Init(partialMessageRouter{gs})
+		if err != nil {
+			return err
+		}
+
+		gs.extensions.myExtensions.PartialMessages = true
+		gs.extensions.partialMessagesExtension = pm
+		return nil
+	}
+}
+
+type partialMessageRouter struct {
+	gs *GossipSubRouter
+}
+
+// MeshPeers implements partialmessages.Router.
+func (r partialMessageRouter) MeshPeers(topic string) iter.Seq[peer.ID] {
+	return func(yield func(peer.ID) bool) {
+		for peer := range r.gs.mesh[topic] {
+			if exts := r.gs.extensions.peerExtensions[peer]; exts.PartialMessages {
+				if peerStates, ok := r.gs.p.topics[topic]; ok && peerStates[peer].requestsPartial {
+					// Check that the peer wanted partial messages
+					if !yield(peer) {
+						return
+					}
+				}
+			}
+		}
+	}
+}
+
+// SendRPC implements partialmessages.Router.
+func (r partialMessageRouter) SendRPC(p peer.ID, rpc *pubsub_pb.PartialMessagesExtension, urgent bool) {
+	r.gs.sendRPC(p, &RPC{
+		RPC: pubsub_pb.RPC{
+			Partial: rpc,
+		},
+	}, urgent)
+}
+
+var _ partialmessages.Router = partialMessageRouter{}
