@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/libp2p/go-libp2p-pubsub/internal/gologshim"
+	"github.com/libp2p/go-libp2p-pubsub/partialmessages"
 	pb "github.com/libp2p/go-libp2p-pubsub/pb"
 	"github.com/libp2p/go-libp2p-pubsub/timecache"
 
@@ -43,6 +44,10 @@ var (
 )
 
 type ProtocolMatchFn = func(protocol.ID) func(protocol.ID) bool
+
+type peerTopicState struct {
+	requestsPartial bool
+}
 
 // PubSub is the implementation of the pubsub system.
 type PubSub struct {
@@ -133,13 +138,15 @@ type PubSub struct {
 	myTopics map[string]*Topic
 
 	// topics tracks which topics each of our peers are subscribed to
-	topics map[string]map[peer.ID]struct{}
+	topics map[string]map[peer.ID]peerTopicState
 
 	// sendMsg handles messages that have been validated
 	sendMsg chan *Message
 
 	// sendMessageBatch publishes a batch of messages
 	sendMessageBatch chan messageBatchAndPublishOptions
+
+	sendPartialMsg chan publishPartialMessageReq
 
 	// addVal handles validator registration requests
 	addVal chan *addValReq
@@ -524,13 +531,14 @@ func NewPubSub(ctx context.Context, h host.Host, rt PubSubRouter, opts ...Option
 		getTopics:             make(chan *topicReq),
 		sendMsg:               make(chan *Message, 32),
 		sendMessageBatch:      make(chan messageBatchAndPublishOptions, 1),
+		sendPartialMsg:        make(chan publishPartialMessageReq, 1),
 		addVal:                make(chan *addValReq),
 		rmVal:                 make(chan *rmValReq),
 		eval:                  make(chan func()),
 		myTopics:              make(map[string]*Topic),
 		mySubs:                make(map[string]map[*Subscription]struct{}),
 		myRelays:              make(map[string]int),
-		topics:                make(map[string]map[peer.ID]struct{}),
+		topics:                make(map[string]map[peer.ID]peerTopicState),
 		peers:                 make(map[peer.ID]*rpcQueue),
 		inboundStreams:        make(map[peer.ID]network.Stream),
 		blacklist:             NewMapBlacklist(),
@@ -858,7 +866,9 @@ func (p *PubSub) processLoop(ctx context.Context) {
 
 			helloPacket := p.getHelloPacket()
 			helloPacket = p.rt.AddPeer(pid, s.Protocol(), helloPacket)
-			q.Push(helloPacket, true)
+			if helloPacket.Size() > 0 {
+				q.Push(helloPacket, true)
+			}
 
 		case pid := <-p.newPeerError:
 			delete(p.peers, pid)
@@ -909,6 +919,9 @@ func (p *PubSub) processLoop(ctx context.Context) {
 
 		case batchAndOpts := <-p.sendMessageBatch:
 			p.publishMessageBatch(batchAndOpts)
+
+		case req := <-p.sendPartialMsg:
+			p.publishPartialMessage(req)
 
 		case req := <-p.addVal:
 			p.val.AddValidator(req)
@@ -1177,9 +1190,16 @@ func (p *PubSub) handleRemoveRelay(topic string) {
 // announce announces whether or not this node is interested in a given topic
 // Only called from processLoop.
 func (p *PubSub) announce(topic string, sub bool) {
+	var requestPartialMessages bool
+	if sub {
+		if t, ok := p.myTopics[topic]; ok {
+			requestPartialMessages = t.requestPartialMessages
+		}
+	}
 	subopt := &pb.RPC_SubOpts{
 		Topicid:   &topic,
 		Subscribe: &sub,
+		Partial:   &requestPartialMessages,
 	}
 
 	out := rpcWithSubs(subopt)
@@ -1221,9 +1241,16 @@ func (p *PubSub) doAnnounceRetry(pid peer.ID, topic string, sub bool) {
 		return
 	}
 
+	var requestPartialMessages bool
+	if sub {
+		if t, ok := p.myTopics[topic]; ok {
+			requestPartialMessages = t.requestPartialMessages
+		}
+	}
 	subopt := &pb.RPC_SubOpts{
 		Topicid:   &topic,
 		Subscribe: &sub,
+		Partial:   &requestPartialMessages,
 	}
 
 	out := rpcWithSubs(subopt)
@@ -1323,16 +1350,20 @@ func (p *PubSub) handleIncomingRPC(rpc *RPC) {
 		if subopt.GetSubscribe() {
 			tmap, ok := p.topics[t]
 			if !ok {
-				tmap = make(map[peer.ID]struct{})
+				tmap = make(map[peer.ID]peerTopicState)
 				p.topics[t] = tmap
 			}
 
 			if _, ok = tmap[rpc.from]; !ok {
-				tmap[rpc.from] = struct{}{}
+				tmap[rpc.from] = peerTopicState{requestsPartial: subopt.GetPartial()}
 				if topic, ok := p.myTopics[t]; ok {
 					peer := rpc.from
 					topic.sendNotification(PeerEvent{PeerJoin, peer})
 				}
+			} else {
+				s := tmap[rpc.from]
+				s.requestsPartial = subopt.GetPartial()
+				tmap[rpc.from] = s
 			}
 		} else {
 			tmap, ok := p.topics[t]
@@ -1367,7 +1398,7 @@ func (p *PubSub) handleIncomingRPC(rpc *RPC) {
 				continue
 			}
 
-			msg := &Message{pmsg, "", rpc.from, nil, false}
+			msg := &Message{Message: pmsg, ID: "", ReceivedFrom: rpc.from, ValidatorData: nil, Local: false}
 			if p.shouldPush(msg) {
 				toPush = append(toPush, msg)
 			}
@@ -1506,7 +1537,18 @@ type rmTopicReq struct {
 	resp  chan error
 }
 
-type TopicOptions struct{}
+type TopicOptions struct {
+	SkipPublishingToPartialMessageCapablePeers bool
+}
+
+// RequestPartialMessages requests that peers, if they support it, send us
+// partial messages on this topic.
+func RequestPartialMessages() TopicOpt {
+	return func(t *Topic) error {
+		t.requestPartialMessages = true
+		return nil
+	}
+}
 
 type TopicOpt func(t *Topic) error
 
@@ -1662,6 +1704,43 @@ func (p *PubSub) PublishBatch(batch *MessageBatch, opts ...BatchPubOpt) error {
 	}
 
 	return nil
+}
+
+type publishPartialMessageReq struct {
+	topic          string
+	partialMessage partialmessages.Message
+	opts           partialmessages.PublishOptions
+	errCh          chan error
+}
+
+func (p *PubSub) PublishPartialMessage(topic string, partialMessage partialmessages.Message, opts partialmessages.PublishOptions) error {
+	errCh := make(chan error, 1)
+	select {
+	case p.sendPartialMsg <- publishPartialMessageReq{
+		topic:          topic,
+		partialMessage: partialMessage,
+		opts:           opts,
+		errCh:          errCh,
+	}:
+	case <-p.ctx.Done():
+		return p.ctx.Err()
+	}
+	return <-errCh
+}
+
+func (p *PubSub) publishPartialMessage(req publishPartialMessageReq) {
+	rt, ok := p.rt.(*GossipSubRouter)
+	if !ok {
+		req.errCh <- errors.New("partial publishing is only supported by the GossipSub router")
+		return
+	}
+
+	if rt.extensions.partialMessagesExtension == nil {
+		req.errCh <- errors.New("partial publishing is not enabled")
+		return
+	}
+
+	req.errCh <- rt.extensions.partialMessagesExtension.PublishPartial(req.topic, req.partialMessage, req.opts)
 }
 
 func (p *PubSub) nextSeqno() []byte {
