@@ -2757,11 +2757,14 @@ func TestGossipsubIdontwantSend(t *testing.T) {
 		}
 	}
 
+	var midsMu sync.Mutex
 	var expMids []string
 	var actMids []string
 
 	// Used to publish a message with random data
 	publishMsg := func() {
+		midsMu.Lock()
+		defer midsMu.Unlock()
 		data := make([]byte, 16)
 		crand.Read(data)
 		m := &pb.Message{Data: data}
@@ -2778,6 +2781,8 @@ func TestGossipsubIdontwantSend(t *testing.T) {
 
 	// Checks we received the right IDONTWANT messages
 	checkMsgs := func() {
+		midsMu.Lock()
+		defer midsMu.Unlock()
 		sort.Strings(actMids)
 		sort.Strings(expMids)
 
