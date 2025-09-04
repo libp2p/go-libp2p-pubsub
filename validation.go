@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/libp2p/go-libp2p/core/peer"
+	"go.opentelemetry.io/otel/attribute"
 )
 
 const (
@@ -235,17 +236,48 @@ func (v *validation) RemoveValidator(req *rmValReq) {
 // ValidateLocal synchronously validates a locally published message and
 // performs applicable validations. Returns an error if validation fails.
 func (v *validation) ValidateLocal(msg *Message) error {
+	_, span := startSpanForTopicFromMessage(msg, "pubsub.validate_local", msg.GetTopic())
+	defer span.End()
+	
+	span.SetAttributes(
+		attribute.String("pubsub.topic", msg.GetTopic()),
+		attribute.Int("pubsub.message_size", len(msg.GetData())),
+		attribute.String("pubsub.from", msg.ReceivedFrom.String()),
+	)
+	
+	start := time.Now()
+	
 	v.p.tracer.PublishMessage(msg)
 
 	err := v.p.checkSigningPolicy(msg)
 	if err != nil {
+		span.SetAttributes(
+			attribute.String("pubsub.validation_result", "signing_policy_failed"),
+			attribute.String("pubsub.error", err.Error()),
+			attribute.Int64("pubsub.validation_duration_ms", time.Since(start).Milliseconds()),
+		)
 		return err
 	}
 
 	vals := v.getValidators(msg)
-	return v.validate(vals, msg.ReceivedFrom, msg, true, func(msg *Message) error {
+	span.SetAttributes(attribute.Int("pubsub.validators_count", len(vals)))
+	
+	err = v.validate(vals, msg.ReceivedFrom, msg, true, func(msg *Message) error {
 		return nil
 	})
+	
+	if err != nil {
+		span.SetAttributes(
+			attribute.String("pubsub.validation_result", "failed"),
+			attribute.String("pubsub.error", err.Error()),
+		)
+	} else {
+		span.SetAttributes(attribute.String("pubsub.validation_result", "success"))
+	}
+	
+	span.SetAttributes(attribute.Int64("pubsub.validation_duration_ms", time.Since(start).Milliseconds()))
+	
+	return err
 }
 
 // Push pushes a message into the validation pipeline.
@@ -309,12 +341,30 @@ func (v *validation) sendMsgBlocking(msg *Message) error {
 // If synchronous is true, onValid will be called before this function returns
 // if the message is new and accepted.
 func (v *validation) validate(vals []*validatorImpl, src peer.ID, msg *Message, synchronous bool, onValid func(*Message) error) error {
+	_, span := startSpanForTopicFromMessage(msg, "pubsub.validate_message", msg.GetTopic())
+	defer span.End()
+	
+	span.SetAttributes(
+		attribute.String("pubsub.peer_id", src.String()),
+		attribute.String("pubsub.topic", msg.GetTopic()),
+		attribute.Int("pubsub.message_size", len(msg.GetData())),
+		attribute.Int("pubsub.validators_count", len(vals)),
+		attribute.Bool("pubsub.synchronous", synchronous),
+		attribute.Bool("pubsub.has_signature", msg.Signature != nil),
+	)
+	
+	start := time.Now()
+	
 	// If signature verification is enabled, but signing is disabled,
 	// the Signature is required to be nil upon receiving the message in PubSub.pushMsg.
 	if msg.Signature != nil {
 		if !v.validateSignature(msg) {
 			log.Debugf("message signature validation failed; dropping message from %s", src)
 			v.tracer.RejectMessage(msg, RejectInvalidSignature)
+			span.SetAttributes(
+				attribute.String("pubsub.validation_result", "signature_invalid"),
+				attribute.Int64("pubsub.validation_duration_ms", time.Since(start).Milliseconds()),
+			)
 			return ValidationError{Reason: RejectInvalidSignature}
 		}
 	}
@@ -324,6 +374,10 @@ func (v *validation) validate(vals []*validatorImpl, src peer.ID, msg *Message, 
 	id := v.p.idGen.ID(msg)
 	if !v.p.markSeen(id) {
 		v.tracer.DuplicateMessage(msg)
+		span.SetAttributes(
+			attribute.String("pubsub.validation_result", "duplicate"),
+			attribute.Int64("pubsub.validation_duration_ms", time.Since(start).Milliseconds()),
+		)
 		return dupeErr{}
 	} else {
 		v.tracer.ValidateMessage(msg)
@@ -337,12 +391,26 @@ func (v *validation) validate(vals []*validatorImpl, src peer.ID, msg *Message, 
 			async = append(async, val)
 		}
 	}
+	
+	span.SetAttributes(
+		attribute.Int("pubsub.inline_validators", len(inline)),
+		attribute.Int("pubsub.async_validators", len(async)),
+	)
 
 	// apply inline (synchronous) validators
 	result := ValidationAccept
 loop:
-	for _, val := range inline {
-		switch val.validateMsg(v.p.ctx, src, msg) {
+	for i, val := range inline {
+		validatorStart := time.Now()
+		validationResult := val.validateMsg(v.p.ctx, src, msg)
+		
+		span.SetAttributes(
+			attribute.String(fmt.Sprintf("pubsub.inline_validator_%d_topic", i), val.topic),
+			attribute.String(fmt.Sprintf("pubsub.inline_validator_%d_result", i), validationResultString(validationResult)),
+			attribute.Int64(fmt.Sprintf("pubsub.inline_validator_%d_duration_ms", i), time.Since(validatorStart).Milliseconds()),
+		)
+		
+		switch validationResult {
 		case ValidationAccept:
 		case ValidationReject:
 			result = ValidationReject
@@ -355,6 +423,10 @@ loop:
 	if result == ValidationReject {
 		log.Debugf("message validation failed; dropping message from %s", src)
 		v.tracer.RejectMessage(msg, RejectValidationFailed)
+		span.SetAttributes(
+			attribute.String("pubsub.validation_result", "rejected"),
+			attribute.Int64("pubsub.validation_duration_ms", time.Since(start).Milliseconds()),
+		)
 		return ValidationError{Reason: RejectValidationFailed}
 	}
 
@@ -369,16 +441,28 @@ loop:
 		default:
 			log.Debugf("message validation throttled; dropping message from %s", src)
 			v.tracer.RejectMessage(msg, RejectValidationThrottled)
+			span.SetAttributes(
+				attribute.String("pubsub.validation_result", "throttled"),
+				attribute.Int64("pubsub.validation_duration_ms", time.Since(start).Milliseconds()),
+			)
 		}
 		return nil
 	}
 
 	if result == ValidationIgnore {
 		v.tracer.RejectMessage(msg, RejectValidationIgnored)
+		span.SetAttributes(
+			attribute.String("pubsub.validation_result", "ignored"),
+			attribute.Int64("pubsub.validation_duration_ms", time.Since(start).Milliseconds()),
+		)
 		return ValidationError{Reason: RejectValidationIgnored}
 	}
 
 	// no async validators, accepted message
+	span.SetAttributes(
+		attribute.String("pubsub.validation_result", "accepted"),
+		attribute.Int64("pubsub.validation_duration_ms", time.Since(start).Milliseconds()),
+	)
 	return onValid(msg)
 }
 
@@ -393,11 +477,27 @@ func (v *validation) validateSignature(msg *Message) bool {
 }
 
 func (v *validation) doValidateTopic(vals []*validatorImpl, src peer.ID, msg *Message, r ValidationResult, onValid func(*Message) error) {
+	_, span := startSpanForTopicFromMessage(msg, "pubsub.validate_topic_async", msg.GetTopic())
+	defer span.End()
+	
+	span.SetAttributes(
+		attribute.String("pubsub.peer_id", src.String()),
+		attribute.String("pubsub.topic", msg.GetTopic()),
+		attribute.Int("pubsub.async_validators_count", len(vals)),
+		attribute.String("pubsub.initial_result", validationResultString(r)),
+	)
+	
+	start := time.Now()
 	result := v.validateTopic(vals, src, msg)
 
 	if result == ValidationAccept && r != ValidationAccept {
 		result = r
 	}
+	
+	span.SetAttributes(
+		attribute.String("pubsub.final_result", validationResultString(result)),
+		attribute.Int64("pubsub.async_validation_duration_ms", time.Since(start).Milliseconds()),
+	)
 
 	switch result {
 	case ValidationAccept:
@@ -421,16 +521,33 @@ func (v *validation) doValidateTopic(vals []*validatorImpl, src peer.ID, msg *Me
 }
 
 func (v *validation) validateTopic(vals []*validatorImpl, src peer.ID, msg *Message) ValidationResult {
+	_, span := startSpanForTopicFromMessage(msg, "pubsub.validate_topic", msg.GetTopic())
+	defer span.End()
+	
+	span.SetAttributes(
+		attribute.String("pubsub.peer_id", src.String()),
+		attribute.String("pubsub.topic", msg.GetTopic()),
+		attribute.Int("pubsub.validators_count", len(vals)),
+	)
+	
 	if len(vals) == 1 {
-		return v.validateSingleTopic(vals[0], src, msg)
+		span.SetAttributes(attribute.Bool("pubsub.single_validator", true))
+		result := v.validateSingleTopic(vals[0], src, msg)
+		span.SetAttributes(attribute.String("pubsub.validation_result", validationResultString(result)))
+		return result
 	}
 
+	span.SetAttributes(attribute.Bool("pubsub.single_validator", false))
+	
 	ctx, cancel := context.WithCancel(v.p.ctx)
 	defer cancel()
 
 	rch := make(chan ValidationResult, len(vals))
 	rcount := 0
+	throttledCount := 0
 
+	start := time.Now()
+	
 	for _, val := range vals {
 		rcount++
 
@@ -443,9 +560,12 @@ func (v *validation) validateTopic(vals []*validatorImpl, src peer.ID, msg *Mess
 
 		default:
 			log.Debugf("validation throttled for topic %s", val.topic)
+			throttledCount++
 			rch <- validationThrottled
 		}
 	}
+
+	span.SetAttributes(attribute.Int("pubsub.throttled_validators", throttledCount))
 
 	result := ValidationAccept
 loop:
@@ -466,6 +586,11 @@ loop:
 		}
 	}
 
+	span.SetAttributes(
+		attribute.String("pubsub.validation_result", validationResultString(result)),
+		attribute.Int64("pubsub.validation_duration_ms", time.Since(start).Milliseconds()),
+	)
+	
 	return result
 }
 
@@ -599,5 +724,21 @@ func WithValidatorInline(inline bool) ValidatorOpt {
 	return func(addVal *addValReq) error {
 		addVal.inline = inline
 		return nil
+	}
+}
+
+// Helper function to convert ValidationResult to string for tracing
+func validationResultString(result ValidationResult) string {
+	switch result {
+	case ValidationAccept:
+		return "accept"
+	case ValidationReject:
+		return "reject"
+	case ValidationIgnore:
+		return "ignore"
+	case validationThrottled:
+		return "throttled"
+	default:
+		return fmt.Sprintf("unknown_%d", int(result))
 	}
 }

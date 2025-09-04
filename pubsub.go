@@ -13,6 +13,7 @@ import (
 	"time"
 
 	pb "github.com/libp2p/go-libp2p-pubsub/pb"
+	"go.opentelemetry.io/otel/attribute"
 	"github.com/libp2p/go-libp2p-pubsub/timecache"
 
 	"github.com/libp2p/go-libp2p/core/crypto"
@@ -244,6 +245,8 @@ type Message struct {
 	ReceivedFrom  peer.ID
 	ValidatorData interface{}
 	Local         bool
+	// Context for tracing - allows span nesting from calling applications
+	Ctx           context.Context
 }
 
 func (m *Message) GetFrom() peer.ID {
@@ -255,6 +258,8 @@ type RPC struct {
 
 	// unexported on purpose, not sending this over the wire
 	from peer.ID
+	// timestamp when RPC was received from network
+	receivedAt time.Time
 }
 
 // split splits the given RPC If a sub RPC is too large and can't be split
@@ -262,7 +267,7 @@ type RPC struct {
 // returned as an oversized RPC. The caller should filter out oversized RPCs.
 func (rpc *RPC) split(limit int) iter.Seq[RPC] {
 	return func(yield func(RPC) bool) {
-		nextRPC := RPC{from: rpc.from}
+		nextRPC := RPC{from: rpc.from, receivedAt: rpc.receivedAt}
 
 		{
 			nextRPCSize := 0
@@ -766,6 +771,9 @@ func WithAppSpecificRpcInspector(inspector func(peer.ID, *RPC) error) Option {
 
 // processLoop handles all inputs arriving on the channels
 func (p *PubSub) processLoop(ctx context.Context) {
+	_, loopSpan := startSpan(ctx, "pubsub.process_loop")
+	defer loopSpan.End()
+	
 	defer func() {
 		// Clean up go routines.
 		for _, queue := range p.peers {
@@ -776,59 +784,161 @@ func (p *PubSub) processLoop(ctx context.Context) {
 		p.seenMessages.Done()
 	}()
 
+	// Event loop iteration counter
+	var iterationCount int64
+	
 	for {
+		// Capture queue depths for monitoring
+		sendMsgDepth := len(p.sendMsg)
+		incomingDepth := len(p.incoming)
+		
+		// Start span for this iteration
+		iterCtx, iterSpan := startSpan(ctx, "pubsub.process_loop_iteration")
+		iterationCount++
+		
+		iterSpan.SetAttributes(
+			attribute.Int64("pubsub.iteration", iterationCount),
+			attribute.Int("pubsub.sendmsg_queue_depth", sendMsgDepth),
+			attribute.Int("pubsub.incoming_queue_depth", incomingDepth),
+			attribute.Int("pubsub.peer_count", len(p.peers)),
+			attribute.Int("pubsub.topic_count", len(p.topics)),
+		)
+		
 		select {
 		case <-p.newPeers:
+			_, eventSpan := startSpan(iterCtx, "pubsub.handle_pending_peers")
+			eventSpan.SetAttributes(attribute.String("pubsub.event_type", "new_peers"))
 			p.handlePendingPeers()
+			eventSpan.End()
 
 		case s := <-p.newPeerStream:
+			_, eventSpan := startSpan(iterCtx, "pubsub.handle_new_peer_stream")
 			pid := s.Conn().RemotePeer()
+			eventSpan.SetAttributes(
+				attribute.String("pubsub.event_type", "new_peer_stream"),
+				attribute.String("pubsub.peer_id", pid.String()),
+				attribute.String("pubsub.protocol", string(s.Protocol())),
+			)
 
 			q, ok := p.peers[pid]
 			if !ok {
 				log.Warn("new stream for unknown peer: ", pid)
+				eventSpan.SetAttributes(attribute.String("pubsub.result", "unknown_peer"))
 				s.Reset()
+				eventSpan.End()
+				iterSpan.End()
 				continue
 			}
 
 			if p.blacklist.Contains(pid) {
 				log.Warn("closing stream for blacklisted peer: ", pid)
+				eventSpan.SetAttributes(attribute.String("pubsub.result", "blacklisted"))
 				q.Close()
 				delete(p.peers, pid)
 				s.Reset()
+				eventSpan.End()
+				iterSpan.End()
 				continue
 			}
 
 			p.rt.AddPeer(pid, s.Protocol())
+			eventSpan.SetAttributes(attribute.String("pubsub.result", "added"))
+			eventSpan.End()
 
 		case pid := <-p.newPeerError:
+			_, eventSpan := startSpan(iterCtx, "pubsub.handle_peer_error")
+			eventSpan.SetAttributes(
+				attribute.String("pubsub.event_type", "peer_error"),
+				attribute.String("pubsub.peer_id", pid.String()),
+			)
 			delete(p.peers, pid)
+			eventSpan.End()
 
 		case <-p.peerDead:
+			_, eventSpan := startSpan(iterCtx, "pubsub.handle_dead_peers")
+			eventSpan.SetAttributes(attribute.String("pubsub.event_type", "peer_dead"))
+			deadPeerCount := len(p.peerDeadPend)
+			eventSpan.SetAttributes(attribute.Int("pubsub.dead_peer_count", deadPeerCount))
 			p.handleDeadPeers()
+			eventSpan.End()
 
 		case treq := <-p.getTopics:
+			_, eventSpan := startSpan(iterCtx, "pubsub.get_topics")
+			eventSpan.SetAttributes(attribute.String("pubsub.event_type", "get_topics"))
 			var out []string
 			for t := range p.mySubs {
 				out = append(out, t)
 			}
+			eventSpan.SetAttributes(attribute.Int("pubsub.topic_count_response", len(out)))
 			treq.resp <- out
+			eventSpan.End()
+			
 		case topic := <-p.addTopic:
+			_, eventSpan := startSpan(iterCtx, "pubsub.add_topic")
+			eventSpan.SetAttributes(
+				attribute.String("pubsub.event_type", "add_topic"),
+				attribute.String("pubsub.topic", topic.topic.topic),
+			)
 			p.handleAddTopic(topic)
+			eventSpan.End()
+			
 		case topic := <-p.rmTopic:
+			_, eventSpan := startSpan(iterCtx, "pubsub.remove_topic")
+			eventSpan.SetAttributes(
+				attribute.String("pubsub.event_type", "remove_topic"),
+				attribute.String("pubsub.topic", topic.topic.topic),
+			)
 			p.handleRemoveTopic(topic)
+			eventSpan.End()
+			
 		case sub := <-p.cancelCh:
+			_, eventSpan := startSpan(iterCtx, "pubsub.cancel_subscription")
+			eventSpan.SetAttributes(
+				attribute.String("pubsub.event_type", "cancel_subscription"),
+				attribute.String("pubsub.topic", sub.topic),
+			)
 			p.handleRemoveSubscription(sub)
+			eventSpan.End()
+			
 		case sub := <-p.addSub:
+			_, eventSpan := startSpan(iterCtx, "pubsub.add_subscription")
+			eventSpan.SetAttributes(
+				attribute.String("pubsub.event_type", "add_subscription"),
+				attribute.String("pubsub.topic", sub.sub.topic),
+			)
 			p.handleAddSubscription(sub)
+			eventSpan.End()
+			
 		case relay := <-p.addRelay:
+			_, eventSpan := startSpan(iterCtx, "pubsub.add_relay")
+			eventSpan.SetAttributes(
+				attribute.String("pubsub.event_type", "add_relay"),
+				attribute.String("pubsub.topic", relay.topic),
+			)
 			p.handleAddRelay(relay)
+			eventSpan.End()
+			
 		case topic := <-p.rmRelay:
+			_, eventSpan := startSpan(iterCtx, "pubsub.remove_relay")
+			eventSpan.SetAttributes(
+				attribute.String("pubsub.event_type", "remove_relay"),
+				attribute.String("pubsub.topic", topic),
+			)
 			p.handleRemoveRelay(topic)
+			eventSpan.End()
+			
 		case preq := <-p.getPeers:
+			_, eventSpan := startSpan(iterCtx, "pubsub.get_peers")
+			eventSpan.SetAttributes(
+				attribute.String("pubsub.event_type", "get_peers"),
+				attribute.String("pubsub.topic", preq.topic),
+			)
 			tmap, ok := p.topics[preq.topic]
 			if preq.topic != "" && !ok {
+				eventSpan.SetAttributes(attribute.String("pubsub.result", "topic_not_found"))
 				preq.resp <- nil
+				eventSpan.End()
+				iterSpan.End()
 				continue
 			}
 			var peers []peer.ID
@@ -841,29 +951,89 @@ func (p *PubSub) processLoop(ctx context.Context) {
 				}
 				peers = append(peers, p)
 			}
+			eventSpan.SetAttributes(attribute.Int("pubsub.peer_count_response", len(peers)))
 			preq.resp <- peers
+			eventSpan.End()
+			
 		case rpc := <-p.incoming:
+			_, eventSpan := startSpan(iterCtx, "pubsub.handle_incoming_rpc")
+			eventSpan.SetAttributes(
+				attribute.String("pubsub.event_type", "incoming_rpc"),
+				attribute.String("pubsub.peer_id", rpc.from.String()),
+				attribute.Int("pubsub.message_count", len(rpc.GetPublish())),
+				attribute.Int("pubsub.subscription_count", len(rpc.GetSubscriptions())),
+			)
+			if rpc.Control != nil {
+				eventSpan.SetAttributes(
+					attribute.Int("pubsub.ihave_count", len(rpc.Control.GetIhave())),
+					attribute.Int("pubsub.iwant_count", len(rpc.Control.GetIwant())),
+					attribute.Int("pubsub.graft_count", len(rpc.Control.GetGraft())),
+					attribute.Int("pubsub.prune_count", len(rpc.Control.GetPrune())),
+				)
+			}
 			p.handleIncomingRPC(rpc)
+			eventSpan.End()
 
 		case msg := <-p.sendMsg:
+			_, eventSpan := startSpan(iterCtx, "pubsub.publish_message")
+			eventSpan.SetAttributes(
+				attribute.String("pubsub.event_type", "send_message"),
+				attribute.String("pubsub.topic", msg.GetTopic()),
+				attribute.Int("pubsub.message_size", len(msg.GetData())),
+				attribute.String("pubsub.from", msg.ReceivedFrom.String()),
+				attribute.Bool("pubsub.local", msg.Local),
+			)
 			p.publishMessage(msg)
+			eventSpan.End()
 
 		case batchAndOpts := <-p.sendMessageBatch:
+			_, eventSpan := startSpan(iterCtx, "pubsub.publish_message_batch")
+			eventSpan.SetAttributes(
+				attribute.String("pubsub.event_type", "send_message_batch"),
+				attribute.Int("pubsub.batch_size", len(batchAndOpts.messages)),
+			)
+			// Add topics from batch
+			topicSet := make(map[string]struct{})
+			totalSize := 0
+			for _, msg := range batchAndOpts.messages {
+				topicSet[msg.GetTopic()] = struct{}{}
+				totalSize += len(msg.GetData())
+			}
+			eventSpan.SetAttributes(
+				attribute.Int("pubsub.unique_topics", len(topicSet)),
+				attribute.Int("pubsub.total_message_size", totalSize),
+			)
 			p.publishMessageBatch(batchAndOpts)
+			eventSpan.End()
 
 		case req := <-p.addVal:
+			_, eventSpan := startSpan(iterCtx, "pubsub.add_validator")
+			eventSpan.SetAttributes(attribute.String("pubsub.event_type", "add_validator"))
 			p.val.AddValidator(req)
+			eventSpan.End()
 
 		case req := <-p.rmVal:
+			_, eventSpan := startSpan(iterCtx, "pubsub.remove_validator")
+			eventSpan.SetAttributes(attribute.String("pubsub.event_type", "remove_validator"))
 			p.val.RemoveValidator(req)
+			eventSpan.End()
 
 		case thunk := <-p.eval:
+			_, eventSpan := startSpan(iterCtx, "pubsub.eval_function")
+			eventSpan.SetAttributes(attribute.String("pubsub.event_type", "eval"))
 			thunk()
+			eventSpan.End()
 
 		case pid := <-p.blacklistPeer:
+			_, eventSpan := startSpan(iterCtx, "pubsub.blacklist_peer")
+			eventSpan.SetAttributes(
+				attribute.String("pubsub.event_type", "blacklist_peer"),
+				attribute.String("pubsub.peer_id", pid.String()),
+			)
 			log.Infof("Blacklisting peer %s", pid)
 			p.blacklist.Add(pid)
 
+			topicsAffected := 0
 			q, ok := p.peers[pid]
 			if ok {
 				q.Close()
@@ -872,15 +1042,27 @@ func (p *PubSub) processLoop(ctx context.Context) {
 					if _, ok := tmap[pid]; ok {
 						delete(tmap, pid)
 						p.notifyLeave(t, pid)
+						topicsAffected++
 					}
 				}
 				p.rt.RemovePeer(pid)
 			}
+			eventSpan.SetAttributes(
+				attribute.Bool("pubsub.peer_was_connected", ok),
+				attribute.Int("pubsub.topics_affected", topicsAffected),
+			)
+			eventSpan.End()
 
 		case <-ctx.Done():
+			_, eventSpan := startSpan(iterCtx, "pubsub.shutdown")
+			eventSpan.SetAttributes(attribute.String("pubsub.event_type", "shutdown"))
 			log.Info("pubsub processloop shutting down")
+			eventSpan.End()
+			iterSpan.End()
 			return
 		}
+		
+		iterSpan.End()
 	}
 }
 
@@ -1239,27 +1421,94 @@ func (p *PubSub) notifyLeave(topic string, pid peer.ID) {
 }
 
 func (p *PubSub) handleIncomingRPC(rpc *RPC) {
-	// pass the rpc through app specific validation (if any available).
+	_, span := startSpan(context.Background(), "pubsub.handle_incoming_rpc_detailed")
+	defer span.End()
+	
+	start := time.Now()
+	
+	// Calculate timing from network arrival to event loop processing
+	var queueDelayMs int64
+	var networkToProcessingMs int64
+	if !rpc.receivedAt.IsZero() {
+		queueDelayMs = start.Sub(rpc.receivedAt).Milliseconds()
+		networkToProcessingMs = queueDelayMs
+	}
+	
+	// Basic RPC metrics
+	messageCount := len(rpc.GetPublish())
+	subscriptionCount := len(rpc.GetSubscriptions())
+	controlMessageCount := 0
+	ihaveCount, iwantCount, graftCount, pruneCount := 0, 0, 0, 0
+	
+	if rpc.Control != nil {
+		ihaveCount = len(rpc.Control.GetIhave())
+		iwantCount = len(rpc.Control.GetIwant())
+		graftCount = len(rpc.Control.GetGraft())
+		pruneCount = len(rpc.Control.GetPrune())
+		controlMessageCount = ihaveCount + iwantCount + graftCount + pruneCount
+	}
+	
+	span.SetAttributes(
+		attribute.String("pubsub.peer_id", rpc.from.String()),
+		attribute.Int("pubsub.message_count", messageCount),
+		attribute.Int("pubsub.subscription_count", subscriptionCount),
+		attribute.Int("pubsub.control_message_count", controlMessageCount),
+		attribute.Int("pubsub.ihave_count", ihaveCount),
+		attribute.Int("pubsub.iwant_count", iwantCount),
+		attribute.Int("pubsub.graft_count", graftCount),
+		attribute.Int("pubsub.prune_count", pruneCount),
+		attribute.Int64("pubsub.queue_delay_ms", queueDelayMs),
+		attribute.Int64("pubsub.network_to_processing_ms", networkToProcessingMs),
+	)
+	
+	// Phase 1: App-specific inspection
+	inspectionStart := time.Now()
 	if p.appSpecificRpcInspector != nil {
 		// check if the RPC is allowed by the external inspector
 		if err := p.appSpecificRpcInspector(rpc.from, rpc); err != nil {
+			span.SetAttributes(
+				attribute.String("pubsub.result", "app_inspection_failed"),
+				attribute.String("pubsub.error", err.Error()),
+				attribute.Int64("pubsub.inspection_duration_ms", time.Since(inspectionStart).Milliseconds()),
+				attribute.Int64("pubsub.total_duration_ms", time.Since(start).Milliseconds()),
+			)
 			log.Debugf("application-specific inspection failed, rejecting incoming rpc: %s", err)
 			return // reject the RPC
 		}
 	}
-
+	inspectionDuration := time.Since(inspectionStart)
+	
+	// Phase 2: Tracer notification
+	tracerStart := time.Now()
 	p.tracer.RecvRPC(rpc)
+	tracerDuration := time.Since(tracerStart)
 
+	// Phase 3: Subscription processing
+	subscriptionStart := time.Now()
 	subs := rpc.GetSubscriptions()
+	subscriptionFiltered := 0
+	
 	if len(subs) != 0 && p.subFilter != nil {
 		var err error
+		originalCount := len(subs)
 		subs, err = p.subFilter.FilterIncomingSubscriptions(rpc.from, subs)
 		if err != nil {
+			span.SetAttributes(
+				attribute.String("pubsub.result", "subscription_filter_failed"),
+				attribute.String("pubsub.error", err.Error()),
+				attribute.Int64("pubsub.subscription_duration_ms", time.Since(subscriptionStart).Milliseconds()),
+				attribute.Int64("pubsub.total_duration_ms", time.Since(start).Milliseconds()),
+			)
 			log.Debugf("subscription filter error: %s; ignoring RPC", err)
 			return
 		}
+		subscriptionFiltered = originalCount - len(subs)
 	}
-
+	
+	topicsJoined := 0
+	topicsLeft := 0
+	notificationsTriggered := 0
+	
 	for _, subopt := range subs {
 		t := subopt.GetTopicid()
 
@@ -1272,9 +1521,11 @@ func (p *PubSub) handleIncomingRPC(rpc *RPC) {
 
 			if _, ok = tmap[rpc.from]; !ok {
 				tmap[rpc.from] = struct{}{}
+				topicsJoined++
 				if topic, ok := p.myTopics[t]; ok {
 					peer := rpc.from
 					topic.sendNotification(PeerEvent{PeerJoin, peer})
+					notificationsTriggered++
 				}
 			}
 		} else {
@@ -1285,43 +1536,142 @@ func (p *PubSub) handleIncomingRPC(rpc *RPC) {
 
 			if _, ok := tmap[rpc.from]; ok {
 				delete(tmap, rpc.from)
+				topicsLeft++
 				p.notifyLeave(t, rpc.from)
+				notificationsTriggered++
 			}
 		}
 	}
+	subscriptionDuration := time.Since(subscriptionStart)
 
-	// ask the router to vet the peer before commiting any processing resources
-	switch p.rt.AcceptFrom(rpc.from) {
+	// Phase 4: Router acceptance check
+	routerCheckStart := time.Now()
+	acceptStatus := p.rt.AcceptFrom(rpc.from)
+	routerCheckDuration := time.Since(routerCheckStart)
+	
+	var acceptStatusStr string
+	messagesProcessed := 0
+	messagesFiltered := 0
+	messagesIgnored := 0
+	messagesPushed := 0
+	
+	// Phase 5: Message processing based on acceptance
+	messageProcessingStart := time.Now()
+	
+	switch acceptStatus {
 	case AcceptNone:
+		acceptStatusStr = "none"
+		span.SetAttributes(attribute.String("pubsub.result", "peer_graylisted"))
 		log.Debugf("received RPC from router graylisted peer %s; dropping RPC", rpc.from)
-		return
-
+		
 	case AcceptControl:
+		acceptStatusStr = "control_only"
 		if len(rpc.GetPublish()) > 0 {
+			messagesIgnored = len(rpc.GetPublish())
+			span.SetAttributes(attribute.String("pubsub.result", "peer_throttled"))
 			log.Debugf("peer %s was throttled by router; ignoring %d payload messages", rpc.from, len(rpc.GetPublish()))
 		}
 		p.tracer.ThrottlePeer(rpc.from)
 
 	case AcceptAll:
+		acceptStatusStr = "all"
 		var toPush []*Message
 		for _, pmsg := range rpc.GetPublish() {
+			messagesProcessed++
+			
 			if !(p.subscribedToMsg(pmsg) || p.canRelayMsg(pmsg)) {
+				messagesFiltered++
 				log.Debug("received message in topic we didn't subscribe to; ignoring message")
 				continue
 			}
 
-			msg := &Message{pmsg, "", rpc.from, nil, false}
+			msg := &Message{pmsg, "", rpc.from, nil, false, context.Background()}
 			if p.shouldPush(msg) {
 				toPush = append(toPush, msg)
 			}
 		}
+		
+		// Phase 6: Router preprocessing
+		preprocessStart := time.Now()
 		p.rt.Preprocess(rpc.from, toPush)
+		preprocessDuration := time.Since(preprocessStart)
+		
+		// Phase 7: Push messages to validation
+		pushStart := time.Now()
 		for _, msg := range toPush {
 			p.pushMsg(msg)
+			messagesPushed++
 		}
+		pushDuration := time.Since(pushStart)
+		
+		span.SetAttributes(
+			attribute.Int64("pubsub.preprocess_duration_ms", preprocessDuration.Milliseconds()),
+			attribute.Int64("pubsub.push_duration_ms", pushDuration.Milliseconds()),
+		)
 	}
+	messageProcessingDuration := time.Since(messageProcessingStart)
 
+	// Phase 8: Router control message handling
+	routerHandleStart := time.Now()
 	p.rt.HandleRPC(rpc)
+	routerHandleDuration := time.Since(routerHandleStart)
+	
+	totalDuration := time.Since(start)
+	
+	// Set comprehensive attributes
+	span.SetAttributes(
+		attribute.String("pubsub.accept_status", acceptStatusStr),
+		attribute.Int("pubsub.subscription_filtered", subscriptionFiltered),
+		attribute.Int("pubsub.topics_joined", topicsJoined),
+		attribute.Int("pubsub.topics_left", topicsLeft),
+		attribute.Int("pubsub.notifications_triggered", notificationsTriggered),
+		attribute.Int("pubsub.messages_processed", messagesProcessed),
+		attribute.Int("pubsub.messages_filtered", messagesFiltered),
+		attribute.Int("pubsub.messages_ignored", messagesIgnored),
+		attribute.Int("pubsub.messages_pushed", messagesPushed),
+		
+		// Timing breakdown
+		attribute.Int64("pubsub.inspection_duration_ms", inspectionDuration.Milliseconds()),
+		attribute.Int64("pubsub.tracer_duration_ms", tracerDuration.Milliseconds()),
+		attribute.Int64("pubsub.subscription_duration_ms", subscriptionDuration.Milliseconds()),
+		attribute.Int64("pubsub.router_check_duration_ms", routerCheckDuration.Milliseconds()),
+		attribute.Int64("pubsub.message_processing_duration_ms", messageProcessingDuration.Milliseconds()),
+		attribute.Int64("pubsub.router_handle_duration_ms", routerHandleDuration.Milliseconds()),
+		attribute.Int64("pubsub.total_duration_ms", totalDuration.Milliseconds()),
+	)
+	
+	// Flag slow queue delays (indicates event loop backlog)
+	if queueDelayMs > 10 { // 10ms queue delay is concerning
+		span.SetAttributes(attribute.Bool("pubsub.slow_queue_delay", true))
+	}
+	
+	if queueDelayMs > 50 { // 50ms queue delay is very concerning
+		span.SetAttributes(attribute.Bool("pubsub.very_slow_queue_delay", true))
+	}
+	
+	if queueDelayMs > 100 { // 100ms+ queue delay indicates serious event loop congestion
+		span.SetAttributes(attribute.Bool("pubsub.critical_queue_delay", true))
+	}
+	
+	// Mark as slow if over threshold
+	if totalDuration > 50*time.Millisecond {
+		span.SetAttributes(attribute.Bool("pubsub.rpc_slow", true))
+		
+		// Add percentage breakdown for slow RPCs
+		total := float64(totalDuration.Microseconds())
+		span.SetAttributes(
+			attribute.Float64("pubsub.inspection_pct", float64(inspectionDuration.Microseconds())/total*100),
+			attribute.Float64("pubsub.tracer_pct", float64(tracerDuration.Microseconds())/total*100),
+			attribute.Float64("pubsub.subscription_pct", float64(subscriptionDuration.Microseconds())/total*100),
+			attribute.Float64("pubsub.router_check_pct", float64(routerCheckDuration.Microseconds())/total*100),
+			attribute.Float64("pubsub.message_processing_pct", float64(messageProcessingDuration.Microseconds())/total*100),
+			attribute.Float64("pubsub.router_handle_pct", float64(routerHandleDuration.Microseconds())/total*100),
+		)
+	}
+	
+	if totalDuration > 100*time.Millisecond {
+		span.SetAttributes(attribute.Bool("pubsub.rpc_very_slow", true))
+	}
 }
 
 // DefaultMsgIdFn returns a unique ID of the passed Message
