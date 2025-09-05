@@ -1777,6 +1777,7 @@ func TestGossipsubMultipleGraftTopics(t *testing.T) {
 	firstPeer := hosts[0].ID()
 	secondPeer := hosts[1].ID()
 
+	p1Sub := psubs[0]
 	p2Sub := psubs[1]
 	p1Router := psubs[0].rt.(*GossipSubRouter)
 	p2Router := psubs[1].rt.(*GossipSubRouter)
@@ -1795,9 +1796,14 @@ func TestGossipsubMultipleGraftTopics(t *testing.T) {
 
 	// Send multiple GRAFT messages to second peer from
 	// 1st peer
-	p1Router.sendGraftPrune(map[peer.ID][]string{
-		secondPeer: {firstTopic, secondTopic, thirdTopic},
-	}, map[peer.ID][]string{}, map[peer.ID]bool{})
+	wait := make(chan struct{})
+	p1Sub.eval <- func() {
+		defer close(wait)
+		p1Router.sendGraftPrune(map[peer.ID][]string{
+			secondPeer: {firstTopic, secondTopic, thirdTopic},
+		}, map[peer.ID][]string{}, map[peer.ID]bool{})
+	}
+	<-wait
 
 	time.Sleep(time.Second * 1)
 
