@@ -48,6 +48,15 @@ func getGossipsubs(ctx context.Context, hs []host.Host, opts ...Option) []*PubSu
 	return psubs
 }
 
+func TestGossipSubParamsValidate(t *testing.T) {
+	params := DefaultGossipSubParams()
+	params.Dhi = 1
+	params.Dscore = 10
+	if params.Validate() == nil {
+		t.Fatal("Params should be invalid")
+	}
+}
+
 func TestSparseGossipsub(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -1768,6 +1777,7 @@ func TestGossipsubMultipleGraftTopics(t *testing.T) {
 	firstPeer := hosts[0].ID()
 	secondPeer := hosts[1].ID()
 
+	p1Sub := psubs[0]
 	p2Sub := psubs[1]
 	p1Router := psubs[0].rt.(*GossipSubRouter)
 	p2Router := psubs[1].rt.(*GossipSubRouter)
@@ -1786,9 +1796,14 @@ func TestGossipsubMultipleGraftTopics(t *testing.T) {
 
 	// Send multiple GRAFT messages to second peer from
 	// 1st peer
-	p1Router.sendGraftPrune(map[peer.ID][]string{
-		secondPeer: {firstTopic, secondTopic, thirdTopic},
-	}, map[peer.ID][]string{}, map[peer.ID]bool{})
+	wait := make(chan struct{})
+	p1Sub.eval <- func() {
+		defer close(wait)
+		p1Router.sendGraftPrune(map[peer.ID][]string{
+			secondPeer: {firstTopic, secondTopic, thirdTopic},
+		}, map[peer.ID][]string{}, map[peer.ID]bool{})
+	}
+	<-wait
 
 	time.Sleep(time.Second * 1)
 
@@ -2748,11 +2763,14 @@ func TestGossipsubIdontwantSend(t *testing.T) {
 		}
 	}
 
+	var midsMu sync.Mutex
 	var expMids []string
 	var actMids []string
 
 	// Used to publish a message with random data
 	publishMsg := func() {
+		midsMu.Lock()
+		defer midsMu.Unlock()
 		data := make([]byte, 16)
 		crand.Read(data)
 		m := &pb.Message{Data: data}
@@ -2769,6 +2787,8 @@ func TestGossipsubIdontwantSend(t *testing.T) {
 
 	// Checks we received the right IDONTWANT messages
 	checkMsgs := func() {
+		midsMu.Lock()
+		defer midsMu.Unlock()
 		sort.Strings(actMids)
 		sort.Strings(expMids)
 
