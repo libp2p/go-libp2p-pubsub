@@ -242,6 +242,20 @@ type GossipSubParams struct {
 }
 
 func (params *GossipSubParams) validate() error {
+	if !(params.HistoryGossip <= params.HistoryLength) {
+		return fmt.Errorf("param HistoryGossip=%d must be less than or equal to HistoryLength=%d", params.HistoryGossip, params.HistoryLength)
+	}
+
+	if !(params.Dscore <= params.Dhi) {
+		return fmt.Errorf("param Dscore=%d must be lower than or equal to  Dhi=%d", params.Dscore, params.Dhi)
+	}
+
+	// Bootstrappers set D=D_lo=D_hi=D_out=0
+	// See https://github.com/libp2p/specs/blob/master/pubsub/gossipsub/gossipsub-v1.1.md#recommendations-for-network-operators
+	if params.D == 0 && params.Dlo == 0 && params.Dhi == 0 && params.Dout == 0 {
+		return nil
+	}
+
 	if !(params.Dlo <= params.D && params.D <= params.Dhi) {
 		return fmt.Errorf("param D=%d must be between Dlo=%d and Dhi=%d", params.D, params.Dlo, params.Dhi)
 	}
@@ -252,10 +266,6 @@ func (params *GossipSubParams) validate() error {
 
 	if !(params.Dout < params.Dlo && params.Dout < (params.D/2)) {
 		return fmt.Errorf("param Dout=%d must be less than Dlo=%d and Dout must not exceed D=%d / 2", params.Dout, params.Dlo, params.D)
-	}
-
-	if !(params.HistoryGossip <= params.HistoryLength) {
-		return fmt.Errorf("param HistoryGossip=%d must be less than or equal to HistoryLength=%d", params.HistoryGossip, params.HistoryLength)
 	}
 
 	return nil

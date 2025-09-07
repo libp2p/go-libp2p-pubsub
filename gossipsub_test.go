@@ -57,6 +57,18 @@ func TestGossipSubParamsValidate(t *testing.T) {
 	}
 }
 
+func TestGossipSubBootstrapParamsValidate(t *testing.T) {
+	params := DefaultGossipSubParams()
+	params.D = 0
+	params.Dlo = 0
+	params.Dhi = 0
+	params.Dout = 0
+	params.Dscore = 0
+	if err := params.validate(); err != nil {
+		t.Fatalf("Params should be valid: %v", err)
+	}
+}
+
 func TestSparseGossipsub(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
