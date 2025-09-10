@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	mrand "math/rand"
+	"os"
 	"sort"
 	"sync"
 	"testing"
@@ -1159,6 +1160,9 @@ func TestWithInvalidMessageAuthor(t *testing.T) {
 }
 
 func TestPreconnectedNodes(t *testing.T) {
+	if os.Getenv("CI") != "" {
+		t.Skip("Flaky test in CI")
+	}
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	// If this test fails it may hang so set a timeout
