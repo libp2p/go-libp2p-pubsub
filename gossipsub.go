@@ -241,7 +241,7 @@ type GossipSubParams struct {
 	IDontWantMessageTTL int
 }
 
-func (params *GossipSubParams) Validate() error {
+func (params *GossipSubParams) validate() error {
 	if !(params.Dlo <= params.D && params.D <= params.Dhi) {
 		return fmt.Errorf("param D=%d must be between Dlo=%d and Dhi=%d", params.D, params.Dlo, params.Dhi)
 	}
@@ -461,7 +461,7 @@ func WithDirectConnectTicks(t uint64) Option {
 // config to be set when instantiating the gossipsub router.
 func WithGossipSubParams(cfg GossipSubParams) Option {
 	return func(ps *PubSub) error {
-		if err := cfg.Validate(); err != nil {
+		if err := cfg.validate(); err != nil {
 			return err
 		}
 		gs, ok := ps.rt.(*GossipSubRouter)
