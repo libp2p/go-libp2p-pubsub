@@ -52,7 +52,7 @@ func TestGossipSubParamsValidate(t *testing.T) {
 	params := DefaultGossipSubParams()
 	params.Dhi = 1
 	params.Dscore = 10
-	if params.Validate() == nil {
+	if params.validate() == nil {
 		t.Fatal("Params should be invalid")
 	}
 }
