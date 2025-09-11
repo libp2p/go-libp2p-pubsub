@@ -59,12 +59,12 @@ func startSpanForTopic(ctx context.Context, operationName string, topic string) 
 		// Return no-op span if tracing not enabled
 		return ctx, trace.SpanFromContext(ctx)
 	}
-	
+
 	// If topic filter is set and topic doesn't contain the filter string, return no-op span
 	if otelTopicFilter != "" && !strings.Contains(topic, otelTopicFilter) {
 		return ctx, trace.SpanFromContext(ctx)
 	}
-	
+
 	return otelTracer.Start(ctx, operationName)
 }
 
@@ -73,12 +73,12 @@ func shouldTraceTopic(topic string) bool {
 	if otelTracer == nil {
 		return false
 	}
-	
+
 	// If no filter is set, trace all topics
 	if otelTopicFilter == "" {
 		return true
 	}
-	
+
 	// Only trace if topic contains the filter string
 	return strings.Contains(topic, otelTopicFilter)
 }
@@ -97,7 +97,7 @@ func GetOtelTopicFilter() string {
 // Falls back to context.Background() if message context is nil
 func startSpanFromMessage(msg interface{}, operationName string) (context.Context, trace.Span) {
 	var ctx context.Context = context.Background()
-	
+
 	// Try to extract context from Message if available
 	if m, ok := msg.(*Message); ok && m.Ctx != nil {
 		ctx = m.Ctx
@@ -106,18 +106,18 @@ func startSpanFromMessage(msg interface{}, operationName string) (context.Contex
 			// Context has a valid span - nesting should work
 		}
 	}
-	
+
 	return startSpan(ctx, operationName)
 }
 
 // startSpanForTopicFromMessage starts a topic-filtered span using the context from a Message
 func startSpanForTopicFromMessage(msg interface{}, operationName, topic string) (context.Context, trace.Span) {
 	var ctx context.Context = context.Background()
-	
+
 	// Try to extract context from Message if available
 	if m, ok := msg.(*Message); ok && m.Ctx != nil {
 		ctx = m.Ctx
 	}
-	
+
 	return startSpanForTopic(ctx, operationName, topic)
 }

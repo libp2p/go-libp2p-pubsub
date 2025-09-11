@@ -44,7 +44,7 @@ func (p *PubSub) getHelloPacket() *RPC {
 
 func (p *PubSub) handleNewStream(s network.Stream) {
 	peer := s.Conn().RemotePeer()
-	
+
 	// Create stream-level span for the entire stream lifecycle
 	_, streamSpan := startSpan(context.Background(), "pubsub.handle_new_stream")
 	streamSpan.SetAttributes(
@@ -70,7 +70,7 @@ func (p *PubSub) handleNewStream(s network.Stream) {
 
 	defer func() {
 		streamDuration := time.Since(streamStart)
-		
+
 		// Set final stream metrics
 		streamSpan.SetAttributes(
 			attribute.Int("pubsub.total_messages_received", totalMessages),
@@ -78,11 +78,11 @@ func (p *PubSub) handleNewStream(s network.Stream) {
 			attribute.Int64("pubsub.stream_duration_ms", streamDuration.Milliseconds()),
 			attribute.Bool("pubsub.duplicate_stream_detected", duplicateStreamDetected),
 		)
-		
+
 		if streamDuration > 10*time.Second {
 			streamSpan.SetAttributes(attribute.Bool("pubsub.long_lived_stream", true))
 		}
-		
+
 		p.inboundStreamsMx.Lock()
 		if p.inboundStreams[peer] == s {
 			delete(p.inboundStreams, peer)
@@ -98,21 +98,21 @@ func (p *PubSub) handleNewStream(s network.Stream) {
 			attribute.String("pubsub.peer_id", peer.String()),
 			attribute.Int("pubsub.message_sequence", totalMessages+1),
 		)
-		
+
 		readStart := time.Now()
 		msgbytes, err := r.ReadMsg()
 		readDuration := time.Since(readStart)
-		
+
 		if err != nil {
 			r.ReleaseMsg(msgbytes)
-			
+
 			msgSpan.SetAttributes(
 				attribute.String("pubsub.result", "read_error"),
 				attribute.String("pubsub.error", err.Error()),
 				attribute.Int64("pubsub.read_duration_us", readDuration.Microseconds()),
 			)
 			msgSpan.End()
-			
+
 			if err != io.EOF {
 				s.Reset()
 				log.Debugf("error reading rpc from %s: %s", s.Conn().RemotePeer(), err)
@@ -124,7 +124,7 @@ func (p *PubSub) handleNewStream(s network.Stream) {
 
 			return
 		}
-		
+
 		if len(msgbytes) == 0 {
 			msgSpan.SetAttributes(
 				attribute.String("pubsub.result", "empty_message"),
@@ -136,14 +136,14 @@ func (p *PubSub) handleNewStream(s network.Stream) {
 
 		messageSize := len(msgbytes)
 		totalBytes += messageSize
-		
+
 		// Parse RPC and analyze content
 		parseStart := time.Now()
 		rpc := new(RPC)
 		err = rpc.Unmarshal(msgbytes)
 		r.ReleaseMsg(msgbytes)
 		parseDuration := time.Since(parseStart)
-		
+
 		if err != nil {
 			msgSpan.SetAttributes(
 				attribute.String("pubsub.result", "parse_error"),
@@ -153,7 +153,7 @@ func (p *PubSub) handleNewStream(s network.Stream) {
 				attribute.Int64("pubsub.parse_duration_us", parseDuration.Microseconds()),
 			)
 			msgSpan.End()
-			
+
 			s.Reset()
 			log.Warnf("bogus rpc from %s: %s", s.Conn().RemotePeer(), err)
 			return
@@ -164,7 +164,7 @@ func (p *PubSub) handleNewStream(s network.Stream) {
 		subscriptionCount := len(rpc.GetSubscriptions())
 		controlMessageCount := 0
 		ihaveCount, iwantCount, graftCount, pruneCount, idontwantCount := 0, 0, 0, 0, 0
-		
+
 		if rpc.Control != nil {
 			ihaveCount = len(rpc.Control.GetIhave())
 			iwantCount = len(rpc.Control.GetIwant())
@@ -178,7 +178,7 @@ func (p *PubSub) handleNewStream(s network.Stream) {
 		queueStart := time.Now()
 		rpc.from = peer
 		rpc.receivedAt = readStart // Set timestamp when RPC was first read from network
-		
+
 		var queueResult string
 		select {
 		case p.incoming <- rpc:
@@ -196,7 +196,7 @@ func (p *PubSub) handleNewStream(s network.Stream) {
 				attribute.Int64("pubsub.parse_duration_us", parseDuration.Microseconds()),
 			)
 			msgSpan.End()
-			
+
 			// Close is useless because the other side isn't reading.
 			s.Reset()
 			return
@@ -216,44 +216,44 @@ func (p *PubSub) handleNewStream(s network.Stream) {
 			attribute.Int("pubsub.graft_count", graftCount),
 			attribute.Int("pubsub.prune_count", pruneCount),
 			attribute.Int("pubsub.idontwant_count", idontwantCount),
-			
+
 			// Timing breakdown
 			attribute.Int64("pubsub.read_duration_us", readDuration.Microseconds()),
 			attribute.Int64("pubsub.parse_duration_us", parseDuration.Microseconds()),
 			attribute.Int64("pubsub.queue_duration_us", queueDuration.Microseconds()),
 			attribute.Int64("pubsub.total_processing_duration_us", totalProcessingDuration.Microseconds()),
-			
+
 			// Network arrival timestamp (for correlation with handleIncomingRPC)
 			attribute.String("pubsub.network_received_at", readStart.Format(time.RFC3339Nano)),
 		)
-		
+
 		// Flag slow network operations
 		if readDuration > 10*time.Millisecond {
 			msgSpan.SetAttributes(attribute.Bool("pubsub.slow_network_read", true))
 		}
-		
+
 		if parseDuration > 5*time.Millisecond {
 			msgSpan.SetAttributes(attribute.Bool("pubsub.slow_parse", true))
 		}
-		
+
 		if queueDuration > 1*time.Millisecond {
 			msgSpan.SetAttributes(attribute.Bool("pubsub.slow_queue", true))
 		}
-		
+
 		if totalProcessingDuration > 20*time.Millisecond {
 			msgSpan.SetAttributes(attribute.Bool("pubsub.slow_message_processing", true))
 		}
-		
+
 		// Flag large messages
 		if messageSize > 100*1024 { // 100KB
 			msgSpan.SetAttributes(attribute.Bool("pubsub.large_message", true))
 		}
-		
+
 		// Flag control message heavy RPCs
 		if controlMessageCount > 100 {
 			msgSpan.SetAttributes(attribute.Bool("pubsub.control_heavy_rpc", true))
 		}
-		
+
 		msgSpan.End()
 	}
 }

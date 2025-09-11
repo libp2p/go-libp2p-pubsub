@@ -238,15 +238,15 @@ func (v *validation) RemoveValidator(req *rmValReq) {
 func (v *validation) ValidateLocal(msg *Message) error {
 	_, span := startSpanForTopicFromMessage(msg, "pubsub.validate_local", msg.GetTopic())
 	defer span.End()
-	
+
 	span.SetAttributes(
 		attribute.String("pubsub.topic", msg.GetTopic()),
 		attribute.Int("pubsub.message_size", len(msg.GetData())),
 		attribute.String("pubsub.from", msg.ReceivedFrom.String()),
 	)
-	
+
 	start := time.Now()
-	
+
 	v.p.tracer.PublishMessage(msg)
 
 	err := v.p.checkSigningPolicy(msg)
@@ -261,11 +261,11 @@ func (v *validation) ValidateLocal(msg *Message) error {
 
 	vals := v.getValidators(msg)
 	span.SetAttributes(attribute.Int("pubsub.validators_count", len(vals)))
-	
+
 	err = v.validate(vals, msg.ReceivedFrom, msg, true, func(msg *Message) error {
 		return nil
 	})
-	
+
 	if err != nil {
 		span.SetAttributes(
 			attribute.String("pubsub.validation_result", "failed"),
@@ -274,9 +274,9 @@ func (v *validation) ValidateLocal(msg *Message) error {
 	} else {
 		span.SetAttributes(attribute.String("pubsub.validation_result", "success"))
 	}
-	
+
 	span.SetAttributes(attribute.Int64("pubsub.validation_duration_ms", time.Since(start).Milliseconds()))
-	
+
 	return err
 }
 
@@ -343,7 +343,7 @@ func (v *validation) sendMsgBlocking(msg *Message) error {
 func (v *validation) validate(vals []*validatorImpl, src peer.ID, msg *Message, synchronous bool, onValid func(*Message) error) error {
 	_, span := startSpanForTopicFromMessage(msg, "pubsub.validate_message", msg.GetTopic())
 	defer span.End()
-	
+
 	span.SetAttributes(
 		attribute.String("pubsub.peer_id", src.String()),
 		attribute.String("pubsub.topic", msg.GetTopic()),
@@ -352,9 +352,9 @@ func (v *validation) validate(vals []*validatorImpl, src peer.ID, msg *Message, 
 		attribute.Bool("pubsub.synchronous", synchronous),
 		attribute.Bool("pubsub.has_signature", msg.Signature != nil),
 	)
-	
+
 	start := time.Now()
-	
+
 	// If signature verification is enabled, but signing is disabled,
 	// the Signature is required to be nil upon receiving the message in PubSub.pushMsg.
 	if msg.Signature != nil {
@@ -391,7 +391,7 @@ func (v *validation) validate(vals []*validatorImpl, src peer.ID, msg *Message, 
 			async = append(async, val)
 		}
 	}
-	
+
 	span.SetAttributes(
 		attribute.Int("pubsub.inline_validators", len(inline)),
 		attribute.Int("pubsub.async_validators", len(async)),
@@ -403,13 +403,13 @@ loop:
 	for i, val := range inline {
 		validatorStart := time.Now()
 		validationResult := val.validateMsg(v.p.ctx, src, msg)
-		
+
 		span.SetAttributes(
 			attribute.String(fmt.Sprintf("pubsub.inline_validator_%d_topic", i), val.topic),
 			attribute.String(fmt.Sprintf("pubsub.inline_validator_%d_result", i), validationResultString(validationResult)),
 			attribute.Int64(fmt.Sprintf("pubsub.inline_validator_%d_duration_ms", i), time.Since(validatorStart).Milliseconds()),
 		)
-		
+
 		switch validationResult {
 		case ValidationAccept:
 		case ValidationReject:
@@ -479,21 +479,21 @@ func (v *validation) validateSignature(msg *Message) bool {
 func (v *validation) doValidateTopic(vals []*validatorImpl, src peer.ID, msg *Message, r ValidationResult, onValid func(*Message) error) {
 	_, span := startSpanForTopicFromMessage(msg, "pubsub.validate_topic_async", msg.GetTopic())
 	defer span.End()
-	
+
 	span.SetAttributes(
 		attribute.String("pubsub.peer_id", src.String()),
 		attribute.String("pubsub.topic", msg.GetTopic()),
 		attribute.Int("pubsub.async_validators_count", len(vals)),
 		attribute.String("pubsub.initial_result", validationResultString(r)),
 	)
-	
+
 	start := time.Now()
 	result := v.validateTopic(vals, src, msg)
 
 	if result == ValidationAccept && r != ValidationAccept {
 		result = r
 	}
-	
+
 	span.SetAttributes(
 		attribute.String("pubsub.final_result", validationResultString(result)),
 		attribute.Int64("pubsub.async_validation_duration_ms", time.Since(start).Milliseconds()),
@@ -523,13 +523,13 @@ func (v *validation) doValidateTopic(vals []*validatorImpl, src peer.ID, msg *Me
 func (v *validation) validateTopic(vals []*validatorImpl, src peer.ID, msg *Message) ValidationResult {
 	_, span := startSpanForTopicFromMessage(msg, "pubsub.validate_topic", msg.GetTopic())
 	defer span.End()
-	
+
 	span.SetAttributes(
 		attribute.String("pubsub.peer_id", src.String()),
 		attribute.String("pubsub.topic", msg.GetTopic()),
 		attribute.Int("pubsub.validators_count", len(vals)),
 	)
-	
+
 	if len(vals) == 1 {
 		span.SetAttributes(attribute.Bool("pubsub.single_validator", true))
 		result := v.validateSingleTopic(vals[0], src, msg)
@@ -538,7 +538,7 @@ func (v *validation) validateTopic(vals []*validatorImpl, src peer.ID, msg *Mess
 	}
 
 	span.SetAttributes(attribute.Bool("pubsub.single_validator", false))
-	
+
 	ctx, cancel := context.WithCancel(v.p.ctx)
 	defer cancel()
 
@@ -547,7 +547,7 @@ func (v *validation) validateTopic(vals []*validatorImpl, src peer.ID, msg *Mess
 	throttledCount := 0
 
 	start := time.Now()
-	
+
 	for _, val := range vals {
 		rcount++
 
@@ -590,7 +590,7 @@ loop:
 		attribute.String("pubsub.validation_result", validationResultString(result)),
 		attribute.Int64("pubsub.validation_duration_ms", time.Since(start).Milliseconds()),
 	)
-	
+
 	return result
 }
 

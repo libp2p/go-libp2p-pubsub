@@ -104,7 +104,7 @@ func runDisabledExample() {
 func runTempoExample() {
 	// Example for Grafana Tempo with OTLP HTTP exporter
 	// This would typically connect to Tempo at http://localhost:3200
-	
+
 	// For this example, we'll use stdout since Tempo setup is external
 	exporter, err := stdouttrace.New(stdouttrace.WithPrettyPrint())
 	if err != nil {
@@ -186,7 +186,7 @@ func runPubSubExample(exampleName string) {
 	// Publish attestation (creates publish traces)
 	attestationData := []byte("simulated beacon attestation data")
 	log.Printf("[%s] Publishing attestation...", exampleName)
-	
+
 	err = ps1.Publish(topic, attestationData)
 	if err != nil {
 		log.Printf("Failed to publish: %v", err)

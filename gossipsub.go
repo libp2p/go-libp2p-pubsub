@@ -626,12 +626,12 @@ func (gs *GossipSubRouter) manageAddrBook() {
 func (gs *GossipSubRouter) AddPeer(p peer.ID, proto protocol.ID) {
 	_, span := startSpan(context.Background(), "gossipsub.add_peer")
 	defer span.End()
-	
+
 	span.SetAttributes(
 		attribute.String("pubsub.peer_id", p.String()),
 		attribute.String("pubsub.protocol", string(proto)),
 	)
-	
+
 	start := time.Now()
 	log.Debugf("PEERUP: Add new peer %s using %s", p, proto)
 	gs.tracer.AddPeer(p, proto)
@@ -660,7 +660,7 @@ loop:
 		}
 	}
 	gs.outbound[p] = outbound
-	
+
 	span.SetAttributes(
 		attribute.Bool("pubsub.outbound_connection", outbound),
 		attribute.Int("pubsub.connection_count", connectionCount),
@@ -671,17 +671,17 @@ loop:
 func (gs *GossipSubRouter) RemovePeer(p peer.ID) {
 	_, span := startSpan(context.Background(), "gossipsub.remove_peer")
 	defer span.End()
-	
+
 	span.SetAttributes(attribute.String("pubsub.peer_id", p.String()))
-	
+
 	start := time.Now()
 	log.Debugf("PEERDOWN: Remove disconnected peer %s", p)
 	gs.tracer.RemovePeer(p)
-	
+
 	// Count mesh/fanout topics the peer was part of
 	meshTopics := 0
 	fanoutTopics := 0
-	
+
 	delete(gs.peers, p)
 	for _, peers := range gs.mesh {
 		if _, exists := peers[p]; exists {
@@ -698,7 +698,7 @@ func (gs *GossipSubRouter) RemovePeer(p peer.ID) {
 	delete(gs.gossip, p)
 	delete(gs.control, p)
 	delete(gs.outbound, p)
-	
+
 	span.SetAttributes(
 		attribute.Int("pubsub.mesh_topics", meshTopics),
 		attribute.Int("pubsub.fanout_topics", fanoutTopics),
@@ -785,19 +785,19 @@ func (gs *GossipSubRouter) Preprocess(from peer.ID, msgs []*Message) {
 func (gs *GossipSubRouter) HandleRPC(rpc *RPC) {
 	_, span := startSpan(context.Background(), "gossipsub.handle_rpc")
 	defer span.End()
-	
+
 	span.SetAttributes(
 		attribute.String("pubsub.rpc_from", rpc.from.String()),
 		attribute.Int("pubsub.rpc_messages", len(rpc.GetPublish())),
 		attribute.Int("pubsub.rpc_subscriptions", len(rpc.GetSubscriptions())),
 	)
-	
+
 	ctl := rpc.GetControl()
 	if ctl == nil {
 		span.SetAttributes(attribute.Bool("pubsub.has_control", false))
 		return
 	}
-	
+
 	span.SetAttributes(
 		attribute.Bool("pubsub.has_control", true),
 		attribute.Int("pubsub.ihave_count", len(ctl.GetIhave())),
@@ -807,7 +807,7 @@ func (gs *GossipSubRouter) HandleRPC(rpc *RPC) {
 	)
 
 	start := time.Now()
-	
+
 	iwant := gs.handleIHave(rpc.from, ctl)
 	ihave := gs.handleIWant(rpc.from, ctl)
 	prune := gs.handleGraft(rpc.from, ctl)
@@ -832,16 +832,16 @@ func (gs *GossipSubRouter) HandleRPC(rpc *RPC) {
 func (gs *GossipSubRouter) handleIHave(p peer.ID, ctl *pb.ControlMessage) []*pb.ControlIWant {
 	_, span := startSpan(context.Background(), "gossipsub.handle_ihave")
 	defer span.End()
-	
+
 	span.SetAttributes(
 		attribute.String("pubsub.peer_id", p.String()),
 		attribute.Int("pubsub.ihave_messages_count", len(ctl.GetIhave())),
 	)
-	
+
 	// we ignore IHAVE gossip from any peer whose score is below the gossip threshold
 	score := gs.score.Score(p)
 	span.SetAttributes(attribute.Float64("pubsub.peer_score", score))
-	
+
 	if score < gs.gossipThreshold {
 		span.SetStatus(codes.Error, "peer score below gossip threshold")
 		span.SetAttributes(attribute.String("pubsub.reject_reason", "low_score"))
@@ -889,7 +889,7 @@ func (gs *GossipSubRouter) handleIHave(p peer.ID, ctl *pb.ControlMessage) []*pb.
 
 	iwantCount := len(iwant)
 	span.SetAttributes(attribute.Int("pubsub.iwant_requests", iwantCount))
-	
+
 	if iwantCount == 0 {
 		return nil
 	}
@@ -898,7 +898,7 @@ func (gs *GossipSubRouter) handleIHave(p peer.ID, ctl *pb.ControlMessage) []*pb.
 	if iask+gs.iasked[p] > gs.params.MaxIHaveLength {
 		iask = gs.params.MaxIHaveLength - gs.iasked[p]
 	}
-	
+
 	span.SetAttributes(attribute.Int("pubsub.messages_requested", iask))
 
 	log.Debugf("IHAVE: Asking for %d out of %d messages from %s", iask, iwantCount, p)
@@ -923,9 +923,9 @@ func (gs *GossipSubRouter) handleIHave(p peer.ID, ctl *pb.ControlMessage) []*pb.
 func (gs *GossipSubRouter) handleIWant(p peer.ID, ctl *pb.ControlMessage) []*pb.Message {
 	_, span := startSpan(context.Background(), "gossipsub.handle_iwant")
 	defer span.End()
-	
+
 	span.SetAttributes(attribute.String("pubsub.peer_id", p.String()))
-	
+
 	start := time.Now()
 	// we don't respond to IWANT requests from any peer whose score is below the gossip threshold
 	score := gs.score.Score(p)
@@ -933,12 +933,12 @@ func (gs *GossipSubRouter) handleIWant(p peer.ID, ctl *pb.ControlMessage) []*pb.
 	for _, iwant := range ctl.GetIwant() {
 		iwantCount += len(iwant.GetMessageIDs())
 	}
-	
+
 	span.SetAttributes(
 		attribute.Float64("pubsub.peer_score", score),
 		attribute.Int("pubsub.iwant_requests", iwantCount),
 	)
-	
+
 	if score < gs.gossipThreshold {
 		log.Debugf("IWANT: ignoring peer %s with score below threshold [score = %f]", p, score)
 		span.SetAttributes(
@@ -947,14 +947,14 @@ func (gs *GossipSubRouter) handleIWant(p peer.ID, ctl *pb.ControlMessage) []*pb.
 		)
 		return nil
 	}
-	
+
 	span.SetAttributes(attribute.Bool("pubsub.below_threshold", false))
 
 	ihave := make(map[string]*pb.Message)
 	skipped := 0
 	retransmissionSkipped := 0
 	unwantedSkipped := 0
-	
+
 	for _, iwant := range ctl.GetIwant() {
 		for _, mid := range iwant.GetMessageIDs() {
 			// Check if that peer has sent IDONTWANT before, if so don't send them the message
@@ -1002,7 +1002,7 @@ func (gs *GossipSubRouter) handleIWant(p peer.ID, ctl *pb.ControlMessage) []*pb.
 	for _, msg := range ihave {
 		msgs = append(msgs, msg)
 	}
-	
+
 	span.SetAttributes(attribute.Int64("pubsub.handle_iwant_duration_ms", time.Since(start).Milliseconds()))
 	return msgs
 }
@@ -1010,16 +1010,16 @@ func (gs *GossipSubRouter) handleIWant(p peer.ID, ctl *pb.ControlMessage) []*pb.
 func (gs *GossipSubRouter) handleGraft(p peer.ID, ctl *pb.ControlMessage) []*pb.ControlPrune {
 	_, span := startSpan(context.Background(), "gossipsub.handle_graft")
 	defer span.End()
-	
+
 	span.SetAttributes(attribute.String("pubsub.peer_id", p.String()))
-	
+
 	start := time.Now()
 	var prune []string
 
 	doPX := gs.doPX
 	score := gs.score.Score(p)
 	now := time.Now()
-	
+
 	graftCount := len(ctl.GetGraft())
 	span.SetAttributes(
 		attribute.Float64("pubsub.peer_score", score),
@@ -1128,18 +1128,18 @@ func (gs *GossipSubRouter) handleGraft(p peer.ID, ctl *pb.ControlMessage) []*pb.
 func (gs *GossipSubRouter) handlePrune(p peer.ID, ctl *pb.ControlMessage) {
 	_, span := startSpan(context.Background(), "gossipsub.handle_prune")
 	defer span.End()
-	
+
 	span.SetAttributes(attribute.String("pubsub.peer_id", p.String()))
-	
+
 	start := time.Now()
 	score := gs.score.Score(p)
-	
+
 	pruneCount := len(ctl.GetPrune())
 	span.SetAttributes(
 		attribute.Float64("pubsub.peer_score", score),
 		attribute.Int("pubsub.prune_requests", pruneCount),
 	)
-	
+
 	topicsPruned := 0
 	pxPeersReceived := 0
 	pxIgnored := 0
@@ -1155,7 +1155,7 @@ func (gs *GossipSubRouter) handlePrune(p peer.ID, ctl *pb.ControlMessage) {
 		gs.tracer.Prune(p, topic)
 		delete(peers, p)
 		topicsPruned++
-		
+
 		// is there a backoff specified by the peer? if so obey it.
 		backoff := prune.GetBackoff()
 		if backoff > 0 {
@@ -1177,7 +1177,7 @@ func (gs *GossipSubRouter) handlePrune(p peer.ID, ctl *pb.ControlMessage) {
 			gs.pxConnect(px)
 		}
 	}
-	
+
 	span.SetAttributes(
 		attribute.Int("pubsub.topics_pruned", topicsPruned),
 		attribute.Int("pubsub.px_peers_received", pxPeersReceived),
@@ -1320,23 +1320,23 @@ func (gs *GossipSubRouter) connector() {
 func (gs *GossipSubRouter) PublishBatch(messages []*Message, opts *BatchPublishOptions) {
 	_, span := startSpan(context.Background(), "gossipsub.publish_batch")
 	defer span.End()
-	
+
 	start := time.Now()
 	topicCounts := make(map[string]int)
 	totalSize := 0
-	
+
 	// Collect metrics about the batch
 	for _, msg := range messages {
 		topicCounts[msg.GetTopic()]++
 		totalSize += len(msg.GetData())
 	}
-	
+
 	span.SetAttributes(
 		attribute.Int("pubsub.batch_size", len(messages)),
 		attribute.Int("pubsub.total_message_size", totalSize),
 		attribute.Int("pubsub.unique_topics", len(topicCounts)),
 	)
-	
+
 	strategy := opts.Strategy
 	for _, msg := range messages {
 		msgID := gs.p.idGen.ID(msg)
@@ -1350,7 +1350,7 @@ func (gs *GossipSubRouter) PublishBatch(messages []*Message, opts *BatchPublishO
 		gs.sendRPC(p, rpc, false)
 		peerCount++
 	}
-	
+
 	span.SetAttributes(
 		attribute.Int("pubsub.peers_sent_to", peerCount),
 		attribute.Int64("pubsub.batch_duration_ms", time.Since(start).Milliseconds()),
@@ -1360,21 +1360,21 @@ func (gs *GossipSubRouter) PublishBatch(messages []*Message, opts *BatchPublishO
 func (gs *GossipSubRouter) Publish(msg *Message) {
 	_, span := startSpanForTopicFromMessage(msg, "gossipsub.publish", msg.GetTopic())
 	defer span.End()
-	
+
 	span.SetAttributes(
 		attribute.String("pubsub.topic", msg.GetTopic()),
 		attribute.Int("pubsub.message_size", len(msg.GetData())),
 		attribute.String("pubsub.from", msg.ReceivedFrom.String()),
 	)
-	
+
 	start := time.Now()
 	peerCount := 0
-	
+
 	for p, rpc := range gs.rpcs(msg) {
 		peerCount++
 		gs.sendRPC(p, rpc, false)
 	}
-	
+
 	span.SetAttributes(
 		attribute.Int("pubsub.peers_sent_to", peerCount),
 		attribute.Int64("pubsub.duration_ms", time.Since(start).Milliseconds()),
@@ -1466,11 +1466,11 @@ func (gs *GossipSubRouter) rpcs(msg *Message) iter.Seq2[peer.ID, *RPC] {
 func (gs *GossipSubRouter) Join(topic string) {
 	_, span := startSpanForTopic(context.Background(), "gossipsub.join_topic", topic)
 	defer span.End()
-	
+
 	span.SetAttributes(attribute.String("pubsub.topic", topic))
-	
+
 	start := time.Now()
-	
+
 	gmap, ok := gs.mesh[topic]
 	if ok {
 		span.SetAttributes(attribute.Bool("pubsub.already_joined", true))
@@ -1479,7 +1479,7 @@ func (gs *GossipSubRouter) Join(topic string) {
 
 	log.Debugf("JOIN %s", topic)
 	gs.tracer.Join(topic)
-	
+
 	peersSelected := 0
 
 	gmap, ok = gs.fanout[topic]
@@ -1529,7 +1529,7 @@ func (gs *GossipSubRouter) Join(topic string) {
 		gs.tracer.Graft(p, topic)
 		gs.sendGraft(p, topic)
 	}
-	
+
 	span.SetAttributes(
 		attribute.Int("pubsub.peers_grafted", peersSelected),
 		attribute.Int64("pubsub.join_duration_ms", time.Since(start).Milliseconds()),
@@ -1539,9 +1539,9 @@ func (gs *GossipSubRouter) Join(topic string) {
 func (gs *GossipSubRouter) Leave(topic string) {
 	_, span := startSpanForTopic(context.Background(), "gossipsub.leave_topic", topic)
 	defer span.End()
-	
+
 	span.SetAttributes(attribute.String("pubsub.topic", topic))
-	
+
 	start := time.Now()
 	gmap, ok := gs.mesh[topic]
 	if !ok {
@@ -1568,7 +1568,7 @@ func (gs *GossipSubRouter) Leave(topic string) {
 		gs.addBackoff(p, topic, true)
 		peersPruned++
 	}
-	
+
 	span.SetAttributes(
 		attribute.Bool("pubsub.was_in_mesh", true),
 		attribute.Int("pubsub.peers_pruned", peersPruned),
@@ -1688,11 +1688,11 @@ func (gs *GossipSubRouter) heartbeatTimer() {
 func (gs *GossipSubRouter) heartbeat() {
 	_, span := startSpan(context.Background(), "gossipsub.heartbeat")
 	defer span.End()
-	
+
 	start := time.Now()
 	meshPeerCount := 0
 	topicCount := 0
-	
+
 	defer func() {
 		duration := time.Since(start)
 		span.SetAttributes(
@@ -1701,7 +1701,7 @@ func (gs *GossipSubRouter) heartbeat() {
 			attribute.Int("pubsub.mesh_peers_total", meshPeerCount),
 			attribute.Int("pubsub.topics_total", topicCount),
 		)
-		
+
 		if gs.params.SlowHeartbeatWarning > 0 {
 			slowWarning := time.Duration(gs.params.SlowHeartbeatWarning * float64(gs.params.HeartbeatInterval))
 			if duration > slowWarning {
@@ -2092,9 +2092,9 @@ func (gs *GossipSubRouter) sendGraftPrune(tograft, toprune map[peer.ID][]string,
 func (gs *GossipSubRouter) emitGossip(topic string, exclude map[peer.ID]struct{}) {
 	_, span := startSpanForTopic(context.Background(), "gossipsub.emit_gossip", topic)
 	defer span.End()
-	
+
 	span.SetAttributes(attribute.String("pubsub.topic", topic))
-	
+
 	start := time.Now()
 	mids := gs.mcache.GetGossipIDs(topic)
 	if len(mids) == 0 {
@@ -2117,7 +2117,7 @@ func (gs *GossipSubRouter) emitGossip(topic string, exclude map[peer.ID]struct{}
 		log.Debugf("too many messages for gossip; will truncate IHAVE list (%d messages)", len(mids))
 		truncated = true
 	}
-	
+
 	span.SetAttributes(attribute.Bool("pubsub.truncated", truncated))
 
 	// Send gossip to GossipFactor peers above threshold, with a minimum of D_lazy.
@@ -2128,11 +2128,11 @@ func (gs *GossipSubRouter) emitGossip(topic string, exclude map[peer.ID]struct{}
 	excludeCount := 0
 	directCount := 0
 	belowThresholdCount := 0
-	
+
 	for p := range gs.p.topics[topic] {
 		_, inExclude := exclude[p]
 		_, direct := gs.direct[p]
-		
+
 		if inExclude {
 			excludeCount++
 			continue
@@ -2145,7 +2145,7 @@ func (gs *GossipSubRouter) emitGossip(topic string, exclude map[peer.ID]struct{}
 			belowThresholdCount++
 			continue
 		}
-		
+
 		peers = append(peers, p)
 	}
 
@@ -2177,7 +2177,7 @@ func (gs *GossipSubRouter) emitGossip(topic string, exclude map[peer.ID]struct{}
 		gs.enqueueGossip(p, &pb.ControlIHave{TopicID: &topic, MessageIDs: peerMids})
 		totalMessagesSent += len(peerMids)
 	}
-	
+
 	span.SetAttributes(
 		attribute.Int("pubsub.peers_gossiped_to", len(peers)),
 		attribute.Int("pubsub.peers_excluded", excludeCount),
