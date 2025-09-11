@@ -8,6 +8,7 @@ import (
 	"iter"
 	"log/slog"
 	"math/rand"
+	"slices"
 	"sort"
 	"time"
 
@@ -21,6 +22,8 @@ import (
 	"github.com/libp2p/go-libp2p/core/protocol"
 	"github.com/libp2p/go-libp2p/core/record"
 	"github.com/libp2p/go-libp2p/p2p/host/peerstore/pstoremem"
+	ma "github.com/multiformats/go-multiaddr"
+	manet "github.com/multiformats/go-multiaddr/net"
 )
 
 const (
@@ -286,25 +289,26 @@ func NewGossipSubWithRouter(ctx context.Context, h host.Host, rt PubSubRouter, o
 func DefaultGossipSubRouter(h host.Host) *GossipSubRouter {
 	params := DefaultGossipSubParams()
 	return &GossipSubRouter{
-		peers:        make(map[peer.ID]protocol.ID),
-		mesh:         make(map[string]map[peer.ID]struct{}),
-		fanout:       make(map[string]map[peer.ID]struct{}),
-		lastpub:      make(map[string]int64),
-		gossip:       make(map[peer.ID][]*pb.ControlIHave),
-		control:      make(map[peer.ID]*pb.ControlMessage),
-		backoff:      make(map[string]map[peer.ID]time.Time),
-		peerhave:     make(map[peer.ID]int),
-		peerdontwant: make(map[peer.ID]int),
-		unwanted:     make(map[peer.ID]map[checksum]int),
-		iasked:       make(map[peer.ID]int),
-		outbound:     make(map[peer.ID]bool),
-		connect:      make(chan connectInfo, params.MaxPendingConnections),
-		cab:          pstoremem.NewAddrBook(),
-		mcache:       NewMessageCache(params.HistoryGossip, params.HistoryLength),
-		protos:       GossipSubDefaultProtocols,
-		feature:      GossipSubDefaultFeatures,
-		tagTracer:    newTagTracer(h.ConnManager()),
-		params:       params,
+		peers:           make(map[peer.ID]protocol.ID),
+		mesh:            make(map[string]map[peer.ID]struct{}),
+		fanout:          make(map[string]map[peer.ID]struct{}),
+		lastpub:         make(map[string]int64),
+		gossip:          make(map[peer.ID][]*pb.ControlIHave),
+		control:         make(map[peer.ID]*pb.ControlMessage),
+		backoff:         make(map[string]map[peer.ID]time.Time),
+		peerhave:        make(map[peer.ID]int),
+		peerdontwant:    make(map[peer.ID]int),
+		unwanted:        make(map[peer.ID]map[checksum]int),
+		iasked:          make(map[peer.ID]int),
+		outbound:        make(map[peer.ID]bool),
+		connect:         make(chan connectInfo, params.MaxPendingConnections),
+		cab:             pstoremem.NewAddrBook(),
+		mcache:          NewMessageCache(params.HistoryGossip, params.HistoryLength),
+		protos:          GossipSubDefaultProtocols,
+		feature:         GossipSubDefaultFeatures,
+		tagTracer:       newTagTracer(h.ConnManager()),
+		params:          params,
+		reducePXRecords: defaultPXRecordReducer,
 	}
 }
 
@@ -418,9 +422,82 @@ func WithPeerExchange(doPX bool) Option {
 		}
 
 		gs.doPX = doPX
-
 		return nil
 	}
+}
+
+type PXRecordReducer func(pxRecords []*pb.PeerInfo, logger *slog.Logger, p peer.ID, addrs []ma.Multiaddr, record *record.Envelope) []*pb.PeerInfo
+
+// WithCustomPXRecordReducer enables custom filtering of PX Records. See
+// the implementation of OnlyPublicAddrsOnPeerExchange for an example.
+func WithCustomPXRecordReducer(f PXRecordReducer) Option {
+	return func(ps *PubSub) error {
+		gs, ok := ps.rt.(*GossipSubRouter)
+		if !ok {
+			return fmt.Errorf("pubsub router is not gossipsub")
+		}
+		gs.reducePXRecords = f
+		return nil
+	}
+}
+
+// defaultPXRecordReducer serializes the Signed Peer Records within the record envelop
+func defaultPXRecordReducer(pxRecords []*pb.PeerInfo, logger *slog.Logger, p peer.ID, addrs []ma.Multiaddr, record *record.Envelope) []*pb.PeerInfo {
+	var recordBytes []byte
+	if record != nil {
+		var err error
+		recordBytes, err = record.Marshal()
+		if err != nil {
+			logger.Warn("error marshaling signed peer record for", "peer", p, "err", err)
+			return pxRecords
+		}
+	}
+	return append(pxRecords, &pb.PeerInfo{PeerID: []byte(p), SignedPeerRecord: recordBytes})
+}
+
+// OnlyPublicAddrsOnPeerExchange is a gossipsub router option that defines ensures that only Signed Peer Records with
+// public addresses are shared over the gossipsub PeerExchange method
+func OnlyPublicAddrsOnPeerExchange() Option {
+	return func(ps *PubSub) error {
+		gs, ok := ps.rt.(*GossipSubRouter)
+		if !ok {
+			return fmt.Errorf("pubsub router is not gossipsub")
+		}
+		gs.reducePXRecords = publicAddrsPXRecordReducer
+		return nil
+	}
+}
+
+// publicAddrsPXRecordReducer checks if the given record.Envelop includes any public IP address and returns the pb.PeerInfo accordingly.
+// If the Signed Peer Record includes at least a public IP, the record is shared,
+// If not, we return an empty PeerRecord, at least notify the remote node that there is a peer in that topic.
+func publicAddrsPXRecordReducer(pxRecords []*pb.PeerInfo, logger *slog.Logger, p peer.ID, addrs []ma.Multiaddr, record *record.Envelope) []*pb.PeerInfo {
+	if !slices.ContainsFunc(addrs, manet.IsPublicAddr) {
+		return defaultPXRecordReducer(pxRecords, logger, p, addrs, nil)
+	}
+	if !checkPubAddrsOnSignedPeerRecord(logger, p, record) {
+		logger.Warn("no public address on signed peer record for", "peer", p)
+		record = nil
+	}
+	return defaultPXRecordReducer(pxRecords, logger, p, addrs, record)
+}
+
+func checkPubAddrsOnSignedPeerRecord(logger *slog.Logger, p peer.ID, env *record.Envelope) bool {
+	if env == nil {
+		return false
+	}
+	rec, err := env.Record()
+	if err != nil {
+		logger.Warn("error getting peer record for from signed envelop", "peer", p, "err", err)
+		return false
+	}
+
+	pRec, ok := rec.(*peer.PeerRecord)
+	if !ok {
+		logger.Warn("unable to convert peer record from envelop")
+	}
+
+	return slices.ContainsFunc(pRec.Addrs, manet.IsPublicAddr)
 }
 
 // WithDirectPeers is a gossipsub router option that specifies peers with direct
@@ -527,7 +604,8 @@ type GossipSubRouter struct {
 
 	// whether PX is enabled; this should be enabled in bootstrappers and other well connected/trusted
 	// nodes.
-	doPX bool
+	doPX            bool
+	reducePXRecords PXRecordReducer
 
 	// threshold for accepting PX from a peer; this should be positive and limited to scores
 	// attainable by bootstrappers and trusted nodes
@@ -2018,24 +2096,14 @@ func (gs *GossipSubRouter) makePrune(p peer.ID, topic string, doPX bool, isUnsub
 			return p != xp && gs.score.Score(xp) >= 0
 		})
 
-		cab, ok := peerstore.GetCertifiedAddrBook(gs.cab)
+		cab, cabOK := peerstore.GetCertifiedAddrBook(gs.cab)
 		px = make([]*pb.PeerInfo, 0, len(peers))
 		for _, p := range peers {
-			// see if we have a signed peer record to send back; if we don't, just send
-			// the peer ID and let the pruned peer find them in the DHT -- we can't trust
-			// unsigned address records through px anyway.
-			var recordBytes []byte
-			if ok {
-				spr := cab.GetPeerRecord(p)
-				var err error
-				if spr != nil {
-					recordBytes, err = spr.Marshal()
-					if err != nil {
-						gs.logger.Warn("error marshaling signed peer record for peer", "peer", p, "err", err)
-					}
-				}
+			var record *record.Envelope
+			if cabOK {
+				record = cab.GetPeerRecord(p)
 			}
-			px = append(px, &pb.PeerInfo{PeerID: []byte(p), SignedPeerRecord: recordBytes})
+			px = gs.reducePXRecords(px, gs.logger, p, gs.p.host.Peerstore().Addrs(p), record)
 		}
 	}
 

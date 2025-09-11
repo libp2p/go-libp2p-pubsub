@@ -23,6 +23,7 @@ import (
 
 	"github.com/libp2p/go-libp2p-pubsub/internal/gologshim"
 	pb "github.com/libp2p/go-libp2p-pubsub/pb"
+	"github.com/libp2p/go-libp2p/core/crypto"
 
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/network"
@@ -30,6 +31,8 @@ import (
 	"github.com/libp2p/go-libp2p/core/peerstore"
 	"github.com/libp2p/go-libp2p/core/protocol"
 	"github.com/libp2p/go-libp2p/core/record"
+
+	ma "github.com/multiformats/go-multiaddr"
 
 	//lint:ignore SA1019 "github.com/libp2p/go-msgio/protoio" is deprecated
 	"github.com/libp2p/go-msgio/protoio"
@@ -3937,6 +3940,267 @@ func BenchmarkSplitRPCLargeMessages(b *testing.B) {
 			}
 			if count != 2 {
 				b.Fatalf("expected 2 RPCs, got %d", count)
+			}
+		}
+	})
+}
+
+func TestCheckPubAddrsOnSignedPeerRecord(t *testing.T) {
+	// generate keypair and peer ID
+	priv, _, err := crypto.GenerateEd25519Key(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	id, err := peer.IDFromPrivateKey(priv)
+	if err != nil {
+		t.Fatal(err)
+	}
+	logger := slog.Default()
+
+	t.Run("private addresses only", func(t *testing.T) {
+		addr := "/ip4/192.168.1.1/tcp/4001"
+		signed := makeSignedPeerRecord(t, id, []string{addr}, priv)
+		if checkPubAddrsOnSignedPeerRecord(logger, id, signed) {
+			t.Errorf("expected false for private addrs")
+		}
+	})
+
+	t.Run("public address present", func(t *testing.T) {
+		addr := "/ip4/8.8.8.8/tcp/4001"
+		signed := makeSignedPeerRecord(t, id, []string{addr}, priv)
+		if !checkPubAddrsOnSignedPeerRecord(logger, id, signed) {
+			t.Errorf("expected true for public addr")
+		}
+	})
+
+	t.Run("malformed record", func(t *testing.T) {
+		if checkPubAddrsOnSignedPeerRecord(logger, id, &record.Envelope{}) {
+			t.Errorf("expected false for malformed record")
+		}
+		if checkPubAddrsOnSignedPeerRecord(logger, id, nil) {
+			t.Errorf("expected false for malformed record")
+		}
+	})
+}
+
+// helper to sign and marshal PeerRecord
+func makeSignedPeerRecord(t *testing.T, id peer.ID, addrs []string, priv crypto.PrivKey) *record.Envelope {
+	var maddrs []ma.Multiaddr
+	for _, s := range addrs {
+		m, err := ma.NewMultiaddr(s)
+		if err != nil {
+			t.Fatalf("failed to parse maddr: %v", err)
+		}
+		maddrs = append(maddrs, m)
+	}
+	rec := &peer.PeerRecord{PeerID: id, Addrs: maddrs}
+	signed, err := record.Seal(rec, priv)
+	if err != nil {
+		t.Fatalf("failed to sign peer record: %v", err)
+	}
+	return signed
+}
+
+func TestDefaultPXRecordReducer(t *testing.T) {
+	// generate keypair and peer ID
+	priv, _, err := crypto.GenerateEd25519Key(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	id, err := peer.IDFromPrivateKey(priv)
+	if err != nil {
+		t.Fatal(err)
+	}
+	logger := slog.Default()
+
+	t.Run("private addresses records only", func(t *testing.T) {
+		addrs := []string{
+			"/ip4/192.168.1.1/tcp/4001",
+			"/ip4/192.168.1.2/tcp/4001",
+		}
+		px := make([]*pb.PeerInfo, 0)
+		for _, addr := range addrs {
+			maddr, err := ma.NewMultiaddr(addr)
+			if err != nil {
+				t.Fatal(err)
+			}
+			signed := makeSignedPeerRecord(t, id, []string{addr}, priv)
+			px = defaultPXRecordReducer(px, logger, id, []ma.Multiaddr{maddr}, signed)
+		}
+		if len(px) < len(addrs) {
+			t.Fatalf("Expected as many px records (%d) as addresses (%d)", len(px), len(addrs))
+		}
+	})
+
+	t.Run("private and public records", func(t *testing.T) {
+		addrs := []string{
+			"/ip4/192.168.1.1/tcp/4001",
+			"/ip4/8.8.8.8/tcp/4001",
+		}
+		px := make([]*pb.PeerInfo, 0)
+		for _, addr := range addrs {
+			maddr, err := ma.NewMultiaddr(addr)
+			if err != nil {
+				t.Fatal(err)
+			}
+			signed := makeSignedPeerRecord(t, id, []string{addr}, priv)
+			px = defaultPXRecordReducer(px, logger, id, []ma.Multiaddr{maddr}, signed)
+		}
+		if len(px) < len(addrs) {
+			t.Fatalf("Expected as many px records (%d) as addresses (%d)", len(px), len(addrs))
+		}
+	})
+
+	t.Run("private and public but no records", func(t *testing.T) {
+		addrs := []string{
+			"/ip4/192.168.1.1/tcp/4001",
+			"/ip4/8.8.8.8/tcp/4001",
+		}
+		px := make([]*pb.PeerInfo, 0)
+		for _, addr := range addrs {
+			maddr, err := ma.NewMultiaddr(addr)
+			if err != nil {
+				t.Fatal(err)
+			}
+			px = defaultPXRecordReducer(px, logger, id, []ma.Multiaddr{maddr}, nil)
+		}
+		if len(px) < len(addrs) {
+			t.Fatalf("Expected as many px records (%d) as addresses (%d)", len(px), len(addrs))
+		}
+		for _, indvPx := range px {
+			if len(indvPx.SignedPeerRecord) > 0 {
+				t.Fatalf("Expected no records as they are invalid, got %d", len(indvPx.SignedPeerRecord))
+			}
+		}
+	})
+}
+
+func TestPublicAddrsPXRecordReducer(t *testing.T) {
+	// generate keypair and peer ID
+	priv, _, err := crypto.GenerateEd25519Key(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	id, err := peer.IDFromPrivateKey(priv)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	logger := slog.Default()
+
+	t.Run("private records only", func(t *testing.T) {
+		// should trigger the address public check before checking the record
+		addrs := []string{
+			"/ip4/192.168.1.1/tcp/4001",
+			"/ip4/192.168.1.2/tcp/4001",
+		}
+		px := make([]*pb.PeerInfo, 0)
+		for _, addr := range addrs {
+			maddr, err := ma.NewMultiaddr(addr)
+			if err != nil {
+				t.Fatal(err)
+			}
+			signed := makeSignedPeerRecord(t, id, []string{addr}, priv)
+			px = publicAddrsPXRecordReducer(px, logger, id, []ma.Multiaddr{maddr}, signed)
+		}
+		if len(px) < len(addrs) {
+			t.Fatalf("Expected as many px records (%d) as addresses (%d)", len(px), len(addrs))
+		}
+	})
+
+	t.Run("public records only", func(t *testing.T) {
+		addrs := []string{
+			"/ip4/8.8.8.8/tcp/4001",
+			"/ip4/8.8.8.8/tcp/4002",
+		}
+		px := make([]*pb.PeerInfo, 0)
+		for _, addr := range addrs {
+			maddr, err := ma.NewMultiaddr(addr)
+			if err != nil {
+				t.Fatal(err)
+			}
+			signed := makeSignedPeerRecord(t, id, []string{addr}, priv)
+			px = publicAddrsPXRecordReducer(px, logger, id, []ma.Multiaddr{maddr}, signed)
+		}
+		if len(px) < len(addrs) {
+			t.Fatalf("Expected as many px records (%d) as addresses (%d)", len(px), len(addrs))
+		}
+		for _, indvPx := range px {
+			if len(indvPx.SignedPeerRecord) == 0 {
+				t.Fatalf("Expected some bytes on signed records, got %d", len(indvPx.SignedPeerRecord))
+			}
+		}
+	})
+
+	t.Run("private and public records", func(t *testing.T) {
+		addrs := []string{
+			"/ip4/192.168.1.1/tcp/4001",
+			"/ip4/8.8.8.8/tcp/4001",
+		}
+		px := make([]*pb.PeerInfo, 0)
+		for _, addr := range addrs {
+			maddr, err := ma.NewMultiaddr(addr)
+			if err != nil {
+				t.Fatal(err)
+			}
+			signed := makeSignedPeerRecord(t, id, []string{addr}, priv)
+			px = publicAddrsPXRecordReducer(px, logger, id, []ma.Multiaddr{maddr}, signed)
+		}
+		if len(px) < len(addrs) {
+			t.Fatalf("Expected as many px records (%d) as addresses (%d)", len(px), len(addrs))
+		}
+		if len(px[0].SignedPeerRecord) > 0 {
+			t.Fatalf("Expected no bytes from priv addrs, got %d", len(px[0].SignedPeerRecord))
+		}
+		if len(px[1].SignedPeerRecord) == 0 {
+			t.Fatalf("Expected some bytes from pub addrs, got %d", len(px[1].SignedPeerRecord))
+		}
+	})
+
+	t.Run("public addrs but no records", func(t *testing.T) {
+		addrs := []string{
+			"/ip4/8.8.8.8/tcp/4001",
+			"/ip4/8.8.8.8/tcp/4002",
+		}
+		px := make([]*pb.PeerInfo, 0)
+		for _, addr := range addrs {
+			maddr, err := ma.NewMultiaddr(addr)
+			if err != nil {
+				t.Fatal(err)
+			}
+			px = publicAddrsPXRecordReducer(px, logger, id, []ma.Multiaddr{maddr}, nil)
+		}
+		if len(px) < len(addrs) {
+			t.Fatalf("Expected as many px records (%d) as addresses (%d)", len(px), len(addrs))
+		}
+		for _, indvPx := range px {
+			if len(indvPx.SignedPeerRecord) > 0 {
+				t.Fatalf("Expected no records, got %d", len(indvPx.SignedPeerRecord))
+			}
+		}
+	})
+
+	t.Run("public addrs but prc records", func(t *testing.T) {
+		privAddr := "/ip4/192.168.1.1/tcp/4001"
+		addrs := []string{
+			privAddr,
+			"/ip4/8.8.8.8/tcp/4001",
+		}
+		px := make([]*pb.PeerInfo, 0, 2)
+		for range addrs {
+			maddr, err := ma.NewMultiaddr(privAddr)
+			if err != nil {
+				t.Fatal(err)
+			}
+			signed := makeSignedPeerRecord(t, id, []string{privAddr}, priv)
+			px = publicAddrsPXRecordReducer(px, logger, id, []ma.Multiaddr{maddr}, signed)
+		}
+		if len(px) < len(addrs) {
+			t.Fatalf("Expected as many px records (%d) as addresses (%d)", len(px), len(addrs))
+		}
+		for _, indvPx := range px {
+			if len(indvPx.SignedPeerRecord) > 0 {
+				t.Fatalf("Expected no records, got %d", len(indvPx.SignedPeerRecord))
 			}
 		}
 	})
