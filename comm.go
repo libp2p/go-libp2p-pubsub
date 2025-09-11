@@ -14,6 +14,7 @@ import (
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-msgio"
 	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 
 	pb "github.com/libp2p/go-libp2p-pubsub/pb"
 )
@@ -91,6 +92,12 @@ func (p *PubSub) handleNewStream(s network.Stream) {
 	}()
 
 	r := msgio.NewVarintReaderSize(s, p.maxMessageSize)
+	var rpcSpan trace.Span
+	defer func() {
+		if rpcSpan != nil {
+			rpcSpan.End()
+		}
+	}()
 	for {
 		// Create span for each message read operation
 		_, msgSpan := startSpan(context.Background(), "pubsub.read_network_message")
@@ -99,6 +106,8 @@ func (p *PubSub) handleNewStream(s network.Stream) {
 			attribute.Int("pubsub.message_sequence", totalMessages+1),
 		)
 
+		// ignore the values. We only want to know when the first bytes came in.
+		_, _ = r.NextMsgLen()
 		readStart := time.Now()
 		msgbytes, err := r.ReadMsg()
 		readDuration := time.Since(readStart)
@@ -143,6 +152,7 @@ func (p *PubSub) handleNewStream(s network.Stream) {
 		err = rpc.Unmarshal(msgbytes)
 		r.ReleaseMsg(msgbytes)
 		parseDuration := time.Since(parseStart)
+		rpc.ctx, rpcSpan = startSpan(context.Background(), "pubsub.rpc.incoming")
 
 		if err != nil {
 			msgSpan.SetAttributes(
@@ -179,12 +189,16 @@ func (p *PubSub) handleNewStream(s network.Stream) {
 		rpc.from = peer
 		rpc.receivedAt = readStart // Set timestamp when RPC was first read from network
 
+		var queueSpan trace.Span
+		rpc.queuedCtx, queueSpan = otelTracer.Start(rpc.ctx, "pubsub.incoming.rpc.queued")
+
 		var queueResult string
 		select {
 		case p.incoming <- rpc:
 			queueResult = "queued"
 			totalMessages++
 		case <-p.ctx.Done():
+			queueSpan.End()
 			queueResult = "context_cancelled"
 			msgSpan.SetAttributes(
 				attribute.String("pubsub.result", queueResult),

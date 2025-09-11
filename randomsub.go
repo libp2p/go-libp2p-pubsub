@@ -90,7 +90,7 @@ func (rs *RandomSubRouter) EnoughPeers(topic string, suggested int) bool {
 	return false
 }
 
-func (rs *RandomSubRouter) AcceptFrom(peer.ID) AcceptStatus {
+func (rs *RandomSubRouter) AcceptFrom(_ context.Context, _ peer.ID) AcceptStatus {
 	return AcceptAll
 }
 

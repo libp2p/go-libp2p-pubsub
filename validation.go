@@ -9,6 +9,7 @@ import (
 
 	"github.com/libp2p/go-libp2p/core/peer"
 	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 )
 
 const (
@@ -290,10 +291,15 @@ func (v *validation) Push(src peer.ID, msg *Message) bool {
 		case v.validateQ <- &validateReq{vals, src, msg}:
 		default:
 			log.Debugf("message validation throttled: queue full; dropping message from %s", src)
+			span := trace.SpanFromContext(msg.Ctx)
+			span.SetAttributes(attribute.Bool("dropped", true))
+			span.AddEvent("dropped from validation queue")
+			defer span.End()
 			v.tracer.RejectMessage(msg, RejectValidationQueueFull)
 		}
 		return false
 	}
+	trace.SpanFromContext(msg.Ctx).End()
 
 	return true
 }
@@ -322,6 +328,7 @@ func (v *validation) validateWorker() {
 		select {
 		case req := <-v.validateQ:
 			_ = v.validate(req.vals, req.src, req.msg, false, v.sendMsgBlocking)
+			trace.SpanFromContext(req.msg.Ctx).End()
 		case <-v.p.ctx.Done():
 			return
 		}

@@ -6,6 +6,7 @@ import (
 
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/trace"
+	"go.opentelemetry.io/otel/trace/noop"
 )
 
 const (
@@ -13,7 +14,7 @@ const (
 )
 
 // Global tracer instance - will be nil if tracing is not enabled
-var otelTracer trace.Tracer
+var otelTracer trace.Tracer = noop.Tracer{}
 
 // Global topic filter - only trace topics that contain this substring
 // Empty string means trace all topics

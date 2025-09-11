@@ -735,16 +735,20 @@ func (gs *GossipSubRouter) EnoughPeers(topic string, suggested int) bool {
 	return false
 }
 
-func (gs *GossipSubRouter) AcceptFrom(p peer.ID) AcceptStatus {
+func (gs *GossipSubRouter) AcceptFrom(ctx context.Context, p peer.ID) AcceptStatus {
 	_, direct := gs.direct[p]
 	if direct {
 		return AcceptAll
 	}
 
+	_, span := otelTracer.Start(ctx, "check_score")
 	if gs.score.Score(p) < gs.graylistThreshold {
 		return AcceptNone
 	}
+	span.End()
 
+	_, span = otelTracer.Start(ctx, "check_peerGater")
+	defer span.End()
 	return gs.gate.AcceptFrom(p)
 }
 
@@ -783,7 +787,7 @@ func (gs *GossipSubRouter) Preprocess(from peer.ID, msgs []*Message) {
 }
 
 func (gs *GossipSubRouter) HandleRPC(rpc *RPC) {
-	_, span := startSpan(context.Background(), "gossipsub.handle_rpc")
+	_, span := startSpan(rpc.ctx, "gossipsub.handle_rpc")
 	defer span.End()
 
 	span.SetAttributes(
