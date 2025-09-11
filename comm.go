@@ -63,6 +63,10 @@ func (p *PubSub) handleNewStream(s network.Stream) {
 
 	r := msgio.NewVarintReaderSize(s, p.maxMessageSize)
 	for {
+		// ignore the values. We only want to know when the first bytes came in.
+		_, _ = r.NextMsgLen()
+		// Start the time once we've received the message length
+		start := time.Now()
 		msgbytes, err := r.ReadMsg()
 		if err != nil {
 			r.ReleaseMsg(msgbytes)
@@ -84,6 +88,7 @@ func (p *PubSub) handleNewStream(s network.Stream) {
 		rpc := new(RPC)
 		err = rpc.Unmarshal(msgbytes)
 		r.ReleaseMsg(msgbytes)
+		rpc.timeToReceive = time.Since(start)
 		if err != nil {
 			s.Reset()
 			log.Warnf("bogus rpc from %s: %s", s.Conn().RemotePeer(), err)
