@@ -628,7 +628,7 @@ func (gs *GossipSubRouter) AddPeer(p peer.ID, proto protocol.ID) {
 	defer span.End()
 
 	span.SetAttributes(
-		attribute.String("pubsub.peer_id", p.String()),
+		// attribute.String("pubsub.peer_id", p.String()),
 		attribute.String("pubsub.protocol", string(proto)),
 	)
 
@@ -672,7 +672,7 @@ func (gs *GossipSubRouter) RemovePeer(p peer.ID) {
 	_, span := startSpan(context.Background(), "gossipsub.remove_peer")
 	defer span.End()
 
-	span.SetAttributes(attribute.String("pubsub.peer_id", p.String()))
+	// span.SetAttributes(attribute.String("pubsub.peer_id", p.String()))
 
 	start := time.Now()
 	log.Debugf("PEERDOWN: Remove disconnected peer %s", p)
@@ -791,7 +791,7 @@ func (gs *GossipSubRouter) HandleRPC(rpc *RPC) {
 	defer span.End()
 
 	span.SetAttributes(
-		attribute.String("pubsub.rpc_from", rpc.from.String()),
+		// attribute.String("pubsub.rpc_from", rpc.from.String()),
 		attribute.Int("pubsub.rpc_messages", len(rpc.GetPublish())),
 		attribute.Int("pubsub.rpc_subscriptions", len(rpc.GetSubscriptions())),
 	)
@@ -838,7 +838,7 @@ func (gs *GossipSubRouter) handleIHave(p peer.ID, ctl *pb.ControlMessage) []*pb.
 	defer span.End()
 
 	span.SetAttributes(
-		attribute.String("pubsub.peer_id", p.String()),
+		// attribute.String("pubsub.peer_id", p.String()),
 		attribute.Int("pubsub.ihave_messages_count", len(ctl.GetIhave())),
 	)
 
@@ -928,7 +928,7 @@ func (gs *GossipSubRouter) handleIWant(p peer.ID, ctl *pb.ControlMessage) []*pb.
 	_, span := startSpan(context.Background(), "gossipsub.handle_iwant")
 	defer span.End()
 
-	span.SetAttributes(attribute.String("pubsub.peer_id", p.String()))
+	// span.SetAttributes(attribute.String("pubsub.peer_id", p.String()))
 
 	start := time.Now()
 	// we don't respond to IWANT requests from any peer whose score is below the gossip threshold
@@ -1015,7 +1015,7 @@ func (gs *GossipSubRouter) handleGraft(p peer.ID, ctl *pb.ControlMessage) []*pb.
 	_, span := startSpan(context.Background(), "gossipsub.handle_graft")
 	defer span.End()
 
-	span.SetAttributes(attribute.String("pubsub.peer_id", p.String()))
+	// span.SetAttributes(attribute.String("pubsub.peer_id", p.String()))
 
 	start := time.Now()
 	var prune []string
@@ -1133,7 +1133,7 @@ func (gs *GossipSubRouter) handlePrune(p peer.ID, ctl *pb.ControlMessage) {
 	_, span := startSpan(context.Background(), "gossipsub.handle_prune")
 	defer span.End()
 
-	span.SetAttributes(attribute.String("pubsub.peer_id", p.String()))
+	// span.SetAttributes(attribute.String("pubsub.peer_id", p.String()))
 
 	start := time.Now()
 	score := gs.score.Score(p)

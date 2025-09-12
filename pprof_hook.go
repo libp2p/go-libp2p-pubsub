@@ -20,9 +20,9 @@ var (
 	pprofHookErr  error
 )
 
-// setupPprofHook sets up a signal handler to capture pprof traces when SIGUSR1 is received.
+// SetupPprofHook sets up a signal handler to capture pprof traces when SIGUSR1 is received.
 // This function can only be called once per process and is thread-safe.
-func setupPprofHook() error {
+func SetupPprofHook() error {
 	pprofHookOnce.Do(func() {
 		pprofHookErr = setupPprofHookOnce()
 	})

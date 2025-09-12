@@ -49,7 +49,7 @@ func (p *PubSub) handleNewStream(s network.Stream) {
 	// Create stream-level span for the entire stream lifecycle
 	_, streamSpan := startSpan(context.Background(), "pubsub.handle_new_stream")
 	streamSpan.SetAttributes(
-		attribute.String("pubsub.peer_id", peer.String()),
+		// attribute.String("pubsub.peer_id", peer.String()),
 		attribute.String("pubsub.stream_direction", "inbound"),
 	)
 	defer streamSpan.End()
@@ -102,7 +102,7 @@ func (p *PubSub) handleNewStream(s network.Stream) {
 		// Create span for each message read operation
 		_, msgSpan := startSpan(context.Background(), "pubsub.read_network_message")
 		msgSpan.SetAttributes(
-			attribute.String("pubsub.peer_id", peer.String()),
+			// attribute.String("pubsub.peer_id", peer.String()),
 			attribute.Int("pubsub.message_sequence", totalMessages+1),
 		)
 

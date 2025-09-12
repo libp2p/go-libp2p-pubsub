@@ -819,7 +819,7 @@ func (p *PubSub) processLoop(ctx context.Context) {
 			pid := s.Conn().RemotePeer()
 			eventSpan.SetAttributes(
 				attribute.String("pubsub.event_type", "new_peer_stream"),
-				attribute.String("pubsub.peer_id", pid.String()),
+				// attribute.String("pubsub.peer_id", pid.String()),
 				attribute.String("pubsub.protocol", string(s.Protocol())),
 			)
 
@@ -852,7 +852,7 @@ func (p *PubSub) processLoop(ctx context.Context) {
 			_, eventSpan := startSpan(iterCtx, "pubsub.handle_peer_error")
 			eventSpan.SetAttributes(
 				attribute.String("pubsub.event_type", "peer_error"),
-				attribute.String("pubsub.peer_id", pid.String()),
+				// attribute.String("pubsub.peer_id", pid.String()),
 			)
 			delete(p.peers, pid)
 			eventSpan.End()
@@ -966,7 +966,7 @@ func (p *PubSub) processLoop(ctx context.Context) {
 				eventSpan.AddLink(trace.LinkFromContext(rpc.ctx))
 				eventSpan.SetAttributes(
 					attribute.String("pubsub.event_type", "incoming_rpc"),
-					attribute.String("pubsub.peer_id", rpc.from.String()),
+					// attribute.String("pubsub.peer_id", rpc.from.String()),
 					attribute.Int("pubsub.message_count", len(rpc.GetPublish())),
 					attribute.Int("pubsub.subscription_count", len(rpc.GetSubscriptions())),
 				)
@@ -1042,7 +1042,7 @@ func (p *PubSub) processLoop(ctx context.Context) {
 			_, eventSpan := startSpan(iterCtx, "pubsub.blacklist_peer")
 			eventSpan.SetAttributes(
 				attribute.String("pubsub.event_type", "blacklist_peer"),
-				attribute.String("pubsub.peer_id", pid.String()),
+				// attribute.String("pubsub.peer_id", pid.String()),
 			)
 			log.Infof("Blacklisting peer %s", pid)
 			p.blacklist.Add(pid)
@@ -1464,7 +1464,7 @@ func (p *PubSub) handleIncomingRPC(ctx context.Context, rpc *RPC) {
 	}
 
 	handleRPCSpan.SetAttributes(
-		attribute.String("pubsub.peer_id", rpc.from.String()),
+		// attribute.String("pubsub.peer_id", rpc.from.String()),
 		attribute.Int("pubsub.message_count", messageCount),
 		attribute.Int("pubsub.subscription_count", subscriptionCount),
 		attribute.Int("pubsub.control_message_count", controlMessageCount),
@@ -2053,8 +2053,4 @@ type RelayCancelFunc func()
 type addRelayReq struct {
 	topic string
 	resp  chan RelayCancelFunc
-}
-
-func SetupPprofHook() error {
-	panic("TODO")
 }
