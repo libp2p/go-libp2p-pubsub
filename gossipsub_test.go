@@ -3886,3 +3886,137 @@ func BenchmarkSplitRPCLargeMessages(b *testing.B) {
 		}
 	})
 }
+
+type Event1 struct{ Value int }
+type Event2 struct{ Value int }
+type Event3 struct{ Value int }
+type Event4 struct{ Value int }
+type Event5 struct{ Value int }
+type Event6 struct{ Value int }
+type Event7 struct{ Value int }
+type Event8 struct{ Value int }
+type Event9 struct{ Value int }
+type Event10 struct{ Value int }
+
+type EventKind int
+
+const (
+	Kind1 EventKind = iota
+	Kind2
+	Kind3
+	Kind4
+	Kind5
+	Kind6
+	Kind7
+	Kind8
+	Kind9
+	Kind10
+)
+
+type UnifiedEvent struct {
+	Kind  EventKind
+	Value int
+}
+
+func BenchmarkMultipleChannels(b *testing.B) {
+	ch1 := make(chan Event1, 1)
+	ch2 := make(chan Event2, 1)
+	ch3 := make(chan Event3, 1)
+	ch4 := make(chan Event4, 1)
+	ch5 := make(chan Event5, 1)
+	ch6 := make(chan Event6, 1)
+	ch7 := make(chan Event7, 1)
+	ch8 := make(chan Event8, 1)
+	ch9 := make(chan Event9, 1)
+	ch10 := make(chan Event10, 1)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	go func() {
+		for i := 0; i < b.N; i++ {
+			switch i % 10 {
+			case 0:
+				ch1 <- Event1{Value: i}
+			case 1:
+				ch2 <- Event2{Value: i}
+			case 2:
+				ch3 <- Event3{Value: i}
+			case 3:
+				ch4 <- Event4{Value: i}
+			case 4:
+				ch5 <- Event5{Value: i}
+			case 5:
+				ch6 <- Event6{Value: i}
+			case 6:
+				ch7 <- Event7{Value: i}
+			case 7:
+				ch8 <- Event8{Value: i}
+			case 8:
+				ch9 <- Event9{Value: i}
+			case 9:
+				ch10 <- Event10{Value: i}
+			}
+		}
+		cancel()
+	}()
+
+	b.ResetTimer()
+
+	received := 0
+	for received < b.N {
+		select {
+		case <-ch1:
+			received++
+		case <-ch2:
+			received++
+		case <-ch3:
+			received++
+		case <-ch4:
+			received++
+		case <-ch5:
+			received++
+		case <-ch6:
+			received++
+		case <-ch7:
+			received++
+		case <-ch8:
+			received++
+		case <-ch9:
+			received++
+		case <-ch10:
+			received++
+		case <-ctx.Done():
+			return
+		}
+	}
+}
+
+func BenchmarkSingleChannel(b *testing.B) {
+	ch := make(chan UnifiedEvent, 1)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	go func() {
+		for i := 0; i < b.N; i++ {
+			kind := EventKind(i % 10)
+			ch <- UnifiedEvent{Kind: kind, Value: i}
+		}
+		cancel()
+	}()
+
+	b.ResetTimer()
+
+	received := 0
+	for received < b.N {
+		select {
+		case event := <-ch:
+			switch event.Kind {
+			case Kind1, Kind2, Kind3, Kind4, Kind5, Kind6, Kind7, Kind8, Kind9, Kind10:
+				received++
+			}
+		case <-ctx.Done():
+			return
+		}
+	}
+}

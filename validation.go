@@ -290,6 +290,8 @@ func (v *validation) Push(src peer.ID, msg *Message) bool {
 		select {
 		case v.validateQ <- &validateReq{vals, src, msg}:
 		default:
+			// TODO: add counter for dropped validation
+
 			log.Debugf("message validation throttled: queue full; dropping message from %s", src)
 			span := trace.SpanFromContext(msg.Ctx)
 			span.SetAttributes(attribute.Bool("dropped", true))
@@ -410,6 +412,7 @@ loop:
 	for i, val := range inline {
 		validatorStart := time.Now()
 		validationResult := val.validateMsg(v.p.ctx, src, msg)
+		msg.ValidationDuration = time.Since(validatorStart)
 
 		span.SetAttributes(
 			attribute.String(fmt.Sprintf("pubsub.inline_validator_%d_topic", i), val.topic),
@@ -616,18 +619,18 @@ func (v *validation) validateSingleTopic(val *validatorImpl, src peer.ID, msg *M
 }
 
 func (val *validatorImpl) validateMsg(ctx context.Context, src peer.ID, msg *Message) ValidationResult {
-	start := time.Now()
-	defer func() {
-		log.Debugf("validation done; took %s", time.Since(start))
-	}()
-
 	if val.validateTimeout > 0 {
 		var cancel func()
 		ctx, cancel = context.WithTimeout(ctx, val.validateTimeout)
 		defer cancel()
 	}
 
+	start := time.Now()
 	r := val.validate(ctx, src, msg)
+	took := time.Since(start)
+	log.Debugf("validation done; took %s", took)
+	msg.ValidationDuration += took
+
 	switch r {
 	case ValidationAccept:
 		fallthrough

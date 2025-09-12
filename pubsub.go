@@ -15,6 +15,8 @@ import (
 	pb "github.com/libp2p/go-libp2p-pubsub/pb"
 	"github.com/libp2p/go-libp2p-pubsub/timecache"
 	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/metric"
+	"go.opentelemetry.io/otel/metric/noop"
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/libp2p/go-libp2p/core/crypto"
@@ -56,6 +58,8 @@ type PubSub struct {
 	//
 	// See: https://golang.org/pkg/sync/atomic/#pkg-note-BUG
 	counter uint64
+
+	metrics metrics
 
 	host host.Host
 
@@ -246,6 +250,10 @@ type Message struct {
 	ReceivedFrom  peer.ID
 	ValidatorData interface{}
 	Local         bool
+
+	// Timestamps to record message processing time
+	ReceivedAt         time.Time
+	ValidationDuration time.Duration
 	// Context for tracing - allows span nesting from calling applications
 	Ctx context.Context
 }
@@ -510,6 +518,8 @@ func NewPubSub(ctx context.Context, h host.Host, rt PubSubRouter, opts ...Option
 		seenMsgStrategy:       TimeCacheStrategy,
 		idGen:                 newMsgIdGenerator(),
 		counter:               uint64(time.Now().UnixNano()),
+
+		metrics: metrics{MeterProvider: noop.MeterProvider{}},
 	}
 
 	for _, opt := range opts {
@@ -517,6 +527,18 @@ func NewPubSub(ctx context.Context, h host.Host, rt PubSubRouter, opts ...Option
 		if err != nil {
 			return nil, err
 		}
+	}
+
+	meter := ps.metrics.MeterProvider.Meter("libp2p-pubsub")
+	var err error
+	ps.metrics.msgProcessingHistogram, err = meter.Int64Histogram(
+		"msg_processing.duration",
+		metric.WithDescription("The duration of message processing not including validation"),
+		metric.WithUnit("us"),
+		metric.WithExplicitBucketBoundaries(100, 500, 1_000, 5_000, 10_000, 50_000, 100_000, 250_000, 500_000, 1_000_000, 5_000_000, 10_000_000),
+	)
+	if err != nil {
+		return nil, err
 	}
 
 	if ps.signPolicy.mustSign() {
@@ -1601,7 +1623,13 @@ func (p *PubSub) handleIncomingRPC(ctx context.Context, rpc *RPC) {
 			}
 
 			ctx, shouldPushSpan := otelTracer.Start(messageProcessingCtx, "should_push")
-			msg := &Message{pmsg, "", rpc.from, nil, false, context.Background()}
+			msg := &Message{
+				Message:      pmsg,
+				ID:           "",
+				ReceivedFrom: rpc.from,
+				ReceivedAt:   rpc.receivedAt,
+				Ctx:          context.Background(),
+			}
 			if p.shouldPush(ctx, msg) {
 				msg.Ctx, _ = otelTracer.Start(context.Background(), "pubsub.message", trace.WithLinks(trace.LinkFromContext(rpc.ctx), trace.LinkFromContext(messageProcessingCtx)))
 				toPush = append(toPush, msg)
@@ -1793,6 +1821,7 @@ func (p *PubSub) publishMessage(msg *Message) {
 	if !msg.Local {
 		p.rt.Publish(msg)
 	}
+	p.metrics.msgProcessingHistogram.Record(context.Background(), (time.Since(msg.ReceivedAt) - msg.ValidationDuration).Microseconds())
 }
 
 func (p *PubSub) publishMessageBatch(batchAndOpts messageBatchAndPublishOptions) {

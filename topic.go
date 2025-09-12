@@ -348,7 +348,14 @@ func (t *Topic) validate(ctx context.Context, data []byte, opts ...PubOpt) (*Mes
 		}
 	}
 
-	msg := &Message{m, "", t.p.host.ID(), pub.validatorData, pub.local, ctx}
+	msg := &Message{
+		Message:       m,
+		ReceivedFrom:  t.p.host.ID(),
+		ValidatorData: pub.validatorData,
+		Local:         pub.local,
+		ReceivedAt:    time.Now(),
+		Ctx:           ctx,
+	}
 	select {
 	case t.p.eval <- func() {
 		t.p.rt.Preprocess(t.p.host.ID(), []*Message{msg})

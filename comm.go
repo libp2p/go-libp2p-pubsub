@@ -187,7 +187,7 @@ func (p *PubSub) handleNewStream(s network.Stream) {
 		// Queue to event loop
 		queueStart := time.Now()
 		rpc.from = peer
-		rpc.receivedAt = readStart // Set timestamp when RPC was first read from network
+		rpc.receivedAt = time.Now() // Set timestamp when RPC was recvd from network
 
 		var queueSpan trace.Span
 		rpc.queuedCtx, queueSpan = otelTracer.Start(rpc.ctx, "pubsub.incoming.rpc.queued")
