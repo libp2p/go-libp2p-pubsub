@@ -856,7 +856,9 @@ func TestGossipsubAttackSpamIDONTWANT(t *testing.T) {
 						})
 					}
 					// The host should receives this message id because the maximum was reached
+					mu.Lock()
 					expMid = mid
+					mu.Unlock()
 
 					// Wait for a short interval to make sure the middle peer
 					// received and processed the IDONTWANTs
