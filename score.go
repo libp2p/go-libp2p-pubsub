@@ -263,10 +263,14 @@ func (ps *peerScore) Score(p peer.ID) float64 {
 }
 
 func (ps *peerScore) score(p peer.ID) float64 {
+	start := time.Now()
 	pstats, ok := ps.peerStats[p]
 	if !ok {
 		return 0
 	}
+	defer func() {
+		ps.params.metrics.peerScoreCalcDurHistogram.Record(context.Background(), int64(time.Since(start).Microseconds()))
+	}()
 
 	var score float64
 
@@ -317,6 +321,7 @@ func (ps *peerScore) score(p peer.ID) float64 {
 		// update score, mixing with topic weight
 		score += topicScore * topicParams.TopicWeight
 	}
+	ps.params.metrics.peerTopicScoreCalcDurHistogram.Record(context.Background(), int64(time.Since(start).Microseconds()))
 
 	// apply the topic score cap, if any
 	if ps.params.TopicScoreCap > 0 && score > ps.params.TopicScoreCap {

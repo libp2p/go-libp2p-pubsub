@@ -340,6 +340,9 @@ func WithPeerScore(params *PeerScoreParams, thresholds *PeerScoreThresholds) Opt
 			return err
 		}
 
+		if params.metrics == nil {
+			params.metrics = &ps.metrics
+		}
 		gs.score = newPeerScore(params)
 		gs.gossipThreshold = thresholds.GossipThreshold
 		gs.publishThreshold = thresholds.PublishThreshold

@@ -67,6 +67,8 @@ type PeerScoreParams struct {
 	// whether it is allowed to just set some params and not all of them.
 	SkipAtomicValidation bool
 
+	metrics *metrics
+
 	// Score parameters per topic.
 	Topics map[string]*TopicScoreParams
 

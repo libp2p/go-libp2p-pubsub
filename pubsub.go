@@ -15,7 +15,6 @@ import (
 	pb "github.com/libp2p/go-libp2p-pubsub/pb"
 	"github.com/libp2p/go-libp2p-pubsub/timecache"
 	"go.opentelemetry.io/otel/attribute"
-	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/metric/noop"
 	"go.opentelemetry.io/otel/trace"
 
@@ -530,16 +529,7 @@ func NewPubSub(ctx context.Context, h host.Host, rt PubSubRouter, opts ...Option
 	}
 
 	meter := ps.metrics.MeterProvider.Meter("libp2p-pubsub")
-	var err error
-	ps.metrics.msgProcessingHistogram, err = meter.Int64Histogram(
-		"msg_processing.duration",
-		metric.WithDescription("The duration of message processing not including validation"),
-		metric.WithUnit("us"),
-		metric.WithExplicitBucketBoundaries(100, 500, 1_000, 5_000, 10_000, 50_000, 100_000, 250_000, 500_000, 1_000_000, 5_000_000, 10_000_000),
-	)
-	if err != nil {
-		return nil, err
-	}
+	ps.metrics.init(meter)
 
 	if ps.signPolicy.mustSign() {
 		if ps.signID == "" {
