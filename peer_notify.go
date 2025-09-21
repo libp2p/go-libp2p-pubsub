@@ -4,7 +4,6 @@ import (
 	"context"
 
 	"github.com/libp2p/go-libp2p/core/event"
-	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/core/protocol"
 )
@@ -14,7 +13,6 @@ func (ps *PubSub) watchForNewPeers(ctx context.Context) {
 	// every new connection.
 	sub, err := ps.host.EventBus().Subscribe([]interface{}{
 		&event.EvtPeerIdentificationCompleted{},
-		&event.EvtPeerProtocolsUpdated{},
 	})
 	if err != nil {
 		ps.logger.Error("failed to subscribe to peer identification events", "err", err)
@@ -22,27 +20,10 @@ func (ps *PubSub) watchForNewPeers(ctx context.Context) {
 	}
 	defer sub.Close()
 
-	ps.newPeersPrioLk.RLock()
-	ps.newPeersMx.Lock()
-	for _, pid := range ps.host.Network().Peers() {
-		if ps.host.Network().Connectedness(pid) != network.Connected {
-			continue
-		}
-		ps.newPeersPend[pid] = struct{}{}
-	}
-	ps.newPeersMx.Unlock()
-	ps.newPeersPrioLk.RUnlock()
-
-	select {
-	case ps.newPeers <- struct{}{}:
-	default:
-	}
-
 	var supportsProtocol func(protocol.ID) bool
 	if ps.protoMatchFunc != nil {
 		var supportedProtocols []func(protocol.ID) bool
 		for _, proto := range ps.rt.Protocols() {
-
 			supportedProtocols = append(supportedProtocols, ps.protoMatchFunc(proto))
 		}
 		supportsProtocol = func(proto protocol.ID) bool {
@@ -64,6 +45,27 @@ func (ps *PubSub) watchForNewPeers(ctx context.Context) {
 		}
 	}
 
+	ps.newPeersMx.Lock()
+	for _, pid := range ps.host.Network().Peers() {
+		protos, err := ps.host.Peerstore().GetProtocols(pid)
+		if err != nil {
+			ps.logger.Error("failed to get peer protocols from peerstore", "peer", pid, "err", err)
+			continue
+		}
+		for _, p := range protos {
+			if supportsProtocol(p) {
+				ps.newPeersPend[pid] = struct{}{}
+				break
+			}
+		}
+	}
+	ps.newPeersMx.Unlock()
+
+	select {
+	case ps.newPeers <- struct{}{}:
+	default:
+	}
+
 	for ctx.Err() == nil {
 		var ev any
 		select {
@@ -78,9 +80,6 @@ func (ps *PubSub) watchForNewPeers(ctx context.Context) {
 		case event.EvtPeerIdentificationCompleted:
 			peer = ev.Peer
 			protos = ev.Protocols
-		case event.EvtPeerProtocolsUpdated:
-			peer = ev.Peer
-			protos = ev.Added
 		default:
 			continue
 		}
@@ -95,15 +94,12 @@ func (ps *PubSub) watchForNewPeers(ctx context.Context) {
 			}
 		}
 	}
-
 }
 
 func (ps *PubSub) notifyNewPeer(peer peer.ID) {
-	ps.newPeersPrioLk.RLock()
 	ps.newPeersMx.Lock()
 	ps.newPeersPend[peer] = struct{}{}
 	ps.newPeersMx.Unlock()
-	ps.newPeersPrioLk.RUnlock()
 
 	select {
 	case ps.newPeers <- struct{}{}:

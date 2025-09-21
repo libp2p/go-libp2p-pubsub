@@ -104,10 +104,9 @@ type PubSub struct {
 	rmTopic chan *rmTopicReq
 
 	// a notification channel for new peer connections accumulated
-	newPeers       chan struct{}
-	newPeersPrioLk sync.RWMutex
-	newPeersMx     sync.Mutex
-	newPeersPend   map[peer.ID]struct{}
+	newPeers     chan struct{}
+	newPeersMx   sync.Mutex
+	newPeersPend map[peer.ID]struct{}
 
 	// a notification channel for new outoging peer streams
 	newPeerStream chan network.Stream
@@ -915,16 +914,16 @@ func (p *PubSub) processLoop(ctx context.Context) {
 }
 
 func (p *PubSub) handlePendingPeers() {
-	p.newPeersPrioLk.Lock()
+	p.newPeersMx.Lock()
 
 	if len(p.newPeersPend) == 0 {
-		p.newPeersPrioLk.Unlock()
+		p.newPeersMx.Unlock()
 		return
 	}
 
 	newPeers := p.newPeersPend
 	p.newPeersPend = make(map[peer.ID]struct{})
-	p.newPeersPrioLk.Unlock()
+	p.newPeersMx.Unlock()
 
 	for pid := range newPeers {
 		// Make sure we have a non-limited connection. We do this late because we may have
