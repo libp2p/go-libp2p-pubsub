@@ -967,6 +967,8 @@ func (gs *GossipSubRouter) handleIHave(p peer.ID, ctl *pb.ControlMessage) []*pb.
 
 	gs.gossipTracer.AddPromise(p, iwantlst)
 
+	gs.p.metrics.IncrementIWantMsgSent()
+
 	return []*pb.ControlIWant{{MessageIDs: iwantlst}}
 }
 
@@ -980,6 +982,7 @@ func (gs *GossipSubRouter) handleIWant(p peer.ID, ctl *pb.ControlMessage) []*pb.
 
 	ihave := make(map[string]*pb.Message)
 	for _, iwant := range ctl.GetIwant() {
+		gs.p.metrics.IncrementIWantMsgRecvd()
 		for _, mid := range iwant.GetMessageIDs() {
 			// Check if that peer has sent IDONTWANT before, if so don't send them the message
 			if _, ok := gs.unwanted[p][computeChecksum(mid)]; ok {
@@ -1027,6 +1030,8 @@ func (gs *GossipSubRouter) handleGraft(p peer.ID, ctl *pb.ControlMessage) []*pb.
 
 	for _, graft := range ctl.GetGraft() {
 		topic := graft.GetTopicID()
+
+		gs.p.metrics.IncrementGraftMsgRecvdPerTopic(topic)
 
 		if !gs.p.peerFilter(p, topic) {
 			continue
@@ -1121,6 +1126,9 @@ func (gs *GossipSubRouter) handlePrune(p peer.ID, ctl *pb.ControlMessage) {
 
 	for _, prune := range ctl.GetPrune() {
 		topic := prune.GetTopicID()
+
+		gs.p.metrics.IncrementPruneMsgRecvdPerTopic(topic)
+
 		peers, ok := gs.mesh[topic]
 		if !ok {
 			continue
@@ -1166,6 +1174,7 @@ func (gs *GossipSubRouter) handleIDontWant(p peer.ID, ctl *pb.ControlMessage) {
 	// Remember all the unwanted message ids
 mainIDWLoop:
 	for _, idontwant := range ctl.GetIdontwant() {
+		gs.p.metrics.IncrementIDontWantMsgRecvdCount()
 		for _, mid := range idontwant.GetMessageIDs() {
 			// IDONTWANT flood protection
 			if totalUnwantedIds >= gs.params.MaxIDontWantLength {
@@ -1465,12 +1474,14 @@ func (gs *GossipSubRouter) Leave(topic string) {
 func (gs *GossipSubRouter) sendGraft(p peer.ID, topic string) {
 	graft := []*pb.ControlGraft{{TopicID: &topic}}
 	out := rpcWithControl(nil, nil, nil, graft, nil, nil)
+	gs.p.metrics.IncrementGraftMsgSentPerTopic(topic)
 	gs.sendRPC(p, out, false)
 }
 
 func (gs *GossipSubRouter) sendPrune(p peer.ID, topic string, isUnsubscribe bool) {
 	prune := []*pb.ControlPrune{gs.makePrune(p, topic, gs.doPX, isUnsubscribe)}
 	out := rpcWithControl(nil, nil, nil, nil, prune, nil)
+	gs.p.metrics.IncrementPruneMsgSentPerTopic(topic)
 	gs.sendRPC(p, out, false)
 }
 
@@ -1541,13 +1552,24 @@ func (gs *GossipSubRouter) doSendRPC(rpc *RPC, p peer.ID, q *rpcQueue, urgent bo
 		gs.doDropRPC(rpc, p, "queue full")
 		return
 	}
+
+	if len(rpc.GetPublish()) > 0 {
+		for _, msg := range rpc.GetPublish() {
+			if msg.GetTopic() != "" {
+				gs.p.metrics.IncrementTopicMsgSent(msg.GetTopic())
+				gs.p.metrics.IncrementTopicBytesSent(int64(msg.Size()), msg.GetTopic())
+			}
+		}
+	}
+
 	gs.tracer.SendRPC(rpc, p)
 }
 
 func (gs *GossipSubRouter) heartbeatTimer() {
 	time.Sleep(gs.params.HeartbeatInitialDelay)
+	treq := NewTimedRequest(gs.heartbeat, time.Now())
 	select {
-	case gs.p.eval <- gs.heartbeat:
+	case gs.p.eval <- treq:
 	case <-gs.p.ctx.Done():
 		return
 	}
@@ -1558,8 +1580,9 @@ func (gs *GossipSubRouter) heartbeatTimer() {
 	for {
 		select {
 		case <-ticker.C:
+			treq := NewTimedRequest(gs.heartbeat, time.Now())
 			select {
-			case gs.p.eval <- gs.heartbeat:
+			case gs.p.eval <- treq:
 			case <-gs.p.ctx.Done():
 				return
 			}
@@ -1572,9 +1595,11 @@ func (gs *GossipSubRouter) heartbeatTimer() {
 func (gs *GossipSubRouter) heartbeat() {
 	start := time.Now()
 	defer func() {
+		heartBeatDuration := time.Since(start)
+		gs.p.metrics.RecordHeartbeatTime(heartBeatDuration)
 		if gs.params.SlowHeartbeatWarning > 0 {
 			slowWarning := time.Duration(gs.params.SlowHeartbeatWarning * float64(gs.params.HeartbeatInterval))
-			if dt := time.Since(start); dt > slowWarning {
+			if dt := heartBeatDuration; dt > slowWarning {
 				gs.logger.Warn("slow heartbeat", "took", dt)
 			}
 		}

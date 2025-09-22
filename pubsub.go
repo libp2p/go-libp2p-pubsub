@@ -16,6 +16,7 @@ import (
 	"github.com/libp2p/go-libp2p-pubsub/internal/gologshim"
 	pb "github.com/libp2p/go-libp2p-pubsub/pb"
 	"github.com/libp2p/go-libp2p-pubsub/timecache"
+	"go.opentelemetry.io/otel/metric/noop"
 
 	"github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/libp2p/go-libp2p/core/discovery"
@@ -55,6 +56,8 @@ type PubSub struct {
 
 	host host.Host
 
+	metrics metrics
+
 	rt PubSubRouter
 
 	val *validation
@@ -77,46 +80,46 @@ type PubSub struct {
 	peerOutboundQueueSize int
 
 	// incoming messages from other peers
-	incoming chan *RPC
+	incoming chan TimedRequest[*RPC]
 
 	// addSub is a control channel for us to add and remove subscriptions
-	addSub chan *addSubReq
+	addSub chan TimedRequest[*addSubReq]
 
 	// addRelay is a control channel for us to add and remove relays
-	addRelay chan *addRelayReq
+	addRelay chan TimedRequest[*addRelayReq]
 
 	// rmRelay is a relay cancellation channel
-	rmRelay chan string
+	rmRelay chan TimedRequest[string]
 
 	// get list of topics we are subscribed to
-	getTopics chan *topicReq
+	getTopics chan TimedRequest[*topicReq]
 
 	// get chan of peers we are connected to
-	getPeers chan *listPeerReq
+	getPeers chan TimedRequest[*listPeerReq]
 
 	// send subscription here to cancel it
-	cancelCh chan *Subscription
+	cancelCh chan TimedRequest[*Subscription]
 
 	// addSub is a channel for us to add a topic
-	addTopic chan *addTopicReq
+	addTopic chan TimedRequest[*addTopicReq]
 
 	// removeTopic is a topic cancellation channel
-	rmTopic chan *rmTopicReq
+	rmTopic chan TimedRequest[*rmTopicReq]
 
 	// a notification channel for new peer connections accumulated
-	newPeers       chan struct{}
+	newPeers       chan TimedRequest[struct{}]
 	newPeersPrioLk sync.RWMutex
 	newPeersMx     sync.Mutex
 	newPeersPend   map[peer.ID]struct{}
 
 	// a notification channel for new outoging peer streams
-	newPeerStream chan network.Stream
+	newPeerStream chan TimedRequest[network.Stream]
 
 	// a notification channel for errors opening new peer streams
-	newPeerError chan peer.ID
+	newPeerError chan TimedRequest[peer.ID]
 
 	// a notification channel for when our peers die
-	peerDead       chan struct{}
+	peerDead       chan TimedRequest[struct{}]
 	peerDeadPrioLk sync.RWMutex
 	peerDeadMx     sync.Mutex
 	peerDeadPend   map[peer.ID]struct{}
@@ -136,23 +139,23 @@ type PubSub struct {
 	topics map[string]map[peer.ID]struct{}
 
 	// sendMsg handles messages that have been validated
-	sendMsg chan *Message
+	sendMsg chan TimedRequest[*Message]
 
 	// sendMessageBatch publishes a batch of messages
-	sendMessageBatch chan messageBatchAndPublishOptions
+	sendMessageBatch chan TimedRequest[messageBatchAndPublishOptions]
 
 	// addVal handles validator registration requests
-	addVal chan *addValReq
+	addVal chan TimedRequest[*addValReq]
 
 	// rmVal handles validator unregistration requests
-	rmVal chan *rmValReq
+	rmVal chan TimedRequest[*rmValReq]
 
 	// eval thunk in event loop
-	eval chan func()
+	eval chan TimedRequest[func()]
 
 	// peer blacklist
 	blacklist     Blacklist
-	blacklistPeer chan peer.ID
+	blacklistPeer chan TimedRequest[peer.ID]
 
 	peers map[peer.ID]*rpcQueue
 
@@ -249,6 +252,10 @@ type Message struct {
 	ReceivedFrom  peer.ID
 	ValidatorData interface{}
 	Local         bool
+
+	// Timestamps to record message processing time
+	ReceivedAt         time.Time
+	ValidationDuration time.Duration
 }
 
 func (m *Message) GetFrom() peer.ID {
@@ -259,7 +266,8 @@ type RPC struct {
 	pb.RPC
 
 	// unexported on purpose, not sending this over the wire
-	from peer.ID
+	from       peer.ID
+	receivedAt time.Time
 }
 
 // split splits the given RPC If a sub RPC is too large and can't be split
@@ -477,27 +485,27 @@ func NewPubSub(ctx context.Context, h host.Host, rt PubSubRouter, opts ...Option
 		signID:                h.ID(),
 		signKey:               nil,
 		signPolicy:            StrictSign,
-		incoming:              make(chan *RPC, 32),
-		newPeers:              make(chan struct{}, 1),
+		incoming:              make(chan TimedRequest[*RPC], 32),
+		newPeers:              make(chan TimedRequest[struct{}], 1),
 		newPeersPend:          make(map[peer.ID]struct{}),
-		newPeerStream:         make(chan network.Stream),
-		newPeerError:          make(chan peer.ID),
-		peerDead:              make(chan struct{}, 1),
+		newPeerStream:         make(chan TimedRequest[network.Stream]),
+		newPeerError:          make(chan TimedRequest[peer.ID]),
+		peerDead:              make(chan TimedRequest[struct{}]),
 		peerDeadPend:          make(map[peer.ID]struct{}),
 		deadPeerBackoff:       newBackoff(ctx, 1000, BackoffCleanupInterval, MaxBackoffAttempts),
-		cancelCh:              make(chan *Subscription),
-		getPeers:              make(chan *listPeerReq),
-		addSub:                make(chan *addSubReq),
-		addRelay:              make(chan *addRelayReq),
-		rmRelay:               make(chan string),
-		addTopic:              make(chan *addTopicReq),
-		rmTopic:               make(chan *rmTopicReq),
-		getTopics:             make(chan *topicReq),
-		sendMsg:               make(chan *Message, 32),
-		sendMessageBatch:      make(chan messageBatchAndPublishOptions, 1),
-		addVal:                make(chan *addValReq),
-		rmVal:                 make(chan *rmValReq),
-		eval:                  make(chan func()),
+		cancelCh:              make(chan TimedRequest[*Subscription]),
+		getPeers:              make(chan TimedRequest[*listPeerReq]),
+		addSub:                make(chan TimedRequest[*addSubReq]),
+		addRelay:              make(chan TimedRequest[*addRelayReq]),
+		rmRelay:               make(chan TimedRequest[string]),
+		addTopic:              make(chan TimedRequest[*addTopicReq]),
+		rmTopic:               make(chan TimedRequest[*rmTopicReq]),
+		getTopics:             make(chan TimedRequest[*topicReq]),
+		sendMsg:               make(chan TimedRequest[*Message], 32),
+		sendMessageBatch:      make(chan TimedRequest[messageBatchAndPublishOptions], 1),
+		addVal:                make(chan TimedRequest[*addValReq]),
+		rmVal:                 make(chan TimedRequest[*rmValReq]),
+		eval:                  make(chan TimedRequest[func()]),
 		myTopics:              make(map[string]*Topic),
 		mySubs:                make(map[string]map[*Subscription]struct{}),
 		myRelays:              make(map[string]int),
@@ -505,11 +513,12 @@ func NewPubSub(ctx context.Context, h host.Host, rt PubSubRouter, opts ...Option
 		peers:                 make(map[peer.ID]*rpcQueue),
 		inboundStreams:        make(map[peer.ID]network.Stream),
 		blacklist:             NewMapBlacklist(),
-		blacklistPeer:         make(chan peer.ID),
+		blacklistPeer:         make(chan TimedRequest[peer.ID]),
 		seenMsgTTL:            TimeCacheDuration,
 		seenMsgStrategy:       TimeCacheStrategy,
 		idGen:                 newMsgIdGenerator(),
 		counter:               uint64(time.Now().UnixNano()),
+		metrics:               metrics{MeterProvider: noop.MeterProvider{}},
 	}
 
 	for _, opt := range opts {
@@ -517,6 +526,11 @@ func NewPubSub(ctx context.Context, h host.Host, rt PubSubRouter, opts ...Option
 		if err != nil {
 			return nil, err
 		}
+	}
+
+	err := InitMetrics(ps)
+	if err != nil {
+		return nil, err
 	}
 
 	if ps.rpcLogger == nil {
@@ -805,17 +819,32 @@ func (p *PubSub) processLoop(ctx context.Context) {
 	}()
 
 	for {
-		select {
-		case <-p.newPeers:
-			p.handlePendingPeers()
+		p.metrics.RecordSendMsgQueueDepth(int64(len(p.sendMsg)))
+		p.metrics.RecordIncomingQueueDepth(int64(len(p.incoming)))
 
-		case s := <-p.newPeerStream:
+		select {
+		case treq := <-p.newPeers:
+			queueDelay := time.Since(treq.ReceivedAt)
+			p.metrics.RecordEventLoopWaitTeam(queueDelay, "new_peers")
+
+			startTime := time.Now()
+			p.handlePendingPeers()
+			p.metrics.RecordEventProcessingTime(time.Since(startTime), "new_peers")
+
+		case treq := <-p.newPeerStream:
+			queueDelay := time.Since(treq.ReceivedAt)
+			p.metrics.RecordEventLoopWaitTeam(queueDelay, "new_peer_stream")
+
+			startTime := time.Now()
+
+			s := treq.Request
 			pid := s.Conn().RemotePeer()
 
 			q, ok := p.peers[pid]
 			if !ok {
 				p.logger.Warn("new stream for unknown peer", "peer", pid)
 				s.Reset()
+				p.metrics.RecordEventProcessingTime(time.Since(startTime), "new_peer_stream")
 				continue
 			}
 
@@ -823,42 +852,113 @@ func (p *PubSub) processLoop(ctx context.Context) {
 				p.logger.Warn("closing stream for blacklisted peer", "peer", pid)
 				q.Close()
 				delete(p.peers, pid)
+				p.metrics.RecordPeerCount(int64(len(p.peers)))
 				s.Reset()
+				p.metrics.RecordEventProcessingTime(time.Since(startTime), "new_peer_stream")
 				continue
 			}
 
 			helloPacket := p.getHelloPacket()
 			helloPacket = p.rt.AddPeer(pid, s.Protocol(), helloPacket)
 			q.Push(helloPacket, true)
+			p.metrics.RecordEventProcessingTime(time.Since(startTime), "new_peer_stream")
 
-		case pid := <-p.newPeerError:
+		case treq := <-p.newPeerError:
+			queueDelay := time.Since(treq.ReceivedAt)
+			p.metrics.RecordEventLoopWaitTeam(queueDelay, "new_peer_error")
+
+			startTime := time.Now()
+			pid := treq.Request
+
 			delete(p.peers, pid)
+			p.metrics.RecordPeerCount(int64(len(p.peers)))
+			p.metrics.RecordEventProcessingTime(time.Since(startTime), "new_peer_error")
 
-		case <-p.peerDead:
+		case treq := <-p.peerDead:
+			queueDelay := time.Since(treq.ReceivedAt)
+			p.metrics.RecordEventLoopWaitTeam(queueDelay, "peer_dead")
+
+			startTime := time.Now()
 			p.handleDeadPeers()
+			p.metrics.RecordEventProcessingTime(time.Since(startTime), "peer_dead")
 
-		case treq := <-p.getTopics:
+		case trequest := <-p.getTopics:
+			queueDelay := time.Since(trequest.ReceivedAt)
+			p.metrics.RecordEventLoopWaitTeam(queueDelay, "get_topics")
+
+			startTime := time.Now()
+			treq := trequest.Request
 			var out []string
 			for t := range p.mySubs {
 				out = append(out, t)
 			}
 			treq.resp <- out
-		case topic := <-p.addTopic:
+			p.metrics.RecordEventProcessingTime(time.Since(startTime), "get_topics")
+
+		case treq := <-p.addTopic:
+			queueDelay := time.Since(treq.ReceivedAt)
+			p.metrics.RecordEventLoopWaitTeam(queueDelay, "add_topic")
+
+			startTime := time.Now()
+			topic := treq.Request
 			p.handleAddTopic(topic)
-		case topic := <-p.rmTopic:
+			p.metrics.RecordEventProcessingTime(time.Since(startTime), "add_topic")
+
+		case treq := <-p.rmTopic:
+			queueDelay := time.Since(treq.ReceivedAt)
+			p.metrics.RecordEventLoopWaitTeam(queueDelay, "rm_topic")
+
+			startTime := time.Now()
+			topic := treq.Request
 			p.handleRemoveTopic(topic)
-		case sub := <-p.cancelCh:
+			p.metrics.RecordEventProcessingTime(time.Since(startTime), "rm_topic")
+
+		case treq := <-p.cancelCh:
+			queueDelay := time.Since(treq.ReceivedAt)
+			p.metrics.RecordEventLoopWaitTeam(queueDelay, "rm_subscription")
+
+			startTime := time.Now()
+			sub := treq.Request
 			p.handleRemoveSubscription(sub)
-		case sub := <-p.addSub:
+			p.metrics.RecordEventProcessingTime(time.Since(startTime), "rm_subscription")
+
+		case treq := <-p.addSub:
+			queueDelay := time.Since(treq.ReceivedAt)
+			p.metrics.RecordEventLoopWaitTeam(queueDelay, "add_subscription")
+
+			startTime := time.Now()
+			sub := treq.Request
 			p.handleAddSubscription(sub)
-		case relay := <-p.addRelay:
+			p.metrics.RecordEventProcessingTime(time.Since(startTime), "add_subscription")
+
+		case treq := <-p.addRelay:
+			queueDelay := time.Since(treq.ReceivedAt)
+			p.metrics.RecordEventLoopWaitTeam(queueDelay, "add_relay")
+
+			startTime := time.Now()
+			relay := treq.Request
 			p.handleAddRelay(relay)
-		case topic := <-p.rmRelay:
+			p.metrics.RecordEventProcessingTime(time.Since(startTime), "add_relay")
+
+		case treq := <-p.rmRelay:
+			queueDelay := time.Since(treq.ReceivedAt)
+			p.metrics.RecordEventLoopWaitTeam(queueDelay, "rm_relay")
+
+			startTime := time.Now()
+			topic := treq.Request
 			p.handleRemoveRelay(topic)
-		case preq := <-p.getPeers:
+			p.metrics.RecordEventProcessingTime(time.Since(startTime), "rm_relay")
+
+		case treq := <-p.getPeers:
+			queueDelay := time.Since(treq.ReceivedAt)
+			p.metrics.RecordEventLoopWaitTeam(queueDelay, "get_peers")
+
+			startTime := time.Now()
+			preq := treq.Request
 			tmap, ok := p.topics[preq.topic]
 			if preq.topic != "" && !ok {
 				preq.resp <- nil
+				p.metrics.RecordEventProcessingTime(time.Since(startTime), "get_peers")
 				continue
 			}
 			var peers []peer.ID
@@ -872,25 +972,74 @@ func (p *PubSub) processLoop(ctx context.Context) {
 				peers = append(peers, p)
 			}
 			preq.resp <- peers
-		case rpc := <-p.incoming:
+			p.metrics.RecordEventProcessingTime(time.Since(startTime), "get_peers")
+
+		case treq := <-p.incoming:
+			queueDelay := time.Since(treq.ReceivedAt)
+			p.metrics.RecordEventLoopWaitTeam(queueDelay, "handle_incoming_rpc")
+
+			startTime := time.Now()
+			rpc := treq.Request
 			p.handleIncomingRPC(rpc)
+			p.metrics.RecordEventProcessingTime(time.Since(startTime), "handle_incoming_rpc")
 
-		case msg := <-p.sendMsg:
+		case treq := <-p.sendMsg:
+			queueDelay := time.Since(treq.ReceivedAt)
+			p.metrics.RecordEventLoopWaitTeam(queueDelay, "publish_message")
+
+			startTime := time.Now()
+			msg := treq.Request
 			p.publishMessage(msg)
+			p.metrics.RecordEventProcessingTime(time.Since(startTime), "publish_message")
 
-		case batchAndOpts := <-p.sendMessageBatch:
+			p.metrics.IncrementTopicMsgPublished(msg.GetTopic())
+
+		case treq := <-p.sendMessageBatch:
+			queueDelay := time.Since(treq.ReceivedAt)
+			p.metrics.RecordEventLoopWaitTeam(queueDelay, "send_message_batch")
+
+			startTime := time.Now()
+			batchAndOpts := treq.Request
 			p.publishMessageBatch(batchAndOpts)
+			p.metrics.RecordEventProcessingTime(time.Since(startTime), "send_message_batch")
 
-		case req := <-p.addVal:
+			for _, msg := range batchAndOpts.messages {
+				p.metrics.IncrementTopicMsgPublished(msg.GetTopic())
+			}
+
+		case treq := <-p.addVal:
+			queueDelay := time.Since(treq.ReceivedAt)
+			p.metrics.RecordEventLoopWaitTeam(queueDelay, "add_validator")
+
+			startTime := time.Now()
+			req := treq.Request
 			p.val.AddValidator(req)
+			p.metrics.RecordEventProcessingTime(time.Since(startTime), "add_validator")
 
-		case req := <-p.rmVal:
+		case treq := <-p.rmVal:
+			queueDelay := time.Since(treq.ReceivedAt)
+			p.metrics.RecordEventLoopWaitTeam(queueDelay, "rm_validator")
+
+			startTime := time.Now()
+			req := treq.Request
 			p.val.RemoveValidator(req)
+			p.metrics.RecordEventProcessingTime(time.Since(startTime), "rm_validator")
 
-		case thunk := <-p.eval:
-			thunk()
+		case treq := <-p.eval:
+			// TODO - get name of method using reflect?
+			queueDelay := time.Since(treq.ReceivedAt)
+			p.metrics.RecordEventLoopWaitTeam(queueDelay, "eval")
 
-		case pid := <-p.blacklistPeer:
+			startTime := time.Now()
+			treq.Request()
+			p.metrics.RecordEventProcessingTime(time.Since(startTime), "eval")
+
+		case treq := <-p.blacklistPeer:
+			queueDelay := time.Since(treq.ReceivedAt)
+			p.metrics.RecordEventLoopWaitTeam(queueDelay, "blacklist_peer")
+
+			startTime := time.Now()
+			pid := treq.Request
 			p.logger.Info("Blacklisting peer", "peer", pid)
 			p.blacklist.Add(pid)
 
@@ -905,7 +1054,9 @@ func (p *PubSub) processLoop(ctx context.Context) {
 					}
 				}
 				p.rt.RemovePeer(pid)
+				p.metrics.RecordPeerCount(int64(len(p.peers)))
 			}
+			p.metrics.RecordEventProcessingTime(time.Since(startTime), "blacklist_peer")
 
 		case <-ctx.Done():
 			p.logger.Info("pubsub processloop shutting down")
@@ -947,6 +1098,8 @@ func (p *PubSub) handlePendingPeers() {
 		p.peers[pid] = rpcQueue
 		go p.handleNewPeer(p.ctx, pid, rpcQueue)
 	}
+
+	p.metrics.RecordPeerCount(int64(len(p.peers)))
 }
 
 func (p *PubSub) handleDeadPeers() {
@@ -994,6 +1147,8 @@ func (p *PubSub) handleDeadPeers() {
 			go p.handleNewPeerWithBackoff(p.ctx, pid, backoffDelay, rpcQueue)
 		}
 	}
+
+	p.metrics.RecordPeerCount(int64(len(p.peers)))
 }
 
 // handleAddTopic adds a tracker for a particular topic.
@@ -1009,6 +1164,7 @@ func (p *PubSub) handleAddTopic(req *addTopicReq) {
 	}
 
 	p.myTopics[topicID] = topic
+	p.metrics.RecordTopicCount(int64(len(p.myTopics)))
 	req.resp <- topic
 }
 
@@ -1026,6 +1182,7 @@ func (p *PubSub) handleRemoveTopic(req *rmTopicReq) {
 		len(p.mySubs[req.topic.topic]) == 0 &&
 		p.myRelays[req.topic.topic] == 0 {
 		delete(p.myTopics, topic.topic)
+		p.metrics.RecordTopicCount(int64(len(p.myTopics)))
 		req.resp <- nil
 		return
 	}
@@ -1057,6 +1214,8 @@ func (p *PubSub) handleRemoveSubscription(sub *Subscription) {
 			p.announce(sub.topic, false)
 			p.rt.Leave(sub.topic)
 		}
+
+		p.metrics.RecordSubscriptionCount(int64(len(p.mySubs[sub.topic])))
 	}
 }
 
@@ -1083,6 +1242,8 @@ func (p *PubSub) handleAddSubscription(req *addSubReq) {
 	sub.cancelCh = p.cancelCh
 
 	p.mySubs[sub.topic][sub] = struct{}{}
+
+	p.metrics.RecordSubscriptionCount(int64(len(p.mySubs[sub.topic])))
 
 	req.resp <- sub
 }
@@ -1111,8 +1272,9 @@ func (p *PubSub) handleAddRelay(req *addRelayReq) {
 			return
 		}
 
+		treq := NewTimedRequest(topic, time.Now())
 		select {
-		case p.rmRelay <- topic:
+		case p.rmRelay <- treq:
 			isCancelled = true
 		case <-p.ctx.Done():
 		}
@@ -1169,7 +1331,7 @@ func (p *PubSub) announce(topic string, sub bool) {
 func (p *PubSub) announceRetry(pid peer.ID, topic string, sub bool) {
 	time.Sleep(time.Duration(1+rand.Intn(1000)) * time.Millisecond)
 
-	retry := func() {
+	treq := NewTimedRequest(func() {
 		_, okSubs := p.mySubs[topic]
 		_, okRelays := p.myRelays[topic]
 
@@ -1178,10 +1340,10 @@ func (p *PubSub) announceRetry(pid peer.ID, topic string, sub bool) {
 		if (ok && sub) || (!ok && !sub) {
 			p.doAnnounceRetry(pid, topic, sub)
 		}
-	}
+	}, time.Now())
 
 	select {
-	case p.eval <- retry:
+	case p.eval <- treq:
 	case <-p.ctx.Done():
 	}
 }
@@ -1338,7 +1500,12 @@ func (p *PubSub) handleIncomingRPC(rpc *RPC) {
 				continue
 			}
 
-			msg := &Message{pmsg, "", rpc.from, nil, false}
+			msg := &Message{
+				Message:      pmsg,
+				ID:           "",
+				ReceivedFrom: rpc.from,
+				ReceivedAt:   rpc.receivedAt,
+			}
 			if p.shouldPush(msg) {
 				toPush = append(toPush, msg)
 			}
@@ -1527,11 +1694,12 @@ func (p *PubSub) tryJoin(topic string, opts ...TopicOpt) (*Topic, bool, error) {
 	}
 
 	resp := make(chan *Topic, 1)
-	select {
-	case t.p.addTopic <- &addTopicReq{
+	treq := NewTimedRequest(&addTopicReq{
 		topic: t,
 		resp:  resp,
-	}:
+	}, time.Now())
+	select {
+	case t.p.addTopic <- treq:
 	case <-t.p.ctx.Done():
 		return nil, false, t.p.ctx.Err()
 	}
@@ -1583,8 +1751,9 @@ type topicReq struct {
 // GetTopics returns the topics this node is subscribed to.
 func (p *PubSub) GetTopics() []string {
 	out := make(chan []string, 1)
+	treq := NewTimedRequest(&topicReq{resp: out}, time.Now())
 	select {
-	case p.getTopics <- &topicReq{resp: out}:
+	case p.getTopics <- treq:
 	case <-p.ctx.Done():
 		return nil
 	}
@@ -1627,10 +1796,12 @@ func (p *PubSub) PublishBatch(batch *MessageBatch, opts ...BatchPubOpt) error {
 	}
 	setDefaultBatchPublishOptions(publishOptions)
 
-	p.sendMessageBatch <- messageBatchAndPublishOptions{
+	treq := NewTimedRequest(messageBatchAndPublishOptions{
 		messages: batch.take(),
 		opts:     publishOptions,
-	}
+	}, time.Now())
+
+	p.sendMessageBatch <- treq
 
 	return nil
 }
@@ -1650,11 +1821,12 @@ type listPeerReq struct {
 // ListPeers returns a list of peers we are connected to in the given topic.
 func (p *PubSub) ListPeers(topic string) []peer.ID {
 	out := make(chan []peer.ID)
-	select {
-	case p.getPeers <- &listPeerReq{
+	treq := NewTimedRequest(&listPeerReq{
 		resp:  out,
 		topic: topic,
-	}:
+	}, time.Now())
+	select {
+	case p.getPeers <- treq:
 	case <-p.ctx.Done():
 		return nil
 	}
@@ -1663,8 +1835,9 @@ func (p *PubSub) ListPeers(topic string) []peer.ID {
 
 // BlacklistPeer blacklists a peer; all messages from this peer will be unconditionally dropped.
 func (p *PubSub) BlacklistPeer(pid peer.ID) {
+	treq := NewTimedRequest(pid, time.Now())
 	select {
-	case p.blacklistPeer <- pid:
+	case p.blacklistPeer <- treq:
 	case <-p.ctx.Done():
 	}
 }
@@ -1687,8 +1860,10 @@ func (p *PubSub) RegisterTopicValidator(topic string, val interface{}, opts ...V
 		}
 	}
 
+	treq := NewTimedRequest(addVal, time.Now())
+
 	select {
-	case p.addVal <- addVal:
+	case p.addVal <- treq:
 	case <-p.ctx.Done():
 		return p.ctx.Err()
 	}
@@ -1703,8 +1878,9 @@ func (p *PubSub) UnregisterTopicValidator(topic string) error {
 		resp:  make(chan error, 1),
 	}
 
+	treq := NewTimedRequest(rmVal, time.Now())
 	select {
-	case p.rmVal <- rmVal:
+	case p.rmVal <- treq:
 	case <-p.ctx.Done():
 		return p.ctx.Err()
 	}

@@ -625,9 +625,9 @@ func TestTopicRelayReuse(t *testing.T) {
 	time.Sleep(time.Millisecond * 100)
 
 	res := make(chan bool, 1)
-	pubsubs[0].eval <- func() {
+	pubsubs[0].eval <- NewTimedRequest(func() {
 		res <- pubsubs[0].myRelays[topic] == 3
-	}
+	}, time.Now())
 
 	isCorrectNumber := <-res
 	if !isCorrectNumber {
@@ -639,9 +639,9 @@ func TestTopicRelayReuse(t *testing.T) {
 	relay1Cancel()
 	relay1Cancel()
 
-	pubsubs[0].eval <- func() {
+	pubsubs[0].eval <- NewTimedRequest(func() {
 		res <- pubsubs[0].myRelays[topic] == 2
-	}
+	}, time.Now())
 
 	isCorrectNumber = <-res
 	if !isCorrectNumber {
@@ -653,9 +653,9 @@ func TestTopicRelayReuse(t *testing.T) {
 
 	time.Sleep(time.Millisecond * 100)
 
-	pubsubs[0].eval <- func() {
+	pubsubs[0].eval <- NewTimedRequest(func() {
 		res <- pubsubs[0].myRelays[topic] == 0
-	}
+	}, time.Now())
 
 	isCorrectNumber = <-res
 	if !isCorrectNumber {

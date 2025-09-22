@@ -110,7 +110,7 @@ func TestGossipSubCustomProtocols(t *testing.T) {
 
 	// check the meshes of the gsubs, the gossipsub meshes should include each other but not the
 	// floddsub peer
-	gsubs[0].eval <- func() {
+	gsubs[0].eval <- NewTimedRequest(func() {
 		gs := gsubs[0].rt.(*GossipSubRouter)
 
 		_, ok := gs.mesh[topic][hosts[1].ID()]
@@ -122,9 +122,9 @@ func TestGossipSubCustomProtocols(t *testing.T) {
 		if ok {
 			t.Fatal("expected gs0 to not have fs in its mesh")
 		}
-	}
+	}, time.Now())
 
-	gsubs[1].eval <- func() {
+	gsubs[1].eval <- NewTimedRequest(func() {
 		gs := gsubs[1].rt.(*GossipSubRouter)
 
 		_, ok := gs.mesh[topic][hosts[0].ID()]
@@ -136,7 +136,7 @@ func TestGossipSubCustomProtocols(t *testing.T) {
 		if ok {
 			t.Fatal("expected gs1 to not have fs in its mesh")
 		}
-	}
+	}, time.Now())
 
 	// send some messages
 	for i := 0; i < 10; i++ {

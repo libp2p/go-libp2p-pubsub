@@ -172,12 +172,12 @@ func TestSubscriptionFilterRPC(t *testing.T) {
 	var sub1, sub2, sub3 bool
 	ready := make(chan struct{})
 
-	ps1.eval <- func() {
+	ps1.eval <- NewTimedRequest(func() {
 		_, sub1 = ps1.topics["test1"][hosts[1].ID()]
 		_, sub2 = ps1.topics["test2"][hosts[1].ID()]
 		_, sub3 = ps1.topics["test3"][hosts[1].ID()]
 		ready <- struct{}{}
-	}
+	}, time.Now())
 	<-ready
 
 	if sub1 {
@@ -190,12 +190,12 @@ func TestSubscriptionFilterRPC(t *testing.T) {
 		t.Fatal("expected no subscription for test1")
 	}
 
-	ps2.eval <- func() {
+	ps2.eval <- NewTimedRequest(func() {
 		_, sub1 = ps2.topics["test1"][hosts[0].ID()]
 		_, sub2 = ps2.topics["test2"][hosts[0].ID()]
 		_, sub3 = ps2.topics["test3"][hosts[0].ID()]
 		ready <- struct{}{}
-	}
+	}, time.Now())
 	<-ready
 
 	if sub1 {

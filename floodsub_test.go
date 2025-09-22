@@ -270,9 +270,9 @@ func TestReconnects(t *testing.T) {
 	}
 
 	nSubs := make(chan int)
-	psubs[2].eval <- func() {
+	psubs[2].eval <- NewTimedRequest(func() {
 		nSubs <- len(psubs[2].mySubs["cats"])
-	}
+	}, time.Now())
 	if <-nSubs > 0 {
 		t.Fatal(`B should have 0 subscribers for channel "cats", has`, nSubs)
 	}

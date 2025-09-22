@@ -579,11 +579,11 @@ func TestGossipsubAttackGRAFTDuringBackoff(t *testing.T) {
 
 					// make sure we are _not_ in the mesh
 					res := make(chan bool)
-					ps.eval <- func() {
+					ps.eval <- NewTimedRequest(func() {
 						mesh := ps.rt.(*GossipSubRouter).mesh[mytopic]
 						_, inMesh := mesh[attacker.ID()]
 						res <- inMesh
-					}
+					}, time.Now())
 
 					inMesh := <-res
 					if inMesh {

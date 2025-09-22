@@ -372,20 +372,20 @@ func TestGossipsubFanoutExpiry(t *testing.T) {
 		}
 	}
 
-	psubs[0].eval <- func() {
+	psubs[0].eval <- NewTimedRequest(func() {
 		if len(psubs[0].rt.(*GossipSubRouter).fanout) == 0 {
 			t.Fatal("owner has no fanout")
 		}
-	}
+	}, time.Now())
 
 	// wait for TTL to expire fanout peers in owner
 	time.Sleep(time.Second * 2)
 
-	psubs[0].eval <- func() {
+	psubs[0].eval <- NewTimedRequest(func() {
 		if len(psubs[0].rt.(*GossipSubRouter).fanout) > 0 {
 			t.Fatal("fanout hasn't expired")
 		}
-	}
+	}, time.Now())
 
 	// wait for it to run in the event loop
 	time.Sleep(10 * time.Millisecond)
@@ -697,7 +697,7 @@ func TestGossipsubPruneBackoffTime(t *testing.T) {
 		// Copy i so this func keeps the correct value in the closure.
 		var idx = i
 		// Run this check in the eval thunk so that we don't step over the heartbeat goroutine and trigger a race.
-		psubs[idx].rt.(*GossipSubRouter).p.eval <- func() {
+		psubs[idx].rt.(*GossipSubRouter).p.eval <- NewTimedRequest(func() {
 			defer wg.Done()
 			backoff, ok := psubs[idx].rt.(*GossipSubRouter).backoff["foobar"][hosts[0].ID()]
 			if !ok {
@@ -706,7 +706,7 @@ func TestGossipsubPruneBackoffTime(t *testing.T) {
 			if ok && backoff.Sub(pruneTime)-params.PruneBackoff > time.Second {
 				t.Errorf("backoff time should be equal to prune backoff (with some slack) was %v", backoff.Sub(pruneTime)-params.PruneBackoff)
 			}
-		}
+		}, time.Now())
 	}
 	wg.Wait()
 
@@ -1119,13 +1119,13 @@ func TestGossipsubStarTopology(t *testing.T) {
 	psubs := getGossipsubs(ctx, hosts, WithPeerExchange(true), WithFloodPublish(true))
 
 	// configure the center of the star with a very low D
-	psubs[0].eval <- func() {
+	psubs[0].eval <- NewTimedRequest(func() {
 		gs := psubs[0].rt.(*GossipSubRouter)
 		gs.params.D = 0
 		gs.params.Dlo = 0
 		gs.params.Dhi = 0
 		gs.params.Dscore = 0
-	}
+	}, time.Now())
 
 	// add all peer addresses to the peerstores
 	// this is necessary because we can't have signed address records witout identify
@@ -1203,13 +1203,13 @@ func TestGossipsubStarTopologyWithSignedPeerRecords(t *testing.T) {
 	psubs := getGossipsubs(ctx, hosts, WithPeerExchange(true), WithFloodPublish(true))
 
 	// configure the center of the star with a very low D
-	psubs[0].eval <- func() {
+	psubs[0].eval <- NewTimedRequest(func() {
 		gs := psubs[0].rt.(*GossipSubRouter)
 		gs.params.D = 0
 		gs.params.Dlo = 0
 		gs.params.Dhi = 0
 		gs.params.Dscore = 0
-	}
+	}, time.Now())
 
 	// manually create signed peer records for each host and add them to the
 	// peerstore of the center of the star, which is doing the bootstrapping
@@ -1417,14 +1417,14 @@ func TestGossipsubDirectPeersFanout(t *testing.T) {
 
 	// verify that h0 is in the fanout of h2, but not h1 who is a direct peer
 	result := make(chan bool, 2)
-	psubs[2].eval <- func() {
+	psubs[2].eval <- NewTimedRequest(func() {
 		rt := psubs[2].rt.(*GossipSubRouter)
 		fanout := rt.fanout["test"]
 		_, ok := fanout[h[0].ID()]
 		result <- ok
 		_, ok = fanout[h[1].ID()]
 		result <- ok
-	}
+	}, time.Now())
 
 	inFanout := <-result
 	if !inFanout {
@@ -1444,14 +1444,14 @@ func TestGossipsubDirectPeersFanout(t *testing.T) {
 
 	time.Sleep(2 * time.Second)
 
-	psubs[2].eval <- func() {
+	psubs[2].eval <- NewTimedRequest(func() {
 		rt := psubs[2].rt.(*GossipSubRouter)
 		mesh := rt.mesh["test"]
 		_, ok := mesh[h[0].ID()]
 		result <- ok
 		_, ok = mesh[h[1].ID()]
 		result <- ok
-	}
+	}, time.Now())
 
 	inMesh := <-result
 	if !inMesh {
@@ -1517,9 +1517,9 @@ func TestGossipsubEnoughPeers(t *testing.T) {
 
 	// at this point we have no connections and no mesh, so EnoughPeers should return false
 	res := make(chan bool, 1)
-	psubs[0].eval <- func() {
+	psubs[0].eval <- NewTimedRequest(func() {
 		res <- psubs[0].rt.EnoughPeers("test", 0)
-	}
+	}, time.Now())
 	enough := <-res
 	if enough {
 		t.Fatal("should not have enough peers")
@@ -1530,9 +1530,9 @@ func TestGossipsubEnoughPeers(t *testing.T) {
 
 	time.Sleep(3 * time.Second)
 
-	psubs[0].eval <- func() {
+	psubs[0].eval <- NewTimedRequest(func() {
 		res <- psubs[0].rt.EnoughPeers("test", 0)
-	}
+	}, time.Now())
 	enough = <-res
 	if !enough {
 		t.Fatal("should have enough peers")
@@ -1732,17 +1732,17 @@ func TestGossipsubScoreValidatorEx(t *testing.T) {
 	// assert that peer1's score is still 0 (its message was ignored) while peer2 should have
 	// a negative score (its message got rejected)
 	res := make(chan float64, 1)
-	psubs[0].eval <- func() {
+	psubs[0].eval <- NewTimedRequest(func() {
 		res <- psubs[0].rt.(*GossipSubRouter).score.Score(hosts[1].ID())
-	}
+	}, time.Now())
 	score := <-res
 	if score != 0 {
 		t.Fatalf("expected 0 score for peer1, but got %f", score)
 	}
 
-	psubs[0].eval <- func() {
+	psubs[0].eval <- NewTimedRequest(func() {
 		res <- psubs[0].rt.(*GossipSubRouter).score.Score(hosts[2].ID())
-	}
+	}, time.Now())
 	score = <-res
 	if score >= 0 {
 		t.Fatalf("expected negative score for peer2, but got %f", score)
@@ -1761,7 +1761,7 @@ func TestGossipsubPiggybackControl(t *testing.T) {
 	blah := peer.ID("bogotr0n")
 
 	res := make(chan *RPC, 1)
-	ps.eval <- func() {
+	ps.eval <- NewTimedRequest(func() {
 		gs := ps.rt.(*GossipSubRouter)
 		test1 := "test1"
 		test2 := "test2"
@@ -1776,7 +1776,7 @@ func TestGossipsubPiggybackControl(t *testing.T) {
 			Prune: []*pb.ControlPrune{{TopicID: &test1}, {TopicID: &test2}, {TopicID: &test3}},
 		})
 		res <- rpc
-	}
+	}, time.Now())
 
 	rpc := <-res
 	if rpc.Control == nil {
@@ -1823,30 +1823,30 @@ func TestGossipsubMultipleGraftTopics(t *testing.T) {
 
 	finChan := make(chan struct{})
 
-	p2Sub.eval <- func() {
+	p2Sub.eval <- NewTimedRequest(func() {
 		// Add topics to second peer
 		p2Router.mesh[firstTopic] = map[peer.ID]struct{}{}
 		p2Router.mesh[secondTopic] = map[peer.ID]struct{}{}
 		p2Router.mesh[thirdTopic] = map[peer.ID]struct{}{}
 
 		finChan <- struct{}{}
-	}
+	}, time.Now())
 	<-finChan
 
 	// Send multiple GRAFT messages to second peer from
 	// 1st peer
 	wait := make(chan struct{})
-	p1Sub.eval <- func() {
+	p1Sub.eval <- NewTimedRequest(func() {
 		defer close(wait)
 		p1Router.sendGraftPrune(map[peer.ID][]string{
 			secondPeer: {firstTopic, secondTopic, thirdTopic},
 		}, map[peer.ID][]string{}, map[peer.ID]bool{})
-	}
+	}, time.Now())
 	<-wait
 
 	time.Sleep(time.Second * 1)
 
-	p2Sub.eval <- func() {
+	p2Sub.eval <- NewTimedRequest(func() {
 		if _, ok := p2Router.mesh[firstTopic][firstPeer]; !ok {
 			t.Errorf("First peer wasnt added to mesh of the second peer for the topic %s", firstTopic)
 		}
@@ -1857,7 +1857,7 @@ func TestGossipsubMultipleGraftTopics(t *testing.T) {
 			t.Errorf("First peer wasnt added to mesh of the second peer for the topic %s", thirdTopic)
 		}
 		finChan <- struct{}{}
-	}
+	}, time.Now())
 	<-finChan
 }
 
@@ -1956,7 +1956,7 @@ func TestGossipsubOpportunisticGrafting(t *testing.T) {
 	// check the honest peer meshes, they should have at least 3 honest peers each
 	res := make(chan int, 1)
 	for _, ps := range psubs {
-		ps.eval <- func() {
+		ps.eval <- NewTimedRequest(func() {
 			gs := ps.rt.(*GossipSubRouter)
 			count := 0
 			for _, h := range hosts[:10] {
@@ -1966,7 +1966,7 @@ func TestGossipsubOpportunisticGrafting(t *testing.T) {
 				}
 			}
 			res <- count
-		}
+		}, time.Now())
 
 		count := <-res
 		if count < 3 {
@@ -1999,7 +1999,7 @@ func TestGossipSubLeaveTopic(t *testing.T) {
 	leaveTime := time.Now()
 	done := make(chan struct{})
 
-	psubs[0].rt.(*GossipSubRouter).p.eval <- func() {
+	psubs[0].rt.(*GossipSubRouter).p.eval <- NewTimedRequest(func() {
 		defer close(done)
 		psubs[0].rt.Leave("test")
 		time.Sleep(time.Second)
@@ -2017,13 +2017,13 @@ func TestGossipSubLeaveTopic(t *testing.T) {
 		if backoffTime-GossipSubUnsubscribeBackoff > time.Second {
 			t.Error("Backoff time should be set to GossipSubUnsubscribeBackoff.")
 		}
-	}
+	}, time.Now())
 	<-done
 
 	done = make(chan struct{})
 	// Ensure that remote peer 1 also applies the backoff appropriately
 	// for peer 0.
-	psubs[1].rt.(*GossipSubRouter).p.eval <- func() {
+	psubs[1].rt.(*GossipSubRouter).p.eval <- NewTimedRequest(func() {
 		defer close(done)
 		peerMap2 := psubs[1].rt.(*GossipSubRouter).backoff["test"]
 		if len(peerMap2) != 1 {
@@ -2039,7 +2039,7 @@ func TestGossipSubLeaveTopic(t *testing.T) {
 		if backoffTime-GossipSubUnsubscribeBackoff > time.Second {
 			t.Error("Backoff time should be set to GossipSubUnsubscribeBackoff.")
 		}
-	}
+	}, time.Now())
 	<-done
 }
 
@@ -2047,11 +2047,11 @@ func TestGossipSubLeaveTopic(t *testing.T) {
 // It runs the callback synchronously
 func withRouter(p *PubSub, f func(r PubSubRouter)) {
 	done := make(chan struct{})
-	p.eval <- func() {
+	p.eval <- NewTimedRequest(func() {
 		defer close(done)
 		router := p.rt
 		f(router)
-	}
+	}, time.Now())
 	<-done
 }
 

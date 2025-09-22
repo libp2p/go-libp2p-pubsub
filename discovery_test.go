@@ -298,9 +298,9 @@ func waitUntilGossipsubMeshCount(ps *PubSub, topic string, count int) {
 	doneCh := make(chan bool, 1)
 	rt := ps.rt.(*GossipSubRouter)
 	for !done {
-		ps.eval <- func() {
+		ps.eval <- NewTimedRequest(func() {
 			doneCh <- len(rt.mesh[topic]) == count
-		}
+		}, time.Now())
 		done = <-doneCh
 		if !done {
 			time.Sleep(100 * time.Millisecond)

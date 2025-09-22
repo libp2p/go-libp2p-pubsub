@@ -85,6 +85,8 @@ func (p *PubSub) handleNewStream(s network.Stream) {
 			continue
 		}
 
+		p.metrics.RecordMessageSize(int64(len(msgbytes)))
+
 		rpc := new(RPC)
 		err = rpc.Unmarshal(msgbytes)
 		r.ReleaseMsg(msgbytes)
@@ -96,11 +98,15 @@ func (p *PubSub) handleNewStream(s network.Stream) {
 		}
 
 		timeToReceive := time.Since(start)
+		p.metrics.RecordMessageParsingTime(timeToReceive)
+		
 		p.rpcLogger.Debug("received", "peer", s.Conn().RemotePeer(), "duration_s", timeToReceive.Seconds(), "rpc", rpc)
 
 		rpc.from = peer
+
+		treq := NewTimedRequest(rpc, rpc.receivedAt)
 		select {
-		case p.incoming <- rpc:
+		case p.incoming <- treq:
 		case <-p.ctx.Done():
 			// Close is useless because the other side isn't reading.
 			s.Reset()
@@ -116,8 +122,9 @@ func (p *PubSub) notifyPeerDead(pid peer.ID) {
 	p.peerDeadMx.Unlock()
 	p.peerDeadPrioLk.RUnlock()
 
+	treq := NewTimedRequest(struct{}{}, time.Now())
 	select {
-	case p.peerDead <- struct{}{}:
+	case p.peerDead <- treq:
 	default:
 	}
 }
@@ -127,8 +134,9 @@ func (p *PubSub) handleNewPeer(ctx context.Context, pid peer.ID, outgoing *rpcQu
 	if err != nil {
 		p.logger.Debug("error opening new stream to peer", "err", err, "peer", pid)
 
+		treq := NewTimedRequest(pid, time.Now())
 		select {
-		case p.newPeerError <- pid:
+		case p.newPeerError <- treq:
 		case <-ctx.Done():
 		}
 
@@ -137,8 +145,10 @@ func (p *PubSub) handleNewPeer(ctx context.Context, pid peer.ID, outgoing *rpcQu
 
 	go p.handleSendingMessages(ctx, s, outgoing)
 	go p.handlePeerDead(s)
+
+	treq := NewTimedRequest(s, time.Now())
 	select {
-	case p.newPeerStream <- s:
+	case p.newPeerStream <- treq:
 	case <-ctx.Done():
 	}
 }

@@ -300,8 +300,9 @@ func (v *validation) validateWorker() {
 }
 
 func (v *validation) sendMsgBlocking(msg *Message) error {
+	treq := NewTimedRequest(msg, time.Now())
 	select {
-	case v.p.sendMsg <- msg:
+	case v.p.sendMsg <- treq:
 		return nil
 	case <-v.p.ctx.Done():
 		return v.p.ctx.Err()
@@ -345,7 +346,10 @@ func (v *validation) validate(vals []*validatorImpl, src peer.ID, msg *Message, 
 	result := ValidationAccept
 loop:
 	for _, val := range inline {
-		switch val.validateMsg(v.p.ctx, src, msg) {
+		validatorStart := time.Now()
+		validationResult := val.validateMsg(v.p.ctx, src, msg)
+		msg.ValidationDuration += time.Since(validatorStart)
+		switch validationResult {
 		case ValidationAccept:
 		case ValidationReject:
 			result = ValidationReject
@@ -498,7 +502,10 @@ func (val *validatorImpl) validateMsg(ctx context.Context, src peer.ID, msg *Mes
 		defer cancel()
 	}
 
+	validationStartTime := time.Now()
 	r := val.validate(ctx, src, msg)
+	took := time.Since(validationStartTime)
+	msg.ValidationDuration += took
 	switch r {
 	case ValidationAccept:
 		fallthrough

@@ -71,8 +71,9 @@ func (t *Topic) SetScoreParams(p *TopicScoreParams) error {
 		result <- err
 	}
 
+	treq := NewTimedRequest(update, time.Now())
 	select {
-	case t.p.eval <- update:
+	case t.p.eval <- treq:
 		err = <-result
 		return err
 
@@ -107,8 +108,7 @@ func (t *Topic) EventHandler(opts ...TopicEventHandlerOpt) (*TopicEventHandler, 
 
 	done := make(chan struct{}, 1)
 
-	select {
-	case t.p.eval <- func() {
+	evalFunc := func() {
 		tmap := t.p.topics[t.topic]
 		for p := range tmap {
 			h.evtLog[p] = PeerJoin
@@ -118,7 +118,11 @@ func (t *Topic) EventHandler(opts ...TopicEventHandlerOpt) (*TopicEventHandler, 
 		t.evtHandlers[h] = struct{}{}
 		t.evtHandlerMux.Unlock()
 		done <- struct{}{}
-	}:
+	}
+
+	treq := NewTimedRequest(evalFunc, time.Now())
+	select {
+	case t.p.eval <- treq:
 	case <-t.p.ctx.Done():
 		return nil, t.p.ctx.Err()
 	}
@@ -168,11 +172,12 @@ func (t *Topic) Subscribe(opts ...SubOpt) (*Subscription, error) {
 
 	t.p.disc.Discover(sub.topic)
 
-	select {
-	case t.p.addSub <- &addSubReq{
-		sub:  sub,
+	treq := NewTimedRequest(&addSubReq {
+		sub: sub,
 		resp: out,
-	}:
+	}, time.Now())
+	select {
+	case t.p.addSub <- treq:
 	case <-t.p.ctx.Done():
 		return nil, t.p.ctx.Err()
 	}
@@ -194,11 +199,13 @@ func (t *Topic) Relay() (RelayCancelFunc, error) {
 
 	t.p.disc.Discover(t.topic)
 
-	select {
-	case t.p.addRelay <- &addRelayReq{
+	treq := NewTimedRequest(&addRelayReq {
 		topic: t.topic,
-		resp:  out,
-	}:
+		resp: out,
+	}, time.Now())
+
+	select {
+	case t.p.addRelay <- treq:
 	case <-t.p.ctx.Done():
 		return nil, t.p.ctx.Err()
 	}
@@ -321,11 +328,12 @@ func (t *Topic) validate(ctx context.Context, data []byte, opts ...PubOpt) (*Mes
 				// Check if ready for publishing.
 				// Similar to what disc.Bootstrap does.
 				res := make(chan bool, 1)
-				select {
-				case t.p.eval <- func() {
+				treq := NewTimedRequest(func() {
 					done, _ := pub.ready(t.p.rt, t.topic)
 					res <- done
-				}:
+				}, time.Now())
+				select {
+				case t.p.eval <- treq:
 					if <-res {
 						break readyLoop
 					}
@@ -347,12 +355,19 @@ func (t *Topic) validate(ctx context.Context, data []byte, opts ...PubOpt) (*Mes
 			}
 		}
 	}
-
-	msg := &Message{m, "", t.p.host.ID(), pub.validatorData, pub.local}
-	select {
-	case t.p.eval <- func() {
+	
+	msg := &Message{
+		Message:       m,
+		ReceivedFrom:  t.p.host.ID(),
+		ValidatorData: pub.validatorData,
+		Local:         pub.local,
+		ReceivedAt:    time.Now(),
+	}
+	treq := NewTimedRequest(func() {
 		t.p.rt.Preprocess(t.p.host.ID(), []*Message{msg})
-	}:
+	}, time.Now())
+	select {
+	case t.p.eval <- treq:
 	case <-t.p.ctx.Done():
 		return nil, t.p.ctx.Err()
 	case <-ctx.Done():
@@ -418,8 +433,9 @@ func (t *Topic) Close() error {
 
 	req := &rmTopicReq{t, make(chan error, 1)}
 
+	treq := NewTimedRequest(req, time.Now())
 	select {
-	case t.p.rmTopic <- req:
+	case t.p.rmTopic <- treq:
 	case <-t.p.ctx.Done():
 		return t.p.ctx.Err()
 	}

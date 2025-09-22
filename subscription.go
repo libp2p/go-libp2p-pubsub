@@ -3,6 +3,7 @@ package pubsub
 import (
 	"context"
 	"sync"
+	"time"
 )
 
 // Subscription handles the details of a particular Topic subscription.
@@ -10,7 +11,7 @@ import (
 type Subscription struct {
 	topic    string
 	ch       chan *Message
-	cancelCh chan<- *Subscription
+	cancelCh chan<- TimedRequest[*Subscription]
 	ctx      context.Context
 	err      error
 	once     sync.Once
@@ -38,8 +39,9 @@ func (sub *Subscription) Next(ctx context.Context) (*Message, error) {
 // Cancel closes the subscription. If this is the last active subscription then pubsub will send an unsubscribe
 // announcement to the network.
 func (sub *Subscription) Cancel() {
+	treq := NewTimedRequest(sub, time.Now())
 	select {
-	case sub.cancelCh <- sub:
+	case sub.cancelCh <- treq:
 	case <-sub.ctx.Done():
 	}
 }

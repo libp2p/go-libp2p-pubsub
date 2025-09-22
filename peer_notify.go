@@ -2,6 +2,7 @@ package pubsub
 
 import (
 	"context"
+	"time"
 
 	"github.com/libp2p/go-libp2p/core/event"
 	"github.com/libp2p/go-libp2p/core/network"
@@ -33,8 +34,9 @@ func (ps *PubSub) watchForNewPeers(ctx context.Context) {
 	ps.newPeersMx.Unlock()
 	ps.newPeersPrioLk.RUnlock()
 
+	treq := NewTimedRequest(struct{}{}, time.Now())
 	select {
-	case ps.newPeers <- struct{}{}:
+	case ps.newPeers <- treq:
 	default:
 	}
 
@@ -105,8 +107,9 @@ func (ps *PubSub) notifyNewPeer(peer peer.ID) {
 	ps.newPeersMx.Unlock()
 	ps.newPeersPrioLk.RUnlock()
 
+	treq := NewTimedRequest(struct{}{}, time.Now())
 	select {
-	case ps.newPeers <- struct{}{}:
+	case ps.newPeers <- treq:
 	default:
 	}
 }
