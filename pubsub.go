@@ -1495,6 +1495,8 @@ func (p *PubSub) handleIncomingRPC(rpc *RPC) {
 	case AcceptAll:
 		var toPush []*Message
 		for _, pmsg := range rpc.GetPublish() {
+			// TODO - is this the right place? messages from graylisted and throttled peers may not be counted.
+			p.metrics.IncrementTopicMsgRecvdUnfiltered(pmsg.GetTopic())
 			if !(p.subscribedToMsg(pmsg) || p.canRelayMsg(pmsg)) {
 				p.logger.Debug("received message in topic we didn't subscribe to; ignoring message")
 				continue
@@ -1507,6 +1509,8 @@ func (p *PubSub) handleIncomingRPC(rpc *RPC) {
 				ReceivedAt:   rpc.receivedAt,
 			}
 			if p.shouldPush(msg) {
+				p.metrics.IncrementTopicMsgRecvd(msg.GetTopic())
+				p.metrics.IncrementTopicBytesRecvd(int64(msg.Size()), msg.GetTopic())
 				toPush = append(toPush, msg)
 			}
 		}

@@ -42,12 +42,12 @@ type metrics struct {
 	eventProcessingTime metric.Int64Histogram // DONE
 
 	// the number of times, we have received an IDONTWANT message
-	iDontWantMsgRecvd metric.Int64Counter
+	iDontWantMsgRecvd metric.Int64Counter // DONE
 	// the number of times, we have sent an IDONTWANT message
-	iDontWantMsgSent metric.Int64Counter
+	iDontWantMsgSent metric.Int64Counter // DONE
 	// the number of IWantMsgs sent
 	iWantMsgSent metric.Int64Counter // DONE
-	// the number of IWantMsgs recvd 
+	// the number of IWantMsgs recvd
 	iWantMsgRecvd metric.Int64Counter // DONE
 	// the number of prune msgs recvd per topic
 	pruneMsgRecvdPerTopic metric.Int64Counter // DONE
@@ -66,13 +66,17 @@ type metrics struct {
 	topicMsgPublished metric.Int64Counter // DONE
 
 	// the number of messages received per topic
-	topicMsgRecvd metric.Int64Counter
+	topicMsgRecvd metric.Int64Counter // DONE
 	// the bytes received per topic
-	topicBytesRecvd metric.Int64Counter
+	topicBytesRecvd metric.Int64Counter // DONE
 	// the number of messages received per topic unfiltered(with duplicates)
-	topicMsgRecvdUnfiltered metric.Int64Counter
+	topicMsgRecvdUnfiltered metric.Int64Counter // DONE
 
 	// TODO - validation related metrics
+	duplicateMessages metric.Int64Counter
+	rejectedMessages  metric.Int64Counter
+	invalidMessages   metric.Int64Counter
+	ignoredMessages   metric.Int64Counter
 }
 
 func WithMeterProvider(meterProvider metric.MeterProvider) Option {
@@ -201,7 +205,7 @@ func InitMetrics(ps *PubSub) error {
 	}
 
 	ps.metrics.iDontWantMsgRecvd, err = meter.Int64Counter(
-		"i_dont_want_msg_recvd",
+		"idont_want_msg_recvd",
 		metric.WithDescription("The number of times we have received an IDONTWANT message"),
 	)
 	if err != nil {
@@ -209,7 +213,7 @@ func InitMetrics(ps *PubSub) error {
 	}
 
 	ps.metrics.iDontWantMsgSent, err = meter.Int64Counter(
-		"i_dont_want_msg_sent",
+		"idont_want_msg_sent",
 		metric.WithDescription("The number of times we have sent an IDONTWANT message"),
 	)
 	if err != nil {
@@ -217,7 +221,7 @@ func InitMetrics(ps *PubSub) error {
 	}
 
 	ps.metrics.iWantMsgSent, err = meter.Int64Counter(
-		"i_want_msg_sent",
+		"iwant_msg_sent",
 		metric.WithDescription("The number of IWANT msgs sent"),
 	)
 	if err != nil {
@@ -225,7 +229,7 @@ func InitMetrics(ps *PubSub) error {
 	}
 
 	ps.metrics.iWantMsgRecvd, err = meter.Int64Counter(
-		"i_want_msg_recvd",
+		"iwant_msg_recvd",
 		metric.WithDescription("The number of IWANT msgs received"),
 	)
 	if err != nil {
@@ -403,6 +407,19 @@ func (m *metrics) IncrementTopicMsgRecvd(topic string) {
 	m.topicMsgRecvd.Add(context.Background(), 1, metric.WithAttributes(attribute.String("topic", topic)))
 }
 
-func (m *metrics) IncrementTopicBytesRecvd(topic string) {
-	m.topicBytesRecvd.Add(context.Background(), 1, metric.WithAttributes(attribute.String("topic", topic)))
+func (m *metrics) IncrementTopicMsgRecvdUnfiltered(topic string) {
+	m.topicMsgRecvdUnfiltered.Add(context.Background(), 1, metric.WithAttributes(attribute.String("topic", topic)))
 }
+	
+func (m *metrics) IncrementTopicBytesRecvd(bytes int64, topic string) {
+	m.topicBytesRecvd.Add(context.Background(), bytes, metric.WithAttributes(attribute.String("topic", topic)))
+}
+
+func (m *metrics) RecordMeshMemberCount(count int64, topic string) {
+	m.meshMemberCount.Record(context.Background(), count, metric.WithAttributes(attribute.String("topic", topic)))
+}
+
+func (m *metrics) RecordFanoutMemberCount(count int64, topic string) {
+	m.fanoutMemberCount.Record(context.Background(), count, metric.WithAttributes(attribute.String("topic", topic)))
+}
+
