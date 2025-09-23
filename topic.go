@@ -72,6 +72,7 @@ func (t *Topic) SetScoreParams(p *TopicScoreParams) error {
 	}
 
 	treq := NewTimedRequest(update, time.Now())
+	treq.AddEvalMethodName("topic.SetTopicScoreParams")
 	select {
 	case t.p.eval <- treq:
 		err = <-result
@@ -121,6 +122,7 @@ func (t *Topic) EventHandler(opts ...TopicEventHandlerOpt) (*TopicEventHandler, 
 	}
 
 	treq := NewTimedRequest(evalFunc, time.Now())
+	treq.AddEvalMethodName("topic.EventHandler")
 	select {
 	case t.p.eval <- treq:
 	case <-t.p.ctx.Done():
@@ -332,6 +334,7 @@ func (t *Topic) validate(ctx context.Context, data []byte, opts ...PubOpt) (*Mes
 					done, _ := pub.ready(t.p.rt, t.topic)
 					res <- done
 				}, time.Now())
+				treq.AddEvalMethodName("topic.validate.readyLoop")
 				select {
 				case t.p.eval <- treq:
 					if <-res {
@@ -366,6 +369,7 @@ func (t *Topic) validate(ctx context.Context, data []byte, opts ...PubOpt) (*Mes
 	treq := NewTimedRequest(func() {
 		t.p.rt.Preprocess(t.p.host.ID(), []*Message{msg})
 	}, time.Now())
+	treq.AddEvalMethodName("topic.validate.Preprocess")
 	select {
 	case t.p.eval <- treq:
 	case <-t.p.ctx.Done():

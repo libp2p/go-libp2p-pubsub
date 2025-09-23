@@ -1552,6 +1552,7 @@ func (gs *GossipSubRouter) doSendRPC(rpc *RPC, p peer.ID, q *rpcQueue, urgent bo
 		gs.doDropRPC(rpc, p, "queue full")
 		return
 	}
+	gs.p.metrics.RecordOutgoingRpcQueueSize(int64(q.queue.Len()))
 
 	if len(rpc.GetPublish()) > 0 {
 		for _, msg := range rpc.GetPublish() {
@@ -1568,6 +1569,7 @@ func (gs *GossipSubRouter) doSendRPC(rpc *RPC, p peer.ID, q *rpcQueue, urgent bo
 func (gs *GossipSubRouter) heartbeatTimer() {
 	time.Sleep(gs.params.HeartbeatInitialDelay)
 	treq := NewTimedRequest(gs.heartbeat, time.Now())
+	treq.AddEvalMethodName("gossipsub.heartbeat")
 	select {
 	case gs.p.eval <- treq:
 	case <-gs.p.ctx.Done():
@@ -1581,6 +1583,7 @@ func (gs *GossipSubRouter) heartbeatTimer() {
 		select {
 		case <-ticker.C:
 			treq := NewTimedRequest(gs.heartbeat, time.Now())
+			treq.AddEvalMethodName("gossipsub.heartbeat")
 			select {
 			case gs.p.eval <- treq:
 			case <-gs.p.ctx.Done():

@@ -114,6 +114,7 @@ func (d *discover) pollTimer() {
 	}
 
 	treq := NewTimedRequest(d.requestDiscovery, time.Now())
+	treq.AddEvalMethodName("discover.pollTimer")
 	select {
 	case d.p.eval <- treq:
 	case <-d.p.ctx.Done():
@@ -127,6 +128,7 @@ func (d *discover) pollTimer() {
 		select {
 		case <-ticker.C:
 			treq := NewTimedRequest(d.requestDiscovery, time.Now())
+			treq.AddEvalMethodName("discover.pollTimer")
 			select {
 			case d.p.eval <- treq:
 			case <-d.p.ctx.Done():
@@ -259,6 +261,7 @@ func (d *discover) Bootstrap(ctx context.Context, topic string, ready RouterRead
 			done, _ := ready(d.p.rt, topic)
 			bootstrapped <- done
 		}, time.Now())
+		treq.AddEvalMethodName("discover.Bootstrap")
 		select {
 		case d.p.eval <- treq:
 			if <-bootstrapped {

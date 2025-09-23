@@ -15,20 +15,22 @@ type metrics struct {
 	// TODO
 	messageProcessingTime metric.Int64Histogram
 	// time spent to read message over network and parse it into an RPC.
-	messageParsingTime metric.Int64Histogram // DONE
+	messageReceivedTime metric.Int64Histogram // DONE // Rename it to msg received time?
 	// time taken for a heartbeat to complete
 	heartbeatTime metric.Int64Histogram // DONE
+	// The time spent waiting by an RPC to be sent to the incoming channel in handleNewStream
+	rpcIncomingChannelContentionTime metric.Int64Histogram
 
 	// total peers connected to
-	totalPeerCount metric.Int64Gauge // DONE
+	// CAN BE BORKED. Can import from go-libp2p.
 	// total number of topics subscribed to
 	totalTopicCount metric.Int64Gauge // DONE
 	// total number of subscriptions active in the pubsub router
 	totalSubscriptionCount metric.Int64Gauge // DONE
 	// depth of the incoming queue in the event loop
-	incomingQueueDepth metric.Int64Gauge // DONE
+	incomingQueueDepth metric.Int64Histogram // DONE
 	// depth of the sendMsg queue in the event loop
-	sendMsgQueueDepth metric.Int64Gauge // DONE
+	sendMsgQueueDepth metric.Int64Histogram // DONE
 
 	// TODO - ideally should be per-topic
 	messageSize metric.Int64Histogram // DONE
@@ -46,7 +48,7 @@ type metrics struct {
 	// the number of times, we have received an IDONTWANT message
 	iDontWantMsgRecvd metric.Int64Counter // DONE
 	// the number of times, we have sent an IDONTWANT message
-	iDontWantMsgSent metric.Int64Counter // DONE
+	iDontWantMsgSent metric.Int64Counter
 	// the number of IWantMsgs sent
 	iWantMsgSent metric.Int64Counter // DONE
 	// the number of IWantMsgs recvd
@@ -73,6 +75,9 @@ type metrics struct {
 	topicBytesRecvd metric.Int64Counter // DONE
 	// the number of messages received per topic unfiltered(with duplicates)
 	topicMsgRecvdUnfiltered metric.Int64Counter // DONE
+
+	// the size of the outgoing rpc queue
+	outGoingRpcQueueSize metric.Int64Histogram
 
 	// TODO - validation related metrics
 	duplicateMessages  metric.Int64Counter
@@ -104,8 +109,8 @@ func InitMetrics(ps *PubSub) error {
 		return err
 	}
 
-	ps.metrics.messageParsingTime, err = meter.Int64Histogram(
-		metricPrefix+"message_parsing_time.duration",
+	ps.metrics.messageReceivedTime, err = meter.Int64Histogram(
+		metricPrefix+"message_received_time",
 		metric.WithDescription("The duration of parsing a message received from the network stream to an RPC"),
 		metric.WithUnit("us"),
 		metric.WithExplicitBucketBoundaries(100, 500, 1_000, 5_000, 10_000, 50_000, 100_000, 250_000, 500_000, 1_000_000, 5_000_000, 10_000_000),
@@ -124,9 +129,20 @@ func InitMetrics(ps *PubSub) error {
 		return err
 	}
 
-	ps.metrics.totalPeerCount, err = meter.Int64Gauge(
-		metricPrefix+"total_peer_count",
-		metric.WithDescription("The total number of peers that are connected to this pubsub router"),
+	ps.metrics.rpcIncomingChannelContentionTime, err = meter.Int64Histogram(
+		metricPrefix+"rpc_incoming_channel_contention_time",
+		metric.WithDescription("The time spent waiting by an RPC to be sent to the incoming channel in handleNewStream"),
+		metric.WithUnit("us"),
+		metric.WithExplicitBucketBoundaries(100, 500, 1_000, 5_000, 10_000, 50_000, 100_000, 250_000, 500_000, 1_000_000, 5_000_000, 10_000_000),
+	)
+	if err != nil {
+		return err
+	}
+
+	ps.metrics.outGoingRpcQueueSize, err = meter.Int64Histogram(
+		metricPrefix+"outgoing_rpc_queue_size",
+		metric.WithDescription("The size of the outgoing rpc queue"),
+		metric.WithExplicitBucketBoundaries(1, 5, 10, 20, 30, 50, 70, 100),
 	)
 	if err != nil {
 		return err
@@ -148,17 +164,19 @@ func InitMetrics(ps *PubSub) error {
 		return err
 	}
 
-	ps.metrics.incomingQueueDepth, err = meter.Int64Gauge(
+	ps.metrics.incomingQueueDepth, err = meter.Int64Histogram(
 		metricPrefix+"incoming_queue_depth",
 		metric.WithDescription("The depth of the incoming queue in the event loop"),
+		metric.WithExplicitBucketBoundaries(1, 5, 10, 15, 20, 25, 30, 32),
 	)
 	if err != nil {
 		return err
 	}
 
-	ps.metrics.sendMsgQueueDepth, err = meter.Int64Gauge(
+	ps.metrics.sendMsgQueueDepth, err = meter.Int64Histogram(
 		metricPrefix+"sendmsg_queue_depth",
 		metric.WithDescription("The depth of the send message queue in the event loop"),
+		metric.WithExplicitBucketBoundaries(1, 5, 10, 15, 20, 25, 30, 32),
 	)
 	if err != nil {
 		return err
@@ -324,16 +342,34 @@ func InitMetrics(ps *PubSub) error {
 	return nil
 }
 
-func (m *metrics) RecordEventLoopWaitTeam(waitTime time.Duration, eventType string) {
-	m.eventLoopWaitTime.Record(context.Background(), waitTime.Microseconds(), metric.WithAttributes(attribute.String("event_type", eventType)))
+func (m *metrics) RecordEventLoopWaitTeam(waitTime time.Duration, eventType string, evalMethodName string) {
+	attrs := []attribute.KeyValue{}
+	if evalMethodName != "" {
+		attrs = append(attrs, attribute.String("eval_method_name", evalMethodName))
+	}
+	attrs = append(attrs, attribute.String("event_type", eventType))
+	m.eventLoopWaitTime.Record(context.Background(), waitTime.Microseconds(), metric.WithAttributes(attrs...))
 }
 
-func (m *metrics) RecordEventProcessingTime(processingTime time.Duration, eventType string) {
-	m.eventProcessingTime.Record(context.Background(), processingTime.Microseconds(), metric.WithAttributes(attribute.String("event_type", eventType)))
+func (m *metrics) RecordEventProcessingTime(processingTime time.Duration, eventType string, evalMethodName string) {
+	attrs := []attribute.KeyValue{}
+	if evalMethodName != "" {
+		attrs = append(attrs, attribute.String("eval_method_name", evalMethodName))
+	}
+	attrs = append(attrs, attribute.String("event_type", eventType))
+	m.eventProcessingTime.Record(context.Background(), processingTime.Microseconds(), metric.WithAttributes(attrs...))
 }
 
-func (m *metrics) RecordMessageParsingTime(parsingTime time.Duration) {
-	m.messageParsingTime.Record(context.Background(), parsingTime.Microseconds())
+func (m *metrics) RecordMessageReceivedTime(parsingTime time.Duration) {
+	m.messageReceivedTime.Record(context.Background(), parsingTime.Microseconds())
+}
+
+func (m *metrics) RecordRpcIncomingChannelContentionTime(contentionTime time.Duration) {
+	m.rpcIncomingChannelContentionTime.Record(context.Background(), contentionTime.Microseconds())
+}
+
+func (m *metrics) RecordOutgoingRpcQueueSize(size int64) {
+	m.outGoingRpcQueueSize.Record(context.Background(), size)
 }
 
 func (m *metrics) RecordMessageSize(msgSize int64) {
@@ -342,10 +378,6 @@ func (m *metrics) RecordMessageSize(msgSize int64) {
 
 func (m *metrics) RecordHeartbeatTime(heartbeatTime time.Duration) {
 	m.heartbeatTime.Record(context.Background(), heartbeatTime.Microseconds())
-}
-
-func (m *metrics) RecordPeerCount(peerCount int64) {
-	m.totalPeerCount.Record(context.Background(), peerCount)
 }
 
 func (m *metrics) RecordTopicCount(topicCount int64) {
