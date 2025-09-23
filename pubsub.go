@@ -1003,6 +1003,7 @@ func (p *PubSub) processLoop(ctx context.Context) {
 			p.publishMessageBatch(batchAndOpts)
 			p.metrics.RecordEventProcessingTime(time.Since(startTime), "send_message_batch")
 
+			// TODO - we can just increment the metric by len(batchAndOpts.messages)
 			for _, msg := range batchAndOpts.messages {
 				p.metrics.IncrementTopicMsgPublished(msg.GetTopic())
 			}

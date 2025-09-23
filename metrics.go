@@ -31,9 +31,9 @@ type metrics struct {
 	// TODO - ideally should be per-topic
 	messageSize metric.Int64Histogram // DONE
 	// mesh size per topic
-	meshMemberCount metric.Int64Gauge
+	meshMemberCount metric.Int64Gauge // DONE
 	// fanout network size per topic
-	fanoutMemberCount metric.Int64Gauge
+	fanoutMemberCount metric.Int64Gauge // DONE
 
 	// time spent by different events in the event loop before being picked up
 	// for processing.
@@ -73,10 +73,11 @@ type metrics struct {
 	topicMsgRecvdUnfiltered metric.Int64Counter // DONE
 
 	// TODO - validation related metrics
-	duplicateMessages metric.Int64Counter
-	rejectedMessages  metric.Int64Counter
-	invalidMessages   metric.Int64Counter
-	ignoredMessages   metric.Int64Counter
+	duplicateMessages  metric.Int64Counter
+	rejectedMessages   metric.Int64Counter
+	invalidMessages    metric.Int64Counter
+	ignoredMessages    metric.Int64Counter
+	validationDuration metric.Int64Histogram
 }
 
 func WithMeterProvider(meterProvider metric.MeterProvider) Option {
@@ -410,7 +411,7 @@ func (m *metrics) IncrementTopicMsgRecvd(topic string) {
 func (m *metrics) IncrementTopicMsgRecvdUnfiltered(topic string) {
 	m.topicMsgRecvdUnfiltered.Add(context.Background(), 1, metric.WithAttributes(attribute.String("topic", topic)))
 }
-	
+
 func (m *metrics) IncrementTopicBytesRecvd(bytes int64, topic string) {
 	m.topicBytesRecvd.Add(context.Background(), bytes, metric.WithAttributes(attribute.String("topic", topic)))
 }
@@ -422,4 +423,3 @@ func (m *metrics) RecordMeshMemberCount(count int64, topic string) {
 func (m *metrics) RecordFanoutMemberCount(count int64, topic string) {
 	m.fanoutMemberCount.Record(context.Background(), count, metric.WithAttributes(attribute.String("topic", topic)))
 }
-

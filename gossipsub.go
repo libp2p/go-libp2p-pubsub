@@ -1639,6 +1639,9 @@ func (gs *GossipSubRouter) heartbeat() {
 
 	// maintain the mesh for topics we have joined
 	for topic, peers := range gs.mesh {
+		// record mesh count here
+		gs.p.metrics.RecordMeshMemberCount(int64(len(peers)), topic)
+
 		prunePeer := func(p peer.ID) {
 			gs.tracer.Prune(p, topic)
 			delete(peers, p)
@@ -1822,6 +1825,9 @@ func (gs *GossipSubRouter) heartbeat() {
 
 	// maintain our fanout for topics we are publishing but we have not joined
 	for topic, peers := range gs.fanout {
+		// record fanout count here
+		gs.p.metrics.RecordFanoutMemberCount(int64(len(peers)), topic)
+
 		// check whether our peers are still in the topic and have a score above the publish threshold
 		for p := range peers {
 			_, ok := gs.p.topics[topic][p]
