@@ -319,7 +319,9 @@ func DefaultGossipSubRouter(h host.Host) *GossipSubRouter {
 		if rt.score != nil {
 			rt.score.AddPenalty(p, 10)
 		}
-	}, rt.sendRPC)
+	}, func(p peer.ID, r *RPC, b bool) {
+		rt.sendRPC(p, r, b, nil)
+	})
 
 	return rt
 }
@@ -986,6 +988,7 @@ func (gs *GossipSubRouter) handleIWant(p peer.ID, ctl *pb.ControlMessage) []*pb.
 		for _, mid := range iwant.GetMessageIDs() {
 			// Check if that peer has sent IDONTWANT before, if so don't send them the message
 			if _, ok := gs.unwanted[p][computeChecksum(mid)]; ok {
+				gs.p.metrics.effectiveIDONTWANTs.Add(context.Background(), 1)
 				continue
 			}
 
@@ -1381,6 +1384,7 @@ func (gs *GossipSubRouter) rpcs(msg *Message) iter.Seq2[peer.ID, *RPC] {
 				// Check if it has already received an IDONTWANT for the message.
 				// If so, don't send it to the peer
 				if _, ok := gs.unwanted[p][csum]; ok {
+					gs.p.metrics.effectiveIDONTWANTs.Add(context.Background(), 1)
 					continue
 				}
 				tosend[p] = struct{}{}

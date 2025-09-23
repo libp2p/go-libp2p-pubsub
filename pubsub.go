@@ -859,7 +859,7 @@ func (p *PubSub) processLoop(ctx context.Context) {
 
 			helloPacket := p.getHelloPacket()
 			helloPacket = p.rt.AddPeer(pid, s.Protocol(), helloPacket)
-			q.Push(helloPacket, true)
+			q.Push(helloPacket, true, nil)
 			p.metrics.RecordEventProcessingTime(time.Since(startTime), "new_peer_stream", "")
 
 		case treq := <-p.newPeerError:
@@ -1137,7 +1137,7 @@ func (p *PubSub) handleDeadPeers() {
 			// still connected, must be a duplicate connection being closed.
 			// we respawn the writer as we need to ensure there is a stream active
 			p.logger.Debug("peer declared dead but still connected; respawning writer", "peer", pid)
-			rpcQueue := newRpcQueue(p.peerOutboundQueueSize)
+			rpcQueue := newRpcQueue(p.peerOutboundQueueSize, p.metrics.lateIDONTWANTs)
 			p.peers[pid] = rpcQueue
 			go p.handleNewPeerWithBackoff(p.ctx, pid, backoffDelay, rpcQueue)
 		}

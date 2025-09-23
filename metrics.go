@@ -86,7 +86,8 @@ type metrics struct {
 	ignoredMessages    metric.Int64Counter
 	validationDuration metric.Int64Histogram
 
-	lateIDONTWANTs metric.Int64Counter
+	lateIDONTWANTs      metric.Int64Counter
+	effectiveIDONTWANTs metric.Int64Counter
 }
 
 func WithMeterProvider(meterProvider metric.MeterProvider) Option {
@@ -344,6 +345,13 @@ func InitMetrics(ps *PubSub) error {
 	if ps.metrics.lateIDONTWANTs, err = meter.Int64Counter(
 		"late_idontwant.count",
 		metric.WithDescription("The number of late IDONTWANT messages"),
+	); err != nil {
+		return err
+	}
+
+	if ps.metrics.effectiveIDONTWANTs, err = meter.Int64Counter(
+		"effective_idontwant.count",
+		metric.WithDescription("The number of effective IDONTWANT messages"),
 	); err != nil {
 		return err
 	}
