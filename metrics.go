@@ -1,8 +1,6 @@
 package pubsub
 
 import (
-	"context"
-
 	"go.opentelemetry.io/otel/metric"
 )
 
@@ -12,6 +10,7 @@ type metrics struct {
 	peerScoreCalcDurHistogram      metric.Int64Histogram
 	peerTopicScoreCalcDurHistogram metric.Int64Histogram
 	lateIDONTWANTs                 metric.Int64Counter
+	effectiveIDONTWANTs            metric.Int64Counter
 }
 
 func (m *metrics) init(meter metric.Meter) (err error) {
@@ -49,8 +48,12 @@ func (m *metrics) init(meter metric.Meter) (err error) {
 		return err
 	}
 
-	// TODO: remove
-	m.lateIDONTWANTs.Add(context.Background(), 1)
+	if m.effectiveIDONTWANTs, err = meter.Int64Counter(
+		"effective_idontwant.count",
+		metric.WithDescription("The number of effective IDONTWANT messages"),
+	); err != nil {
+		return err
+	}
 
 	return
 }

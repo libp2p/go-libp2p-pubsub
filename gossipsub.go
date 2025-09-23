@@ -998,6 +998,7 @@ func (gs *GossipSubRouter) handleIWant(p peer.ID, ctl *pb.ControlMessage) []*pb.
 		attribute.Int("pubsub.retransmission_skipped", retransmissionSkipped),
 		attribute.Int("pubsub.unwanted_skipped", unwantedSkipped),
 	)
+	gs.p.metrics.effectiveIDONTWANTs.Add(context.Background(), int64(unwantedSkipped))
 
 	if messagesSent == 0 {
 		return nil
@@ -1459,6 +1460,7 @@ func (gs *GossipSubRouter) rpcs(msg *Message) iter.Seq2[peer.ID, *RPC] {
 				// Check if it has already received an IDONTWANT for the message.
 				// If so, don't send it to the peer
 				if _, ok := gs.unwanted[p][csum]; ok {
+					gs.p.metrics.effectiveIDONTWANTs.Add(context.Background(), 1)
 					continue
 				}
 				tosend[p] = struct{}{}
