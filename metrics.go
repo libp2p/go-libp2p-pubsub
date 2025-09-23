@@ -193,6 +193,7 @@ func InitMetrics(ps *PubSub) error {
 		metricPrefix+"event_loop_wait_time",
 		metric.WithDescription("The time spent by different events in the event loop before being picked up for processing"),
 		metric.WithUnit("us"),
+		metric.WithExplicitBucketBoundaries(100, 500, 1_000, 5_000, 10_000, 50_000, 100_000, 250_000, 500_000, 1_000_000, 5_000_000, 10_000_000),
 	)
 	if err != nil {
 		return err
@@ -202,6 +203,7 @@ func InitMetrics(ps *PubSub) error {
 		metricPrefix+"event_processing_time",
 		metric.WithDescription("The time spent processing different events in the event loop"),
 		metric.WithUnit("us"),
+		metric.WithExplicitBucketBoundaries(100, 500, 1_000, 5_000, 10_000, 50_000, 100_000, 250_000, 500_000, 1_000_000, 5_000_000, 10_000_000),
 	)
 	if err != nil {
 		return err
