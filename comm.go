@@ -103,6 +103,7 @@ func (p *PubSub) handleNewStream(s network.Stream) {
 		p.rpcLogger.Debug("received", "peer", s.Conn().RemotePeer(), "duration_s", timeToReceive.Seconds(), "rpc", rpc)
 
 		rpc.from = peer
+		rpc.receivedAt = time.Now()
 
 		treq := NewTimedRequest(rpc, rpc.receivedAt)
 		select {
