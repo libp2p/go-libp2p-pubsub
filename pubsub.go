@@ -1121,8 +1121,8 @@ func (p *PubSub) handlePendingPeers() {
 			continue
 		}
 
-		rpcQueue := newRpcQueue(p.peerOutboundQueueSize)
-		rpcQueue.Push(p.getHelloPacket(), true)
+		rpcQueue := newRpcQueue(p.peerOutboundQueueSize, p.metrics.lateIDONTWANTs)
+		rpcQueue.Push(p.getHelloPacket(), true, nil)
 		go p.handleNewPeer(p.ctx, pid, rpcQueue)
 		p.peers[pid] = rpcQueue
 	}
@@ -1168,8 +1168,8 @@ func (p *PubSub) handleDeadPeers() {
 			// still connected, must be a duplicate connection being closed.
 			// we respawn the writer as we need to ensure there is a stream active
 			log.Debugf("peer declared dead but still connected; respawning writer: %s", pid)
-			rpcQueue := newRpcQueue(p.peerOutboundQueueSize)
-			rpcQueue.Push(p.getHelloPacket(), true)
+			rpcQueue := newRpcQueue(p.peerOutboundQueueSize, p.metrics.lateIDONTWANTs)
+			rpcQueue.Push(p.getHelloPacket(), true, nil)
 			p.peers[pid] = rpcQueue
 			go p.handleNewPeerWithBackoff(p.ctx, pid, backoffDelay, rpcQueue)
 		}
@@ -1335,7 +1335,7 @@ func (p *PubSub) announce(topic string, sub bool) {
 
 	out := rpcWithSubs(subopt)
 	for pid, peer := range p.peers {
-		err := peer.Push(out, false)
+		err := peer.Push(out, false, nil)
 		if err != nil {
 			log.Infof("Can't send announce message to peer %s: queue full; scheduling retry", pid)
 			p.tracer.DropRPC(out, pid)
@@ -1378,7 +1378,7 @@ func (p *PubSub) doAnnounceRetry(pid peer.ID, topic string, sub bool) {
 	}
 
 	out := rpcWithSubs(subopt)
-	err := peer.Push(out, false)
+	err := peer.Push(out, false, nil)
 	if err != nil {
 		log.Infof("Can't send announce message to peer %s: queue full; scheduling retry", pid)
 		p.tracer.DropRPC(out, pid)

@@ -1,12 +1,17 @@
 package pubsub
 
-import "go.opentelemetry.io/otel/metric"
+import (
+	"context"
+
+	"go.opentelemetry.io/otel/metric"
+)
 
 type metrics struct {
 	metric.MeterProvider
 	msgProcessingHistogram         metric.Int64Histogram
 	peerScoreCalcDurHistogram      metric.Int64Histogram
 	peerTopicScoreCalcDurHistogram metric.Int64Histogram
+	lateIDONTWANTs                 metric.Int64Counter
 }
 
 func (m *metrics) init(meter metric.Meter) (err error) {
@@ -36,6 +41,16 @@ func (m *metrics) init(meter metric.Meter) (err error) {
 	); err != nil {
 		return err
 	}
+
+	if m.lateIDONTWANTs, err = meter.Int64Counter(
+		"late_idontwant.count",
+		metric.WithDescription("The number of late IDONTWANT messages"),
+	); err != nil {
+		return err
+	}
+
+	// TODO: remove
+	m.lateIDONTWANTs.Add(context.Background(), 1)
 
 	return
 }

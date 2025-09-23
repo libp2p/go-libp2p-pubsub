@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"sync"
+
+	"go.opentelemetry.io/otel/metric"
 )
 
 var (
@@ -13,33 +15,38 @@ var (
 	ErrQueuePushOnClosed = errors.New("push on closed rpc queue")
 )
 
+type rpcAndMsgIDs struct {
+	RPC    *RPC
+	MsgIDs []string
+}
+
 type priorityQueue struct {
-	normal   []*RPC
-	priority []*RPC
+	normal   []rpcAndMsgIDs
+	priority []rpcAndMsgIDs
 }
 
 func (q *priorityQueue) Len() int {
 	return len(q.normal) + len(q.priority)
 }
 
-func (q *priorityQueue) NormalPush(rpc *RPC) {
-	q.normal = append(q.normal, rpc)
+func (q *priorityQueue) NormalPush(rpc *RPC, msgIDs []string) {
+	q.normal = append(q.normal, rpcAndMsgIDs{RPC: rpc, MsgIDs: msgIDs})
 }
 
-func (q *priorityQueue) PriorityPush(rpc *RPC) {
-	q.priority = append(q.priority, rpc)
+func (q *priorityQueue) PriorityPush(rpc *RPC, msgIDs []string) {
+	q.priority = append(q.priority, rpcAndMsgIDs{RPC: rpc, MsgIDs: msgIDs})
 }
 
-func (q *priorityQueue) Pop() *RPC {
-	var rpc *RPC
+func (q *priorityQueue) Pop() rpcAndMsgIDs {
+	var rpc rpcAndMsgIDs
 
 	if len(q.priority) > 0 {
 		rpc = q.priority[0]
-		q.priority[0] = nil
+		q.priority[0] = rpcAndMsgIDs{}
 		q.priority = q.priority[1:]
 	} else if len(q.normal) > 0 {
 		rpc = q.normal[0]
-		q.normal[0] = nil
+		q.normal[0] = rpcAndMsgIDs{}
 		q.normal = q.normal[1:]
 	}
 
@@ -49,30 +56,46 @@ func (q *priorityQueue) Pop() *RPC {
 type rpcQueue struct {
 	dataAvailable  sync.Cond
 	spaceAvailable sync.Cond
+	lateIDONTWANTs metric.Int64Counter
 	// Mutex used to access queue
-	queueMu sync.Mutex
-	queue   priorityQueue
+	queueMu      sync.Mutex
+	queue        priorityQueue
+	queuedMsgIDs map[string]struct{}
 
 	closed  bool
 	maxSize int
 }
 
-func newRpcQueue(maxSize int) *rpcQueue {
-	q := &rpcQueue{maxSize: maxSize}
+func newRpcQueue(maxSize int, lateIDONTWANTs metric.Int64Counter) *rpcQueue {
+	q := &rpcQueue{maxSize: maxSize, lateIDONTWANTs: lateIDONTWANTs}
 	q.dataAvailable.L = &q.queueMu
 	q.spaceAvailable.L = &q.queueMu
+	q.queuedMsgIDs = make(map[string]struct{})
 	return q
 }
 
-func (q *rpcQueue) Push(rpc *RPC, block bool) error {
-	return q.push(rpc, false, block)
+func (q *rpcQueue) Push(rpc *RPC, block bool, msgIDs []string) error {
+	return q.push(rpc, false, block, msgIDs)
 }
 
-func (q *rpcQueue) UrgentPush(rpc *RPC, block bool) error {
-	return q.push(rpc, true, block)
+func (q *rpcQueue) UrgentPush(rpc *RPC, block bool, msgIDs []string) error {
+	return q.push(rpc, true, block, msgIDs)
 }
 
-func (q *rpcQueue) push(rpc *RPC, urgent bool, block bool) error {
+func (q *rpcQueue) Cancel(msgID string) {
+	var found bool
+	q.queueMu.Lock()
+	_, found = q.queuedMsgIDs[msgID]
+	if found {
+		delete(q.queuedMsgIDs, msgID)
+	}
+	q.queueMu.Unlock()
+	if found {
+		q.lateIDONTWANTs.Add(context.Background(), 1)
+	}
+}
+
+func (q *rpcQueue) push(rpc *RPC, urgent bool, block bool, msgIDs []string) error {
 	q.queueMu.Lock()
 	defer q.queueMu.Unlock()
 
@@ -92,9 +115,12 @@ func (q *rpcQueue) push(rpc *RPC, urgent bool, block bool) error {
 		}
 	}
 	if urgent {
-		q.queue.PriorityPush(rpc)
+		q.queue.PriorityPush(rpc, msgIDs)
 	} else {
-		q.queue.NormalPush(rpc)
+		q.queue.NormalPush(rpc, msgIDs)
+	}
+	for _, msgID := range msgIDs {
+		q.queuedMsgIDs[msgID] = struct{}{}
 	}
 
 	q.dataAvailable.Signal()
@@ -132,9 +158,12 @@ func (q *rpcQueue) Pop(ctx context.Context) (*RPC, error) {
 			return nil, ErrQueueClosed
 		}
 	}
-	rpc := q.queue.Pop()
+	r := q.queue.Pop()
+	for _, msgID := range r.MsgIDs {
+		delete(q.queuedMsgIDs, msgID)
+	}
 	q.spaceAvailable.Signal()
-	return rpc, nil
+	return r.RPC, nil
 }
 
 func (q *rpcQueue) Close() {

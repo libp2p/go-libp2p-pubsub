@@ -783,7 +783,7 @@ func (gs *GossipSubRouter) Preprocess(from peer.ID, msgs []*Message) {
 			if gs.feature(GossipSubFeatureIdontwant, gs.peers[p]) {
 				idontwant := []*pb.ControlIDontWant{{MessageIDs: mids}}
 				out := rpcWithControl(nil, nil, nil, nil, nil, idontwant)
-				gs.sendRPC(p, out, true)
+				gs.sendRPC(p, out, true, nil)
 			}
 		}
 	}
@@ -833,7 +833,7 @@ func (gs *GossipSubRouter) HandleRPC(rpc *RPC) {
 	}
 
 	out := rpcWithControl(ihave, nil, iwant, nil, prune, nil)
-	gs.sendRPC(rpc.from, out, false)
+	gs.sendRPC(rpc.from, out, false, nil)
 }
 
 func (gs *GossipSubRouter) handleIHave(p peer.ID, ctl *pb.ControlMessage) []*pb.ControlIWant {
@@ -1216,6 +1216,11 @@ mainIDWLoop:
 				break mainIDWLoop
 			}
 
+			q, ok := gs.p.peers[p]
+			if ok {
+				q.Cancel(mid)
+			}
+
 			totalUnwantedIds++
 			gs.unwanted[p][computeChecksum(mid)] = gs.params.IDontWantMessageTTL
 		}
@@ -1345,8 +1350,10 @@ func (gs *GossipSubRouter) PublishBatch(messages []*Message, opts *BatchPublishO
 	)
 
 	strategy := opts.Strategy
+	msgIDs := make([]string, 0, len(messages))
 	for _, msg := range messages {
 		msgID := gs.p.idGen.ID(msg)
+		msgIDs = append(msgIDs, msgID)
 		for p, rpc := range gs.rpcs(msg) {
 			strategy.AddRPC(p, msgID, rpc)
 		}
@@ -1354,7 +1361,7 @@ func (gs *GossipSubRouter) PublishBatch(messages []*Message, opts *BatchPublishO
 
 	peerCount := 0
 	for p, rpc := range strategy.All() {
-		gs.sendRPC(p, rpc, false)
+		gs.sendRPC(p, rpc, false, msgIDs)
 		peerCount++
 	}
 
@@ -1376,10 +1383,11 @@ func (gs *GossipSubRouter) Publish(msg *Message) {
 
 	start := time.Now()
 	peerCount := 0
+	msgIDs := []string{msg.ID}
 
 	for p, rpc := range gs.rpcs(msg) {
 		peerCount++
-		gs.sendRPC(p, rpc, false)
+		gs.sendRPC(p, rpc, false, msgIDs)
 	}
 
 	span.SetAttributes(
@@ -1586,16 +1594,16 @@ func (gs *GossipSubRouter) Leave(topic string) {
 func (gs *GossipSubRouter) sendGraft(p peer.ID, topic string) {
 	graft := []*pb.ControlGraft{{TopicID: &topic}}
 	out := rpcWithControl(nil, nil, nil, graft, nil, nil)
-	gs.sendRPC(p, out, false)
+	gs.sendRPC(p, out, false, nil)
 }
 
 func (gs *GossipSubRouter) sendPrune(p peer.ID, topic string, isUnsubscribe bool) {
 	prune := []*pb.ControlPrune{gs.makePrune(p, topic, gs.doPX, isUnsubscribe)}
 	out := rpcWithControl(nil, nil, nil, nil, prune, nil)
-	gs.sendRPC(p, out, false)
+	gs.sendRPC(p, out, false, nil)
 }
 
-func (gs *GossipSubRouter) sendRPC(p peer.ID, out *RPC, urgent bool) {
+func (gs *GossipSubRouter) sendRPC(p peer.ID, out *RPC, urgent bool, msgIDs []string) {
 	// do we own the RPC?
 	own := false
 
@@ -1626,7 +1634,7 @@ func (gs *GossipSubRouter) sendRPC(p peer.ID, out *RPC, urgent bool) {
 
 	// If we're below the max message size, go ahead and send
 	if out.Size() < gs.p.maxMessageSize {
-		gs.doSendRPC(out, p, q, urgent)
+		gs.doSendRPC(out, p, q, urgent, msgIDs)
 		return
 	}
 
@@ -1637,7 +1645,7 @@ func (gs *GossipSubRouter) sendRPC(p peer.ID, out *RPC, urgent bool) {
 			gs.doDropRPC(out, p, fmt.Sprintf("Dropping oversized RPC. Size: %d, limit: %d. (Over by %d bytes)", rpc.Size(), gs.p.maxMessageSize, rpc.Size()-gs.p.maxMessageSize))
 			continue
 		}
-		gs.doSendRPC(&rpc, p, q, urgent)
+		gs.doSendRPC(&rpc, p, q, urgent, msgIDs)
 	}
 }
 
@@ -1653,12 +1661,12 @@ func (gs *GossipSubRouter) doDropRPC(rpc *RPC, p peer.ID, reason string) {
 	}
 }
 
-func (gs *GossipSubRouter) doSendRPC(rpc *RPC, p peer.ID, q *rpcQueue, urgent bool) {
+func (gs *GossipSubRouter) doSendRPC(rpc *RPC, p peer.ID, q *rpcQueue, urgent bool, msgIDs []string) {
 	var err error
 	if urgent {
-		err = q.UrgentPush(rpc, false)
+		err = q.UrgentPush(rpc, false, msgIDs)
 	} else {
-		err = q.Push(rpc, false)
+		err = q.Push(rpc, false, msgIDs)
 	}
 	if err != nil {
 		gs.doDropRPC(rpc, p, "queue full")
@@ -2080,7 +2088,7 @@ func (gs *GossipSubRouter) sendGraftPrune(tograft, toprune map[peer.ID][]string,
 		}
 
 		out := rpcWithControl(nil, nil, nil, graft, prune, nil)
-		gs.sendRPC(p, out, false)
+		gs.sendRPC(p, out, false, nil)
 	}
 
 	for p, topics := range toprune {
@@ -2090,7 +2098,7 @@ func (gs *GossipSubRouter) sendGraftPrune(tograft, toprune map[peer.ID][]string,
 		}
 
 		out := rpcWithControl(nil, nil, nil, nil, prune, nil)
-		gs.sendRPC(p, out, false)
+		gs.sendRPC(p, out, false, nil)
 	}
 }
 
@@ -2201,14 +2209,14 @@ func (gs *GossipSubRouter) flush() {
 	for p, ihave := range gs.gossip {
 		delete(gs.gossip, p)
 		out := rpcWithControl(nil, ihave, nil, nil, nil, nil)
-		gs.sendRPC(p, out, false)
+		gs.sendRPC(p, out, false, nil)
 	}
 
 	// send the remaining control messages that wasn't merged with gossip
 	for p, ctl := range gs.control {
 		delete(gs.control, p)
 		out := rpcWithControl(nil, nil, nil, ctl.Graft, ctl.Prune, nil)
-		gs.sendRPC(p, out, false)
+		gs.sendRPC(p, out, false, nil)
 	}
 }
 
@@ -2372,7 +2380,7 @@ func (gs *GossipSubRouter) WithDefaultTagTracer() Option {
 //	nothing.
 func (gs *GossipSubRouter) SendControl(p peer.ID, ctl *pb.ControlMessage, msgs ...*pb.Message) {
 	out := rpcWithControl(msgs, ctl.Ihave, ctl.Iwant, ctl.Graft, ctl.Prune, ctl.Idontwant)
-	gs.sendRPC(p, out, false)
+	gs.sendRPC(p, out, false, nil)
 }
 
 func peerListToMap(peers []peer.ID) map[peer.ID]struct{} {

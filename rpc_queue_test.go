@@ -8,7 +8,7 @@ import (
 
 func TestNewRpcQueue(t *testing.T) {
 	maxSize := 32
-	q := newRpcQueue(maxSize)
+	q := newRpcQueue(maxSize, nil)
 	if q.maxSize != maxSize {
 		t.Fatalf("rpc queue has wrong max size, expected %d but got %d", maxSize, q.maxSize)
 	}
@@ -22,16 +22,16 @@ func TestNewRpcQueue(t *testing.T) {
 
 func TestRpcQueueUrgentPush(t *testing.T) {
 	maxSize := 32
-	q := newRpcQueue(maxSize)
+	q := newRpcQueue(maxSize, nil)
 
 	rpc1 := &RPC{}
 	rpc2 := &RPC{}
 	rpc3 := &RPC{}
 	rpc4 := &RPC{}
-	q.Push(rpc1, true)
-	q.UrgentPush(rpc2, true)
-	q.Push(rpc3, true)
-	q.UrgentPush(rpc4, true)
+	q.Push(rpc1, true, nil)
+	q.UrgentPush(rpc2, true, nil)
+	q.Push(rpc3, true, nil)
+	q.UrgentPush(rpc4, true, nil)
 	pop1, err := q.Pop(context.Background())
 	if err != nil {
 		t.Fatal(err)
@@ -64,12 +64,12 @@ func TestRpcQueueUrgentPush(t *testing.T) {
 
 func TestRpcQueuePushThenPop(t *testing.T) {
 	maxSize := 32
-	q := newRpcQueue(maxSize)
+	q := newRpcQueue(maxSize, nil)
 
 	rpc1 := &RPC{}
 	rpc2 := &RPC{}
-	q.Push(rpc1, true)
-	q.Push(rpc2, true)
+	q.Push(rpc1, true, nil)
+	q.Push(rpc2, true, nil)
 	pop1, err := q.Pop(context.Background())
 	if err != nil {
 		t.Fatal(err)
@@ -88,15 +88,15 @@ func TestRpcQueuePushThenPop(t *testing.T) {
 
 func TestRpcQueuePopThenPush(t *testing.T) {
 	maxSize := 32
-	q := newRpcQueue(maxSize)
+	q := newRpcQueue(maxSize, nil)
 
 	rpc1 := &RPC{}
 	rpc2 := &RPC{}
 	go func() {
 		// Wait to make sure the main goroutine is blocked.
 		time.Sleep(1 * time.Millisecond)
-		q.Push(rpc1, true)
-		q.Push(rpc2, true)
+		q.Push(rpc1, true, nil)
+		q.Push(rpc2, true, nil)
 	}()
 	pop1, err := q.Pop(context.Background())
 	if err != nil {
@@ -116,12 +116,12 @@ func TestRpcQueuePopThenPush(t *testing.T) {
 
 func TestRpcQueueBlockPushWhenFull(t *testing.T) {
 	maxSize := 1
-	q := newRpcQueue(maxSize)
+	q := newRpcQueue(maxSize, nil)
 
 	finished := make(chan struct{})
-	q.Push(&RPC{}, true)
+	q.Push(&RPC{}, true, nil)
 	go func() {
-		q.Push(&RPC{}, true)
+		q.Push(&RPC{}, true, nil)
 		finished <- struct{}{}
 	}()
 	// Wait to make sure the goroutine is blocked.
@@ -135,10 +135,10 @@ func TestRpcQueueBlockPushWhenFull(t *testing.T) {
 
 func TestRpcQueueNonblockPushWhenFull(t *testing.T) {
 	maxSize := 1
-	q := newRpcQueue(maxSize)
+	q := newRpcQueue(maxSize, nil)
 
-	q.Push(&RPC{}, true)
-	err := q.Push(&RPC{}, false)
+	q.Push(&RPC{}, true, nil)
+	err := q.Push(&RPC{}, false, nil)
 	if err != ErrQueueFull {
 		t.Fatalf("non-blocking rpc queue Push returns wrong error when it is full")
 	}
@@ -146,7 +146,7 @@ func TestRpcQueueNonblockPushWhenFull(t *testing.T) {
 
 func TestRpcQueuePushAfterClose(t *testing.T) {
 	maxSize := 32
-	q := newRpcQueue(maxSize)
+	q := newRpcQueue(maxSize, nil)
 	q.Close()
 
 	defer func() {
@@ -154,12 +154,12 @@ func TestRpcQueuePushAfterClose(t *testing.T) {
 			t.Fatalf("rpc queue Push does not panick after closed")
 		}
 	}()
-	q.Push(&RPC{}, true)
+	q.Push(&RPC{}, true, nil)
 }
 
 func TestRpcQueuePopAfterClose(t *testing.T) {
 	maxSize := 32
-	q := newRpcQueue(maxSize)
+	q := newRpcQueue(maxSize, nil)
 	q.Close()
 	_, err := q.Pop(context.Background())
 	if err != ErrQueueClosed {
@@ -169,8 +169,8 @@ func TestRpcQueuePopAfterClose(t *testing.T) {
 
 func TestRpcQueueCloseWhilePush(t *testing.T) {
 	maxSize := 1
-	q := newRpcQueue(maxSize)
-	q.Push(&RPC{}, true)
+	q := newRpcQueue(maxSize, nil)
+	q.Push(&RPC{}, true, nil)
 
 	defer func() {
 		if r := recover(); r == nil {
@@ -183,12 +183,12 @@ func TestRpcQueueCloseWhilePush(t *testing.T) {
 		time.Sleep(1 * time.Millisecond)
 		q.Close()
 	}()
-	q.Push(&RPC{}, true)
+	q.Push(&RPC{}, true, nil)
 }
 
 func TestRpcQueueCloseWhilePop(t *testing.T) {
 	maxSize := 32
-	q := newRpcQueue(maxSize)
+	q := newRpcQueue(maxSize, nil)
 	go func() {
 		// Wait to make sure the main goroutine is blocked.
 		time.Sleep(1 * time.Millisecond)
@@ -202,20 +202,20 @@ func TestRpcQueueCloseWhilePop(t *testing.T) {
 
 func TestRpcQueuePushWhenFullThenPop(t *testing.T) {
 	maxSize := 1
-	q := newRpcQueue(maxSize)
+	q := newRpcQueue(maxSize, nil)
 
-	q.Push(&RPC{}, true)
+	q.Push(&RPC{}, true, nil)
 	go func() {
 		// Wait to make sure the main goroutine is blocked.
 		time.Sleep(1 * time.Millisecond)
 		q.Pop(context.Background())
 	}()
-	q.Push(&RPC{}, true)
+	q.Push(&RPC{}, true, nil)
 }
 
 func TestRpcQueueCancelPop(t *testing.T) {
 	maxSize := 32
-	q := newRpcQueue(maxSize)
+	q := newRpcQueue(maxSize, nil)
 	ctx, cancel := context.WithCancel(context.Background())
 	go func() {
 		// Wait to make sure the main goroutine is blocked.

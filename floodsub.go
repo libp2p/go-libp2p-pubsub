@@ -90,7 +90,7 @@ func (fs *FloodSubRouter) Publish(msg *Message) {
 			continue
 		}
 
-		err := q.Push(out, false)
+		err := q.Push(out, false, []string{msg.ID})
 		if err != nil {
 			log.Infof("dropping message to peer %s: queue full", pid)
 			fs.tracer.DropRPC(out, pid)

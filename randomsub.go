@@ -151,7 +151,7 @@ func (rs *RandomSubRouter) Publish(msg *Message) {
 			continue
 		}
 
-		err := q.Push(out, false)
+		err := q.Push(out, false, nil)
 		if err != nil {
 			log.Infof("dropping message to peer %s: queue full", p)
 			rs.tracer.DropRPC(out, p)
