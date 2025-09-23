@@ -1091,7 +1091,7 @@ func (p *PubSub) handlePendingPeers() {
 			continue
 		}
 
-		rpcQueue := newRpcQueue(p.peerOutboundQueueSize)
+		rpcQueue := newRpcQueue(p.peerOutboundQueueSize, p.metrics.lateIDONTWANTs)
 		p.peers[pid] = rpcQueue
 		go p.handleNewPeer(p.ctx, pid, rpcQueue)
 	}
@@ -1310,7 +1310,7 @@ func (p *PubSub) announce(topic string, sub bool) {
 
 	out := rpcWithSubs(subopt)
 	for pid, peer := range p.peers {
-		err := peer.Push(out, false)
+		err := peer.Push(out, false, nil)
 		if err != nil {
 			p.logger.Info("Can't send announce message to peer: queue full; scheduling retry", "peer", pid)
 			p.tracer.DropRPC(out, pid)
@@ -1353,7 +1353,7 @@ func (p *PubSub) doAnnounceRetry(pid peer.ID, topic string, sub bool) {
 	}
 
 	out := rpcWithSubs(subopt)
-	err := peer.Push(out, false)
+	err := peer.Push(out, false, nil)
 	if err != nil {
 		p.logger.Info("Can't send announce message to peer: queue full; scheduling retry", "peer", pid)
 		p.tracer.DropRPC(out, pid)
