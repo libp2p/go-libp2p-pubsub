@@ -1543,8 +1543,21 @@ type TopicOptions struct {
 
 // RequestPartialMessages requests that peers, if they support it, send us
 // partial messages on this topic.
+//
+// If a peer does not support partial messages, this has no effect, and the peer
+// will continue sending us full messages
+//
+// It is an error to use this option if partial messages are not enabled
 func RequestPartialMessages() TopicOpt {
 	return func(t *Topic) error {
+		gs, ok := t.p.rt.(*GossipSubRouter)
+		if !ok {
+			return errors.New("partial messages only supported by gossipsub")
+		}
+
+		if !gs.extensions.myExtensions.PartialMessages {
+			return errors.New("partial messages are not enabled")
+		}
 		t.requestPartialMessages = true
 		return nil
 	}
