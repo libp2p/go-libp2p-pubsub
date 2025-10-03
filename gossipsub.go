@@ -1375,7 +1375,7 @@ func (gs *GossipSubRouter) rpcs(msg *Message) iter.Seq2[peer.ID, *RPC] {
 			if pid == from || pid == peer.ID(msg.GetFrom()) {
 				continue
 			}
-			if peerStates, ok := gs.p.topics[topic]; ok && peerStates[pid].requestsPartial {
+			if gs.peerWantsPartial(pid, topic) {
 				// The peer requested partial messages. We'll skip sending them full messages
 				continue
 			}
@@ -1385,6 +1385,11 @@ func (gs *GossipSubRouter) rpcs(msg *Message) iter.Seq2[peer.ID, *RPC] {
 			}
 		}
 	}
+}
+
+func (gs *GossipSubRouter) peerWantsPartial(p peer.ID, topic string) bool {
+	peerStates, ok := gs.p.topics[topic]
+	return ok && gs.extensions.myExtensions.PartialMessages && peerStates[p].requestsPartial
 }
 
 func (gs *GossipSubRouter) Join(topic string) {
