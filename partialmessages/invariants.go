@@ -30,13 +30,15 @@ type InvariantChecker[P Message] interface {
 	// in (as determined from the parts metadata)
 	ShouldRequest(a P, from peer.ID, partsMetadata []byte) bool
 
+	MergePartsMetadata(left, right PartsMetadata) PartsMetadata
+
 	Equal(a, b P) bool
 }
 
 func TestPartialMessageInvariants[P Message](t *testing.T, checker InvariantChecker[P]) {
 	extend := func(a, b P) (P, error) {
 		emptyParts := checker.EmptyMessage().PartsMetadata()
-		encodedB, _, err := b.PartialMessageBytes(emptyParts)
+		encodedB, err := b.PartialMessageBytes(emptyParts)
 		if err != nil {
 			var out P
 			return out, err
@@ -64,7 +66,7 @@ func TestPartialMessageInvariants[P Message](t *testing.T, checker InvariantChec
 
 		recombined := checker.EmptyMessage()
 		for _, part := range parts {
-			b, _, err := part.PartialMessageBytes(recombined.PartsMetadata())
+			b, err := part.PartialMessageBytes(recombined.PartsMetadata())
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -86,10 +88,11 @@ func TestPartialMessageInvariants[P Message](t *testing.T, checker InvariantChec
 		emptyMsgPartsMeta := emptyMessage.PartsMetadata()
 
 		// Empty message should not be able to fulfill any request
-		response, rest, err := emptyMessage.PartialMessageBytes(emptyMsgPartsMeta)
+		response, err := emptyMessage.PartialMessageBytes(emptyMsgPartsMeta)
 		if err != nil {
 			t.Fatal(err)
 		}
+		rest := checker.MergePartsMetadata(emptyMsgPartsMeta, emptyMessage.PartsMetadata())
 
 		if len(response) != 0 {
 			t.Error("Empty message should return nil response when requesting parts it doesn't have")
@@ -122,10 +125,11 @@ func TestPartialMessageInvariants[P Message](t *testing.T, checker InvariantChec
 		emptyMsgPartsMeta := emptyMessage.PartsMetadata()
 
 		// Request all parts from the partial message
-		response1, rest1, err := parts[0].PartialMessageBytes(emptyMsgPartsMeta)
+		response1, err := parts[0].PartialMessageBytes(emptyMsgPartsMeta)
 		if err != nil {
 			t.Fatal(err)
 		}
+		rest1 := checker.MergePartsMetadata(emptyMsgPartsMeta, parts[0].PartsMetadata())
 
 		// Should get some response since partial message has at least one part
 		if len(response1) == 0 {
@@ -134,10 +138,10 @@ func TestPartialMessageInvariants[P Message](t *testing.T, checker InvariantChec
 
 		// Rest should be non-zero and different from original request since something was fulfilled
 		if len(rest1) == 0 {
-			t.Error("Rest should be non-zero when partial fulfillment occurred")
+			t.Fatal("Rest should be non-zero when partial fulfillment occurred")
 		}
 		if bytes.Equal(rest1, emptyMsgPartsMeta) {
-			t.Error("Rest should be different from original request since partial fulfillment occurred")
+			t.Fatalf("Rest should be different from original request since partial fulfillment occurred")
 		}
 
 		// Create another partial message with the remaining parts
@@ -150,10 +154,11 @@ func TestPartialMessageInvariants[P Message](t *testing.T, checker InvariantChec
 		}
 
 		// The remaining partial message should be able to fulfill the "rest" request
-		response2, rest2, err := remainingPartial.PartialMessageBytes(rest1)
+		response2, err := remainingPartial.PartialMessageBytes(rest1)
 		if err != nil {
 			t.Fatal(err)
 		}
+		rest2 := checker.MergePartsMetadata(rest1, remainingPartial.PartsMetadata())
 
 		// response2 should be non-empty since we have remaining parts to fulfill
 		if len(response2) == 0 {
@@ -192,7 +197,8 @@ func TestPartialMessageInvariants[P Message](t *testing.T, checker InvariantChec
 
 		// Request with empty metadata should return all available parts
 		emptyMeta := checker.EmptyMessage().PartsMetadata()
-		response, rest, err := fullMessage.PartialMessageBytes(emptyMeta)
+		response, err := fullMessage.PartialMessageBytes(emptyMeta)
+		rest := checker.MergePartsMetadata(emptyMeta, fullMessage.PartsMetadata())
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -244,7 +250,8 @@ func TestPartialMessageInvariants[P Message](t *testing.T, checker InvariantChec
 			// Get the MissingParts() and have the full message fulfill the request
 			msgPartsMeta := testMsg.PartsMetadata()
 
-			response, rest, err := fullMessage.PartialMessageBytes(msgPartsMeta)
+			response, err := fullMessage.PartialMessageBytes(msgPartsMeta)
+			rest := checker.MergePartsMetadata(msgPartsMeta, fullMessage.PartsMetadata())
 			if err != nil {
 				t.Fatal(err)
 			}

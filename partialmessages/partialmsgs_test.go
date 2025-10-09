@@ -13,6 +13,7 @@ import (
 	"testing"
 
 	"github.com/libp2p/go-libp2p-pubsub/internal/merkle"
+	"github.com/libp2p/go-libp2p-pubsub/partialmessages/bitmap"
 	pubsub_pb "github.com/libp2p/go-libp2p-pubsub/pb"
 	"github.com/libp2p/go-libp2p/core/peer"
 )
@@ -120,16 +121,14 @@ func (pm *testPartialMessage) complete() bool {
 }
 
 // AvailableParts returns a bitmap of available parts
-func (pm *testPartialMessage) PartsMetadata() []byte {
-	var temp big.Int
+func (pm *testPartialMessage) PartsMetadata() PartsMetadata {
+	out := bitmap.NewBitmapWithOnesCount(testPartialMessageLeaves)
 	for i, part := range pm.Parts {
-		var b uint = 0
-		if len(part) > 0 {
-			b = 1
+		if len(part) == 0 {
+			out.Clear(i)
 		}
-		temp.SetBit(&temp, i, b)
 	}
-	return temp.Bytes()
+	return PartsMetadata(out)
 }
 
 func (pm *testPartialMessage) extendFromEncodedPartialMessage(_ peer.ID, data []byte) (extended bool) {
@@ -200,42 +199,45 @@ func (pm *testPartialMessage) shouldRequest(partsMetadata []byte) bool {
 }
 
 // PartialMessageBytes implements PartialMessage.
-func (pm *testPartialMessage) PartialMessageBytes(metadata []byte) ([]byte, []byte, error) {
-	var peerHas big.Int
-	peerHas.SetBytes(metadata)
+func (pm *testPartialMessage) PartialMessageBytes(metadata PartsMetadata) ([]byte, error) {
+	peerHas := bitmap.Bitmap(metadata)
 
 	var added bool
 	var tempMessage testPartialMessage
 	tempMessage.Commitment = pm.Commitment
 	for i := range pm.Parts {
-		if peerHas.Bit(i) == 0 {
-			if len(pm.Parts[i]) == 0 {
-				// We can't fulfill this part, leave the bit set
-				continue
-			}
-			// set the bit, we provided the data
-			peerHas.SetBit(&peerHas, i, 1)
-
-			tempMessage.Parts[i] = pm.Parts[i]
-			tempMessage.Proofs[i] = pm.Proofs[i]
-			added = true
+		if peerHas.Get(i) {
+			continue
 		}
+
+		if len(pm.Parts[i]) == 0 {
+			// We can't fulfill this part
+			continue
+		}
+
+		tempMessage.Parts[i] = pm.Parts[i]
+		tempMessage.Proofs[i] = pm.Proofs[i]
+		added = true
 	}
 
 	if !added {
-		return nil, metadata, nil
+		return nil, nil
 	}
 
 	b, err := json.Marshal(tempMessage)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
-	return b, peerHas.Bytes(), nil
+	return b, nil
 }
 
 type testPartialMessageChecker struct {
 	fullMessage *testPartialMessage
+}
+
+func (t *testPartialMessageChecker) MergePartsMetadata(left, right PartsMetadata) PartsMetadata {
+	return MergeBitmap(left, right)
 }
 
 // EmptyMessage implements InvariantChecker.
@@ -388,8 +390,10 @@ func createPeers(t *testing.T, topic string, n int) *testPeers {
 		var handler *PartialMessageExtension
 		// Create handler
 		handler = &PartialMessageExtension{
-			router: router,
 			Logger: slog.Default().With("id", i),
+			MergePartsMetadata: func(_ string, left, right PartsMetadata) PartsMetadata {
+				return MergeBitmap(left, right)
+			},
 			OnIncomingRPC: func(from peer.ID, rpc *pubsub_pb.PartialMessagesExtension) error {
 				// Handle incoming partial message data - use testPeers to track state
 				// Get or create the partial message for this topic/group
@@ -453,6 +457,7 @@ func createPeers(t *testing.T, topic string, n int) *testPeers {
 			},
 			GroupTTLByHeatbeat: 5,
 		}
+		handler.Init(router)
 
 		handlers[i] = handler
 		nw.handlers[currentPeer] = handler
@@ -592,7 +597,7 @@ func TestPartialMessages(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		msgBytes, _, err := h1Msg.PartialMessageBytes(nil)
+		msgBytes, err := h1Msg.PartialMessageBytes(nil)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -619,7 +624,7 @@ func TestPartialMessages(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		msgBytes, _, err = h2Msg.PartialMessageBytes(nil)
+		msgBytes, err = h2Msg.PartialMessageBytes(nil)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -913,7 +918,7 @@ func TestPartialMessages(t *testing.T) {
 			h1Msg.Parts[i] = fullMsg.Parts[i]
 			h1Msg.Proofs[i] = fullMsg.Proofs[i]
 		}
-		h1MsgEncoded, _, err := h1Msg.PartialMessageBytes(nil)
+		h1MsgEncoded, err := h1Msg.PartialMessageBytes(nil)
 		if err != nil {
 			t.Fatal(err)
 		}
