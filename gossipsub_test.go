@@ -25,6 +25,7 @@ import (
 
 	"github.com/libp2p/go-libp2p-pubsub/internal/gologshim"
 	"github.com/libp2p/go-libp2p-pubsub/partialmessages"
+	"github.com/libp2p/go-libp2p-pubsub/partialmessages/bitmap"
 	pb "github.com/libp2p/go-libp2p-pubsub/pb"
 	"github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/libp2p/go-msgio"
@@ -4408,15 +4409,14 @@ func (m *minimalTestPartialMessage) complete() bool {
 }
 
 // PartsMetadata implements partialmessages.PartialMessage.
-func (m *minimalTestPartialMessage) PartsMetadata() []byte {
-	out := byte(0)
-	if len(m.Parts[0]) > 0 {
-		out |= 1
+func (m *minimalTestPartialMessage) PartsMetadata() partialmessages.PartsMetadata {
+	out := make(bitmap.Bitmap, 1)
+	for i := range m.Parts {
+		if len(m.Parts[i]) > 0 {
+			out.Set(i)
+		}
 	}
-	if len(m.Parts[1]) > 0 {
-		out |= 2
-	}
-	return []byte{out}
+	return partialmessages.PartsMetadata(out)
 }
 
 func (m *minimalTestPartialMessage) extendFromEncodedPartialMessage(_ peer.ID, data []byte) (extended bool) {
@@ -4471,34 +4471,30 @@ func (m *minimalTestPartialMessage) GroupID() []byte {
 	return m.Group
 }
 
-func (m *minimalTestPartialMessage) PartialMessageBytes(peerPartsMetadata []byte) ([]byte, []byte, error) {
+func (m *minimalTestPartialMessage) PartialMessageBytes(peerPartsMetadata partialmessages.PartsMetadata) ([]byte, error) {
 	if len(peerPartsMetadata) == 0 {
-		return nil, nil, errors.New("invalid metadata")
+		return nil, errors.New("invalid metadata")
 	}
-	peerWants := ^peerPartsMetadata[0]
+	peerHas := bitmap.Bitmap(peerPartsMetadata)
 
 	var temp minimalTestPartialMessage
 	temp.Group = m.Group
-	if peerWants&1 == 1 && m.Parts[0] != nil {
-		peerWants ^= 1
+	if !peerHas.Get(0) && m.Parts[0] != nil {
 		temp.Parts[0] = m.Parts[0]
 	}
-	if peerWants&2 == 2 && m.Parts[1] != nil {
-		peerWants ^= 2
+	if !peerHas.Get(1) && m.Parts[1] != nil {
 		temp.Parts[1] = m.Parts[1]
 	}
 
-	restMetadata := []byte{^peerWants}
-
 	if temp.Parts[0] == nil && temp.Parts[1] == nil {
-		return nil, restMetadata, nil
+		return nil, nil
 	}
 
 	b, err := json.Marshal(temp)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
-	return b, restMetadata, nil
+	return b, nil
 }
 
 func (m *minimalTestPartialMessage) shouldRequest(_ peer.ID, peerHasMetadata []byte) bool {
@@ -4514,6 +4510,10 @@ var _ partialmessages.Message = (*minimalTestPartialMessage)(nil)
 
 type minimalTestPartialMessageChecker struct {
 	fullMessage *minimalTestPartialMessage
+}
+
+func (m *minimalTestPartialMessageChecker) MergePartsMetadata(left, right partialmessages.PartsMetadata) partialmessages.PartsMetadata {
+	return partialmessages.MergeBitmap(left, right)
 }
 
 // EmptyMessage implements partialmessages.InvariantChecker.
@@ -4605,6 +4605,9 @@ func TestPartialMessages(t *testing.T) {
 				// No validation. Only for this test. In production you should
 				// have some basic fast rules here.
 				return nil
+			},
+			MergePartsMetadata: func(_ string, left, right partialmessages.PartsMetadata) partialmessages.PartsMetadata {
+				return partialmessages.MergeBitmap(left, right)
 			},
 			OnIncomingRPC: func(from peer.ID, rpc *pb.PartialMessagesExtension) error {
 				groupID := rpc.GroupID
@@ -4705,6 +4708,9 @@ func TestSkipPublishingToPeersWithPartialMessageSupport(t *testing.T) {
 			Logger: logger,
 			ValidateRPC: func(from peer.ID, rpc *pb.PartialMessagesExtension) error {
 				return nil
+			},
+			MergePartsMetadata: func(_ string, left, right partialmessages.PartsMetadata) partialmessages.PartsMetadata {
+				return partialmessages.MergeBitmap(left, right)
 			},
 			OnIncomingRPC: func(from peer.ID, rpc *pb.PartialMessagesExtension) error {
 				topicID := rpc.GetTopicID()

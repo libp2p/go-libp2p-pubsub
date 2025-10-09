@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"slices"
 
+	"github.com/libp2p/go-libp2p-pubsub/partialmessages/bitmap"
 	pb "github.com/libp2p/go-libp2p-pubsub/pb"
 	"github.com/libp2p/go-libp2p/core/peer"
 )
@@ -20,6 +21,10 @@ import (
 //   - But a user may need to republish anyways if they get parts out of band
 
 const minGroupTTL = 3
+
+// PartsMetadata returns metadata about the parts this partial message
+// contains and, possibly implicitly, the parts it wants.
+type PartsMetadata []byte
 
 // Message is a message that can be broken up into parts. It can be
 // complete, partially complete, or empty. It is up to the application to define
@@ -43,20 +48,18 @@ type Message interface {
 	//
 	// If the Partial Message is empty, the implementation MUST return:
 	// nil, metadata, nil.
-	PartialMessageBytes(partsMetadata []byte) (msg []byte, newPartsMetadata []byte, _ error)
+	PartialMessageBytes(partsMetadata PartsMetadata) (msg []byte, _ error)
 
-	// PartsMetadata returns metadata about the parts this partial message
-	// contains and, possibly implicitly, the parts it wants.
-	PartsMetadata() []byte
+	PartsMetadata() PartsMetadata
 }
 
 // peerState is the state we keep per peer. Used to make Publish
 // Idempotent.
 type peerState struct {
 	// The parts metadata the peer has sent us
-	partsMetadata []byte
-	// The parts metadata this endpoint has sent to the peer
-	sentPartsMetadata []byte
+	partsMetadata PartsMetadata
+	// The parts metadata this node has sent to the peer
+	sentPartsMetadata PartsMetadata
 }
 
 func (ps *peerState) IsZero() bool {
@@ -84,8 +87,16 @@ func (s *partialMessageStatePerTopicGroup) clearPeerWants(peerID peer.ID) {
 	}
 }
 
+// MergeBitmap is a helper function for merging parts metadata if they are a
+// bitmap.
+func MergeBitmap(left, right PartsMetadata) PartsMetadata {
+	return PartsMetadata(bitmap.Merge(bitmap.Bitmap(left), bitmap.Bitmap(right)))
+}
+
 type PartialMessageExtension struct {
 	Logger *slog.Logger
+
+	MergePartsMetadata func(topic string, left, right PartsMetadata) PartsMetadata
 
 	// OnIncomingRPC is called whenever we receive an encoded
 	// partial message from a peer. This func MUST be fast and non-blocking.
@@ -147,6 +158,9 @@ func (e *PartialMessageExtension) Init(router Router) error {
 	if e.OnIncomingRPC == nil {
 		return errors.New("field OnIncomingRPC must be set")
 	}
+	if e.MergePartsMetadata == nil {
+		return errors.New("field MergePartsMetadata must be set")
+	}
 	e.statePerTopicPerGroup = make(map[string]map[string]*partialMessageStatePerTopicGroup)
 
 	return nil
@@ -186,14 +200,14 @@ func (e *PartialMessageExtension) PublishPartial(topic string, partial Message, 
 		if pState.partsMetadata != nil {
 			// This peer has previously asked for a certain part. We'll give
 			// them what we can.
-			pm, rest, err := partial.PartialMessageBytes(pState.partsMetadata)
+			pm, err := partial.PartialMessageBytes(pState.partsMetadata)
 			if err != nil {
 				log.Warn("partial message extension failed to get partial message bytes", "error", err)
 				// Possibly a bad request, we'll delete the request as we will likely error next time we try to handle it
 				state.clearPeerWants(p)
 				continue
 			}
-			pState.partsMetadata = rest
+			pState.partsMetadata = e.MergePartsMetadata(topic, pState.partsMetadata, myPartsMeta)
 			if len(pm) > 0 {
 				log.Debug("Respond to peer's IWant")
 				sendRPC = true
@@ -283,7 +297,7 @@ func (e *PartialMessageExtension) HandleRPC(from peer.ID, rpc *pb.PartialMessage
 			pState = &peerState{}
 			state.peerState[from] = pState
 		}
-		pState.partsMetadata = rpc.PartsMetadata
+		pState.partsMetadata = e.MergePartsMetadata(rpc.GetTopicID(), pState.partsMetadata, rpc.PartsMetadata)
 	}
 
 	return e.OnIncomingRPC(from, rpc)
