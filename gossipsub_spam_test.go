@@ -930,20 +930,25 @@ func TestGossipsubHandleIDontwantSpam(t *testing.T) {
 	rPid := hosts[1].ID()
 	ctrlMessage := &pb.ControlMessage{Idontwant: []*pb.ControlIDontWant{{MessageIDs: idwIds}}}
 	grt := psubs[0].rt.(*GossipSubRouter)
-	grt.handleIDontWant(rPid, ctrlMessage)
+	completed := make(chan struct{})
+	psubs[0].eval <- func() {
+		grt.handleIDontWant(rPid, ctrlMessage)
 
-	if grt.peerdontwant[rPid] != 1 {
-		t.Errorf("Wanted message count of %d but received %d", 1, grt.peerdontwant[rPid])
-	}
-	mid := fmt.Sprintf("idontwant-%d", GossipSubMaxIDontWantLength-1)
-	if _, ok := grt.unwanted[rPid][computeChecksum(mid)]; !ok {
-		t.Errorf("Desired message id was not stored in the unwanted map: %s", mid)
-	}
+		if grt.peerdontwant[rPid] != 1 {
+			t.Errorf("Wanted message count of %d but received %d", 1, grt.peerdontwant[rPid])
+		}
+		mid := fmt.Sprintf("idontwant-%d", GossipSubMaxIDontWantLength-1)
+		if _, ok := grt.unwanted[rPid][computeChecksum(mid)]; !ok {
+			t.Errorf("Desired message id was not stored in the unwanted map: %s", mid)
+		}
 
-	mid = fmt.Sprintf("idontwant-%d", GossipSubMaxIDontWantLength)
-	if _, ok := grt.unwanted[rPid][computeChecksum(mid)]; ok {
-		t.Errorf("Unwanted message id was stored in the unwanted map: %s", mid)
+		mid = fmt.Sprintf("idontwant-%d", GossipSubMaxIDontWantLength)
+		if _, ok := grt.unwanted[rPid][computeChecksum(mid)]; ok {
+			t.Errorf("Unwanted message id was stored in the unwanted map: %s", mid)
+		}
+		close(completed)
 	}
+	<-completed
 }
 
 type mockGSOnRead func(writeMsg func(*pb.RPC), irpc *pb.RPC)

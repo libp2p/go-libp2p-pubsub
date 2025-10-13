@@ -1163,6 +1163,9 @@ func (gs *GossipSubRouter) handleIDontWant(p peer.ID, ctl *pb.ControlMessage) {
 	gs.peerdontwant[p]++
 
 	totalUnwantedIds := 0
+	// Collect message IDs for cancellation
+	var msgIDsToCancel []string
+
 	// Remember all the unwanted message ids
 mainIDWLoop:
 	for _, idontwant := range ctl.GetIdontwant() {
@@ -1175,7 +1178,13 @@ mainIDWLoop:
 
 			totalUnwantedIds++
 			gs.unwanted[p][computeChecksum(mid)] = gs.params.IDontWantMessageTTL
+			msgIDsToCancel = append(msgIDsToCancel, mid)
 		}
+	}
+
+	// Cancel these messages in the RPC queue if it exists
+	if queue, ok := gs.p.peers[p]; ok && len(msgIDsToCancel) > 0 {
+		queue.CancelMessages(msgIDsToCancel)
 	}
 }
 
@@ -1316,6 +1325,7 @@ func (gs *GossipSubRouter) rpcs(msg *Message) iter.Seq2[peer.ID, *RPC] {
 			return
 		}
 
+		msgID := gs.p.idGen.ID(msg)
 		if gs.floodPublish && from == gs.p.host.ID() {
 			for p := range tmap {
 				_, direct := gs.direct[p]
@@ -1359,7 +1369,7 @@ func (gs *GossipSubRouter) rpcs(msg *Message) iter.Seq2[peer.ID, *RPC] {
 				gs.lastpub[topic] = time.Now().UnixNano()
 			}
 
-			csum := computeChecksum(gs.p.idGen.ID(msg))
+			csum := computeChecksum(msgID)
 			for p := range gmap {
 				// Check if it has already received an IDONTWANT for the message.
 				// If so, don't send it to the peer
@@ -1370,7 +1380,7 @@ func (gs *GossipSubRouter) rpcs(msg *Message) iter.Seq2[peer.ID, *RPC] {
 			}
 		}
 
-		out := rpcWithMessages(msg.Message)
+		out := rpcWithMessageAndMsgID(msg.Message, msgID)
 		for pid := range tosend {
 			if pid == from || pid == peer.ID(msg.GetFrom()) {
 				continue
