@@ -1694,6 +1694,37 @@ func (p *PubSub) Publish(topic string, data []byte, opts ...PubOpt) error {
 	return t.Publish(context.TODO(), data, opts...)
 }
 
+type PeerFeedbackKind int
+
+const (
+	PeerFeedbackUsefulMessage PeerFeedbackKind = iota
+	PeerFeedbackInvalidMessage
+)
+
+// PeerFeedback lets applications inform GossipSub's peer scorer about the
+// performance of a peer's message. This is useful if the application is using
+// partial messages, because the application handles merging parts.
+func (p *PubSub) PeerFeedback(topic string, peer peer.ID, kind PeerFeedbackKind) error {
+	gs, ok := p.rt.(*GossipSubRouter)
+	if !ok {
+		return errors.New("peer feedback is only supported by GossipSub")
+	}
+	p.eval <- func() {
+		if gs.score == nil {
+			return
+		}
+		gs.score.Lock()
+		defer gs.score.Unlock()
+		switch kind {
+		case PeerFeedbackUsefulMessage:
+			gs.score.markFirstMessageDelivery(peer, topic)
+		case PeerFeedbackInvalidMessage:
+			gs.score.markInvalidMessageDelivery(peer, topic)
+		}
+	}
+	return nil
+}
+
 // PublishBatch publishes a batch of messages. This only works for routers that
 // implement the BatchPublisher interface.
 //
