@@ -185,6 +185,11 @@ func (p *PubSub) handleSendingMessages(ctx context.Context, s network.Stream, ou
 			return err
 		}
 
+		if err := s.SetWriteDeadline(time.Now().Add(time.Second * 30)); err != nil {
+			p.rpcLogger.Debug("failed to set write deadline", "peer", s.Conn().RemotePeer(), "err", err)
+			return err
+		}
+
 		_, err = s.Write(buf)
 		if err != nil {
 			p.rpcLogger.Debug("failed to send message", "peer", s.Conn().RemotePeer(), "rpc", rpc, "err", err)
