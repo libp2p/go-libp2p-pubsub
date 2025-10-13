@@ -77,7 +77,7 @@ func newPartialMessageStatePerTopicGroup(groupTTL int) *partialMessageStatePerTo
 	}
 }
 
-func (s *partialMessageStatePerTopicGroup) clearPeerWants(peerID peer.ID) {
+func (s *partialMessageStatePerTopicGroup) clearPeerMetadata(peerID peer.ID) {
 	if peerState, ok := s.peerState[peerID]; ok {
 		peerState.partsMetadata = nil
 		if peerState.IsZero() {
@@ -203,7 +203,7 @@ func (e *PartialMessageExtension) PublishPartial(topic string, partial Message, 
 			if err != nil {
 				log.Warn("partial message extension failed to get partial message bytes", "error", err)
 				// Possibly a bad request, we'll delete the request as we will likely error next time we try to handle it
-				state.clearPeerWants(p)
+				state.clearPeerMetadata(p)
 				continue
 			}
 			pState.partsMetadata = e.MergePartsMetadata(topic, pState.partsMetadata, myPartsMeta)
