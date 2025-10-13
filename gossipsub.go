@@ -864,6 +864,12 @@ func (gs *GossipSubRouter) Preprocess(from peer.ID, msgs []*Message) {
 				// We don't send IDONTWANT to the peer that sent us the messages
 				continue
 			}
+			if gs.peerWantsPartial(p, topic) {
+				// Don't send IDONTWANT to peers that are using partial messages
+				// for this topic
+				continue
+			}
+
 			// send to only peers that support IDONTWANT
 			if gs.feature(GossipSubFeatureIdontwant, gs.peers[p]) {
 				idontwant := []*pb.ControlIDontWant{{MessageIDs: mids}}
