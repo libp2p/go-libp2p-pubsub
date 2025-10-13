@@ -13,13 +13,13 @@ import (
 )
 
 // TODO: Add gossip fallback (pick random connected peers and send ihave/iwants)
-// Question: How to configure scheduling RPCs?
-//   - Leave it up to the implementation of sendRPC
-// Question: Skip partial IHAVE for now?
-// Question: I could have a user provided validation queue instead of requiring republishing
-//   - But a user may need to republish anyways if they get parts out of band
 
 const minGroupTTL = 3
+
+// peerInitiatedGroupLimitPerTopic limits the total number (per topic) of
+// *partialMessageStatePerTopicGroup we create in response to a incoming RPC.
+// This only applies to groups that we haven't published for yet.
+const peerInitiatedGroupLimitPerTopic = 256
 
 // PartsMetadata returns metadata about the parts this partial message
 // contains and, possibly implicitly, the parts it wants.
@@ -66,8 +66,9 @@ func (ps *peerState) IsZero() bool {
 }
 
 type partialMessageStatePerTopicGroup struct {
-	peerState map[peer.ID]*peerState
-	groupTTL  int
+	peerState     map[peer.ID]*peerState
+	groupTTL      int
+	peerInitiated bool
 }
 
 func newPartialMessageStatePerTopicGroup(groupTTL int) *partialMessageStatePerTopicGroup {
@@ -116,6 +117,8 @@ type PartialMessageExtension struct {
 
 	statePerTopicPerGroup map[string]map[string]*partialMessageStatePerTopicGroup
 
+	peerInitiatedGroupCountPerTopic map[string]int
+
 	router Router
 }
 
@@ -132,7 +135,7 @@ type Router interface {
 	MeshPeers(topic string) iter.Seq[peer.ID]
 }
 
-func (e *PartialMessageExtension) groupState(topic string, groupID []byte) (*partialMessageStatePerTopicGroup, error) {
+func (e *PartialMessageExtension) groupState(topic string, groupID []byte, peerInitiated bool) (*partialMessageStatePerTopicGroup, error) {
 	statePerTopic, ok := e.statePerTopicPerGroup[topic]
 	if !ok {
 		statePerTopic = make(map[string]*partialMessageStatePerTopicGroup)
@@ -140,8 +143,20 @@ func (e *PartialMessageExtension) groupState(topic string, groupID []byte) (*par
 	}
 	state, ok := statePerTopic[string(groupID)]
 	if !ok {
+		if peerInitiated {
+			if e.peerInitiatedGroupCountPerTopic[topic] >= peerInitiatedGroupLimitPerTopic {
+				return nil, errors.New("too many peer initiated group states")
+			}
+			e.peerInitiatedGroupCountPerTopic[topic]++
+		}
+
 		state = newPartialMessageStatePerTopicGroup(e.GroupTTLByHeatbeat)
 		statePerTopic[string(groupID)] = state
+		state.peerInitiated = peerInitiated
+	}
+	if !peerInitiated && state.peerInitiated {
+		state.peerInitiated = false
+		e.peerInitiatedGroupCountPerTopic[topic]--
 	}
 	return state, nil
 }
@@ -161,6 +176,7 @@ func (e *PartialMessageExtension) Init(router Router) error {
 		return errors.New("field MergePartsMetadata must be set")
 	}
 	e.statePerTopicPerGroup = make(map[string]map[string]*partialMessageStatePerTopicGroup)
+	e.peerInitiatedGroupCountPerTopic = make(map[string]int)
 
 	return nil
 }
@@ -169,7 +185,7 @@ func (e *PartialMessageExtension) PublishPartial(topic string, partial Message, 
 	groupID := partial.GroupID()
 	myPartsMeta := partial.PartsMetadata()
 
-	state, err := e.groupState(topic, groupID)
+	state, err := e.groupState(topic, groupID, false)
 	if err != nil {
 		return err
 	}
@@ -284,8 +300,7 @@ func (e *PartialMessageExtension) HandleRPC(from peer.ID, rpc *pb.PartialMessage
 	topic := rpc.GetTopicID()
 	groupID := rpc.GroupID
 
-	// TODO: limit the number of peer-initiated groupIDs per topic
-	state, err := e.groupState(topic, groupID)
+	state, err := e.groupState(topic, groupID, true)
 	if err != nil {
 		return err
 	}

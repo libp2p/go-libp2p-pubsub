@@ -68,6 +68,15 @@ func (m *mockNetworkPartialMessages) removePeers() {
 			m.handlers[b].RemovePeer(a)
 		}
 	}
+
+	// assert that there are no leaked peerInitiatedGroupCountPerTopics
+	for _, h := range m.handlers {
+		for topic, count := range h.peerInitiatedGroupCountPerTopic {
+			if count != 0 {
+				m.t.Errorf("unexpected peerInitiatedGroupCountPerTopic for topic %s: %d", topic, count)
+			}
+		}
+	}
 }
 
 func (m *mockNetworkPartialMessages) handleRPCs() bool {
