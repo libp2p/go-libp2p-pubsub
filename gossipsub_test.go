@@ -2217,6 +2217,58 @@ func TestGossipsubPeerScoreInspect(t *testing.T) {
 	}
 }
 
+func TestGossipsubPeerFeedback(t *testing.T) {
+	// this test exercises the code path sof peer score inspection
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	hosts := getDefaultHosts(t, 2)
+
+	inspector := &mockPeerScoreInspector{}
+	psub1 := getGossipsub(ctx, hosts[0],
+		WithPeerScore(
+			&PeerScoreParams{
+				Topics: map[string]*TopicScoreParams{
+					"test": {
+						TopicWeight:                    1,
+						TimeInMeshQuantum:              time.Second,
+						FirstMessageDeliveriesWeight:   10,
+						FirstMessageDeliveriesDecay:    0.999,
+						FirstMessageDeliveriesCap:      100,
+						InvalidMessageDeliveriesWeight: -1,
+						InvalidMessageDeliveriesDecay:  0.9999,
+					},
+				},
+				AppSpecificScore: func(peer.ID) float64 { return 0 },
+				DecayInterval:    time.Second,
+				DecayToZero:      0.01,
+			},
+			&PeerScoreThresholds{
+				GossipThreshold:   -1,
+				PublishThreshold:  -10,
+				GraylistThreshold: -1000,
+			}),
+		WithPeerScoreInspect(inspector.inspect, time.Second))
+	_ = getGossipsub(ctx, hosts[1])
+
+	connect(t, hosts[0], hosts[1])
+	time.Sleep(500 * time.Millisecond) // Wait for nodes to connect
+
+	var err error
+	err = errors.Join(err, psub1.PeerFeedback("test", hosts[1].ID(), PeerFeedbackUsefulMessage))
+	err = errors.Join(err, psub1.PeerFeedback("test", hosts[1].ID(), PeerFeedbackUsefulMessage))
+	err = errors.Join(err, psub1.PeerFeedback("test", hosts[1].ID(), PeerFeedbackUsefulMessage))
+	if err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(500 * time.Millisecond) // Wait for feedback to be incorporated
+
+	score2 := inspector.score(hosts[1].ID())
+	if score2 < 9 {
+		t.Fatalf("expected score to be at least 9, instead got %f", score2)
+	}
+}
+
 func TestGossipsubPeerScoreResetTopicParams(t *testing.T) {
 	// this test exercises the code path sof peer score inspection
 	ctx, cancel := context.WithCancel(context.Background())
