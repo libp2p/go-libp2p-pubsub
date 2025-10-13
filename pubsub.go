@@ -49,6 +49,12 @@ type peerTopicState struct {
 	requestsPartial bool
 }
 
+type peerOutgoingStream struct {
+	network.Stream
+	StartSending chan struct{}
+	Cancel       context.CancelFunc
+}
+
 // PubSub is the implementation of the pubsub system.
 type PubSub struct {
 	// atomic counter for seqnos
@@ -115,7 +121,7 @@ type PubSub struct {
 	newPeersPend   map[peer.ID]struct{}
 
 	// a notification channel for new outoging peer streams
-	newPeerStream chan network.Stream
+	newPeerStream chan peerOutgoingStream
 
 	// a notification channel for errors opening new peer streams
 	newPeerError chan peer.ID
@@ -516,7 +522,7 @@ func NewPubSub(ctx context.Context, h host.Host, rt PubSubRouter, opts ...Option
 		incoming:              make(chan *RPC, 32),
 		newPeers:              make(chan struct{}, 1),
 		newPeersPend:          make(map[peer.ID]struct{}),
-		newPeerStream:         make(chan network.Stream),
+		newPeerStream:         make(chan peerOutgoingStream),
 		newPeerError:          make(chan peer.ID),
 		peerDead:              make(chan struct{}, 1),
 		peerDeadPend:          make(map[peer.ID]struct{}),
@@ -852,6 +858,7 @@ func (p *PubSub) processLoop(ctx context.Context) {
 			q, ok := p.peers[pid]
 			if !ok {
 				p.logger.Warn("new stream for unknown peer", "peer", pid)
+				s.Cancel()
 				s.Reset()
 				continue
 			}
@@ -860,6 +867,7 @@ func (p *PubSub) processLoop(ctx context.Context) {
 				p.logger.Warn("closing stream for blacklisted peer", "peer", pid)
 				q.Close()
 				delete(p.peers, pid)
+				s.Cancel()
 				s.Reset()
 				continue
 			}
@@ -867,8 +875,14 @@ func (p *PubSub) processLoop(ctx context.Context) {
 			helloPacket := p.getHelloPacket()
 			helloPacket = p.rt.AddPeer(pid, s.Protocol(), helloPacket)
 			if helloPacket.Size() > 0 {
-				q.Push(helloPacket, true)
+				// Use Urgent for the hello packet.
+				// It contains extensions that MUST be sent as the first rpc.
+				err := q.UrgentPush(helloPacket, true)
+				if err != nil {
+					p.logger.Debug("failed to enqueue hello packet", "peer", pid, "err", err)
+				}
 			}
+			close(s.StartSending)
 
 		case pid := <-p.newPeerError:
 			delete(p.peers, pid)

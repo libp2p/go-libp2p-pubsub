@@ -128,7 +128,7 @@ func (p *PubSub) notifyPeerDead(pid peer.ID) {
 }
 
 func (p *PubSub) handleNewPeer(ctx context.Context, pid peer.ID, outgoing *rpcQueue) {
-	s, err := p.host.NewStream(p.ctx, pid, p.rt.Protocols()...)
+	s, err := p.host.NewStream(ctx, pid, p.rt.Protocols()...)
 	if err != nil {
 		p.logger.Debug("error opening new stream to peer", "err", err, "peer", pid)
 
@@ -140,11 +140,14 @@ func (p *PubSub) handleNewPeer(ctx context.Context, pid peer.ID, outgoing *rpcQu
 		return
 	}
 
-	go p.handleSendingMessages(ctx, s, outgoing)
+	startSending := make(chan struct{})
+	sCtx, cancel := context.WithCancel(ctx)
+	go p.handleSendingMessages(sCtx, s, outgoing, startSending)
 	go p.handlePeerDead(s)
 	select {
-	case p.newPeerStream <- s:
+	case p.newPeerStream <- peerOutgoingStream{Stream: s, StartSending: startSending, Cancel: cancel}:
 	case <-ctx.Done():
+		cancel()
 	}
 }
 
@@ -169,7 +172,7 @@ func (p *PubSub) handlePeerDead(s network.Stream) {
 	p.notifyPeerDead(pid)
 }
 
-func (p *PubSub) handleSendingMessages(ctx context.Context, s network.Stream, outgoing *rpcQueue) {
+func (p *PubSub) handleSendingMessages(ctx context.Context, s network.Stream, outgoing *rpcQueue, startSending chan struct{}) {
 	writeRpc := func(rpc *RPC) error {
 		size := uint64(rpc.Size())
 
@@ -189,6 +192,13 @@ func (p *PubSub) handleSendingMessages(ctx context.Context, s network.Stream, ou
 		}
 		p.rpcLogger.Debug("sent", "peer", s.Conn().RemotePeer(), "rpc", rpc)
 		return nil
+	}
+
+	select {
+	case <-startSending:
+	case <-ctx.Done():
+		s.Reset()
+		return
 	}
 
 	defer s.Close()
