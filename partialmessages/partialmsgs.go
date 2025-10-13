@@ -14,6 +14,7 @@ import (
 
 // TODO: Add gossip fallback (pick random connected peers and send ihave/iwants)
 // TODO: Update scoring code to not kick partial-message only peers
+// TODO: Add api to allow users to penalize a certain peer.
 // Question: How to configure scheduling RPCs?
 //   - Leave it up to the implementation of sendRPC
 // Question: Skip partial IHAVE for now?
