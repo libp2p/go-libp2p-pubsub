@@ -49,6 +49,11 @@ type peerTopicState struct {
 	requestsPartial bool
 }
 
+type peerOutgoingStream struct {
+	Stream network.Stream
+	Queue  *rpcQueue
+}
+
 // PubSub is the implementation of the pubsub system.
 type PubSub struct {
 	// atomic counter for seqnos
@@ -115,7 +120,7 @@ type PubSub struct {
 	newPeersPend   map[peer.ID]struct{}
 
 	// a notification channel for new outoging peer streams
-	newPeerStream chan network.Stream
+	newPeerStream chan peerOutgoingStream
 
 	// a notification channel for errors opening new peer streams
 	newPeerError chan peer.ID
@@ -127,6 +132,7 @@ type PubSub struct {
 	peerDeadPend   map[peer.ID]struct{}
 	// backoff for retrying new connections to dead peers
 	deadPeerBackoff *backoff
+	backoffPeers    chan peer.ID
 
 	// The set of topics we are subscribed to
 	mySubs map[string]map[*Subscription]struct{}
@@ -161,7 +167,8 @@ type PubSub struct {
 	blacklist     Blacklist
 	blacklistPeer chan peer.ID
 
-	peers map[peer.ID]*rpcQueue
+	peers          map[peer.ID]*rpcQueue
+	startingStream map[peer.ID]struct{}
 
 	inboundStreamsMx sync.Mutex
 	inboundStreams   map[peer.ID]network.Stream
@@ -516,11 +523,12 @@ func NewPubSub(ctx context.Context, h host.Host, rt PubSubRouter, opts ...Option
 		incoming:              make(chan *RPC, 32),
 		newPeers:              make(chan struct{}, 1),
 		newPeersPend:          make(map[peer.ID]struct{}),
-		newPeerStream:         make(chan network.Stream),
+		newPeerStream:         make(chan peerOutgoingStream),
 		newPeerError:          make(chan peer.ID),
 		peerDead:              make(chan struct{}, 1),
 		peerDeadPend:          make(map[peer.ID]struct{}),
 		deadPeerBackoff:       newBackoff(ctx, 1000, BackoffCleanupInterval, MaxBackoffAttempts),
+		backoffPeers:          make(chan peer.ID, 16),
 		cancelCh:              make(chan *Subscription),
 		getPeers:              make(chan *listPeerReq),
 		addSub:                make(chan *addSubReq),
@@ -846,35 +854,52 @@ func (p *PubSub) processLoop(ctx context.Context) {
 		case <-p.newPeers:
 			p.handlePendingPeers()
 
-		case s := <-p.newPeerStream:
+		case pos := <-p.newPeerStream:
+			s, q := pos.Stream, pos.Queue
 			pid := s.Conn().RemotePeer()
 
-			q, ok := p.peers[pid]
-			if !ok {
+			if _, ok := p.startingStream[pid]; !ok {
 				p.logger.Warn("new stream for unknown peer", "peer", pid)
 				s.Reset()
+				q.Close()
+				continue
+			}
+			delete(p.startingStream, pid)
+
+			if _, ok := p.peers[pid]; ok {
+				p.logger.Error("multiple queues for peer; closing latest", "peer", pid)
+				s.Reset()
+				q.Close()
 				continue
 			}
 
 			if p.blacklist.Contains(pid) {
 				p.logger.Warn("closing stream for blacklisted peer", "peer", pid)
-				q.Close()
-				delete(p.peers, pid)
 				s.Reset()
+				q.Close()
 				continue
 			}
+			p.peers[pid] = q
 
 			helloPacket := p.getHelloPacket()
 			helloPacket = p.rt.AddPeer(pid, s.Protocol(), helloPacket)
 			if helloPacket.Size() > 0 {
-				q.Push(helloPacket, true)
+				// Use urgent to send the hello packet.
+				// This packet contains extensions which MUST be included in the first rpc sent.
+				err := q.UrgentPush(helloPacket, true)
+				if err != nil {
+					p.logger.Debug("failed to enqueue helloPacket", "peer", pid, "error", err)
+				}
 			}
 
 		case pid := <-p.newPeerError:
-			delete(p.peers, pid)
+			delete(p.startingStream, pid)
 
 		case <-p.peerDead:
 			p.handleDeadPeers()
+
+		case pid := <-p.backoffPeers:
+			p.addPeer(pid)
 
 		case treq := <-p.getTopics:
 			var out []string
@@ -969,26 +994,34 @@ func (p *PubSub) handlePendingPeers() {
 	p.newPeersPrioLk.Unlock()
 
 	for pid := range newPeers {
-		// Make sure we have a non-limited connection. We do this late because we may have
-		// disconnected in the meantime.
-		if p.host.Network().Connectedness(pid) != network.Connected {
-			continue
-		}
-
-		if _, ok := p.peers[pid]; ok {
-			p.logger.Debug("already have connection to peer", "peer", pid)
-			continue
-		}
-
-		if p.blacklist.Contains(pid) {
-			p.logger.Warn("ignoring connection from blacklisted peer", "peer", pid)
-			continue
-		}
-
-		rpcQueue := newRpcQueue(p.peerOutboundQueueSize)
-		p.peers[pid] = rpcQueue
-		go p.handleNewPeer(p.ctx, pid, rpcQueue)
+		p.addPeer(pid)
 	}
+}
+
+func (p *PubSub) addPeer(pid peer.ID) {
+	// Make sure we have a non-limited connection. We do this late because we may have
+	// disconnected in the meantime.
+	if p.host.Network().Connectedness(pid) != network.Connected {
+		return
+	}
+
+	if _, ok := p.peers[pid]; ok {
+		p.logger.Debug("already have connection to peer", "peer", pid)
+		return
+	}
+
+	if _, ok := p.startingStream[pid]; ok {
+		p.logger.Debug("already have connection to peer", "peer", pid)
+		return
+	}
+
+	if p.blacklist.Contains(pid) {
+		p.logger.Warn("ignoring connection from blacklisted peer", "peer", pid)
+		return
+	}
+
+	p.startingStream[pid] = struct{}{}
+	go p.handleNewPeer(p.ctx, pid)
 }
 
 func (p *PubSub) handleDeadPeers() {
@@ -1031,9 +1064,7 @@ func (p *PubSub) handleDeadPeers() {
 			// still connected, must be a duplicate connection being closed.
 			// we respawn the writer as we need to ensure there is a stream active
 			p.logger.Debug("peer declared dead but still connected; respawning writer", "peer", pid)
-			rpcQueue := newRpcQueue(p.peerOutboundQueueSize)
-			p.peers[pid] = rpcQueue
-			go p.handleNewPeerWithBackoff(p.ctx, pid, backoffDelay, rpcQueue)
+			go p.handleNewPeerWithBackoff(p.ctx, pid, backoffDelay)
 		}
 	}
 }

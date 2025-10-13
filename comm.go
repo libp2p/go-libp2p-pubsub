@@ -127,7 +127,7 @@ func (p *PubSub) notifyPeerDead(pid peer.ID) {
 	}
 }
 
-func (p *PubSub) handleNewPeer(ctx context.Context, pid peer.ID, outgoing *rpcQueue) {
+func (p *PubSub) handleNewPeer(ctx context.Context, pid peer.ID) {
 	s, err := p.host.NewStream(p.ctx, pid, p.rt.Protocols()...)
 	if err != nil {
 		p.logger.Debug("error opening new stream to peer", "err", err, "peer", pid)
@@ -140,18 +140,23 @@ func (p *PubSub) handleNewPeer(ctx context.Context, pid peer.ID, outgoing *rpcQu
 		return
 	}
 
-	go p.handleSendingMessages(ctx, s, outgoing)
+	rpcQueue := newRpcQueue(p.peerOutboundQueueSize)
+	go p.handleSendingMessages(ctx, s, rpcQueue)
 	go p.handlePeerDead(s)
 	select {
-	case p.newPeerStream <- s:
+	case p.newPeerStream <- peerOutgoingStream{Queue: rpcQueue, Stream: s}:
 	case <-ctx.Done():
 	}
 }
 
-func (p *PubSub) handleNewPeerWithBackoff(ctx context.Context, pid peer.ID, backoff time.Duration, outgoing *rpcQueue) {
+func (p *PubSub) handleNewPeerWithBackoff(ctx context.Context, pid peer.ID, backoff time.Duration) {
 	select {
 	case <-time.After(backoff):
-		p.handleNewPeer(ctx, pid, outgoing)
+		select {
+		case p.backoffPeers <- pid:
+		default:
+			p.logger.Info("dropping backoff peer; queue full", "peer", pid)
+		}
 	case <-ctx.Done():
 		return
 	}
