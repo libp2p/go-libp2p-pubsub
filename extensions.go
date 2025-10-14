@@ -202,7 +202,16 @@ type partialMessageRouter struct {
 // MeshPeers implements partialmessages.Router.
 func (r partialMessageRouter) MeshPeers(topic string) iter.Seq[peer.ID] {
 	return func(yield func(peer.ID) bool) {
-		for peer := range r.gs.mesh[topic] {
+		peerSet, ok := r.gs.mesh[topic]
+		if !ok {
+			// Possible a fanout topic
+			peerSet, ok = r.gs.fanout[topic]
+			if !ok {
+				return
+			}
+		}
+
+		for peer := range peerSet {
 			if exts := r.gs.extensions.peerExtensions[peer]; exts.PartialMessages {
 				if peerStates, ok := r.gs.p.topics[topic]; ok && peerStates[peer].requestsPartial {
 					// Check that the peer wanted partial messages
