@@ -298,7 +298,7 @@ func TestRPCQueueCancellations(t *testing.T) {
 		}
 	})
 
-	t.Run("cancel duplicate", func(t *testing.T) {
+	t.Run("only one rpc cancelled", func(t *testing.T) {
 		msgs, msgIDs := getMesssages(10)
 		rpc := &RPC{
 			RPC:        pb.RPC{Publish: slices.Clone(msgs)},
@@ -326,11 +326,11 @@ func TestRPCQueueCancellations(t *testing.T) {
 		if err != nil {
 			t.Fatalf("failed to pop RPC: %v", err)
 		}
-		if !slices.Equal(msgs[3:], popped.Publish) {
-			t.Fatalf("expected popped.Publish to be %v, got %v", msgs[3:], popped.Publish)
+		if !slices.Equal(msgs, popped.Publish) {
+			t.Fatalf("expected popped.Publish to be %v, got %v", msgs, popped.Publish)
 		}
-		if !slices.Equal(msgIDs[3:], popped.MessageIDs) {
-			t.Fatalf("expected popped.MsgIDs to be %v, got %v", msgIDs[3:], popped.MessageIDs)
+		if !slices.Equal(msgIDs, popped.MessageIDs) {
+			t.Fatalf("expected popped.MsgIDs to be %v, got %v", msgIDs, popped.MessageIDs)
 		}
 		if len(q.queuedMessageIDs) != 0 {
 			t.Fatalf("expected q.queuedMsgIDs to be empty, got %v", q.queuedMessageIDs)

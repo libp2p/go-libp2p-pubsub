@@ -459,6 +459,52 @@ func (rpc *RPC) split(limit int) iter.Seq[RPC] {
 	}
 }
 
+func rpcWithSubs(subs ...*pb.RPC_SubOpts) *RPC {
+	return &RPC{
+		RPC: pb.RPC{
+			Subscriptions: subs,
+		},
+	}
+}
+
+func rpcWithMessages(msgs ...*pb.Message) *RPC {
+	return &RPC{RPC: pb.RPC{Publish: msgs}}
+}
+
+func rpcWithMessageAndMsgID(msg *pb.Message, msgID string) *RPC {
+	return &RPC{RPC: pb.RPC{Publish: []*pb.Message{msg}}, MessageIDs: []string{msgID}}
+}
+
+func rpcWithControl(msgs []*pb.Message,
+	ihave []*pb.ControlIHave,
+	iwant []*pb.ControlIWant,
+	graft []*pb.ControlGraft,
+	prune []*pb.ControlPrune,
+	idontwant []*pb.ControlIDontWant) *RPC {
+	return &RPC{
+		RPC: pb.RPC{
+			Publish: msgs,
+			Control: &pb.ControlMessage{
+				Ihave:     ihave,
+				Iwant:     iwant,
+				Graft:     graft,
+				Prune:     prune,
+				Idontwant: idontwant,
+			},
+		},
+	}
+}
+
+func copyRPC(rpc *RPC) *RPC {
+	res := new(RPC)
+	*res = *rpc
+	if rpc.Control != nil {
+		res.Control = new(pb.ControlMessage)
+		*res.Control = *rpc.Control
+	}
+	return res
+}
+
 // pbFieldNumberLT15Size is the number of bytes required to encode a protobuf
 // field number less than or equal to 15 along with its wire type. This is 1
 // byte because the protobuf encoding of field numbers is a varint encoding of:
