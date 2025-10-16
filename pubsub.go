@@ -257,6 +257,8 @@ func (m *Message) GetFrom() peer.ID {
 
 type RPC struct {
 	pb.RPC
+	// MessageIDs are the ids of the messages in the rpc. MsgID[i] = id(rpc.Publish[i])
+	MessageIDs []string
 
 	// unexported on purpose, not sending this over the wire
 	from peer.ID
@@ -274,6 +276,12 @@ func (rpc *RPC) split(limit int) iter.Seq[RPC] {
 
 			messagesInNextRPC := 0
 			messageSlice := rpc.Publish
+			// This slice may be smaller than messageSlice.
+			// Only use len(messageIDSlice) elements.
+			//
+			// For most cases it'll either be len(RPC.Messages) or empty in which
+			// case the split RPCs will have it equal to len(RPC.Messages) or empty
+			messageIDSlice := rpc.MessageIDs
 
 			// Merge/Append publish messages. This pattern is optimized compared the
 			// the patterns for other fields because this is the common cause for
@@ -286,6 +294,14 @@ func (rpc *RPC) split(limit int) iter.Seq[RPC] {
 					// into this RPC, yield it, then make a new one
 					nextRPC.Publish = messageSlice[:messagesInNextRPC]
 					messageSlice = messageSlice[messagesInNextRPC:]
+					if len(messageIDSlice) >= messagesInNextRPC {
+						nextRPC.MessageIDs = messageIDSlice[:messagesInNextRPC]
+						messageIDSlice = messageIDSlice[messagesInNextRPC:]
+					} else {
+						nextRPC.MessageIDs = messageIDSlice
+						messageIDSlice = messageIDSlice[len(messageIDSlice):]
+					}
+
 					if !yield(nextRPC) {
 						return
 					}
@@ -303,6 +319,11 @@ func (rpc *RPC) split(limit int) iter.Seq[RPC] {
 				// packing this RPC, but we avoid successively calling .Size()
 				// on the messages for the next parts.
 				nextRPC.Publish = messageSlice[:messagesInNextRPC]
+				if len(messageIDSlice) >= messagesInNextRPC {
+					nextRPC.MessageIDs = messageIDSlice[:messagesInNextRPC]
+				} else {
+					nextRPC.MessageIDs = messageIDSlice
+				}
 				if !yield(nextRPC) {
 					return
 				}
@@ -436,6 +457,52 @@ func (rpc *RPC) split(limit int) iter.Seq[RPC] {
 			}
 		}
 	}
+}
+
+func rpcWithSubs(subs ...*pb.RPC_SubOpts) *RPC {
+	return &RPC{
+		RPC: pb.RPC{
+			Subscriptions: subs,
+		},
+	}
+}
+
+func rpcWithMessages(msgs ...*pb.Message) *RPC {
+	return &RPC{RPC: pb.RPC{Publish: msgs}}
+}
+
+func rpcWithMessageAndMsgID(msg *pb.Message, msgID string) *RPC {
+	return &RPC{RPC: pb.RPC{Publish: []*pb.Message{msg}}, MessageIDs: []string{msgID}}
+}
+
+func rpcWithControl(msgs []*pb.Message,
+	ihave []*pb.ControlIHave,
+	iwant []*pb.ControlIWant,
+	graft []*pb.ControlGraft,
+	prune []*pb.ControlPrune,
+	idontwant []*pb.ControlIDontWant) *RPC {
+	return &RPC{
+		RPC: pb.RPC{
+			Publish: msgs,
+			Control: &pb.ControlMessage{
+				Ihave:     ihave,
+				Iwant:     iwant,
+				Graft:     graft,
+				Prune:     prune,
+				Idontwant: idontwant,
+			},
+		},
+	}
+}
+
+func copyRPC(rpc *RPC) *RPC {
+	res := new(RPC)
+	*res = *rpc
+	if rpc.Control != nil {
+		res.Control = new(pb.ControlMessage)
+		*res.Control = *rpc.Control
+	}
+	return res
 }
 
 // pbFieldNumberLT15Size is the number of bytes required to encode a protobuf

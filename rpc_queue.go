@@ -3,6 +3,7 @@ package pubsub
 import (
 	"context"
 	"errors"
+	"slices"
 	"sync"
 )
 
@@ -50,18 +51,39 @@ type rpcQueue struct {
 	dataAvailable  sync.Cond
 	spaceAvailable sync.Cond
 	// Mutex used to access queue
-	queueMu sync.Mutex
-	queue   priorityQueue
+	queueMu             sync.Mutex
+	queue               priorityQueue
+	queuedMessageIDs    map[string]struct{} // messageids in queue
+	cancelledMessageIDs map[string]struct{} // messageids that'll be dropped before sending
 
 	closed  bool
 	maxSize int
 }
 
 func newRpcQueue(maxSize int) *rpcQueue {
-	q := &rpcQueue{maxSize: maxSize}
+	q := &rpcQueue{
+		maxSize:             maxSize,
+		queuedMessageIDs:    make(map[string]struct{}),
+		cancelledMessageIDs: make(map[string]struct{}),
+	}
 	q.dataAvailable.L = &q.queueMu
 	q.spaceAvailable.L = &q.queueMu
 	return q
+}
+
+// CancelMessages marks the given message IDs for cancellation only if they are already in queue.
+func (q *rpcQueue) CancelMessages(msgIDs []string) {
+	q.queueMu.Lock()
+	defer q.queueMu.Unlock()
+
+	for _, id := range msgIDs {
+		if id != "" {
+			// Only cancel messages that are actually in the queue
+			if _, ok := q.queuedMessageIDs[id]; ok {
+				q.cancelledMessageIDs[id] = struct{}{}
+			}
+		}
+	}
 }
 
 func (q *rpcQueue) Push(rpc *RPC, block bool) error {
@@ -91,10 +113,16 @@ func (q *rpcQueue) push(rpc *RPC, urgent bool, block bool) error {
 			return ErrQueueFull
 		}
 	}
+
 	if urgent {
 		q.queue.PriorityPush(rpc)
 	} else {
 		q.queue.NormalPush(rpc)
+	}
+	for _, id := range rpc.MessageIDs {
+		if id != "" {
+			q.queuedMessageIDs[id] = struct{}{}
+		}
 	}
 
 	q.dataAvailable.Signal()
@@ -133,8 +161,51 @@ func (q *rpcQueue) Pop(ctx context.Context) (*RPC, error) {
 		}
 	}
 	rpc := q.queue.Pop()
+	rpc = q.handleCancellations(rpc)
 	q.spaceAvailable.Signal()
 	return rpc, nil
+}
+
+func (q *rpcQueue) handleCancellations(rpc *RPC) *RPC {
+	hasCancellations := false
+	for _, msgID := range rpc.MessageIDs {
+		delete(q.queuedMessageIDs, msgID)
+		if _, ok := q.cancelledMessageIDs[msgID]; ok {
+			hasCancellations = true
+		}
+	}
+	if hasCancellations {
+		// clone the RPC parts that we'll modify. It may be shared with other queues.
+		newRPC := *rpc
+		newRPC.RPC.Publish = slices.Clone(rpc.RPC.Publish)
+		newRPC.MessageIDs = slices.Clone(rpc.MessageIDs)
+		rpc = &newRPC
+		// Ensure looping over MessageIDs. They may not be present. In that case, we wouldn't
+		// be in this branch but don't risk it.
+		for i, msgID := range newRPC.MessageIDs {
+			if msgID == "" {
+				continue
+			}
+			_, ok := q.cancelledMessageIDs[msgID]
+			if !ok {
+				continue
+			}
+			delete(q.cancelledMessageIDs, msgID)
+			rpc.RPC.Publish[i] = nil
+			rpc.MessageIDs[i] = ""
+		}
+		nextEmpty := 0
+		for i := 0; i < len(rpc.MessageIDs); i++ {
+			if rpc.RPC.Publish[i] != nil {
+				rpc.RPC.Publish[nextEmpty] = rpc.RPC.Publish[i]
+				rpc.MessageIDs[nextEmpty] = rpc.MessageIDs[i]
+				nextEmpty++
+			}
+		}
+		rpc.RPC.Publish = rpc.RPC.Publish[:nextEmpty]
+		rpc.MessageIDs = rpc.MessageIDs[:nextEmpty]
+	}
+	return rpc
 }
 
 func (q *rpcQueue) Close() {

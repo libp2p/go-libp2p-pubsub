@@ -2,8 +2,12 @@ package pubsub
 
 import (
 	"context"
+	"fmt"
+	"slices"
 	"testing"
 	"time"
+
+	pb "github.com/libp2p/go-libp2p-pubsub/pb"
 )
 
 func TestNewRpcQueue(t *testing.T) {
@@ -226,4 +230,113 @@ func TestRpcQueueCancelPop(t *testing.T) {
 	if err != ErrQueueCancelled {
 		t.Fatalf("rpc queue Pop returns wrong error when it's cancelled")
 	}
+}
+
+func TestRPCQueueCancellations(t *testing.T) {
+	maxSize := 32
+	q := newRpcQueue(maxSize)
+
+	getMesssages := func(n int) ([]*pb.Message, []string) {
+		msgs := make([]*pb.Message, n)
+		msgIDs := make([]string, n)
+		for i := range msgs {
+			msgs[i] = &pb.Message{Data: []byte(fmt.Sprintf("message%d", i+1))}
+			msgIDs[i] = fmt.Sprintf("msg%d", i+1)
+		}
+		return msgs, msgIDs
+	}
+
+	t.Run("cancel all", func(t *testing.T) {
+		msgs, msgIDs := getMesssages(10)
+		rpc := &RPC{
+			RPC:        pb.RPC{Publish: slices.Clone(msgs)},
+			MessageIDs: slices.Clone(msgIDs),
+		}
+		q.Push(rpc, true)
+		q.CancelMessages(msgIDs)
+		popped, err := q.Pop(context.Background())
+		if err != nil {
+			t.Fatalf("failed to pop RPC: %v", err)
+		}
+		if len(popped.Publish) != 0 {
+			t.Fatalf("expected popped.Publish to be empty, got %v", popped.Publish)
+		}
+		if len(popped.MessageIDs) != 0 {
+			t.Fatalf("expected popped.MsgIDs to be empty, got %v", popped.MessageIDs)
+		}
+		if len(q.queuedMessageIDs) != 0 {
+			t.Fatalf("expected q.queuedMsgIDs to be empty, got %v", q.queuedMessageIDs)
+		}
+		if len(q.cancelledMessageIDs) != 0 {
+			t.Fatalf("expected q.cancelledIDs to be empty, got %v", q.cancelledMessageIDs)
+		}
+	})
+
+	t.Run("cancel some", func(t *testing.T) {
+		msgs, msgIDs := getMesssages(10)
+		rpc := &RPC{
+			RPC:        pb.RPC{Publish: slices.Clone(msgs)},
+			MessageIDs: slices.Clone(msgIDs),
+		}
+		q.Push(rpc, true)
+		q.CancelMessages(msgIDs[:3])
+		popped, err := q.Pop(context.Background())
+		if err != nil {
+			t.Fatalf("failed to pop RPC: %v", err)
+		}
+		if !slices.Equal(msgs[3:], popped.Publish) {
+			t.Fatalf("expected popped.Publish to be %v, got %v", msgs[3:], popped.Publish)
+		}
+		if !slices.Equal(msgIDs[3:], popped.MessageIDs) {
+			t.Fatalf("expected popped.MsgIDs to be %v, got %v", msgIDs[3:], popped.MessageIDs)
+		}
+		if len(q.queuedMessageIDs) != 0 {
+			t.Fatalf("expected q.queuedMsgIDs to be empty, got %v", q.queuedMessageIDs)
+		}
+		if len(q.cancelledMessageIDs) != 0 {
+			t.Fatalf("expected q.cancelledIDs to be empty, got %v", q.cancelledMessageIDs)
+		}
+	})
+
+	t.Run("only one rpc cancelled", func(t *testing.T) {
+		msgs, msgIDs := getMesssages(10)
+		rpc := &RPC{
+			RPC:        pb.RPC{Publish: slices.Clone(msgs)},
+			MessageIDs: slices.Clone(msgIDs),
+		}
+		q.Push(rpc, true)
+		rpc2 := &RPC{
+			RPC:        pb.RPC{Publish: slices.Clone(msgs)},
+			MessageIDs: slices.Clone(msgIDs),
+		}
+		q.Push(rpc2, true)
+		q.CancelMessages(msgIDs[:3])
+		popped, err := q.Pop(context.Background())
+		if err != nil {
+			t.Fatalf("failed to pop RPC: %v", err)
+		}
+		if !slices.Equal(msgs[3:], popped.Publish) {
+			t.Fatalf("expected popped.Publish to be %v, got %v", msgs[3:], popped.Publish)
+		}
+		if !slices.Equal(msgIDs[3:], popped.MessageIDs) {
+			t.Fatalf("expected popped.MsgIDs to be %v, got %v", msgIDs[3:], popped.MessageIDs)
+		}
+
+		popped, err = q.Pop(context.Background())
+		if err != nil {
+			t.Fatalf("failed to pop RPC: %v", err)
+		}
+		if !slices.Equal(msgs, popped.Publish) {
+			t.Fatalf("expected popped.Publish to be %v, got %v", msgs, popped.Publish)
+		}
+		if !slices.Equal(msgIDs, popped.MessageIDs) {
+			t.Fatalf("expected popped.MsgIDs to be %v, got %v", msgIDs, popped.MessageIDs)
+		}
+		if len(q.queuedMessageIDs) != 0 {
+			t.Fatalf("expected q.queuedMsgIDs to be empty, got %v", q.queuedMessageIDs)
+		}
+		if len(q.cancelledMessageIDs) != 0 {
+			t.Fatalf("expected q.cancelledIDs to be empty, got %v", q.cancelledMessageIDs)
+		}
+	})
 }

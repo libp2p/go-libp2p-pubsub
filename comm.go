@@ -165,7 +165,7 @@ func (p *PubSub) handlePeerDead(s network.Stream) {
 }
 
 func (p *PubSub) handleSendingMessages(ctx context.Context, s network.Stream, outgoing *rpcQueue) {
-	writeRpc := func(rpc *RPC) error {
+	writeRpc := func(rpc *pb.RPC) error {
 		size := uint64(rpc.Size())
 
 		buf := pool.Get(varint.UvarintSize(size) + int(size))
@@ -193,54 +193,15 @@ func (p *PubSub) handleSendingMessages(ctx context.Context, s network.Stream, ou
 			p.logger.Debug("error popping message from the queue to send to peer", "peer", s.Conn().RemotePeer(), "err", err)
 			return
 		}
+		if rpc.Size() == 0 {
+			continue
+		}
 
-		err = writeRpc(rpc)
+		err = writeRpc(&rpc.RPC)
 		if err != nil {
 			s.Reset()
 			p.logger.Debug("error writing message to peer", "peer", s.Conn().RemotePeer(), "err", err)
 			return
 		}
 	}
-}
-
-func rpcWithSubs(subs ...*pb.RPC_SubOpts) *RPC {
-	return &RPC{
-		RPC: pb.RPC{
-			Subscriptions: subs,
-		},
-	}
-}
-
-func rpcWithMessages(msgs ...*pb.Message) *RPC {
-	return &RPC{RPC: pb.RPC{Publish: msgs}}
-}
-
-func rpcWithControl(msgs []*pb.Message,
-	ihave []*pb.ControlIHave,
-	iwant []*pb.ControlIWant,
-	graft []*pb.ControlGraft,
-	prune []*pb.ControlPrune,
-	idontwant []*pb.ControlIDontWant) *RPC {
-	return &RPC{
-		RPC: pb.RPC{
-			Publish: msgs,
-			Control: &pb.ControlMessage{
-				Ihave:     ihave,
-				Iwant:     iwant,
-				Graft:     graft,
-				Prune:     prune,
-				Idontwant: idontwant,
-			},
-		},
-	}
-}
-
-func copyRPC(rpc *RPC) *RPC {
-	res := new(RPC)
-	*res = *rpc
-	if rpc.Control != nil {
-		res.Control = new(pb.ControlMessage)
-		*res.Control = *rpc.Control
-	}
-	return res
 }
