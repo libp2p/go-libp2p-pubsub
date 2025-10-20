@@ -12,6 +12,7 @@ import (
 	"github.com/libp2p/go-libp2p/core/peer"
 )
 
+// TODO: Send subscibe rpc if only subscribed via partial messages
 // TODO: Add gossip fallback (pick random connected peers and send ihave/iwants)
 
 const minGroupTTL = 3
