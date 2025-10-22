@@ -134,6 +134,7 @@ type PublishOptions struct {
 type Router interface {
 	SendRPC(p peer.ID, r *pb.PartialMessagesExtension, urgent bool)
 	MeshPeers(topic string) iter.Seq[peer.ID]
+	PeerRequestsPartial(peer peer.ID, topic string) bool
 }
 
 func (e *PartialMessageExtension) groupState(topic string, groupID []byte, peerInitiated bool) (*partialMessageStatePerTopicGroup, error) {
@@ -201,6 +202,7 @@ func (e *PartialMessageExtension) PublishPartial(topic string, partial Message, 
 	}
 	for p := range peers {
 		log := e.Logger.With("peer", p)
+		requestedPartial := e.router.PeerRequestsPartial(p, topic)
 
 		var rpc pb.PartialMessagesExtension
 		var sendRPC bool
@@ -213,7 +215,7 @@ func (e *PartialMessageExtension) PublishPartial(topic string, partial Message, 
 		}
 
 		// Try to fulfill any wants from the peer
-		if pState.partsMetadata != nil {
+		if requestedPartial && pState.partsMetadata != nil {
 			// This peer has previously asked for a certain part. We'll give
 			// them what we can.
 			pm, err := partial.PartialMessageBytes(pState.partsMetadata)
@@ -235,7 +237,7 @@ func (e *PartialMessageExtension) PublishPartial(topic string, partial Message, 
 		// Only send the eager push to the peer if:
 		//   - we didn't reply to an explicit request
 		//   - we have something to eager push
-		if !inResponseToIWant && len(opts.EagerPush) > 0 {
+		if requestedPartial && !inResponseToIWant && len(opts.EagerPush) > 0 {
 			log.Debug("Eager pushing")
 			sendRPC = true
 			rpc.PartialMessage = opts.EagerPush
