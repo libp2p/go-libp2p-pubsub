@@ -24,6 +24,11 @@ type testRouter struct {
 	meshPeers func(topic string) iter.Seq[peer.ID]
 }
 
+// PeerRequestsPartial implements Router.
+func (r *testRouter) PeerRequestsPartial(peer peer.ID, topic string) bool {
+	return true
+}
+
 func (r *testRouter) SendRPC(p peer.ID, rpc *pubsub_pb.PartialMessagesExtension, urgent bool) {
 	r.sendRPC(p, rpc, urgent)
 }
