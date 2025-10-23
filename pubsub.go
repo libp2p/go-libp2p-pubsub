@@ -47,6 +47,7 @@ type ProtocolMatchFn = func(protocol.ID) func(protocol.ID) bool
 
 type peerTopicState struct {
 	requestsPartial bool
+	supportsPartial bool
 }
 
 type peerOutgoingStream struct {
@@ -1197,15 +1198,18 @@ func (p *PubSub) handleRemoveRelay(topic string) {
 // Only called from processLoop.
 func (p *PubSub) announce(topic string, sub bool) {
 	var requestPartialMessages bool
+	var supportsPartialMessages bool
 	if sub {
 		if t, ok := p.myTopics[topic]; ok {
 			requestPartialMessages = t.requestPartialMessages
+			supportsPartialMessages = t.supportsPartialMessages
 		}
 	}
 	subopt := &pb.RPC_SubOpts{
-		Topicid:   &topic,
-		Subscribe: &sub,
-		Partial:   &requestPartialMessages,
+		Topicid:                &topic,
+		Subscribe:              &sub,
+		RequestsPartial:        &requestPartialMessages,
+		SupportsSendingPartial: &supportsPartialMessages,
 	}
 
 	out := rpcWithSubs(subopt)
@@ -1248,15 +1252,18 @@ func (p *PubSub) doAnnounceRetry(pid peer.ID, topic string, sub bool) {
 	}
 
 	var requestPartialMessages bool
+	var supportsPartialMessages bool
 	if sub {
 		if t, ok := p.myTopics[topic]; ok {
 			requestPartialMessages = t.requestPartialMessages
+			supportsPartialMessages = t.supportsPartialMessages
 		}
 	}
 	subopt := &pb.RPC_SubOpts{
-		Topicid:   &topic,
-		Subscribe: &sub,
-		Partial:   &requestPartialMessages,
+		Topicid:                &topic,
+		Subscribe:              &sub,
+		RequestsPartial:        &requestPartialMessages,
+		SupportsSendingPartial: &supportsPartialMessages,
 	}
 
 	out := rpcWithSubs(subopt)
@@ -1360,16 +1367,19 @@ func (p *PubSub) handleIncomingRPC(rpc *RPC) {
 				p.topics[t] = tmap
 			}
 
-			if _, ok = tmap[rpc.from]; !ok {
-				tmap[rpc.from] = peerTopicState{requestsPartial: subopt.GetPartial()}
+			pts := peerTopicState{
+				requestsPartial: subopt.GetRequestsPartial(),
+				// If the peer requested partial, they support it by default
+				supportsPartial: subopt.GetRequestsPartial() || subopt.GetSupportsSendingPartial(),
+			}
+			_, seenBefore := tmap[rpc.from]
+			tmap[rpc.from] = pts
+			if !seenBefore {
+				tmap[rpc.from] = pts
 				if topic, ok := p.myTopics[t]; ok {
 					peer := rpc.from
 					topic.sendNotification(PeerEvent{PeerJoin, peer})
 				}
-			} else {
-				s := tmap[rpc.from]
-				s.requestsPartial = subopt.GetPartial()
-				tmap[rpc.from] = s
 			}
 		} else {
 			tmap, ok := p.topics[t]
@@ -1566,6 +1576,25 @@ func RequestPartialMessages() TopicOpt {
 			return errors.New("partial messages are not enabled")
 		}
 		t.requestPartialMessages = true
+		t.supportsPartialMessages = true
+		return nil
+	}
+}
+
+// SupportsPartialMessages signals to other peers that you will send partial
+// message metadata and fulfill their partial message request, but you will not
+// request partial messages.
+func SupportsPartialMessages() TopicOpt {
+	return func(t *Topic) error {
+		gs, ok := t.p.rt.(*GossipSubRouter)
+		if !ok {
+			return errors.New("partial messages only supported by gossipsub")
+		}
+
+		if !gs.extensions.myExtensions.PartialMessages {
+			return errors.New("partial messages are not enabled")
+		}
+		t.supportsPartialMessages = true
 		return nil
 	}
 }

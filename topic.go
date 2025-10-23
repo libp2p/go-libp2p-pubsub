@@ -33,7 +33,8 @@ type Topic struct {
 	mux    sync.RWMutex
 	closed bool
 
-	requestPartialMessages bool
+	requestPartialMessages  bool
+	supportsPartialMessages bool
 }
 
 // String returns the topic associated with t
