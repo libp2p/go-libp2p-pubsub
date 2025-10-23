@@ -4730,12 +4730,213 @@ func TestPartialMessages(t *testing.T) {
 	}
 }
 
-func TestSkipPublishingToPeersWithPartialMessageSupport(t *testing.T) {
+func TestPeerSupportsPartialMessages(t *testing.T) {
+	// N peers connected in a ring:
+	// peer 0 requests partial messages
+	// peer 1 does not support partial messages
+	// peer 2..N-1 support partial messages
+	//
+	// Peer 0 first requests a partial message by doing a partial publish with an
+	// empty (no parts) message.
+	//
+	// The rest of the peers then publish the full message. The peer that
+	// supports partial messages should have received the request from peer 0,
+	// and can sent the missing parts right away.
+
+	topic := "test-topic"
+	const hostCount = 5
+	hosts := getDefaultHosts(t, hostCount)
+	psubs := make([]*PubSub, 0, len(hosts))
+	topics := make([]*Topic, 0, len(hosts))
+	subs := make([]*Subscription, 0, len(hosts))
+
+	gossipsubCtx, closeGossipsub := context.WithCancel(context.Background())
+	go func() {
+		<-gossipsubCtx.Done()
+		for _, h := range hosts {
+			h.Close()
+		}
+	}()
+
+	partialExt := make([]*partialmessages.PartialMessageExtension, hostCount)
+	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelDebug}))
+
+	// A list of maps from topic+groupID to partialMessage. One map per peer
+	// var partialMessageStoreMu sync.Mutex
+	partialMessageStore := make([]map[string]*minimalTestPartialMessage, hostCount)
+	for i := range hostCount {
+		partialMessageStore[i] = make(map[string]*minimalTestPartialMessage)
+	}
+
+	for i := range partialExt {
+		partialExt[i] = &partialmessages.PartialMessageExtension{
+			Logger: logger.With("id", i),
+			ValidateRPC: func(from peer.ID, rpc *pb.PartialMessagesExtension) error {
+				// No validation. Only for this test. In production you should
+				// have some basic fast rules here.
+				return nil
+			},
+			MergePartsMetadata: func(_ string, left, right partialmessages.PartsMetadata) partialmessages.PartsMetadata {
+				return partialmessages.MergeBitmap(left, right)
+			},
+			OnIncomingRPC: func(from peer.ID, rpc *pb.PartialMessagesExtension) error {
+				if from == hosts[1].ID() {
+					panic("peer 1 does not support partial messages, so should not send a partial message RPC")
+				}
+
+				if i == 0 && rpc.PartialMessage == nil {
+					// The first incoming rpc to the peer requesting a partial
+					// message should contain data since we made sure to send
+					// the request first.
+					panic("expected to receive a partial message from a supporting peer")
+				}
+
+				groupID := rpc.GroupID
+				pm, ok := partialMessageStore[i][topic+string(groupID)]
+				if !ok {
+					pm = &minimalTestPartialMessage{
+						Group: groupID,
+					}
+					partialMessageStore[i][topic+string(groupID)] = pm
+				}
+				if publishOpts := pm.onIncomingRPC(from, rpc); publishOpts != nil {
+					go psubs[i].PublishPartialMessage(topic, pm, *publishOpts)
+					if pm.complete() {
+						encoded, _ := pm.PartialMessageBytes(partialmessages.PartsMetadata([]byte{0}))
+						go func() {
+							err := psubs[i].Publish(topic, encoded)
+							if err != nil {
+								panic(err)
+							}
+						}()
+					}
+
+				}
+				return nil
+			},
+		}
+	}
+
+	for i, h := range hosts {
+		var topicOpts []TopicOpt
+		if i == 0 {
+			topicOpts = append(topicOpts, RequestPartialMessages())
+		} else if i == 1 {
+			// The right neighbor doesn't support partial messages
+		} else {
+			topicOpts = append(topicOpts, SupportsPartialMessages())
+		}
+
+		psub := getGossipsub(gossipsubCtx, h, WithPartialMessagesExtension(partialExt[i]))
+		topic, err := psub.Join(topic, topicOpts...)
+		if err != nil {
+			t.Fatal(err)
+		}
+		sub, err := topic.Subscribe()
+		if err != nil {
+			t.Fatal(err)
+		}
+		psubs = append(psubs, psub)
+		topics = append(topics, topic)
+		subs = append(subs, sub)
+	}
+
+	ringConnect(t, hosts)
+	time.Sleep(2 * time.Second)
+
+	group := []byte("test-group")
+	emptyMsg := &minimalTestPartialMessage{
+		Group: group,
+	}
+	fullMsg := &minimalTestPartialMessage{
+		Group: group,
+		Parts: [2][]byte{
+			[]byte("Hello"),
+			[]byte("World"),
+		},
+	}
+
+	for i := range hosts {
+		if i <= 1 {
+			continue
+		}
+		copiedMsg := *fullMsg
+		partialMessageStore[i][topic+string(group)] = &copiedMsg
+	}
+
+	// Have the first host publish the empty partial message to send a partial
+	// message request to peers that support partial messages.
+	partialMessageStore[0][topic+string(group)] = emptyMsg
+	// first host has no data
+	err := psubs[0].PublishPartialMessage(topic, emptyMsg, partialmessages.PublishOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	time.Sleep(time.Second)
+
+	for i := range hosts {
+		if i == 0 {
+			continue
+		} else {
+			if i != 1 {
+				err := psubs[i].PublishPartialMessage(topic, partialMessageStore[i][topic+string(group)], partialmessages.PublishOptions{})
+				if err != nil {
+					t.Fatal(err)
+				}
+			}
+			encoded, err := fullMsg.PartialMessageBytes(partialmessages.PartsMetadata([]byte{0}))
+			if err != nil {
+				t.Fatal(err)
+			}
+			err = topics[i].Publish(context.Background(), encoded)
+			if err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+
+	time.Sleep(2 * time.Second)
+
+	// Close gossipsub before we inspect the state to avoid race conditions
+	closeGossipsub()
+	time.Sleep(1 * time.Second)
+
+	if len(partialMessageStore) != hostCount {
+		t.Errorf("One host is missing the partial message")
+	}
+
+	for i, msgStore := range partialMessageStore {
+		if i == 1 {
+			// Host 1 doesn't support partial messages
+			continue
+		}
+		if len(msgStore) == 0 {
+			t.Errorf("Host %d is missing the partial message", i)
+		}
+		for _, partialMessage := range msgStore {
+			if !partialMessage.complete() {
+				t.Errorf("expected complete message, but %v is incomplete at host %d", partialMessage, i)
+			}
+		}
+	}
+
+	for i, sub := range subs {
+		ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+		defer cancel()
+		_, err := sub.Next(ctx)
+		if err != nil {
+			t.Errorf("failed to receive message: %v at host %d", err, i)
+		}
+	}
+}
+
+func TestSkipPublishingToPeersRequestingPartialMessages(t *testing.T) {
 	topicName := "test-topic"
 
 	// 3 hosts.
-	// hosts[0]: Publisher. Supports partial messages
-	// hosts[1]: Subscriber. Supports partial messages
+	// hosts[0]: Publisher. Requests partial messages
+	// hosts[1]: Subscriber. Requests partial messages
 	// hosts[2]: Alternate publisher. Does not support partial messages. Only
 	//   connected to hosts[0]
 	hosts := getDefaultHosts(t, 3)

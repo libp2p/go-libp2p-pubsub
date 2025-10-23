@@ -57,6 +57,12 @@ func denseConnect(t *testing.T, hosts []host.Host) {
 	connectSome(t, hosts, 10)
 }
 
+func ringConnect(t *testing.T, hosts []host.Host) {
+	for i := range hosts {
+		connect(t, hosts[i], hosts[(i+1)%len(hosts)])
+	}
+}
+
 func connectSome(t *testing.T, hosts []host.Host, d int) {
 	for i, a := range hosts {
 		for j := 0; j < d; j++ {
