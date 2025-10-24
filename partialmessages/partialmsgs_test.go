@@ -2,6 +2,7 @@ package partialmessages
 
 import (
 	"bytes"
+	cryptorand "crypto/rand"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -10,6 +11,7 @@ import (
 	"log/slog"
 	"math/big"
 	"math/rand"
+	"reflect"
 	"testing"
 
 	"github.com/libp2p/go-libp2p-pubsub/internal/merkle"
@@ -76,9 +78,14 @@ func (m *mockNetworkPartialMessages) removePeers() {
 
 	// assert that there are no leaked peerInitiatedGroupCountPerTopics
 	for _, h := range m.handlers {
-		for topic, count := range h.peerInitiatedGroupCountPerTopic {
-			if count != 0 {
-				m.t.Errorf("unexpected peerInitiatedGroupCountPerTopic for topic %s: %d", topic, count)
+		for topic, ctr := range h.peerInitiatedGroupCounter {
+			if ctr.total != 0 {
+				m.t.Errorf("unexpected peerInitiatedGroupCountPerTopic for topic %s: %d", topic, ctr.total)
+			}
+			for _, v := range ctr.perPeer {
+				if v != 0 {
+					m.t.Errorf("unexpected peerInitiatedGroupCountPerTopic for topic %s: %d", topic, v)
+				}
 			}
 		}
 	}
@@ -976,6 +983,240 @@ func TestPartialMessages(t *testing.T) {
 
 			if !msg.complete() {
 				t.Fatalf("peer %d should have the full message", i+1)
+			}
+		}
+	})
+}
+
+func TestPeerInitiatedCounter(t *testing.T) {
+	// slog.SetLogLoggerLevel(slog.LevelDebug)
+	topic := "test-topic"
+	randParts := func() []byte {
+		buf := make([]byte, 8)
+		_, _ = cryptorand.Read(buf)
+		return buf
+	}
+	handler := PartialMessageExtension{
+		Logger: slog.Default(),
+		MergePartsMetadata: func(topic string, left, right PartsMetadata) PartsMetadata {
+			return left
+		},
+		OnIncomingRPC: func(from peer.ID, rpc *pubsub_pb.PartialMessagesExtension) error {
+			// Ignore for this test
+			return nil
+		},
+		ValidateRPC: func(from peer.ID, rpc *pubsub_pb.PartialMessagesExtension) error {
+			return nil
+		},
+		PeerInitiatedGroupLimitPerTopic:        4,
+		PeerInitiatedGroupLimitPerTopicPerPeer: 2,
+	}
+	router := testRouter{
+		sendRPC:   func(p peer.ID, r *pubsub_pb.PartialMessagesExtension, urgent bool) {},
+		meshPeers: func(topic string) iter.Seq[peer.ID] { return func(yield func(peer.ID) bool) {} },
+	}
+	handler.Init(&router)
+
+	err := handler.HandleRPC("1", &pubsub_pb.PartialMessagesExtension{
+		TopicID:       &topic,
+		GroupID:       []byte("1"),
+		PartsMetadata: randParts(),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	assertCounts := func(expectedTotal int, expectedMap map[peer.ID]int) {
+		t.Helper()
+		if handler.peerInitiatedGroupCounter[topic].total != expectedTotal {
+			t.Fatal()
+		}
+		if !reflect.DeepEqual(handler.peerInitiatedGroupCounter[topic].perPeer, expectedMap) {
+			t.Fatal()
+		}
+	}
+
+	assertCounts(1, map[peer.ID]int{"1": 1})
+
+	err = handler.HandleRPC("1", &pubsub_pb.PartialMessagesExtension{
+		TopicID:       &topic,
+		GroupID:       []byte("2"),
+		PartsMetadata: randParts(),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	assertCounts(2, map[peer.ID]int{"1": 2})
+
+	err = handler.HandleRPC("1", &pubsub_pb.PartialMessagesExtension{
+		TopicID:       &topic,
+		GroupID:       []byte("3"),
+		PartsMetadata: randParts(),
+	})
+	if err != errPeerInitiatedGroupLimitReached {
+		t.Fatal(err)
+	}
+
+	assertCounts(2, map[peer.ID]int{"1": 2})
+
+	// Two peers publish new groups
+	for id := range 2 {
+		otherPeer := fmt.Sprintf("peer%d", id)
+		err = handler.HandleRPC(peer.ID(otherPeer), &pubsub_pb.PartialMessagesExtension{
+			TopicID:       &topic,
+			GroupID:       []byte(otherPeer),
+			PartsMetadata: randParts(),
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// The third one goves over the limit
+	otherPeer := fmt.Sprintf("peer%d", 3)
+	err = handler.HandleRPC(peer.ID(otherPeer), &pubsub_pb.PartialMessagesExtension{
+		TopicID:       &topic,
+		GroupID:       []byte(otherPeer),
+		PartsMetadata: randParts(),
+	})
+	if err != errPeerInitiatedGroupTotalLimitReached {
+		t.Fatal(err)
+	}
+
+	// All peers go away, and the counts should be back to 0
+	handler.RemovePeer("1")
+	for id := range 2 {
+		otherPeer := fmt.Sprintf("peer%d", id)
+		handler.RemovePeer(peer.ID(otherPeer))
+	}
+
+	assertCounts(0, map[peer.ID]int{})
+
+	// Test heartbeat cleanup
+	err = handler.HandleRPC("1", &pubsub_pb.PartialMessagesExtension{
+		TopicID:       &topic,
+		GroupID:       []byte("4"),
+		PartsMetadata: randParts(),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertCounts(1, map[peer.ID]int{"1": 1})
+
+	for range minGroupTTL + 1 {
+		handler.Heartbeat()
+	}
+	assertCounts(0, map[peer.ID]int{})
+}
+
+func FuzzPeerInitiatedCounter(f *testing.F) {
+	topic := "test-topic"
+	f.Fuzz(func(t *testing.T, script []byte, totalLimit uint8, peerLimit uint8) {
+		// This fuzzer works like a simple interpreter. It interprets the script as bytecode.
+		if len(script) == 0 {
+			return
+		}
+		if totalLimit == 0 {
+			totalLimit = uint8(defaultPeerInitiatedGroupLimitPerTopic)
+		}
+		if peerLimit == 0 {
+			peerLimit = uint8(defaultPeerInitiatedGroupLimitPerTopicPerPeer)
+		}
+
+		handler := PartialMessageExtension{
+			Logger: slog.Default(),
+			MergePartsMetadata: func(topic string, left, right PartsMetadata) PartsMetadata {
+				return left
+			},
+			OnIncomingRPC: func(from peer.ID, rpc *pubsub_pb.PartialMessagesExtension) error {
+				// Ignore for this test
+				return nil
+			},
+			ValidateRPC: func(from peer.ID, rpc *pubsub_pb.PartialMessagesExtension) error {
+				return nil
+			},
+			GroupTTLByHeatbeat:                     minGroupTTL,
+			PeerInitiatedGroupLimitPerTopic:        int(totalLimit),
+			PeerInitiatedGroupLimitPerTopicPerPeer: int(peerLimit),
+		}
+		router := testRouter{
+			sendRPC:   func(p peer.ID, r *pubsub_pb.PartialMessagesExtension, urgent bool) {},
+			meshPeers: func(topic string) iter.Seq[peer.ID] { return func(yield func(peer.ID) bool) {} },
+		}
+		handler.Init(&router)
+		partsMetadata := []byte{0, 0, 0, 0}
+
+		expectedTotal := 0
+		expectedPeercounts := map[peer.ID]int{}
+
+		for i := 0; len(script) > 0; i++ {
+			switch script[0] % 3 {
+			case 0: // handle new rpc
+				script = script[1:]
+				if len(script) < 1 {
+					return
+				}
+				otherPeer := peer.ID(fmt.Sprintf("%d", script[0]))
+				script = script[1:]
+
+				var expectNoError bool
+				if expectedTotal < int(totalLimit) && expectedPeercounts[peer.ID(otherPeer)] < int(peerLimit) {
+					expectedPeercounts[peer.ID(otherPeer)]++
+					expectedTotal++
+					expectNoError = true
+				}
+
+				err := handler.HandleRPC(peer.ID(otherPeer), &pubsub_pb.PartialMessagesExtension{
+					TopicID:       &topic,
+					GroupID:       fmt.Appendf(nil, "%d", i),
+					PartsMetadata: partsMetadata,
+				})
+				if expectNoError && err != nil {
+					t.Fatalf("unexpected error: %v", err)
+				}
+			case 1: // remove peer
+				script = script[1:]
+				if len(script) < 1 {
+					return
+				}
+				otherPeer := peer.ID(fmt.Sprintf("%d", script[0]))
+				script = script[1:]
+
+				if expectedPeercounts[peer.ID(otherPeer)] > 0 {
+					expectedTotal -= expectedPeercounts[peer.ID(otherPeer)]
+					delete(expectedPeercounts, peer.ID(otherPeer))
+				}
+
+				handler.RemovePeer(peer.ID(otherPeer))
+			case 2: // heartbeat until everything is cleared
+				script = script[1:]
+				for range handler.GroupTTLByHeatbeat + 1 {
+					handler.Heartbeat()
+				}
+				expectedTotal = 0
+				expectedPeercounts = map[peer.ID]int{}
+			default:
+				// no-op
+				script = script[1:]
+			}
+
+			ctr, ok := handler.peerInitiatedGroupCounter[topic]
+			if ok {
+
+				if expectedTotal != ctr.total {
+					t.Fatalf("expected total %d, got %d", expectedTotal, ctr.total)
+				}
+				if !reflect.DeepEqual(expectedPeercounts, ctr.perPeer) {
+					t.Fatalf("expected peer counts %v, got %v", expectedPeercounts, ctr.perPeer)
+				}
+			} else {
+				if expectedTotal != 0 {
+					t.Fatalf("expected total %d, got %d", expectedTotal, 0)
+				}
+				if !reflect.DeepEqual(expectedPeercounts, map[peer.ID]int{}) {
+					t.Fatalf("expected peer counts %v, got %v", expectedPeercounts, map[peer.ID]int{})
+				}
 			}
 		}
 	})
