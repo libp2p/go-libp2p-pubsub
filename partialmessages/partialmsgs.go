@@ -16,10 +16,12 @@ import (
 
 const minGroupTTL = 3
 
-// peerInitiatedGroupLimitPerTopic limits the total number (per topic) of
+// defaultPeerInitiatedGroupLimitPerTopic limits the total number (per topic) of
 // *partialMessageStatePerTopicGroup we create in response to a incoming RPC.
 // This only applies to groups that we haven't published for yet.
-const peerInitiatedGroupLimitPerTopic = 256
+const defaultPeerInitiatedGroupLimitPerTopic = 255
+
+const defaultPeerInitiatedGroupLimitPerTopicPerPeer = 8
 
 // PartsMetadata returns metadata about the parts this partial message
 // contains and, possibly implicitly, the parts it wants.
@@ -66,9 +68,9 @@ func (ps *peerState) IsZero() bool {
 }
 
 type partialMessageStatePerTopicGroup struct {
-	peerState     map[peer.ID]*peerState
-	groupTTL      int
-	peerInitiated bool
+	peerState   map[peer.ID]*peerState
+	groupTTL    int
+	initiatedBy peer.ID // zero value if we initiated the group
 }
 
 func newPartialMessageStatePerTopicGroup(groupTTL int) *partialMessageStatePerTopicGroup {
@@ -76,6 +78,10 @@ func newPartialMessageStatePerTopicGroup(groupTTL int) *partialMessageStatePerTo
 		peerState: make(map[peer.ID]*peerState),
 		groupTTL:  max(groupTTL, minGroupTTL),
 	}
+}
+
+func (s *partialMessageStatePerTopicGroup) remotePeerInitiated() bool {
+	return s.initiatedBy != ""
 }
 
 func (s *partialMessageStatePerTopicGroup) clearPeerMetadata(peerID peer.ID) {
@@ -111,13 +117,26 @@ type PartialMessageExtension struct {
 	//     expected bounds?
 	ValidateRPC func(from peer.ID, rpc *pb.PartialMessagesExtension) error
 
+	// PeerInitiatedGroupLimitPerTopic limits the number of Group states all
+	// peers can initialize per topic. A group state is initialized by a peer if
+	// the peer's message marks the first time we've seen a group id.
+	PeerInitiatedGroupLimitPerTopic int
+
+	// PeerInitiatedGroupLimitPerTopicPerPeer limits the number of Group states
+	// a single peer can initialize per topic. A group state is initialized by a
+	// peer if the peer's message marks the first time we've seen a group id.
+	PeerInitiatedGroupLimitPerTopicPerPeer int
+
 	// GroupTTLByHeatbeat is how many heartbeats we store Group state for after
 	// publishing a partial message for the group.
 	GroupTTLByHeatbeat int
 
+	// map topic -> map[group]partialMessageStatePerTopicGroup
+	// TODO rename this to ...PerGroupPerTopic
 	statePerTopicPerGroup map[string]map[string]*partialMessageStatePerTopicGroup
 
-	peerInitiatedGroupCountPerTopic map[string]int
+	// map[topic]counter
+	peerInitiatedGroupCounter map[string]*peerInitiatedGroupCounterState
 
 	router Router
 }
@@ -136,28 +155,32 @@ type Router interface {
 	PeerRequestsPartial(peer peer.ID, topic string) bool
 }
 
-func (e *PartialMessageExtension) groupState(topic string, groupID []byte, peerInitiated bool) (*partialMessageStatePerTopicGroup, error) {
+func (e *PartialMessageExtension) groupState(topic string, groupID []byte, peerInitiated bool, from peer.ID) (*partialMessageStatePerTopicGroup, error) {
 	statePerTopic, ok := e.statePerTopicPerGroup[topic]
 	if !ok {
 		statePerTopic = make(map[string]*partialMessageStatePerTopicGroup)
 		e.statePerTopicPerGroup[topic] = statePerTopic
 	}
+	if _, ok := e.peerInitiatedGroupCounter[topic]; !ok {
+		e.peerInitiatedGroupCounter[topic] = &peerInitiatedGroupCounterState{}
+	}
 	state, ok := statePerTopic[string(groupID)]
 	if !ok {
 		if peerInitiated {
-			if e.peerInitiatedGroupCountPerTopic[topic] >= peerInitiatedGroupLimitPerTopic {
-				return nil, errors.New("too many peer initiated group states")
+			err := e.peerInitiatedGroupCounter[topic].Inc(e.PeerInitiatedGroupLimitPerTopic, e.PeerInitiatedGroupLimitPerTopicPerPeer, from)
+			if err != nil {
+				return nil, err
 			}
-			e.peerInitiatedGroupCountPerTopic[topic]++
 		}
 
 		state = newPartialMessageStatePerTopicGroup(e.GroupTTLByHeatbeat)
 		statePerTopic[string(groupID)] = state
-		state.peerInitiated = peerInitiated
+		state.initiatedBy = from
 	}
-	if !peerInitiated && state.peerInitiated {
-		state.peerInitiated = false
-		e.peerInitiatedGroupCountPerTopic[topic]--
+	if !peerInitiated && state.remotePeerInitiated() {
+		// We've tried to initiate this state as well, so it's no longer peer initiated.
+		e.peerInitiatedGroupCounter[topic].Dec(state.initiatedBy)
+		state.initiatedBy = ""
 	}
 	return state, nil
 }
@@ -176,8 +199,16 @@ func (e *PartialMessageExtension) Init(router Router) error {
 	if e.MergePartsMetadata == nil {
 		return errors.New("field MergePartsMetadata must be set")
 	}
+
+	if e.PeerInitiatedGroupLimitPerTopic == 0 {
+		e.PeerInitiatedGroupLimitPerTopic = defaultPeerInitiatedGroupLimitPerTopic
+	}
+	if e.PeerInitiatedGroupLimitPerTopicPerPeer == 0 {
+		e.PeerInitiatedGroupLimitPerTopicPerPeer = defaultPeerInitiatedGroupLimitPerTopicPerPeer
+	}
+
 	e.statePerTopicPerGroup = make(map[string]map[string]*partialMessageStatePerTopicGroup)
-	e.peerInitiatedGroupCountPerTopic = make(map[string]int)
+	e.peerInitiatedGroupCounter = make(map[string]*peerInitiatedGroupCounterState)
 
 	return nil
 }
@@ -186,7 +217,7 @@ func (e *PartialMessageExtension) PublishPartial(topic string, partial Message, 
 	groupID := partial.GroupID()
 	myPartsMeta := partial.PartsMetadata()
 
-	state, err := e.groupState(topic, groupID, false)
+	state, err := e.groupState(topic, groupID, false, "")
 	if err != nil {
 		return err
 	}
@@ -264,9 +295,12 @@ func (e *PartialMessageExtension) AddPeer(id peer.ID) {
 }
 
 func (e *PartialMessageExtension) RemovePeer(id peer.ID) {
-	for _, statePerTopic := range e.statePerTopicPerGroup {
+	for topic, statePerTopic := range e.statePerTopicPerGroup {
 		for _, state := range statePerTopic {
 			delete(state.peerState, id)
+		}
+		if ctr, ok := e.peerInitiatedGroupCounter[topic]; ok {
+			ctr.RemovePeer(id)
 		}
 	}
 }
@@ -279,8 +313,8 @@ func (e *PartialMessageExtension) Heartbeat() {
 				if len(statePerTopic) == 0 {
 					delete(e.statePerTopicPerGroup, topic)
 				}
-				if s.peerInitiated {
-					e.peerInitiatedGroupCountPerTopic[topic]--
+				if s.remotePeerInitiated() {
+					e.peerInitiatedGroupCounter[topic].Dec(s.initiatedBy)
 				}
 			} else {
 				s.groupTTL--
@@ -305,7 +339,7 @@ func (e *PartialMessageExtension) HandleRPC(from peer.ID, rpc *pb.PartialMessage
 	topic := rpc.GetTopicID()
 	groupID := rpc.GroupID
 
-	state, err := e.groupState(topic, groupID, true)
+	state, err := e.groupState(topic, groupID, true, from)
 	if err != nil {
 		return err
 	}
@@ -320,4 +354,46 @@ func (e *PartialMessageExtension) HandleRPC(from peer.ID, rpc *pb.PartialMessage
 	}
 
 	return e.OnIncomingRPC(from, rpc)
+}
+
+type peerInitiatedGroupCounterState struct {
+	// total number of peer initiated groups
+	total int
+	// number of groups initiated per peer
+	perPeer map[peer.ID]int
+}
+
+var errPeerInitiatedGroupTotalLimitReached = errors.New("too many peer initiated group states")
+var errPeerInitiatedGroupLimitReached = errors.New("too many peer initiated group states for this peer")
+
+func (ctr *peerInitiatedGroupCounterState) Inc(totalLimit int, peerLimit int, id peer.ID) error {
+	if ctr.total >= totalLimit {
+		return errPeerInitiatedGroupTotalLimitReached
+	}
+	if ctr.perPeer == nil {
+		ctr.perPeer = make(map[peer.ID]int)
+	}
+	if ctr.perPeer[id] >= peerLimit {
+		return errPeerInitiatedGroupLimitReached
+	}
+	ctr.total++
+	ctr.perPeer[id]++
+	return nil
+}
+
+func (ctr *peerInitiatedGroupCounterState) Dec(id peer.ID) {
+	if _, ok := ctr.perPeer[id]; ok {
+		ctr.total--
+		ctr.perPeer[id]--
+		if ctr.perPeer[id] == 0 {
+			delete(ctr.perPeer, id)
+		}
+	}
+}
+
+func (ctr *peerInitiatedGroupCounterState) RemovePeer(id peer.ID) {
+	if n, ok := ctr.perPeer[id]; ok {
+		ctr.total -= n
+		delete(ctr.perPeer, id)
+	}
 }
