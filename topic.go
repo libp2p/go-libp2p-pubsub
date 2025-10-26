@@ -261,6 +261,60 @@ func (t *Topic) AddToBatch(ctx context.Context, batch *MessageBatch, data []byte
 	return nil
 }
 
+// Announce sends IHAVE gossip for a message to all peers subscribed to the topic
+// without publishing it through the mesh. The message is stored for IWANT retrieval
+// until the expiry time. Works even if we're not subscribed to the topic - in that
+// case, IHAVE is sent to all connected peers who are subscribed. If we are subscribed,
+// the message is marked as seen to prevent duplicate processing.
+func (t *Topic) Announce(ctx context.Context, data []byte, expiry time.Time, opts ...PubOpt) error {
+	t.mux.RLock()
+	defer t.mux.RUnlock()
+
+	if t.closed {
+		return ErrTopicClosed
+	}
+
+	// Validate and construct message (reuse existing validation logic)
+	msg, err := t.validate(ctx, data, opts...)
+	if err != nil {
+		if errors.Is(err, dupeErr{}) {
+			// If it was a duplicate, we return nil to indicate success.
+			// Semantically the message was published by us or someone else.
+			return nil
+		}
+		return err
+	}
+
+	// Get GossipSubRouter
+	gs, ok := t.p.rt.(*GossipSubRouter)
+	if !ok {
+		return fmt.Errorf("announce only works with GossipSub router")
+	}
+
+	// Execute in pubsub event loop
+	done := make(chan struct{})
+	select {
+	case t.p.eval <- func() {
+		gs.announceMessage(t.topic, msg, expiry)
+		close(done)
+	}:
+	case <-t.p.ctx.Done():
+		return t.p.ctx.Err()
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+
+	// Wait for completion
+	select {
+	case <-done:
+		return nil
+	case <-t.p.ctx.Done():
+		return t.p.ctx.Err()
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
 func (t *Topic) validate(ctx context.Context, data []byte, opts ...PubOpt) (*Message, error) {
 	t.mux.RLock()
 	defer t.mux.RUnlock()

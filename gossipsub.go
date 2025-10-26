@@ -62,6 +62,7 @@ var (
 	GossipSubHeartbeatInitialDelay            = 100 * time.Millisecond
 	GossipSubHeartbeatInterval                = 1 * time.Second
 	GossipSubFanoutTTL                        = 60 * time.Second
+	GossipSubAnnouncementMaxTTL               = 60 * time.Second
 	GossipSubPrunePeers                       = 16
 	GossipSubPruneBackoff                     = time.Minute
 	GossipSubUnsubscribeBackoff               = 10 * time.Second
@@ -167,6 +168,11 @@ type GossipSubParams struct {
 	// FanoutTTL since we've published to a topic that we're not subscribed to,
 	// we'll delete the fanout map for that topic.
 	FanoutTTL time.Duration
+
+	// AnnouncementMaxTTL is the maximum possible time-to-live for a message announced
+	// via Announce. This is used to size internal data structures. Deadlines passed to
+	// Announce exceeding this value will be clamped, and a warning will be logged.
+	AnnouncementMaxTTL time.Duration
 
 	// PrunePeers controls the number of peers to include in prune Peer eXchange.
 	// When we prune a peer that's eligible for PX (has a good score, etc), we will try to
@@ -292,6 +298,7 @@ func NewGossipSubWithRouter(ctx context.Context, h host.Host, rt PubSubRouter, o
 // DefaultGossipSubRouter returns a new GossipSubRouter with default parameters.
 func DefaultGossipSubRouter(h host.Host) *GossipSubRouter {
 	params := DefaultGossipSubParams()
+	mcache := NewMessageCache(params.HistoryGossip, params.HistoryLength, params.HeartbeatInterval, params.AnnouncementMaxTTL)
 	rt := &GossipSubRouter{
 		peers:           make(map[peer.ID]protocol.ID),
 		mesh:            make(map[string]map[peer.ID]struct{}),
@@ -307,7 +314,7 @@ func DefaultGossipSubRouter(h host.Host) *GossipSubRouter {
 		outbound:        make(map[peer.ID]bool),
 		connect:         make(chan connectInfo, params.MaxPendingConnections),
 		cab:             pstoremem.NewAddrBook(),
-		mcache:          NewMessageCache(params.HistoryGossip, params.HistoryLength),
+		mcache:          mcache,
 		protos:          GossipSubDefaultProtocols,
 		feature:         GossipSubDefaultFeatures,
 		tagTracer:       newTagTracer(h.ConnManager()),
@@ -341,6 +348,7 @@ func DefaultGossipSubParams() GossipSubParams {
 		HeartbeatInitialDelay:     GossipSubHeartbeatInitialDelay,
 		HeartbeatInterval:         GossipSubHeartbeatInterval,
 		FanoutTTL:                 GossipSubFanoutTTL,
+		AnnouncementMaxTTL:        GossipSubAnnouncementMaxTTL,
 		PrunePeers:                GossipSubPrunePeers,
 		PruneBackoff:              GossipSubPruneBackoff,
 		UnsubscribeBackoff:        GossipSubUnsubscribeBackoff,
@@ -569,7 +577,7 @@ func WithGossipSubParams(cfg GossipSubParams) Option {
 		// Overwrite current config and associated variables in the router.
 		gs.params = cfg
 		gs.connect = make(chan connectInfo, cfg.MaxPendingConnections)
-		gs.mcache = NewMessageCache(cfg.HistoryGossip, cfg.HistoryLength)
+		gs.mcache = NewMessageCache(cfg.HistoryGossip, cfg.HistoryLength, cfg.HeartbeatInterval, cfg.AnnouncementMaxTTL)
 
 		return nil
 	}
@@ -1303,7 +1311,7 @@ func (gs *GossipSubRouter) Publish(msg *Message) {
 
 func (gs *GossipSubRouter) rpcs(msg *Message) iter.Seq2[peer.ID, *RPC] {
 	return func(yield func(peer.ID, *RPC) bool) {
-		gs.mcache.Put(msg)
+		gs.mcache.AppendWindow(msg)
 
 		from := msg.ReceivedFrom
 		topic := msg.GetTopic()
@@ -1595,6 +1603,9 @@ func (gs *GossipSubRouter) heartbeat() {
 	// clean up IDONTWANT counters
 	gs.clearIDontWantCounters()
 
+	// clean up expired announcements
+	gs.purgeAnnouncements()
+
 	// apply IWANT request penalties
 	gs.applyIwantPenalties()
 
@@ -1832,7 +1843,7 @@ func (gs *GossipSubRouter) heartbeat() {
 	gs.flush()
 
 	// advance the message history window
-	gs.mcache.Shift()
+	gs.mcache.ShiftWindow()
 }
 
 func (gs *GossipSubRouter) clearIHaveCounters() {
@@ -1862,6 +1873,10 @@ func (gs *GossipSubRouter) clearIDontWantCounters() {
 			}
 		}
 	}
+}
+
+func (gs *GossipSubRouter) purgeAnnouncements() {
+	gs.mcache.PruneAnns()
 }
 
 func (gs *GossipSubRouter) applyIwantPenalties() {
@@ -1956,7 +1971,7 @@ func (gs *GossipSubRouter) sendGraftPrune(tograft, toprune map[peer.ID][]string,
 // emitGossip emits IHAVE gossip advertising items in the message cache window
 // of this topic.
 func (gs *GossipSubRouter) emitGossip(topic string, exclude map[peer.ID]struct{}) {
-	mids := gs.mcache.GetGossipIDs(topic)
+	mids := gs.mcache.GossipForTopic(topic)
 	if len(mids) == 0 {
 		return
 	}
@@ -2031,6 +2046,44 @@ func (gs *GossipSubRouter) enqueueGossip(p peer.ID, ihave *pb.ControlIHave) {
 	gossip := gs.gossip[p]
 	gossip = append(gossip, ihave)
 	gs.gossip[p] = gossip
+}
+
+func (gs *GossipSubRouter) announceMessage(topic string, msg *Message, expiry time.Time) {
+	// Get all peers in topic
+	tmap, ok := gs.p.topics[topic]
+	if !ok {
+		return
+	}
+
+	// Store message for IWANT retrieval in the message cache
+	msgID := gs.p.idGen.ID(msg)
+
+	// Send IHAVE to all topic peers (excluding direct peers, applying score threshold)
+	// Match the filtering logic from emitGossip
+	var gossipQueued bool
+	for p := range tmap {
+		if !gs.feature(GossipSubFeatureMesh, gs.peers[p]) {
+			continue
+		}
+		if gs.score.Score(p) < gs.gossipThreshold {
+			continue
+		}
+		gs.enqueueGossip(p, &pb.ControlIHave{
+			TopicID:    &topic,
+			MessageIDs: []string{msgID},
+		})
+		gossipQueued = true
+	}
+
+	if !gossipQueued {
+		return
+	}
+
+	// Track announcement in message cache for IWANT retrieval
+	gs.mcache.TrackAnn(msg, expiry)
+
+	// Flush gossip immediately
+	gs.flush()
 }
 
 func (gs *GossipSubRouter) piggybackGossip(p peer.ID, out *RPC, ihave []*pb.ControlIHave) {
