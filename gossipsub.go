@@ -616,6 +616,8 @@ type GossipSubRouter struct {
 	// config for gossipsub parameters
 	params GossipSubParams
 
+	publishStrategy RPCScheduler
+
 	// whether PX is enabled; this should be enabled in bootstrappers and other well connected/trusted
 	// nodes.
 	doPX            bool
@@ -1296,6 +1298,19 @@ func (gs *GossipSubRouter) PublishBatch(messages []*Message, opts *BatchPublishO
 }
 
 func (gs *GossipSubRouter) Publish(msg *Message) {
+	if gs.publishStrategy != nil {
+		msgID := gs.p.idGen.ID(msg)
+		for p, rpc := range gs.rpcs(msg) {
+			gs.publishStrategy.AddRPC(p, msgID, rpc)
+		}
+
+		for p, rpc := range gs.publishStrategy.All() {
+			gs.sendRPC(p, rpc, false)
+		}
+
+		return
+	}
+
 	for p, rpc := range gs.rpcs(msg) {
 		gs.sendRPC(p, rpc, false)
 	}
