@@ -6,11 +6,16 @@ import (
 )
 
 type PeerExtensions struct {
-	TestExtension bool
+	TestExtension       bool
+	TopicTableExtension *pubsub_pb.ExtTopicTable
 }
 
 type TestExtensionConfig struct {
 	OnReceiveTestExtension func(from peer.ID)
+}
+
+type TopicTableExtensionConfig struct {
+	topicBundles [][]string
 }
 
 func WithTestExtension(c TestExtensionConfig) Option {
@@ -21,6 +26,24 @@ func WithTestExtension(c TestExtensionConfig) Option {
 				onReceiveTestExtension: c.OnReceiveTestExtension,
 			}
 			rt.extensions.myExtensions.TestExtension = true
+		}
+		return nil
+	}
+}
+
+func WithTopicTableExtension(c TopicTableExtensionConfig) Option {
+	return func(ps *PubSub) error {
+		if rt, ok := ps.rt.(*GossipSubRouter); ok {
+			rt.extensions.topicTableExtension = &topicTableExtension{}
+
+			bundleHashes := make([][]byte, len(c.topicBundles))
+			for _, topics := range c.topicBundles {
+				hash := computeTopicBundleHash(topics)
+				bundleHashes = append(bundleHashes, hash[:])
+			}
+			rt.extensions.myExtensions.TopicTableExtension = &pubsub_pb.ExtTopicTable{
+				TopicBundleHashes: bundleHashes,
+			}
 		}
 		return nil
 	}
@@ -37,6 +60,7 @@ func peerExtensionsFromRPC(rpc *RPC) PeerExtensions {
 	out := PeerExtensions{}
 	if hasPeerExtensions(rpc) {
 		out.TestExtension = rpc.Control.Extensions.GetTestExtension()
+		out.TopicTableExtension = rpc.Control.Extensions.GetTopicTableExtension()
 	}
 	return out
 }
@@ -46,9 +70,19 @@ func (pe *PeerExtensions) ExtendRPC(rpc *RPC) *RPC {
 		if rpc.Control == nil {
 			rpc.Control = &pubsub_pb.ControlMessage{}
 		}
-		rpc.Control.Extensions = &pubsub_pb.ControlExtensions{
-			TestExtension: &pe.TestExtension,
+		if rpc.Control.Extensions == nil {
+			rpc.Control.Extensions = &pubsub_pb.ControlExtensions{}
 		}
+		rpc.Control.Extensions.TestExtension = &pe.TestExtension
+	}
+	if pe.TopicTableExtension != nil {
+		if rpc.Control == nil {
+			rpc.Control = &pubsub_pb.ControlMessage{}
+		}
+		if rpc.Control.Extensions == nil {
+			rpc.Control.Extensions = &pubsub_pb.ControlExtensions{}
+		}
+		rpc.Control.Extensions.TopicTableExtension = pe.TopicTableExtension
 	}
 	return rpc
 }
@@ -60,7 +94,8 @@ type extensionsState struct {
 	reportMisbehavior func(peer.ID)
 	sendRPC           func(p peer.ID, r *RPC, urgent bool)
 
-	testExtension *testExtension
+	testExtension       *testExtension
+	topicTableExtension *topicTableExtension
 }
 
 func newExtensionsState(myExtensions PeerExtensions, reportMisbehavior func(peer.ID), sendRPC func(peer.ID, *RPC, bool)) *extensionsState {
@@ -70,7 +105,9 @@ func newExtensionsState(myExtensions PeerExtensions, reportMisbehavior func(peer
 		sentExtensions:    make(map[peer.ID]struct{}),
 		reportMisbehavior: reportMisbehavior,
 		sendRPC:           sendRPC,
-		testExtension:     nil,
+
+		testExtension:       nil,
+		topicTableExtension: nil,
 	}
 }
 

@@ -72,6 +72,11 @@ message ControlExtensions {
 	// Experimental extensions must use field numbers larger than 0x200000 to be
 	// encoded with 4 bytes
 	optional bool testExtension = 6492434;
+	optional ExtTopicTable topicTableExtension = 4820938;
+}
+
+message ExtTopicTable {
+	repeated bytes topicBundleHashes = 1;
 }
 
 
