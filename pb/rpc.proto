@@ -8,7 +8,10 @@ message RPC {
 
 	message SubOpts {
 		optional bool subscribe = 1; // subscribe or unsubcribe
-		optional string topicid = 2;
+		oneof topicRef {
+			string topicid = 2;
+			uint32 topicIndex = 3;
+		}
 	}
 
 	optional ControlMessage control = 3;
@@ -25,7 +28,10 @@ message Message {
 	optional bytes from = 1;
 	optional bytes data = 2;
 	optional bytes seqno = 3;
-	optional string topic = 4;
+	oneof topicRef {
+		string topic = 4;
+		uint32 topicIndex = 7;
+	}
 	optional bytes signature = 5;
 	optional bytes key = 6;
 }
@@ -40,7 +46,10 @@ message ControlMessage {
 }
 
 message ControlIHave {
-	optional string topicID = 1;
+	oneof topicRef {
+		string topicID = 1;
+		uint32 topicIndex = 3;
+	}
 	// implementors from other languages should use bytes here - go protobuf emits invalid utf8 strings
 	repeated string messageIDs = 2;
 }
@@ -51,11 +60,17 @@ message ControlIWant {
 }
 
 message ControlGraft {
-	optional string topicID = 1;
+	oneof topicRef {
+		string topicID = 1;
+		uint32 topicIndex = 2;
+	}
 }
 
 message ControlPrune {
-	optional string topicID = 1;
+	oneof topicRef {
+		string topicID = 1;
+		uint32 topicIndex = 4;
+	}
 	repeated PeerInfo peers = 2;
 	optional uint64 backoff = 3;
 }

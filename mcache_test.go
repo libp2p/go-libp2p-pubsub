@@ -159,9 +159,9 @@ func makeTestMessage(n int) *pb.Message {
 	data := []byte(fmt.Sprintf("%d", n))
 	topic := "test"
 	return &pb.Message{
-		Data:  data,
-		Topic: &topic,
-		From:  []byte("test"),
-		Seqno: seqno,
+		Data:     data,
+		TopicRef: &pb.Message_Topic{Topic: topic},
+		From:     []byte("test"),
+		Seqno:    seqno,
 	}
 }

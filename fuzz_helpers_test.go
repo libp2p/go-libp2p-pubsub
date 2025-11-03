@@ -36,7 +36,7 @@ func generateSub(data []byte, limit int) *pb.RPC_SubOpts {
 	subscribe := generateBool(&data)
 
 	str := string(make([]byte, topicIDSize))
-	return &pb.RPC_SubOpts{Subscribe: &subscribe, Topicid: &str}
+	return &pb.RPC_SubOpts{Subscribe: &subscribe, TopicRef: &pb.RPC_SubOpts_Topicid{Topicid: str}}
 }
 
 func generateControl(data []byte, limit int) *pb.ControlMessage {
@@ -65,7 +65,7 @@ func generateControl(data []byte, limit int) *pb.ControlMessage {
 		msgCount := int(generateU16(&data)) % limit
 		topicSize := int(generateU16(&data)) % limit
 		topic := string(make([]byte, topicSize))
-		ctl.Ihave = append(ctl.Ihave, &pb.ControlIHave{TopicID: &topic})
+		ctl.Ihave = append(ctl.Ihave, &pb.ControlIHave{TopicRef: &pb.ControlIHave_TopicID{TopicID: topic}})
 
 		ctl.Ihave[i].MessageIDs = make([]string, 0, msgCount)
 		for j := 0; j < msgCount; j++ {
@@ -81,7 +81,7 @@ func generateControl(data []byte, limit int) *pb.ControlMessage {
 	for i := 0; i < numGraft; i++ {
 		topicSize := int(generateU16(&data)) % limit
 		topic := string(make([]byte, topicSize))
-		ctl.Graft = append(ctl.Graft, &pb.ControlGraft{TopicID: &topic})
+		ctl.Graft = append(ctl.Graft, &pb.ControlGraft{TopicRef: &pb.ControlGraft_TopicID{TopicID: topic}})
 	}
 	if ctl.Size() > limit {
 		return &pb.ControlMessage{}
@@ -92,7 +92,7 @@ func generateControl(data []byte, limit int) *pb.ControlMessage {
 	for i := 0; i < numPrune; i++ {
 		topicSize := int(generateU16(&data)) % limit
 		topic := string(make([]byte, topicSize))
-		ctl.Prune = append(ctl.Prune, &pb.ControlPrune{TopicID: &topic})
+		ctl.Prune = append(ctl.Prune, &pb.ControlPrune{TopicRef: &pb.ControlPrune_TopicID{TopicID: topic}})
 	}
 	if ctl.Size() > limit {
 		return &pb.ControlMessage{}

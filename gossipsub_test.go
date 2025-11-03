@@ -1772,8 +1772,8 @@ func TestGossipsubPiggybackControl(t *testing.T) {
 
 		rpc := &RPC{RPC: pb.RPC{}}
 		gs.piggybackControl(blah, rpc, &pb.ControlMessage{
-			Graft: []*pb.ControlGraft{{TopicID: &test1}, {TopicID: &test2}, {TopicID: &test3}},
-			Prune: []*pb.ControlPrune{{TopicID: &test1}, {TopicID: &test2}, {TopicID: &test3}},
+			Graft: []*pb.ControlGraft{{TopicRef: &pb.ControlGraft_TopicID{TopicID: test1}}, {TopicRef: &pb.ControlGraft_TopicID{TopicID: test2}}, {TopicRef: &pb.ControlGraft_TopicID{TopicID: test3}}},
+			Prune: []*pb.ControlPrune{{TopicRef: &pb.ControlPrune_TopicID{TopicID: test1}}, {TopicRef: &pb.ControlPrune_TopicID{TopicID: test2}}, {TopicRef: &pb.ControlPrune_TopicID{TopicID: test3}}},
 		})
 		res <- rpc
 	}
@@ -2132,7 +2132,7 @@ func (sq *sybilSquatter) handleStream(s network.Stream) {
 	w := protoio.NewDelimitedWriter(os)
 	truth := true
 	topic := "test"
-	err = w.WriteMsg(&pb.RPC{Subscriptions: []*pb.RPC_SubOpts{{Subscribe: &truth, Topicid: &topic}}})
+	err = w.WriteMsg(&pb.RPC{Subscriptions: []*pb.RPC_SubOpts{{Subscribe: &truth, TopicRef: &pb.RPC_SubOpts_Topicid{Topicid: topic}}}})
 	if err != nil {
 		if !sq.ignoreErrors {
 			panic(err)
@@ -2365,7 +2365,7 @@ func (iwe *iwantEverything) handleStream(s network.Stream) {
 	w := protoio.NewDelimitedWriter(os)
 	truth := true
 	topic := "test"
-	err = w.WriteMsg(&pb.RPC{Subscriptions: []*pb.RPC_SubOpts{{Subscribe: &truth, Topicid: &topic}}})
+	err = w.WriteMsg(&pb.RPC{Subscriptions: []*pb.RPC_SubOpts{{Subscribe: &truth, TopicRef: &pb.RPC_SubOpts_Topicid{Topicid: topic}}}})
 	if err != nil {
 		panic(err)
 	}
@@ -2398,7 +2398,7 @@ func (iwe *iwantEverything) handleStream(s network.Stream) {
 			// send a PRUNE for all grafts, so we don't get direct message deliveries
 			var prunes []*pb.ControlPrune
 			for _, graft := range rpc.Control.Graft {
-				prunes = append(prunes, &pb.ControlPrune{TopicID: graft.TopicID})
+				prunes = append(prunes, &pb.ControlPrune{TopicRef: &pb.ControlPrune_TopicID{TopicID: graft.GetTopicID()}})
 			}
 
 			var iwants []*pb.ControlIWant
@@ -2485,7 +2485,7 @@ func TestFragmentRPCFunction(t *testing.T) {
 	rpc.Subscriptions = []*pb.RPC_SubOpts{
 		{
 			Subscribe: &truth,
-			Topicid:   &topic,
+			TopicRef:  &pb.RPC_SubOpts_Topicid{Topicid: topic},
 		},
 	}
 	rpc.Publish = make([]*pb.Message, nMessages)
@@ -2519,8 +2519,8 @@ func TestFragmentRPCFunction(t *testing.T) {
 	// the control messages should be in a separate RPC at the end
 	// reuse RPC from prev test, but add a control message
 	rpc.Control = &pb.ControlMessage{
-		Graft: []*pb.ControlGraft{{TopicID: &topic}},
-		Prune: []*pb.ControlPrune{{TopicID: &topic}},
+		Graft: []*pb.ControlGraft{{TopicRef: &pb.ControlGraft_TopicID{TopicID: topic}}},
+		Prune: []*pb.ControlPrune{{TopicRef: &pb.ControlPrune_TopicID{TopicID: topic}}},
 		Ihave: []*pb.ControlIHave{{MessageIDs: []string{"foo"}}},
 		Iwant: []*pb.ControlIWant{{MessageIDs: []string{"bar"}}},
 	}
@@ -2707,8 +2707,8 @@ func (c *compressedRPC) append(rpc *pb.RPC) {
 		c.iwant = slices.DeleteFunc(c.iwant, func(e string) bool { return len(e) == 0 })
 	}
 	for _, ihave := range ctrl.Ihave {
-		c.ihave[*ihave.TopicID] = append(c.ihave[*ihave.TopicID], ihave.MessageIDs...)
-		c.ihave[*ihave.TopicID] = slices.DeleteFunc(c.ihave[*ihave.TopicID], func(e string) bool { return len(e) == 0 })
+		c.ihave[ihave.GetTopicID()] = append(c.ihave[ihave.GetTopicID()], ihave.MessageIDs...)
+		c.ihave[ihave.GetTopicID()] = slices.DeleteFunc(c.ihave[ihave.GetTopicID()], func(e string) bool { return len(e) == 0 })
 	}
 	for _, idontwant := range ctrl.Idontwant {
 		c.idontwant = append(c.idontwant, idontwant.MessageIDs...)
@@ -2722,7 +2722,7 @@ func (c *compressedRPC) append(rpc *pb.RPC) {
 		c.prune = append(c.prune, d)
 	}
 	for _, graft := range ctrl.Graft {
-		c.graft = append(c.graft, *graft.TopicID)
+		c.graft = append(c.graft, graft.GetTopicID())
 		c.graft = slices.DeleteFunc(c.graft, func(e string) bool { return len(e) == 0 })
 	}
 }
@@ -2860,8 +2860,8 @@ func TestGossipsubIdontwantSend(t *testing.T) {
 			if sub.GetSubscribe() {
 				// Reply by subcribing to the topic and grafting to the middle peer
 				writeMsg(&pb.RPC{
-					Subscriptions: []*pb.RPC_SubOpts{{Subscribe: sub.Subscribe, Topicid: sub.Topicid}},
-					Control:       &pb.ControlMessage{Graft: []*pb.ControlGraft{{TopicID: sub.Topicid}}},
+					Subscriptions: []*pb.RPC_SubOpts{{Subscribe: sub.Subscribe, TopicRef: &pb.RPC_SubOpts_Topicid{Topicid: sub.GetTopicid()}}},
+					Control:       &pb.ControlMessage{Graft: []*pb.ControlGraft{{TopicRef: &pb.ControlGraft_TopicID{TopicID: sub.GetTopicid()}}}},
 				})
 
 				go func() {
@@ -2954,8 +2954,8 @@ func TestGossipsubIdontwantReceive(t *testing.T) {
 			if sub.GetSubscribe() {
 				// Reply by subcribing to the topic and grafting to the middle peer
 				writeMsg(&pb.RPC{
-					Subscriptions: []*pb.RPC_SubOpts{{Subscribe: sub.Subscribe, Topicid: sub.Topicid}},
-					Control:       &pb.ControlMessage{Graft: []*pb.ControlGraft{{TopicID: sub.Topicid}}},
+					Subscriptions: []*pb.RPC_SubOpts{{Subscribe: sub.Subscribe, TopicRef: &pb.RPC_SubOpts_Topicid{Topicid: sub.GetTopicid()}}},
+					Control:       &pb.ControlMessage{Graft: []*pb.ControlGraft{{TopicRef: &pb.ControlGraft_TopicID{TopicID: sub.GetTopicid()}}}},
 				})
 
 				go func() {
@@ -3183,8 +3183,8 @@ func TestGossipsubIdontwantNonMesh(t *testing.T) {
 				// Reply by subcribing to the topic and pruning to the middle peer to make sure
 				// that it's not in the mesh
 				writeMsg(&pb.RPC{
-					Subscriptions: []*pb.RPC_SubOpts{{Subscribe: sub.Subscribe, Topicid: sub.Topicid}},
-					Control:       &pb.ControlMessage{Prune: []*pb.ControlPrune{{TopicID: sub.Topicid}}},
+					Subscriptions: []*pb.RPC_SubOpts{{Subscribe: sub.Subscribe, TopicRef: &pb.RPC_SubOpts_Topicid{Topicid: sub.GetTopicid()}}},
+					Control:       &pb.ControlMessage{Prune: []*pb.ControlPrune{{TopicRef: &pb.ControlPrune_TopicID{TopicID: sub.GetTopicid()}}}},
 				})
 
 				go func() {
@@ -3271,8 +3271,8 @@ func TestGossipsubIdontwantIncompat(t *testing.T) {
 			if sub.GetSubscribe() {
 				// Reply by subcribing to the topic and grafting to the middle peer
 				writeMsg(&pb.RPC{
-					Subscriptions: []*pb.RPC_SubOpts{{Subscribe: sub.Subscribe, Topicid: sub.Topicid}},
-					Control:       &pb.ControlMessage{Graft: []*pb.ControlGraft{{TopicID: sub.Topicid}}},
+					Subscriptions: []*pb.RPC_SubOpts{{Subscribe: sub.Subscribe, TopicRef: &pb.RPC_SubOpts_Topicid{Topicid: sub.GetTopicid()}}},
+					Control:       &pb.ControlMessage{Graft: []*pb.ControlGraft{{TopicRef: &pb.ControlGraft_TopicID{TopicID: sub.GetTopicid()}}}},
 				})
 
 				go func() {
@@ -3359,8 +3359,8 @@ func TestGossipsubIdontwantSmallMessage(t *testing.T) {
 				// Reply by subcribing to the topic and pruning to the middle peer to make sure
 				// that it's not in the mesh
 				writeMsg(&pb.RPC{
-					Subscriptions: []*pb.RPC_SubOpts{{Subscribe: sub.Subscribe, Topicid: sub.Topicid}},
-					Control:       &pb.ControlMessage{Graft: []*pb.ControlGraft{{TopicID: sub.Topicid}}},
+					Subscriptions: []*pb.RPC_SubOpts{{Subscribe: sub.Subscribe, TopicRef: &pb.RPC_SubOpts_Topicid{Topicid: sub.GetTopicid()}}},
+					Control:       &pb.ControlMessage{Graft: []*pb.ControlGraft{{TopicRef: &pb.ControlGraft_TopicID{TopicID: sub.GetTopicid()}}}},
 				})
 
 				go func() {
@@ -3464,8 +3464,8 @@ func TestGossipsubIdontwantBeforeIwant(t *testing.T) {
 				// Reply by subcribing to the topic and pruning to the middle peer to make sure
 				// that it's not in the mesh
 				writeMsg(&pb.RPC{
-					Subscriptions: []*pb.RPC_SubOpts{{Subscribe: sub.Subscribe, Topicid: sub.Topicid}},
-					Control:       &pb.ControlMessage{Prune: []*pb.ControlPrune{{TopicID: sub.Topicid}}},
+					Subscriptions: []*pb.RPC_SubOpts{{Subscribe: sub.Subscribe, TopicRef: &pb.RPC_SubOpts_Topicid{Topicid: sub.GetTopicid()}}},
+					Control:       &pb.ControlMessage{Prune: []*pb.ControlPrune{{TopicRef: &pb.ControlPrune_TopicID{TopicID: sub.GetTopicid()}}}},
 				})
 
 				go func() {
@@ -3549,8 +3549,8 @@ func TestGossipsubIdontwantClear(t *testing.T) {
 			if sub.GetSubscribe() {
 				// Reply by subcribing to the topic and grafting to the middle peer
 				writeMsg(&pb.RPC{
-					Subscriptions: []*pb.RPC_SubOpts{{Subscribe: sub.Subscribe, Topicid: sub.Topicid}},
-					Control:       &pb.ControlMessage{Graft: []*pb.ControlGraft{{TopicID: sub.Topicid}}},
+					Subscriptions: []*pb.RPC_SubOpts{{Subscribe: sub.Subscribe, TopicRef: &pb.RPC_SubOpts_Topicid{Topicid: sub.GetTopicid()}}},
+					Control:       &pb.ControlMessage{Graft: []*pb.ControlGraft{{TopicRef: &pb.ControlGraft_TopicID{TopicID: sub.GetTopicid()}}}},
 				})
 
 				go func() {

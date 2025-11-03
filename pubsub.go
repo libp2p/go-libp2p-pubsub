@@ -402,9 +402,9 @@ func (rpc *RPC) split(limit int) iter.Seq[RPC] {
 
 			for _, ihave := range ctl.GetIhave() {
 				if len(nextRPC.Control.Ihave) == 0 ||
-					nextRPC.Control.Ihave[len(nextRPC.Control.Ihave)-1].TopicID != ihave.TopicID {
+					nextRPC.Control.Ihave[len(nextRPC.Control.Ihave)-1].GetTopicID() != ihave.GetTopicID() {
 					// Start a new IHAVE if we are referencing a new topic ID
-					newIhave := &pb.ControlIHave{TopicID: ihave.TopicID}
+					newIhave := &pb.ControlIHave{TopicRef: ihave.TopicRef}
 					if nextRPC.Control.Ihave = append(nextRPC.Control.Ihave, newIhave); nextRPC.Size() > limit {
 						nextRPC.Control.Ihave = nextRPC.Control.Ihave[:len(nextRPC.Control.Ihave)-1]
 						if !yield(nextRPC) {
@@ -423,7 +423,7 @@ func (rpc *RPC) split(limit int) iter.Seq[RPC] {
 							return
 						}
 						nextRPC = RPC{RPC: pb.RPC{Control: &pb.ControlMessage{
-							Ihave: []*pb.ControlIHave{{TopicID: ihave.TopicID, MessageIDs: []string{msgID}}},
+							Ihave: []*pb.ControlIHave{{TopicRef: ihave.TopicRef, MessageIDs: []string{msgID}}},
 						}}, from: rpc.from}
 					}
 				}
@@ -1149,7 +1149,7 @@ func (p *PubSub) handleRemoveRelay(topic string) {
 // Only called from processLoop.
 func (p *PubSub) announce(topic string, sub bool) {
 	subopt := &pb.RPC_SubOpts{
-		Topicid:   &topic,
+		TopicRef:  &pb.RPC_SubOpts_Topicid{Topicid: topic},
 		Subscribe: &sub,
 	}
 
@@ -1193,7 +1193,7 @@ func (p *PubSub) doAnnounceRetry(pid peer.ID, topic string, sub bool) {
 	}
 
 	subopt := &pb.RPC_SubOpts{
-		Topicid:   &topic,
+		TopicRef:  &pb.RPC_SubOpts_Topicid{Topicid: topic},
 		Subscribe: &sub,
 	}
 

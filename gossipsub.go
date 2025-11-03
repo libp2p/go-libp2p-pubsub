@@ -1463,7 +1463,7 @@ func (gs *GossipSubRouter) Leave(topic string) {
 }
 
 func (gs *GossipSubRouter) sendGraft(p peer.ID, topic string) {
-	graft := []*pb.ControlGraft{{TopicID: &topic}}
+	graft := []*pb.ControlGraft{{TopicRef: &pb.ControlGraft_TopicID{TopicID: topic}}}
 	out := rpcWithControl(nil, nil, nil, graft, nil, nil)
 	gs.sendRPC(p, out, false)
 }
@@ -1925,7 +1925,7 @@ func (gs *GossipSubRouter) sendGraftPrune(tograft, toprune map[peer.ID][]string,
 			// topic here changes with every
 			// iteration of the slice.
 			copiedID := topic
-			graft = append(graft, &pb.ControlGraft{TopicID: &copiedID})
+			graft = append(graft, &pb.ControlGraft{TopicRef: &pb.ControlGraft_TopicID{TopicID: copiedID}})
 		}
 
 		var prune []*pb.ControlPrune
@@ -2007,7 +2007,7 @@ func (gs *GossipSubRouter) emitGossip(topic string, exclude map[peer.ID]struct{}
 			shuffleStrings(mids)
 			copy(peerMids, mids)
 		}
-		gs.enqueueGossip(p, &pb.ControlIHave{TopicID: &topic, MessageIDs: peerMids})
+		gs.enqueueGossip(p, &pb.ControlIHave{TopicRef: &pb.ControlIHave_TopicID{TopicID: topic}, MessageIDs: peerMids})
 	}
 }
 
@@ -2104,7 +2104,7 @@ func (gs *GossipSubRouter) piggybackControl(p peer.ID, out *RPC, ctl *pb.Control
 func (gs *GossipSubRouter) makePrune(p peer.ID, topic string, doPX bool, isUnsubscribe bool) *pb.ControlPrune {
 	if !gs.feature(GossipSubFeaturePX, gs.peers[p]) {
 		// GossipSub v1.0 -- no peer exchange, the peer won't be able to parse it anyway
-		return &pb.ControlPrune{TopicID: &topic}
+		return &pb.ControlPrune{TopicRef: &pb.ControlPrune_TopicID{TopicID: topic}}
 	}
 
 	backoff := uint64(gs.params.PruneBackoff / time.Second)
@@ -2130,7 +2130,7 @@ func (gs *GossipSubRouter) makePrune(p peer.ID, topic string, doPX bool, isUnsub
 		}
 	}
 
-	return &pb.ControlPrune{TopicID: &topic, Peers: px, Backoff: &backoff}
+	return &pb.ControlPrune{TopicRef: &pb.ControlPrune_TopicID{TopicID: topic}, Peers: px, Backoff: &backoff}
 }
 
 func (gs *GossipSubRouter) getPeers(topic string, count int, filter func(peer.ID) bool) []peer.ID {

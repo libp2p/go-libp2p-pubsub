@@ -20,15 +20,15 @@ func TestBasicSubscriptionFilter(t *testing.T) {
 	yes := true
 	subs := []*pb.RPC_SubOpts{
 		{
-			Topicid:   &topic1,
+			TopicRef:  &pb.RPC_SubOpts_Topicid{Topicid: topic1},
 			Subscribe: &yes,
 		},
 		{
-			Topicid:   &topic2,
+			TopicRef:  &pb.RPC_SubOpts_Topicid{Topicid: topic2},
 			Subscribe: &yes,
 		},
 		{
-			Topicid:   &topic3,
+			TopicRef:  &pb.RPC_SubOpts_Topicid{Topicid: topic3},
 			Subscribe: &yes,
 		},
 	}
@@ -109,24 +109,24 @@ func TestSubscriptionFilterDeduplication(t *testing.T) {
 	no := false
 	subs := []*pb.RPC_SubOpts{
 		{
-			Topicid:   &topic1,
+			TopicRef:  &pb.RPC_SubOpts_Topicid{Topicid: topic1},
 			Subscribe: &yes,
 		},
 		{
-			Topicid:   &topic1,
+			TopicRef:  &pb.RPC_SubOpts_Topicid{Topicid: topic1},
 			Subscribe: &yes,
 		},
 
 		{
-			Topicid:   &topic2,
+			TopicRef:  &pb.RPC_SubOpts_Topicid{Topicid: topic2},
 			Subscribe: &yes,
 		},
 		{
-			Topicid:   &topic2,
+			TopicRef:  &pb.RPC_SubOpts_Topicid{Topicid: topic2},
 			Subscribe: &no,
 		},
 		{
-			Topicid:   &topic3,
+			TopicRef:  &pb.RPC_SubOpts_Topicid{Topicid: topic3},
 			Subscribe: &yes,
 		},
 	}
