@@ -34,16 +34,13 @@ func WithTestExtension(c TestExtensionConfig) Option {
 func WithTopicTableExtension(c TopicTableExtensionConfig) Option {
 	return func(ps *PubSub) error {
 		if rt, ok := ps.rt.(*GossipSubRouter); ok {
-			rt.extensions.topicTableExtension = &topicTableExtension{}
+			e, err := newTopicTableExtension(c.topicBundles)
+			if err != nil {
+				return err
+			}
 
-			bundleHashes := make([][]byte, len(c.topicBundles))
-			for _, topics := range c.topicBundles {
-				hash := computeTopicBundleHash(topics)
-				bundleHashes = append(bundleHashes, hash[:])
-			}
-			rt.extensions.myExtensions.TopicTableExtension = &pubsub_pb.ExtTopicTable{
-				TopicBundleHashes: bundleHashes,
-			}
+			rt.extensions.myExtensions.TopicTableExtension = e.GetControlExtension()
+			rt.extensions.topicTableExtension = e
 		}
 		return nil
 	}
@@ -168,6 +165,21 @@ func (es *extensionsState) RemovePeer(id peer.ID) {
 func (es *extensionsState) extensionsAddPeer(id peer.ID) {
 	if es.myExtensions.TestExtension && es.peerExtensions[id].TestExtension {
 		es.testExtension.AddPeer(id)
+	}
+	if es.myExtensions.TopicTableExtension != nil && es.peerExtensions[id].TopicTableExtension != nil {
+		hashSlices := es.peerExtensions[id].TopicTableExtension.GetTopicBundleHashes()
+		// Parsing the slices of bytes, to get a slice of TopicBundleHash
+		bundleHashes := make([]TopicBundleHash, len(hashSlices))
+		for _, buf := range hashSlices {
+			hash, err := newTopicBundleHash(buf)
+			if err != nil {
+				// If there is an error parsing the hash, just quietly return
+				return
+			}
+			bundleHashes = append(bundleHashes, *hash)
+		}
+		// If there is an error adding a peer, just quietly skip it
+		_ = es.topicTableExtension.AddPeer(id, bundleHashes)
 	}
 }
 
