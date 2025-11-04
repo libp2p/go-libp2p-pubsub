@@ -217,6 +217,8 @@ type PubSubRouter interface {
 	// HandleRPC is invoked to process control messages in the RPC envelope.
 	// It is invoked after subscriptions and payload messages have been processed.
 	HandleRPC(*RPC)
+	// InterceptRPC intercepts any incoming RPC before doing anything. Routers may also modify the RPC.
+	InterceptRPC(*RPC) *RPC
 	// Publish is invoked to forward a new message that has been validated.
 	Publish(*Message)
 	// Join notifies the router that we want to receive and forward messages in a topic.
@@ -1267,6 +1269,9 @@ func (p *PubSub) notifyLeave(topic string, pid peer.ID) {
 }
 
 func (p *PubSub) handleIncomingRPC(rpc *RPC) {
+	// intercept and possibly modify the RPC by the router
+	rpc = p.rt.InterceptRPC(rpc)
+
 	// pass the rpc through app specific validation (if any available).
 	if p.appSpecificRpcInspector != nil {
 		// check if the RPC is allowed by the external inspector

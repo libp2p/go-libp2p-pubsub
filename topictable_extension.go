@@ -71,6 +71,53 @@ func (e *topicTableExtension) GetControlExtension() *pubsub_pb.ExtTopicTable {
 	}
 }
 
+func (e *topicTableExtension) InterceptRPC(rpc *RPC) *RPC {
+	// Replace all topic indices with topic names for this peer
+	id := rpc.from
+
+	// Replace in IHAVE messages
+	for _, ihave := range rpc.GetControl().GetIhave() {
+		if topicIndex, ok := ihave.GetTopicRef().(*pubsub_pb.ControlIHave_TopicIndex); ok {
+			if topicName, err := e.GetTopicName(id, int(topicIndex.TopicIndex)); err == nil {
+				ihave.TopicRef = &pubsub_pb.ControlIHave_TopicID{TopicID: topicName}
+			}
+		}
+	}
+	// Replace in GRAFT messages
+	for _, graft := range rpc.GetControl().GetGraft() {
+		if topicIndex, ok := graft.GetTopicRef().(*pubsub_pb.ControlGraft_TopicIndex); ok {
+			if topicName, err := e.GetTopicName(id, int(topicIndex.TopicIndex)); err == nil {
+				graft.TopicRef = &pubsub_pb.ControlGraft_TopicID{TopicID: topicName}
+			}
+		}
+	}
+	// Replace in PRUNE messages
+	for _, prune := range rpc.GetControl().GetPrune() {
+		if topicIndex, ok := prune.GetTopicRef().(*pubsub_pb.ControlPrune_TopicIndex); ok {
+			if topicName, err := e.GetTopicName(id, int(topicIndex.TopicIndex)); err == nil {
+				prune.TopicRef = &pubsub_pb.ControlPrune_TopicID{TopicID: topicName}
+			}
+		}
+	}
+	// Replace in published messages
+	for _, msg := range rpc.GetPublish() {
+		if topicIndex, ok := msg.GetTopicRef().(*pubsub_pb.Message_TopicIndex); ok {
+			if topicName, err := e.GetTopicName(id, int(topicIndex.TopicIndex)); err == nil {
+				msg.TopicRef = &pubsub_pb.Message_Topic{Topic: topicName}
+			}
+		}
+	}
+	// Replace in subscriptions
+	for _, sub := range rpc.GetSubscriptions() {
+		if topicIndex, ok := sub.GetTopicRef().(*pubsub_pb.RPC_SubOpts_TopicIndex); ok {
+			if topicName, err := e.GetTopicName(id, int(topicIndex.TopicIndex)); err == nil {
+				sub.TopicRef = &pubsub_pb.RPC_SubOpts_Topicid{Topicid: topicName}
+			}
+		}
+	}
+	return rpc
+}
+
 func (e *topicTableExtension) AddPeer(id peer.ID, bundles []TopicBundleHash) error {
 	if err := validateBundles(bundles); err != nil {
 		return err

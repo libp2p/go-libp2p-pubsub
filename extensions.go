@@ -130,6 +130,13 @@ func (es *extensionsState) HandleRPC(rpc *RPC) {
 	es.extensionsHandleRPC(rpc)
 }
 
+func (es *extensionsState) InterceptRPC(rpc *RPC) *RPC {
+	if es.myExtensions.TopicTableExtension != nil && es.peerExtensions[rpc.from].TopicTableExtension != nil {
+		rpc = es.topicTableExtension.InterceptRPC(rpc)
+	}
+	return rpc
+}
+
 func (es *extensionsState) AddPeer(id peer.ID, helloPacket *RPC) *RPC {
 	// Send our extensions as the first message.
 	helloPacket = es.myExtensions.ExtendHelloRPC(helloPacket)

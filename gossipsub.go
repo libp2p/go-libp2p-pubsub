@@ -780,6 +780,13 @@ loop:
 	return helloPacket
 }
 
+func (gs *GossipSubRouter) InterceptRPC(rpc *RPC) *RPC {
+	if gs.feature(GossipSubFeatureExtensions, gs.peers[rpc.from]) {
+		return gs.extensions.InterceptRPC(rpc)
+	}
+	return rpc
+}
+
 func (gs *GossipSubRouter) RemovePeer(p peer.ID) {
 	gs.logger.Debug("PEERDOWN: Remove disconnected peer", "peer", p)
 	gs.tracer.RemovePeer(p)
