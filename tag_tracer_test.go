@@ -105,9 +105,9 @@ func TestTagTracerDeliveryTags(t *testing.T) {
 		msg := &Message{
 			ReceivedFrom: p,
 			Message: &pb.Message{
-				From:  []byte(p),
-				Data:  []byte("hello"),
-				Topic: topic,
+				From:     []byte(p),
+				Data:     []byte("hello"),
+				TopicRef: &pb.Message_Topic{Topic: *topic},
 			},
 		}
 		tt.DeliverMessage(msg)
@@ -191,10 +191,10 @@ func TestTagTracerDeliveryTagsNearFirst(t *testing.T) {
 		msg := &Message{
 			ReceivedFrom: p,
 			Message: &pb.Message{
-				From:  []byte(p),
-				Data:  []byte(fmt.Sprintf("msg-%d", i)),
-				Topic: &topic,
-				Seqno: []byte(fmt.Sprintf("%d", i)),
+				From:     []byte(p),
+				Data:     []byte(fmt.Sprintf("msg-%d", i)),
+				TopicRef: &pb.Message_Topic{Topic: topic},
+				Seqno:    []byte(fmt.Sprintf("%d", i)),
 			},
 		}
 

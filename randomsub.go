@@ -51,6 +51,10 @@ func (rs *RandomSubRouter) AddPeer(p peer.ID, proto protocol.ID, hello *RPC) *RP
 	return hello
 }
 
+func (rs *RandomSubRouter) InterceptRPC(rpc *RPC) *RPC {
+	return rpc
+}
+
 func (rs *RandomSubRouter) RemovePeer(p peer.ID) {
 	rs.tracer.RemovePeer(p)
 	delete(rs.peers, p)

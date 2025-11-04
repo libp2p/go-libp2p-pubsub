@@ -290,10 +290,10 @@ func (t *Topic) validate(ctx context.Context, data []byte, opts ...PubOpt) (*Mes
 	}
 
 	m := &pb.Message{
-		Data:  data,
-		Topic: &t.topic,
-		From:  nil,
-		Seqno: nil,
+		Data:     data,
+		TopicRef: &pb.Message_Topic{Topic: t.topic},
+		From:     nil,
+		Seqno:    nil,
 	}
 	if pid != "" {
 		m.From = []byte(pid)

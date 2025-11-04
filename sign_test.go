@@ -30,10 +30,10 @@ func testSignVerify(t *testing.T, privk crypto.PrivKey) {
 	}
 	topic := "foo"
 	m := pb.Message{
-		Data:  []byte("abc"),
-		Topic: &topic,
-		From:  []byte(id),
-		Seqno: []byte("123"),
+		Data:     []byte("abc"),
+		TopicRef: &pb.Message_Topic{Topic: topic},
+		From:     []byte(id),
+		Seqno:    []byte("123"),
 	}
 	signMessage(id, privk, &m)
 	err = verifyMessageSignature(&m)

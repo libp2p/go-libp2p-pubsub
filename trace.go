@@ -77,13 +77,14 @@ func (t *pubsubTracer) PublishMessage(msg *Message) {
 	}
 
 	now := time.Now().UnixNano()
+	topic := msg.Message.GetTopic()
 	evt := &pb.TraceEvent{
 		Type:      pb.TraceEvent_PUBLISH_MESSAGE.Enum(),
 		PeerID:    []byte(t.pid),
 		Timestamp: &now,
 		PublishMessage: &pb.TraceEvent_PublishMessage{
 			MessageID: []byte(t.idGen.ID(msg)),
-			Topic:     msg.Message.Topic,
+			Topic:     &topic,
 		},
 	}
 
@@ -118,6 +119,7 @@ func (t *pubsubTracer) RejectMessage(msg *Message, reason string) {
 	}
 
 	now := time.Now().UnixNano()
+	topic := msg.GetTopic()
 	evt := &pb.TraceEvent{
 		Type:      pb.TraceEvent_REJECT_MESSAGE.Enum(),
 		PeerID:    []byte(t.pid),
@@ -126,7 +128,7 @@ func (t *pubsubTracer) RejectMessage(msg *Message, reason string) {
 			MessageID:    []byte(t.idGen.ID(msg)),
 			ReceivedFrom: []byte(msg.ReceivedFrom),
 			Reason:       &reason,
-			Topic:        msg.Topic,
+			Topic:        &topic,
 		},
 	}
 
@@ -149,6 +151,7 @@ func (t *pubsubTracer) DuplicateMessage(msg *Message) {
 	}
 
 	now := time.Now().UnixNano()
+	topic := msg.GetTopic()
 	evt := &pb.TraceEvent{
 		Type:      pb.TraceEvent_DUPLICATE_MESSAGE.Enum(),
 		PeerID:    []byte(t.pid),
@@ -156,7 +159,7 @@ func (t *pubsubTracer) DuplicateMessage(msg *Message) {
 		DuplicateMessage: &pb.TraceEvent_DuplicateMessage{
 			MessageID:    []byte(t.idGen.ID(msg)),
 			ReceivedFrom: []byte(msg.ReceivedFrom),
-			Topic:        msg.Topic,
+			Topic:        &topic,
 		},
 	}
 
@@ -179,13 +182,14 @@ func (t *pubsubTracer) DeliverMessage(msg *Message) {
 	}
 
 	now := time.Now().UnixNano()
+	topic := msg.GetTopic()
 	evt := &pb.TraceEvent{
 		Type:      pb.TraceEvent_DELIVER_MESSAGE.Enum(),
 		PeerID:    []byte(t.pid),
 		Timestamp: &now,
 		DeliverMessage: &pb.TraceEvent_DeliverMessage{
 			MessageID:    []byte(t.idGen.ID(msg)),
-			Topic:        msg.Topic,
+			Topic:        &topic,
 			ReceivedFrom: []byte(msg.ReceivedFrom),
 		},
 	}
@@ -343,18 +347,20 @@ func (t *pubsubTracer) traceRPCMeta(rpc *RPC) *pb.TraceEvent_RPCMeta {
 
 	var msgs []*pb.TraceEvent_MessageMeta
 	for _, m := range rpc.Publish {
+		topic := m.GetTopic()
 		msgs = append(msgs, &pb.TraceEvent_MessageMeta{
 			MessageID: []byte(t.idGen.RawID(m)),
-			Topic:     m.Topic,
+			Topic:     &topic,
 		})
 	}
 	rpcMeta.Messages = msgs
 
 	var subs []*pb.TraceEvent_SubMeta
 	for _, sub := range rpc.Subscriptions {
+		topic := sub.GetTopicid()
 		subs = append(subs, &pb.TraceEvent_SubMeta{
 			Subscribe: sub.Subscribe,
-			Topic:     sub.Topicid,
+			Topic:     &topic,
 		})
 	}
 	rpcMeta.Subscription = subs
@@ -366,8 +372,9 @@ func (t *pubsubTracer) traceRPCMeta(rpc *RPC) *pb.TraceEvent_RPCMeta {
 			for _, mid := range ctl.MessageIDs {
 				mids = append(mids, []byte(mid))
 			}
+			topic := ctl.GetTopicID()
 			ihave = append(ihave, &pb.TraceEvent_ControlIHaveMeta{
-				Topic:      ctl.TopicID,
+				Topic:      &topic,
 				MessageIDs: mids,
 			})
 		}
@@ -385,8 +392,9 @@ func (t *pubsubTracer) traceRPCMeta(rpc *RPC) *pb.TraceEvent_RPCMeta {
 
 		var graft []*pb.TraceEvent_ControlGraftMeta
 		for _, ctl := range rpc.Control.Graft {
+			topic := ctl.GetTopicID()
 			graft = append(graft, &pb.TraceEvent_ControlGraftMeta{
-				Topic: ctl.TopicID,
+				Topic: &topic,
 			})
 		}
 
@@ -396,8 +404,9 @@ func (t *pubsubTracer) traceRPCMeta(rpc *RPC) *pb.TraceEvent_RPCMeta {
 			for _, pi := range ctl.Peers {
 				peers = append(peers, pi.PeerID)
 			}
+			topic := ctl.GetTopicID()
 			prune = append(prune, &pb.TraceEvent_ControlPruneMeta{
-				Topic: ctl.TopicID,
+				Topic: &topic,
 				Peers: peers,
 			})
 		}

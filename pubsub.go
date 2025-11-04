@@ -217,6 +217,8 @@ type PubSubRouter interface {
 	// HandleRPC is invoked to process control messages in the RPC envelope.
 	// It is invoked after subscriptions and payload messages have been processed.
 	HandleRPC(*RPC)
+	// InterceptRPC intercepts any incoming RPC before doing anything. Routers may also modify the RPC.
+	InterceptRPC(*RPC) *RPC
 	// Publish is invoked to forward a new message that has been validated.
 	Publish(*Message)
 	// Join notifies the router that we want to receive and forward messages in a topic.
@@ -402,9 +404,9 @@ func (rpc *RPC) split(limit int) iter.Seq[RPC] {
 
 			for _, ihave := range ctl.GetIhave() {
 				if len(nextRPC.Control.Ihave) == 0 ||
-					nextRPC.Control.Ihave[len(nextRPC.Control.Ihave)-1].TopicID != ihave.TopicID {
+					nextRPC.Control.Ihave[len(nextRPC.Control.Ihave)-1].GetTopicID() != ihave.GetTopicID() {
 					// Start a new IHAVE if we are referencing a new topic ID
-					newIhave := &pb.ControlIHave{TopicID: ihave.TopicID}
+					newIhave := &pb.ControlIHave{TopicRef: ihave.TopicRef}
 					if nextRPC.Control.Ihave = append(nextRPC.Control.Ihave, newIhave); nextRPC.Size() > limit {
 						nextRPC.Control.Ihave = nextRPC.Control.Ihave[:len(nextRPC.Control.Ihave)-1]
 						if !yield(nextRPC) {
@@ -423,7 +425,7 @@ func (rpc *RPC) split(limit int) iter.Seq[RPC] {
 							return
 						}
 						nextRPC = RPC{RPC: pb.RPC{Control: &pb.ControlMessage{
-							Ihave: []*pb.ControlIHave{{TopicID: ihave.TopicID, MessageIDs: []string{msgID}}},
+							Ihave: []*pb.ControlIHave{{TopicRef: ihave.TopicRef, MessageIDs: []string{msgID}}},
 						}}, from: rpc.from}
 					}
 				}
@@ -1149,7 +1151,7 @@ func (p *PubSub) handleRemoveRelay(topic string) {
 // Only called from processLoop.
 func (p *PubSub) announce(topic string, sub bool) {
 	subopt := &pb.RPC_SubOpts{
-		Topicid:   &topic,
+		TopicRef:  &pb.RPC_SubOpts_Topicid{Topicid: topic},
 		Subscribe: &sub,
 	}
 
@@ -1193,7 +1195,7 @@ func (p *PubSub) doAnnounceRetry(pid peer.ID, topic string, sub bool) {
 	}
 
 	subopt := &pb.RPC_SubOpts{
-		Topicid:   &topic,
+		TopicRef:  &pb.RPC_SubOpts_Topicid{Topicid: topic},
 		Subscribe: &sub,
 	}
 
@@ -1267,6 +1269,9 @@ func (p *PubSub) notifyLeave(topic string, pid peer.ID) {
 }
 
 func (p *PubSub) handleIncomingRPC(rpc *RPC) {
+	// intercept and possibly modify the RPC by the router
+	rpc = p.rt.InterceptRPC(rpc)
+
 	// pass the rpc through app specific validation (if any available).
 	if p.appSpecificRpcInspector != nil {
 		// check if the RPC is allowed by the external inspector

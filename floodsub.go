@@ -46,6 +46,10 @@ func (fs *FloodSubRouter) AddPeer(p peer.ID, proto protocol.ID, hello *RPC) *RPC
 	return hello
 }
 
+func (fs *FloodSubRouter) InterceptRPC(rpc *RPC) *RPC {
+	return rpc
+}
+
 func (fs *FloodSubRouter) RemovePeer(p peer.ID) {
 	fs.tracer.RemovePeer(p)
 }
