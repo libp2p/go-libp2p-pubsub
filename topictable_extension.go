@@ -79,6 +79,57 @@ func (e *topicTableExtension) AddPeer(id peer.ID, bundles []TopicBundleHash) err
 	return nil
 }
 
+func (e *topicTableExtension) ExtendRPC(id peer.ID, rpc *RPC) *RPC {
+	// If it's a hello packet, don't replace the topic names with topic indices
+	if rpc.GetControl().GetExtensions().GetTopicTableExtension() != nil {
+		return rpc
+	}
+
+	// Replace all topic names with topic indices for this peer
+
+	// Replace in IHAVE messages
+	for _, ihave := range rpc.GetControl().GetIhave() {
+		if topicID, ok := ihave.GetTopicRef().(*pubsub_pb.ControlIHave_TopicID); ok {
+			if idx, err := e.GetTopicIndex(id, topicID.TopicID); err == nil {
+				ihave.TopicRef = &pubsub_pb.ControlIHave_TopicIndex{TopicIndex: uint32(idx)}
+			}
+		}
+	}
+	// Replace in GRAFT messages
+	for _, graft := range rpc.GetControl().GetGraft() {
+		if topicID, ok := graft.GetTopicRef().(*pubsub_pb.ControlGraft_TopicID); ok {
+			if idx, err := e.GetTopicIndex(id, topicID.TopicID); err == nil {
+				graft.TopicRef = &pubsub_pb.ControlGraft_TopicIndex{TopicIndex: uint32(idx)}
+			}
+		}
+	}
+	// Replace in PRUNE messages
+	for _, prune := range rpc.GetControl().GetPrune() {
+		if topicID, ok := prune.GetTopicRef().(*pubsub_pb.ControlPrune_TopicID); ok {
+			if idx, err := e.GetTopicIndex(id, topicID.TopicID); err == nil {
+				prune.TopicRef = &pubsub_pb.ControlPrune_TopicIndex{TopicIndex: uint32(idx)}
+			}
+		}
+	}
+	// Replace in published messages
+	for _, msg := range rpc.GetPublish() {
+		if topic, ok := msg.GetTopicRef().(*pubsub_pb.Message_Topic); ok {
+			if idx, err := e.GetTopicIndex(id, topic.Topic); err == nil {
+				msg.TopicRef = &pubsub_pb.Message_TopicIndex{TopicIndex: uint32(idx)}
+			}
+		}
+	}
+	// Replace in subscriptions
+	for _, sub := range rpc.GetSubscriptions() {
+		if topicid, ok := sub.GetTopicRef().(*pubsub_pb.RPC_SubOpts_Topicid); ok {
+			if idx, err := e.GetTopicIndex(id, topicid.Topicid); err == nil {
+				sub.TopicRef = &pubsub_pb.RPC_SubOpts_TopicIndex{TopicIndex: uint32(idx)}
+			}
+		}
+	}
+	return rpc
+}
+
 // Note that topicIndex is 1-based
 func (e *topicTableExtension) GetTopicName(id peer.ID, topicIndex int) (string, error) {
 	if topicIndex < 1 {

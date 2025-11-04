@@ -1532,6 +1532,10 @@ func (gs *GossipSubRouter) doDropRPC(rpc *RPC, p peer.ID, reason string) {
 
 func (gs *GossipSubRouter) doSendRPC(rpc *RPC, p peer.ID, q *rpcQueue, urgent bool) {
 	var err error
+	// let extensions modify the rpc before sending if the other peer supports extensions
+	if gs.feature(GossipSubFeatureExtensions, gs.peers[p]) {
+		rpc = gs.extensions.ExtendRPC(p, rpc)
+	}
 	if urgent {
 		err = q.UrgentPush(rpc, false)
 	} else {

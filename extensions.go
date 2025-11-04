@@ -62,7 +62,7 @@ func peerExtensionsFromRPC(rpc *RPC) PeerExtensions {
 	return out
 }
 
-func (pe *PeerExtensions) ExtendRPC(rpc *RPC) *RPC {
+func (pe *PeerExtensions) ExtendHelloRPC(rpc *RPC) *RPC {
 	if pe.TestExtension {
 		if rpc.Control == nil {
 			rpc.Control = &pubsub_pb.ControlMessage{}
@@ -132,7 +132,7 @@ func (es *extensionsState) HandleRPC(rpc *RPC) {
 
 func (es *extensionsState) AddPeer(id peer.ID, helloPacket *RPC) *RPC {
 	// Send our extensions as the first message.
-	helloPacket = es.myExtensions.ExtendRPC(helloPacket)
+	helloPacket = es.myExtensions.ExtendHelloRPC(helloPacket)
 
 	es.sentExtensions[id] = struct{}{}
 	if _, ok := es.peerExtensions[id]; ok {
@@ -158,6 +158,13 @@ func (es *extensionsState) RemovePeer(id peer.ID) {
 	if len(es.sentExtensions) == 0 {
 		es.sentExtensions = make(map[peer.ID]struct{})
 	}
+}
+
+func (es *extensionsState) ExtendRPC(id peer.ID, rpc *RPC) *RPC {
+	if es.myExtensions.TopicTableExtension != nil && es.peerExtensions[id].TopicTableExtension != nil {
+		rpc = es.topicTableExtension.ExtendRPC(id, rpc)
+	}
+	return rpc
 }
 
 // extensionsAddPeer is only called once we've both sent and received the
