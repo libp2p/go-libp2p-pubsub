@@ -15,7 +15,7 @@ type TestExtensionConfig struct {
 }
 
 type TopicTableExtensionConfig struct {
-	topicBundles [][]string
+	TopicBundles [][]string
 }
 
 func WithTestExtension(c TestExtensionConfig) Option {
@@ -34,7 +34,7 @@ func WithTestExtension(c TestExtensionConfig) Option {
 func WithTopicTableExtension(c TopicTableExtensionConfig) Option {
 	return func(ps *PubSub) error {
 		if rt, ok := ps.rt.(*GossipSubRouter); ok {
-			e, err := newTopicTableExtension(c.topicBundles)
+			e, err := newTopicTableExtension(c.TopicBundles)
 			if err != nil {
 				return err
 			}

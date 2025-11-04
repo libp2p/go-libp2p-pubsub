@@ -4394,3 +4394,118 @@ func TestTestExtension(t *testing.T) {
 		t.Fatal("TestExtension not received")
 	}
 }
+
+func TestTopicTableExtension(t *testing.T) {
+	hosts := getDefaultHosts(t, 2)
+	topicName := "foobar"
+	c := TopicTableExtensionConfig{
+		TopicBundles: [][]string{{topicName}},
+	}
+	psub := getGossipsub(context.Background(), hosts[0], WithTopicTableExtension(c))
+	topic, err := psub.Join(topicName)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	psub1 := newSkeletonGossipsub(ctx, hosts[1])
+	e1, err := newTopicTableExtension(c.TopicBundles)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	connect(t, hosts[0], hosts[1])
+
+	const timeout = 3 * time.Second
+	select {
+	case <-time.After(timeout):
+		t.Fatal("Timeout")
+	case r := <-psub1.outRPC:
+		if r.GetControl().GetExtensions().GetTopicTableExtension() == nil {
+			t.Fatal("Unexpected RPC. First RPC should contain the Topic Table Extension Control Message")
+		}
+	}
+
+	// hello packet
+	truth := true
+	psub1.inRPC <- &pb.RPC{
+		Subscriptions: []*pb.RPC_SubOpts{{Subscribe: &truth, TopicRef: &pb.RPC_SubOpts_Topicid{Topicid: topicName}}},
+		Control: &pb.ControlMessage{
+			Extensions: &pb.ControlExtensions{
+				TopicTableExtension: e1.GetControlExtension(),
+			},
+		},
+	}
+
+	// wait for the first host to build the topic table
+	time.Sleep(time.Second * 1)
+
+	// publish a message
+	testMsg := []byte("test-message")
+	topic.Publish(ctx, testMsg)
+
+	// make sure that the topic ref in the message is an inex
+	select {
+	case <-time.After(timeout):
+		t.Fatal("Timeout")
+	case r := <-psub1.outRPC:
+		msgs := r.GetPublish()
+		if len(msgs) != 1 {
+			t.Fatal("one published message is expected")
+		}
+		msg := msgs[0]
+
+		if _, ok := msg.GetTopicRef().(*pb.Message_TopicIndex); !ok {
+			t.Fatal("the topic index is expected")
+		}
+		if !bytes.Equal(msg.GetData(), testMsg) {
+			t.Fatal("got wrong data")
+		}
+	}
+}
+
+func TestTopicTableExtensionDense(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	hosts := getDefaultHosts(t, 20)
+	topicName := "foobar"
+
+	c := TopicTableExtensionConfig{
+		TopicBundles: [][]string{{topicName}},
+	}
+	psubs := getGossipsubs(ctx, hosts, WithTopicTableExtension(c))
+
+	var msgs []*Subscription
+	for _, ps := range psubs {
+		subch, err := ps.Subscribe(topicName)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		msgs = append(msgs, subch)
+	}
+
+	denseConnect(t, hosts)
+
+	// wait for heartbeats to build mesh
+	time.Sleep(time.Second * 2)
+
+	for i := 0; i < 100; i++ {
+		msg := []byte(fmt.Sprintf("%d it's not a floooooood %d", i, i))
+
+		owner := mrand.Intn(len(psubs))
+
+		psubs[owner].Publish("foobar", msg)
+
+		for _, sub := range msgs {
+			got, err := sub.Next(ctx)
+			if err != nil {
+				t.Fatal(sub.err)
+			}
+			if !bytes.Equal(msg, got.Data) {
+				t.Fatal("got wrong message!")
+			}
+		}
+	}
+}
