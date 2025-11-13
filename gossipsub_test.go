@@ -5049,3 +5049,187 @@ func TestSkipPublishingToPeersRequestingPartialMessages(t *testing.T) {
 	case <-time.After(2 * time.Second):
 	}
 }
+
+func TestPairwiseInteractionWithPartialMessages(t *testing.T) {
+	type PartialMessageStatus int
+	const (
+		NoPartialMessages PartialMessageStatus = iota
+		PeerSupportsPartialMessages
+		PeerRequestsPartialMessages
+	)
+
+	type TestCase struct {
+		hostSupport  []PartialMessageStatus
+		publisherIdx int
+	}
+
+	var tcs []TestCase
+	for _, a := range []PartialMessageStatus{NoPartialMessages, PeerSupportsPartialMessages, PeerRequestsPartialMessages} {
+		for _, b := range []PartialMessageStatus{NoPartialMessages, PeerSupportsPartialMessages, PeerRequestsPartialMessages} {
+			for i := range 2 {
+				tcs = append(tcs, TestCase{hostSupport: []PartialMessageStatus{a, b}, publisherIdx: i})
+			}
+		}
+	}
+
+	for _, tc := range tcs {
+		t.Run(fmt.Sprintf("Host Support: %v. Publisher: %d", tc.hostSupport, tc.publisherIdx), func(t *testing.T) {
+			topic := "test-topic"
+			hostCount := len(tc.hostSupport)
+			hosts := getDefaultHosts(t, hostCount)
+			topics := make([]*Topic, 0, len(hosts))
+			psubs := make([]*PubSub, 0, len(hosts))
+
+			gossipsubCtx, closeGossipsub := context.WithCancel(context.Background())
+			defer closeGossipsub()
+			go func() {
+				<-gossipsubCtx.Done()
+				for _, h := range hosts {
+					h.Close()
+				}
+			}()
+
+			partialExt := make([]*partialmessages.PartialMessageExtension, hostCount)
+			logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelDebug}))
+
+			// A list of maps from topic+groupID to partialMessage. One map per peer
+			// var partialMessageStoreMu sync.Mutex
+			partialMessageStore := make([]map[string]*minimalTestPartialMessage, hostCount)
+			for i := range hostCount {
+				partialMessageStore[i] = make(map[string]*minimalTestPartialMessage)
+			}
+
+			receivedMessage := make(chan struct{}, hostCount)
+
+			for i := range partialExt {
+				if tc.hostSupport[i] == NoPartialMessages {
+					continue
+				}
+				partialExt[i] = &partialmessages.PartialMessageExtension{
+					Logger: logger.With("id", i),
+					ValidateRPC: func(from peer.ID, rpc *pb.PartialMessagesExtension) error {
+						// No validation. Only for this test. In production you should
+						// have some basic fast rules here.
+						return nil
+					},
+					MergePartsMetadata: func(_ string, left, right partialmessages.PartsMetadata) partialmessages.PartsMetadata {
+						return partialmessages.MergeBitmap(left, right)
+					},
+					OnIncomingRPC: func(from peer.ID, rpc *pb.PartialMessagesExtension) error {
+						if tc.hostSupport[i] == PeerSupportsPartialMessages && len(rpc.PartialMessage) > 0 {
+							panic("This host should not have received partial message data")
+						}
+
+						groupID := rpc.GroupID
+						pm, ok := partialMessageStore[i][topic+string(groupID)]
+						if !ok {
+							pm = &minimalTestPartialMessage{
+								Group: groupID,
+							}
+							partialMessageStore[i][topic+string(groupID)] = pm
+						}
+						prevComplete := pm.complete()
+						if publishOpts := pm.onIncomingRPC(from, rpc); publishOpts != nil {
+							if !prevComplete && pm.complete() {
+								t.Log("host", i, "received partial message")
+
+								receivedMessage <- struct{}{}
+							}
+
+							go psubs[i].PublishPartialMessage(topic, pm, *publishOpts)
+						}
+						return nil
+					},
+				}
+			}
+
+			for i, h := range hosts {
+				var opts []Option
+				var topicOpts []TopicOpt
+				switch tc.hostSupport[i] {
+				case NoPartialMessages:
+				case PeerSupportsPartialMessages:
+					opts = append(opts, WithPartialMessagesExtension(partialExt[i]))
+					topicOpts = append(topicOpts, SupportsPartialMessages())
+				case PeerRequestsPartialMessages:
+					opts = append(opts, WithPartialMessagesExtension(partialExt[i]))
+					topicOpts = append(topicOpts, RequestPartialMessages())
+				}
+
+				psub := getGossipsub(gossipsubCtx, h, opts...)
+				topic, err := psub.Join(topic, topicOpts...)
+				if err != nil {
+					t.Fatal(err)
+				}
+				topics = append(topics, topic)
+				sub, err := topic.Subscribe()
+				if err != nil {
+					t.Fatal(err)
+				}
+				psubs = append(psubs, psub)
+				go func() {
+					_, err := sub.Next(gossipsubCtx)
+					if err == context.Canceled {
+						return
+					}
+					if err != nil {
+						panic(err)
+					}
+
+					t.Log("host", i, "received message")
+					receivedMessage <- struct{}{}
+				}()
+			}
+
+			denseConnect(t, hosts)
+			time.Sleep(time.Second)
+
+			group := []byte("test-group")
+			msg1 := &minimalTestPartialMessage{
+				Group: group,
+				Parts: [2][]byte{
+					[]byte("Hello"),
+					[]byte("World"),
+				},
+			}
+
+			for i := range hostCount {
+				if i != tc.publisherIdx {
+					continue
+				}
+
+				partialMessageStore[i][topic+string(group)] = msg1
+
+				encoded, err := msg1.PartialMessageBytes(partialmessages.PartsMetadata([]byte{0}))
+				if err != nil {
+					t.Fatal(err)
+				}
+				err = topics[i].Publish(context.Background(), encoded)
+				if err != nil {
+					t.Fatal(err)
+				}
+
+				if tc.hostSupport[i] != NoPartialMessages {
+					err = psubs[i].PublishPartialMessage(topic, msg1, partialmessages.PublishOptions{})
+					if err != nil {
+						t.Fatal(err)
+					}
+				}
+			}
+
+			for range hostCount {
+				select {
+				case <-receivedMessage:
+				case <-time.After(time.Second):
+					t.Fatalf("At least one message was not received")
+				}
+			}
+
+			select {
+			case <-receivedMessage:
+				t.Fatalf("An extra message was received")
+			case <-time.After(100 * time.Millisecond):
+			}
+		})
+	}
+}
