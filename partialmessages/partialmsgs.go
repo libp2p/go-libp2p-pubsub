@@ -67,24 +67,24 @@ func (ps *peerState) IsZero() bool {
 	return ps.partsMetadata == nil && ps.sentPartsMetadata == nil
 }
 
-type partialMessageStatePerTopicGroup struct {
+type partialMessageStatePerGroupPerTopic struct {
 	peerState   map[peer.ID]*peerState
 	groupTTL    int
 	initiatedBy peer.ID // zero value if we initiated the group
 }
 
-func newPartialMessageStatePerTopicGroup(groupTTL int) *partialMessageStatePerTopicGroup {
-	return &partialMessageStatePerTopicGroup{
+func newPartialMessageStatePerTopicGroup(groupTTL int) *partialMessageStatePerGroupPerTopic {
+	return &partialMessageStatePerGroupPerTopic{
 		peerState: make(map[peer.ID]*peerState),
 		groupTTL:  max(groupTTL, minGroupTTL),
 	}
 }
 
-func (s *partialMessageStatePerTopicGroup) remotePeerInitiated() bool {
+func (s *partialMessageStatePerGroupPerTopic) remotePeerInitiated() bool {
 	return s.initiatedBy != ""
 }
 
-func (s *partialMessageStatePerTopicGroup) clearPeerMetadata(peerID peer.ID) {
+func (s *partialMessageStatePerGroupPerTopic) clearPeerMetadata(peerID peer.ID) {
 	if peerState, ok := s.peerState[peerID]; ok {
 		peerState.partsMetadata = nil
 		if peerState.IsZero() {
@@ -131,9 +131,8 @@ type PartialMessageExtension struct {
 	// publishing a partial message for the group.
 	GroupTTLByHeatbeat int
 
-	// map topic -> map[group]partialMessageStatePerTopicGroup
-	// TODO rename this to ...PerGroupPerTopic
-	statePerTopicPerGroup map[string]map[string]*partialMessageStatePerTopicGroup
+	// map topic -> map[group]partialMessageStatePerGroupPerTopic
+	statePerTopicPerGroup map[string]map[string]*partialMessageStatePerGroupPerTopic
 
 	// map[topic]counter
 	peerInitiatedGroupCounter map[string]*peerInitiatedGroupCounterState
@@ -155,10 +154,10 @@ type Router interface {
 	PeerRequestsPartial(peer peer.ID, topic string) bool
 }
 
-func (e *PartialMessageExtension) groupState(topic string, groupID []byte, peerInitiated bool, from peer.ID) (*partialMessageStatePerTopicGroup, error) {
+func (e *PartialMessageExtension) groupState(topic string, groupID []byte, peerInitiated bool, from peer.ID) (*partialMessageStatePerGroupPerTopic, error) {
 	statePerTopic, ok := e.statePerTopicPerGroup[topic]
 	if !ok {
-		statePerTopic = make(map[string]*partialMessageStatePerTopicGroup)
+		statePerTopic = make(map[string]*partialMessageStatePerGroupPerTopic)
 		e.statePerTopicPerGroup[topic] = statePerTopic
 	}
 	if _, ok := e.peerInitiatedGroupCounter[topic]; !ok {
@@ -207,7 +206,7 @@ func (e *PartialMessageExtension) Init(router Router) error {
 		e.PeerInitiatedGroupLimitPerTopicPerPeer = defaultPeerInitiatedGroupLimitPerTopicPerPeer
 	}
 
-	e.statePerTopicPerGroup = make(map[string]map[string]*partialMessageStatePerTopicGroup)
+	e.statePerTopicPerGroup = make(map[string]map[string]*partialMessageStatePerGroupPerTopic)
 	e.peerInitiatedGroupCounter = make(map[string]*peerInitiatedGroupCounterState)
 
 	return nil
