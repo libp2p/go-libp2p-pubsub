@@ -176,13 +176,22 @@ func (p *PubSub) handleSendingMessages(ctx context.Context, s network.Stream, ou
 		if err != nil {
 			return err
 		}
-
-		_, err = s.Write(buf)
-		if err != nil {
-			p.rpcLogger.Debug("failed to send message", "peer", s.Conn().RemotePeer(), "rpc", rpc, "err", err)
-			return err
+		p.rpcLogger.Error("starting sending message to", "peer", s.Conn().RemotePeer())
+		writeSize := 10 * 1024
+		start := time.Now()
+		for len(buf) > 0 {
+			if writeSize > len(buf) {
+				writeSize = len(buf)
+			}
+			_, err = s.Write(buf[:writeSize])
+			if err != nil {
+				p.rpcLogger.Debug("failed to send message", "peer", s.Conn().RemotePeer(), "rpc", rpc, "err", err)
+				return err
+			}
+			buf = buf[writeSize:]
+			time.Sleep(1 * time.Microsecond)
 		}
-		p.rpcLogger.Debug("sent", "peer", s.Conn().RemotePeer(), "rpc", rpc)
+		p.rpcLogger.Error("sent", "peer", s.Conn().RemotePeer(), "rpc", rpc, "took", time.Since(start))
 		return nil
 	}
 

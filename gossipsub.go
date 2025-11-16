@@ -1297,6 +1297,7 @@ func (gs *GossipSubRouter) PublishBatch(messages []*Message, opts *BatchPublishO
 
 func (gs *GossipSubRouter) Publish(msg *Message) {
 	for p, rpc := range gs.rpcs(msg) {
+		gs.p.logger.Error("send rpcs done")
 		gs.sendRPC(p, rpc, false)
 	}
 }
@@ -1500,6 +1501,7 @@ func (gs *GossipSubRouter) sendRPC(p peer.ID, out *RPC, urgent bool) {
 
 	q, ok := gs.p.peers[p]
 	if !ok {
+		fmt.Println("PANIC!")
 		return
 	}
 
@@ -1535,6 +1537,7 @@ func (gs *GossipSubRouter) doSendRPC(rpc *RPC, p peer.ID, q *rpcQueue, urgent bo
 	if urgent {
 		err = q.UrgentPush(rpc, false)
 	} else {
+		gs.p.logger.Error("enqueuing RPC", "peer", p)
 		err = q.Push(rpc, false)
 	}
 	if err != nil {
