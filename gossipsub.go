@@ -96,6 +96,9 @@ type GossipSubParams struct {
 	// D should be set somewhere between Dlo and Dhi.
 	D int
 
+	// Dforward sets the number of peers we forward a message to
+	Dforward int
+
 	// Dlo sets the lower bound on the number of peers we keep in a GossipSub topic mesh.
 	// If we have fewer than Dlo peers, we will attempt to graft some more into the mesh at
 	// the next heartbeat.
@@ -329,6 +332,7 @@ func DefaultGossipSubRouter(h host.Host) *GossipSubRouter {
 func DefaultGossipSubParams() GossipSubParams {
 	return GossipSubParams{
 		D:                         GossipSubD,
+		Dforward:                  GossipSubD,
 		Dlo:                       GossipSubDlo,
 		Dhi:                       GossipSubDhi,
 		Dscore:                    GossipSubDscore,
@@ -1302,7 +1306,12 @@ func (gs *GossipSubRouter) PublishBatch(messages []*Message, opts *BatchPublishO
 }
 
 func (gs *GossipSubRouter) Publish(msg *Message) {
+	limit := gs.params.Dforward
 	for p, rpc := range gs.rpcs(msg) {
+		limit--
+		if limit < 0 {
+			break
+		}
 		gs.sendRPC(p, rpc, false)
 	}
 }
