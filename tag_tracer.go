@@ -261,7 +261,7 @@ func (t *tagTracer) RejectMessage(msg *Message, reason string) {
 
 func (t *tagTracer) RemovePeer(peer.ID)                {}
 func (t *tagTracer) ThrottlePeer(p peer.ID)            {}
-func (t *tagTracer) RecvRPC(rpc *RPC)                  {}
+func (t *tagTracer) RecvRPC(from peer.ID, rpc *RPC)    {}
 func (t *tagTracer) SendRPC(rpc *RPC, p peer.ID)       {}
 func (t *tagTracer) DropRPC(rpc *RPC, p peer.ID)       {}
 func (t *tagTracer) UndeliverableMessage(msg *Message) {}

@@ -449,7 +449,7 @@ func (pg *peerGater) DuplicateMessage(msg *Message) {
 
 func (pg *peerGater) ThrottlePeer(p peer.ID) {}
 
-func (pg *peerGater) RecvRPC(rpc *RPC) {}
+func (pg *peerGater) RecvRPC(from peer.ID, rpc *RPC) {}
 
 func (pg *peerGater) SendRPC(rpc *RPC, p peer.ID) {}
 

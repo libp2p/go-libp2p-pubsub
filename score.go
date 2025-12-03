@@ -834,7 +834,7 @@ func (ps *peerScore) DuplicateMessage(msg *Message) {
 
 func (ps *peerScore) ThrottlePeer(p peer.ID) {}
 
-func (ps *peerScore) RecvRPC(rpc *RPC) {}
+func (ps *peerScore) RecvRPC(from peer.ID, rpc *RPC) {}
 
 func (ps *peerScore) SendRPC(rpc *RPC, p peer.ID) {}
 
