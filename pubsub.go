@@ -17,6 +17,7 @@ import (
 	"github.com/libp2p/go-libp2p-pubsub/partialmessages"
 	pb "github.com/libp2p/go-libp2p-pubsub/pb"
 	"github.com/libp2p/go-libp2p-pubsub/timecache"
+	"go.opentelemetry.io/otel/metric/noop"
 
 	"github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/libp2p/go-libp2p/core/discovery"
@@ -64,6 +65,7 @@ type PubSub struct {
 	//
 	// See: https://golang.org/pkg/sync/atomic/#pkg-note-BUG
 	counter uint64
+	metrics metrics
 
 	host host.Host
 
@@ -554,6 +556,7 @@ func NewPubSub(ctx context.Context, h host.Host, rt PubSubRouter, opts ...Option
 		seenMsgStrategy:       TimeCacheStrategy,
 		idGen:                 newMsgIdGenerator(),
 		counter:               uint64(time.Now().UnixNano()),
+		metrics:               metrics{MeterProvider: noop.MeterProvider{}},
 	}
 
 	for _, opt := range opts {
@@ -566,6 +569,9 @@ func NewPubSub(ctx context.Context, h host.Host, rt PubSubRouter, opts ...Option
 	if ps.rpcLogger == nil {
 		ps.rpcLogger = slog.New(ps.logger.Handler().WithAttrs([]slog.Attr{slog.String("system", "pubsub/rpc")}))
 	}
+
+	meter := ps.metrics.MeterProvider.Meter("libp2p-pubsub")
+	ps.metrics.init(meter)
 
 	if ps.signPolicy.mustSign() {
 		if ps.signID == "" {

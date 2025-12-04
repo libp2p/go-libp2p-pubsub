@@ -24,6 +24,8 @@ import (
 	"github.com/libp2p/go-libp2p/p2p/host/peerstore/pstoremem"
 	ma "github.com/multiformats/go-multiaddr"
 	manet "github.com/multiformats/go-multiaddr/net"
+	"go.opentelemetry.io/otel/attribute"
+	otelmetric "go.opentelemetry.io/otel/metric"
 )
 
 const (
@@ -1927,7 +1929,22 @@ func (gs *GossipSubRouter) heartbeat() {
 	// advance the message history window
 	gs.mcache.Shift()
 
+	gs.updateMetrics()
+
 	gs.extensions.Heartbeat()
+}
+
+func (gs *GossipSubRouter) updateMetrics() {
+	for t, peers := range gs.mesh {
+		gs.p.metrics.meshSize.Record(context.Background(),
+			int64(len(peers)),
+			otelmetric.WithAttributeSet(
+				attribute.NewSet(
+					attribute.Key("topic").String(t),
+				),
+			),
+		)
+	}
 }
 
 func (gs *GossipSubRouter) clearIHaveCounters() {
