@@ -37,7 +37,7 @@ type PeerScoreThresholds struct {
 func (p *PeerScoreThresholds) validate() error {
 
 	if !p.SkipAtomicValidation || p.PublishThreshold != 0 || p.GossipThreshold != 0 || p.GraylistThreshold != 0 {
-		if p.GossipThreshold > 0 || isInvalidNumber(p.GossipThreshold) {
+		if isInvalidNumber(p.GossipThreshold) {
 			return fmt.Errorf("invalid gossip threshold; it must be <= 0 and a valid number")
 		}
 		if p.PublishThreshold > 0 || p.PublishThreshold > p.GossipThreshold || isInvalidNumber(p.PublishThreshold) {
