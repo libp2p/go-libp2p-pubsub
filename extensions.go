@@ -201,7 +201,7 @@ type partialMessageRouter struct {
 
 // PeerRequestsPartial implements partialmessages.Router.
 func (r partialMessageRouter) PeerRequestsPartial(peer peer.ID, topic string) bool {
-	return r.gs.peerRequestsPartial(peer, topic)
+	return r.gs.iSupportSendingPartial(topic) && r.gs.peerRequestsPartial(peer, topic)
 }
 
 // MeshPeers implements partialmessages.Router.
@@ -216,14 +216,9 @@ func (r partialMessageRouter) MeshPeers(topic string) iter.Seq[peer.ID] {
 			}
 		}
 
-		myTopicState := r.gs.p.myTopics[topic]
-		iRequestPartial := myTopicState != nil && myTopicState.requestPartialMessages
 		for peer := range peerSet {
 			if r.gs.extensions.peerExtensions[peer].PartialMessages {
-				peerSupportsPartial := r.gs.peerSupportsPartial(peer, topic)
-				peerRequestsPartial := r.gs.peerRequestsPartial(peer, topic)
-				if (iRequestPartial && peerSupportsPartial) || peerRequestsPartial {
-					// Peer supports partial messages
+				if (r.gs.iRequestPartial(topic) && r.gs.peerSupportsSendingPartial(peer, topic)) || (r.gs.iSupportSendingPartial(topic) && r.gs.peerRequestsPartial(peer, topic)) {
 					if !yield(peer) {
 						return
 					}
