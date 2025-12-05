@@ -864,7 +864,7 @@ func (gs *GossipSubRouter) Preprocess(from peer.ID, msgs []*Message) {
 				// We don't send IDONTWANT to the peer that sent us the messages
 				continue
 			}
-			if gs.peerRequestsPartial(p, topic) {
+			if gs.sendPeerPartialMessage(p, topic) {
 				// Don't send IDONTWANT to peers that are using partial messages
 				// for this topic
 				continue
@@ -1381,7 +1381,7 @@ func (gs *GossipSubRouter) rpcs(msg *Message) iter.Seq2[peer.ID, *RPC] {
 			if pid == from || pid == peer.ID(msg.GetFrom()) {
 				continue
 			}
-			if gs.peerRequestsPartial(pid, topic) {
+			if gs.sendPeerPartialMessage(pid, topic) {
 				// The peer requested partial messages. We'll skip sending them full messages
 				continue
 			}
@@ -1398,7 +1398,14 @@ func (gs *GossipSubRouter) peerSupportsPartial(p peer.ID, topic string) bool {
 	return ok && gs.extensions.myExtensions.PartialMessages && peerStates[p].supportsPartial
 }
 
-func (gs *GossipSubRouter) peerRequestsPartial(p peer.ID, topic string) bool {
+func (gs *GossipSubRouter) sendPeerPartialMessage(p peer.ID, topic string) bool {
+	myTopicState := gs.p.myTopics[topic]
+	iSupportPartial := myTopicState != nil && myTopicState.supportsPartialMessages
+	if !iSupportPartial {
+		// We don't support partial messages for this topic, we can't fulfill
+		// the peer's partial message requests.
+		return false
+	}
 	peerStates, ok := gs.p.topics[topic]
 	return ok && gs.extensions.myExtensions.PartialMessages && peerStates[p].requestsPartial
 }
