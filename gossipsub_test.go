@@ -4640,7 +4640,7 @@ func TestPartialMessages(t *testing.T) {
 		}
 	}()
 
-	partialExt := make([]*partialmessages.PartialMessageExtension, hostCount)
+	partialExt := make([]*partialmessages.PartialMessagesExtension, hostCount)
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelDebug}))
 
 	// A list of maps from topic+groupID to partialMessage. One map per peer
@@ -4651,7 +4651,7 @@ func TestPartialMessages(t *testing.T) {
 	}
 
 	for i := range partialExt {
-		partialExt[i] = &partialmessages.PartialMessageExtension{
+		partialExt[i] = &partialmessages.PartialMessagesExtension{
 			Logger: logger.With("id", i),
 			ValidateRPC: func(from peer.ID, rpc *pb.PartialMessagesExtension) error {
 				// No validation. Only for this test. In production you should
@@ -4758,7 +4758,7 @@ func TestPeerSupportsPartialMessages(t *testing.T) {
 		}
 	}()
 
-	partialExt := make([]*partialmessages.PartialMessageExtension, hostCount)
+	partialExt := make([]*partialmessages.PartialMessagesExtension, hostCount)
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelDebug}))
 
 	// A list of maps from topic+groupID to partialMessage. One map per peer
@@ -4769,7 +4769,7 @@ func TestPeerSupportsPartialMessages(t *testing.T) {
 	}
 
 	for i := range partialExt {
-		partialExt[i] = &partialmessages.PartialMessageExtension{
+		partialExt[i] = &partialmessages.PartialMessagesExtension{
 			Logger: logger.With("id", i),
 			ValidateRPC: func(from peer.ID, rpc *pb.PartialMessagesExtension) error {
 				// No validation. Only for this test. In production you should
@@ -4942,7 +4942,7 @@ func TestSkipPublishingToPeersRequestingPartialMessages(t *testing.T) {
 	hosts := getDefaultHosts(t, 3)
 
 	const hostsWithPartialMessageSupport = 2
-	partialExt := make([]*partialmessages.PartialMessageExtension, hostsWithPartialMessageSupport)
+	partialExt := make([]*partialmessages.PartialMessagesExtension, hostsWithPartialMessageSupport)
 	// A list of maps from topic+groupID to partialMessage. One map per peer
 	partialMessageStore := make([]map[string]*minimalTestPartialMessage, hostsWithPartialMessageSupport)
 	for i := range hostsWithPartialMessageSupport {
@@ -4957,7 +4957,7 @@ func TestSkipPublishingToPeersRequestingPartialMessages(t *testing.T) {
 	}))
 
 	for i := range partialExt {
-		partialExt[i] = &partialmessages.PartialMessageExtension{
+		partialExt[i] = &partialmessages.PartialMessagesExtension{
 			Logger: logger,
 			ValidateRPC: func(from peer.ID, rpc *pb.PartialMessagesExtension) error {
 				return nil
@@ -5089,7 +5089,7 @@ func TestPairwiseInteractionWithPartialMessages(t *testing.T) {
 				}
 			}()
 
-			partialExt := make([]*partialmessages.PartialMessageExtension, hostCount)
+			partialExt := make([]*partialmessages.PartialMessagesExtension, hostCount)
 			logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelDebug}))
 
 			// A list of maps from topic+groupID to partialMessage. One map per peer
@@ -5105,7 +5105,7 @@ func TestPairwiseInteractionWithPartialMessages(t *testing.T) {
 				if tc.hostSupport[i] == NoPartialMessages {
 					continue
 				}
-				partialExt[i] = &partialmessages.PartialMessageExtension{
+				partialExt[i] = &partialmessages.PartialMessagesExtension{
 					Logger: logger.With("id", i),
 					ValidateRPC: func(from peer.ID, rpc *pb.PartialMessagesExtension) error {
 						// No validation. Only for this test. In production you should

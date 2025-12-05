@@ -50,7 +50,7 @@ type mockNetworkPartialMessages struct {
 
 	allSentMsgs map[peer.ID][]rpcWithFrom
 
-	handlers map[peer.ID]*PartialMessageExtension
+	handlers map[peer.ID]*PartialMessagesExtension
 }
 
 func (m *mockNetworkPartialMessages) addPeers() {
@@ -332,7 +332,7 @@ func (t *testPartialMessageChecker) SplitIntoParts(in *testPartialMessage) ([]*t
 func TestExamplePartialMessageImpl(t *testing.T) {
 	rand := rand.New(rand.NewSource(0))
 	// Create a dummy extension for the test
-	dummyExt := &PartialMessageExtension{}
+	dummyExt := &PartialMessagesExtension{}
 	full, err := newFullTestMessage(rand, dummyExt, "test-topic")
 	if err != nil {
 		t.Fatal(err)
@@ -350,7 +350,7 @@ var _ Message = (*testPartialMessage)(nil)
 
 type testPeers struct {
 	peers    []peer.ID
-	handlers []*PartialMessageExtension
+	handlers []*PartialMessagesExtension
 	network  *mockNetworkPartialMessages
 	// Track partial messages per peer per topic per group
 	partialMessages map[peer.ID]map[string]map[string]*testPartialMessage
@@ -361,11 +361,11 @@ func createPeers(t *testing.T, topic string, n int) *testPeers {
 		t:           t,
 		pendingMsgs: make(map[peer.ID][]rpcWithFrom),
 		allSentMsgs: make(map[peer.ID][]rpcWithFrom),
-		handlers:    make(map[peer.ID]*PartialMessageExtension),
+		handlers:    make(map[peer.ID]*PartialMessagesExtension),
 	}
 
 	peers := make([]peer.ID, n)
-	handlers := make([]*PartialMessageExtension, n)
+	handlers := make([]*PartialMessagesExtension, n)
 
 	// Create peer IDs
 	for i := range n {
@@ -408,9 +408,9 @@ func createPeers(t *testing.T, topic string, n int) *testPeers {
 			},
 		}
 
-		var handler *PartialMessageExtension
+		var handler *PartialMessagesExtension
 		// Create handler
-		handler = &PartialMessageExtension{
+		handler = &PartialMessagesExtension{
 			Logger: slog.Default().With("id", i),
 			MergePartsMetadata: func(_ string, left, right PartsMetadata) PartsMetadata {
 				return MergeBitmap(left, right)
@@ -545,7 +545,7 @@ func (tp *testPeers) registerMessage(peerIndex int, topic string, msg *testParti
 	tp.partialMessages[peerID][topic][string(msg.GroupID())] = msg
 }
 
-func newFullTestMessage(r io.Reader, ext *PartialMessageExtension, topic string) (*testPartialMessage, error) {
+func newFullTestMessage(r io.Reader, ext *PartialMessagesExtension, topic string) (*testPartialMessage, error) {
 	out := &testPartialMessage{}
 	for i := range out.Parts {
 		out.Parts[i] = make([]byte, 8)
@@ -563,7 +563,7 @@ func newFullTestMessage(r io.Reader, ext *PartialMessageExtension, topic string)
 	return out, nil
 }
 
-func newEmptyTestMessage(commitment []byte, ext *PartialMessageExtension, topic string) *testPartialMessage {
+func newEmptyTestMessage(commitment []byte, ext *PartialMessagesExtension, topic string) *testPartialMessage {
 	return &testPartialMessage{
 		Commitment: commitment,
 		republish: func(pm *testPartialMessage, _ []byte) {
@@ -996,7 +996,7 @@ func TestPeerInitiatedCounter(t *testing.T) {
 		_, _ = cryptorand.Read(buf)
 		return buf
 	}
-	handler := PartialMessageExtension{
+	handler := PartialMessagesExtension{
 		Logger: slog.Default(),
 		MergePartsMetadata: func(topic string, left, right PartsMetadata) PartsMetadata {
 			return left
@@ -1124,7 +1124,7 @@ func FuzzPeerInitiatedCounter(f *testing.F) {
 			peerLimit = uint8(defaultPeerInitiatedGroupLimitPerTopicPerPeer)
 		}
 
-		handler := PartialMessageExtension{
+		handler := PartialMessagesExtension{
 			Logger: slog.Default(),
 			MergePartsMetadata: func(topic string, left, right PartsMetadata) PartsMetadata {
 				return left

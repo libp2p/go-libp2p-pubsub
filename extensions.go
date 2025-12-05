@@ -77,7 +77,7 @@ type extensionsState struct {
 	sendRPC           func(p peer.ID, r *RPC, urgent bool)
 	testExtension     *testExtension
 
-	partialMessagesExtension *partialmessages.PartialMessageExtension
+	partialMessagesExtension *partialmessages.PartialMessagesExtension
 }
 
 func newExtensionsState(myExtensions PeerExtensions, reportMisbehavior func(peer.ID), sendRPC func(peer.ID, *RPC, bool)) *extensionsState {
@@ -178,7 +178,7 @@ func (es *extensionsState) Heartbeat() {
 	}
 }
 
-func WithPartialMessagesExtension(pm *partialmessages.PartialMessageExtension) Option {
+func WithPartialMessagesExtension(pm *partialmessages.PartialMessagesExtension) Option {
 	return func(ps *PubSub) error {
 		gs, ok := ps.rt.(*GossipSubRouter)
 		if !ok {
