@@ -223,7 +223,7 @@ func (e *PartialMessagesExtension) PublishPartial(topic string, partial Message,
 	if len(opts.PublishToPeers) > 0 {
 		peers = slices.Values(opts.PublishToPeers)
 	} else {
-		peers = e.router.MeshPeers(topic)
+		peers = e.peersToPublishTo(topic, state)
 	}
 	for p := range peers {
 		log := e.Logger.With("peer", p)
@@ -284,6 +284,27 @@ func (e *PartialMessagesExtension) PublishPartial(topic string, partial Message,
 	}
 
 	return nil
+}
+
+// peersToPublishTo returns a iter.Seq of peers to publish to. It combines peers
+// in the group state with mesh peers for the topic.
+// Group state peers are used to cover the fanout and gossip message cases where
+// the peer would not be in our mesh.
+func (e *PartialMessagesExtension) peersToPublishTo(topic string, state *partialMessageStatePerGroupPerTopic) iter.Seq[peer.ID] {
+	return func(yield func(peer.ID) bool) {
+		for p := range state.peerState {
+			if !yield(p) {
+				return
+			}
+		}
+		for p := range e.router.MeshPeers(topic) {
+			if _, ok := state.peerState[p]; !ok {
+				if !yield(p) {
+					return
+				}
+			}
+		}
+	}
 }
 
 func (e *PartialMessagesExtension) AddPeer(id peer.ID) {

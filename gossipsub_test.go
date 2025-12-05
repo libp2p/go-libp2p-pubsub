@@ -4485,37 +4485,25 @@ func (m *minimalTestPartialMessage) extendFromEncodedPartialMessage(_ peer.ID, d
 
 // onIncomingRPC handle an incoming rpc and will return a non-nil publish
 // options if the caller should republish this partial message.
-func (m *minimalTestPartialMessage) onIncomingRPC(from peer.ID, rpc *pb.PartialMessagesExtension) *partialmessages.PublishOptions {
-	var extended bool
-	if len(rpc.PartialMessage) > 0 {
-		extended = m.extendFromEncodedPartialMessage(from, rpc.PartialMessage)
+func (m *minimalTestPartialMessage) onIncomingRPC(from peer.ID, rpc *pb.PartialMessagesExtension) bool {
+	if len(rpc.PartialMessage) > 0 && m.extendFromEncodedPartialMessage(from, rpc.PartialMessage) {
+		return true
 	}
 
-	var publishOpts partialmessages.PublishOptions
+	var peerHasUsefulData, iHaveUsefulData bool
+	// Only do these checks if we didn't extend our partial message.
+	// Since, otherwise, we simply publish again to all peers.
+	if len(rpc.PartsMetadata) > 0 {
+		iHave := m.PartsMetadata()[0]
+		iWant := ^iHave
 
-	if !extended {
-		var peerHasUsefulData, iHaveUsefulData bool
-		// Only do these checks if we didn't extend our partial message.
-		// Since, otherwise, we simply publish again to all peers.
-		if len(rpc.PartsMetadata) > 0 {
-			iHave := m.PartsMetadata()[0]
-			iWant := ^iHave
+		peerHas := rpc.PartsMetadata[0]
+		peerWants := ^peerHas
 
-			peerHas := rpc.PartsMetadata[0]
-			peerWants := ^peerHas
-
-			iHaveUsefulData = iHave&peerWants != 0
-			peerHasUsefulData = iWant&peerHas != 0
-		}
-		if peerHasUsefulData || iHaveUsefulData {
-			publishOpts.PublishToPeers = []peer.ID{from}
-		}
+		iHaveUsefulData = iHave&peerWants != 0
+		peerHasUsefulData = iWant&peerHas != 0
 	}
-
-	if extended || len(publishOpts.PublishToPeers) > 0 {
-		return &publishOpts
-	}
-	return nil
+	return peerHasUsefulData || iHaveUsefulData
 }
 
 // GroupID implements partialmessages.PartialMessage.
@@ -4670,8 +4658,8 @@ func TestPartialMessages(t *testing.T) {
 					}
 					partialMessageStore[i][topic+string(groupID)] = pm
 				}
-				if publishOpts := pm.onIncomingRPC(from, rpc); publishOpts != nil {
-					go psubs[i].PublishPartialMessage(topic, pm, *publishOpts)
+				if pm.onIncomingRPC(from, rpc) {
+					go psubs[i].PublishPartialMessage(topic, pm, partialmessages.PublishOptions{})
 				}
 				return nil
 			},
@@ -4799,8 +4787,8 @@ func TestPeerSupportsPartialMessages(t *testing.T) {
 					}
 					partialMessageStore[i][topic+string(groupID)] = pm
 				}
-				if publishOpts := pm.onIncomingRPC(from, rpc); publishOpts != nil {
-					go psubs[i].PublishPartialMessage(topic, pm, *publishOpts)
+				if pm.onIncomingRPC(from, rpc) {
+					go psubs[i].PublishPartialMessage(topic, pm, partialmessages.PublishOptions{})
 					if pm.complete() {
 						encoded, _ := pm.PartialMessageBytes(partialmessages.PartsMetadata([]byte{0}))
 						go func() {
@@ -4975,8 +4963,8 @@ func TestSkipPublishingToPeersRequestingPartialMessages(t *testing.T) {
 					}
 					partialMessageStore[i][topicID+string(groupID)] = pm
 				}
-				if publishOpts := pm.onIncomingRPC(from, rpc); publishOpts != nil {
-					go psubs[i].PublishPartialMessage(topicID, pm, *publishOpts)
+				if pm.onIncomingRPC(from, rpc) {
+					go psubs[i].PublishPartialMessage(topicID, pm, partialmessages.PublishOptions{})
 				}
 				return nil
 			},
@@ -5131,14 +5119,14 @@ func TestPairwiseInteractionWithPartialMessages(t *testing.T) {
 							partialMessageStore[i][topic+string(groupID)] = pm
 						}
 						prevComplete := pm.complete()
-						if publishOpts := pm.onIncomingRPC(from, rpc); publishOpts != nil {
+						if pm.onIncomingRPC(from, rpc) {
 							if !prevComplete && pm.complete() {
 								t.Log("host", i, "received partial message")
 
 								receivedMessage <- struct{}{}
 							}
 
-							go psubs[i].PublishPartialMessage(topic, pm, *publishOpts)
+							go psubs[i].PublishPartialMessage(topic, pm, partialmessages.PublishOptions{})
 						}
 						return nil
 					},

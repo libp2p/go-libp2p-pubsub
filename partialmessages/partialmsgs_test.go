@@ -356,7 +356,7 @@ type testPeers struct {
 	partialMessages map[peer.ID]map[string]map[string]*testPartialMessage
 }
 
-func createPeers(t *testing.T, topic string, n int) *testPeers {
+func createPeers(t *testing.T, topic string, n int, nonMesh bool) *testPeers {
 	nw := &mockNetworkPartialMessages{
 		t:           t,
 		pendingMsgs: make(map[peer.ID][]rpcWithFrom),
@@ -396,6 +396,11 @@ func createPeers(t *testing.T, topic string, n int) *testPeers {
 			},
 			meshPeers: func(topic string) iter.Seq[peer.ID] {
 				return func(yield func(peer.ID) bool) {
+					if nonMesh {
+						// No peers are in the mesh
+						return
+					}
+
 					// Yield all other peers
 					for j, otherPeer := range peers {
 						if j != i {
@@ -462,11 +467,7 @@ func createPeers(t *testing.T, topic string, n int) *testPeers {
 				weHaveUsefulData := peerWants.Cmp(&zeroInt) != 0
 
 				if weHaveUsefulData || peerHasUsefulData {
-					// This peer has something we want or we can provide
-					// something to them. Call publish partial just for them.
-					handler.PublishPartial(topic, pm, PublishOptions{
-						PublishToPeers: []peer.ID{from},
-					})
+					handler.PublishPartial(topic, pm, PublishOptions{})
 				}
 				return nil
 			},
@@ -579,7 +580,7 @@ func TestPartialMessages(t *testing.T) {
 	// slog.SetLogLoggerLevel(slog.LevelDebug)
 
 	t.Run("h1 has all the data. h2 requests it", func(t *testing.T) {
-		peers := createPeers(t, topic, 2)
+		peers := createPeers(t, topic, 2, false)
 		peers.network.addPeers()
 		defer peers.network.removePeers()
 
@@ -609,7 +610,7 @@ func TestPartialMessages(t *testing.T) {
 	})
 
 	t.Run("h1 has all the data and eager pushes. h2 has the next message also eager pushes", func(t *testing.T) {
-		peers := createPeers(t, topic, 2)
+		peers := createPeers(t, topic, 2, false)
 		peers.network.addPeers()
 		defer peers.network.removePeers()
 
@@ -670,7 +671,7 @@ func TestPartialMessages(t *testing.T) {
 	})
 
 	t.Run("h1 has all the data. h2 doesn't know anything", func(t *testing.T) {
-		peers := createPeers(t, topic, 2)
+		peers := createPeers(t, topic, 2, false)
 		peers.network.addPeers()
 		defer peers.network.removePeers()
 
@@ -696,8 +697,36 @@ func TestPartialMessages(t *testing.T) {
 		}
 	})
 
+	t.Run("h1 is not in h2's mesh, but sends h2 a partial message", func(t *testing.T) {
+		peers := createPeers(t, topic, 2, true)
+		peers.network.addPeers()
+		defer peers.network.removePeers()
+		slog.Debug("starting")
+
+		h1Msg, err := newFullTestMessage(rand, peers.handlers[0], topic)
+		if err != nil {
+			t.Fatal(err)
+		}
+		peers.registerMessage(0, topic, h1Msg)
+
+		// h1 knows the full message and explicitly publishes to peer 1 (e.g. fanout or gossip (like an IHAVE))
+		peers.handlers[0].PublishPartial(topic, h1Msg, PublishOptions{PublishToPeers: []peer.ID{peers.peers[1]}})
+
+		// Handle all RPCs
+		for peers.network.handleRPCs() {
+		}
+
+		// h2 should now have the partial message after receiving data
+		h2Msg := peers.getOrCreatePartialMessage(1, topic, h1Msg.Commitment)
+
+		// Assert h2 has the full message
+		if !h2Msg.complete() {
+			t.Fatal("h2 should have the full message")
+		}
+	})
+
 	t.Run("h1 has all the data. h2 has some of it", func(t *testing.T) {
-		peers := createPeers(t, topic, 2)
+		peers := createPeers(t, topic, 2, false)
 		peers.network.addPeers()
 		defer peers.network.removePeers()
 
@@ -749,7 +778,7 @@ func TestPartialMessages(t *testing.T) {
 	})
 
 	t.Run("h1 has half the data. h2 has the other half of it", func(t *testing.T) {
-		peers := createPeers(t, topic, 2)
+		peers := createPeers(t, topic, 2, false)
 		peers.network.addPeers()
 		defer peers.network.removePeers()
 
@@ -809,7 +838,7 @@ func TestPartialMessages(t *testing.T) {
 	})
 
 	t.Run("h1 and h2 have the the same half of data. No partial messages should be sent", func(t *testing.T) {
-		peers := createPeers(t, topic, 2)
+		peers := createPeers(t, topic, 2, false)
 		peers.network.addPeers()
 		defer peers.network.removePeers()
 
@@ -858,7 +887,7 @@ func TestPartialMessages(t *testing.T) {
 	})
 
 	t.Run("three peers with distributed partial data", func(t *testing.T) {
-		peers := createPeers(t, topic, 3)
+		peers := createPeers(t, topic, 3, false)
 		peers.network.addPeers()
 		defer peers.network.removePeers()
 
@@ -924,7 +953,7 @@ func TestPartialMessages(t *testing.T) {
 		}
 	})
 	t.Run("three peers. peer 1 has all data and eager pushes. Receivers eager push new content", func(t *testing.T) {
-		peers := createPeers(t, topic, 3)
+		peers := createPeers(t, topic, 3, false)
 		peers.network.addPeers()
 		defer peers.network.removePeers()
 
