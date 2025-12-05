@@ -41,14 +41,10 @@ type Message interface {
 
 	// PartialMessageBytes takes in the opaque request metadata and
 	// returns a encoded partial message that fulfills as much of the request as
-	// possible. It also returns a opaque request metadata representing the
-	// parts it could not fulfill. This MUST be empty if the implementation could
-	// fulfill the whole request.
-	//
-	// An empty metadata should be treated the same as a request for all parts.
+	// possible.
 	//
 	// If the Partial Message is empty, the implementation MUST return:
-	// nil, metadata, nil.
+	// nil, nil.
 	PartialMessageBytes(partsMetadata PartsMetadata) (msg []byte, _ error)
 
 	PartsMetadata() PartsMetadata
