@@ -5054,6 +5054,8 @@ func TestPairwiseInteractionWithPartialMessages(t *testing.T) {
 	type PartialMessageStatus int
 	const (
 		NoPartialMessages PartialMessageStatus = iota
+		// The peer has partial messages extension, but doesn't support it for the topic
+		PartialMessagesExtensionNoSupport
 		PeerSupportsPartialMessages
 		PeerRequestsPartialMessages
 	)
@@ -5064,8 +5066,8 @@ func TestPairwiseInteractionWithPartialMessages(t *testing.T) {
 	}
 
 	var tcs []TestCase
-	for _, a := range []PartialMessageStatus{NoPartialMessages, PeerSupportsPartialMessages, PeerRequestsPartialMessages} {
-		for _, b := range []PartialMessageStatus{NoPartialMessages, PeerSupportsPartialMessages, PeerRequestsPartialMessages} {
+	for _, a := range []PartialMessageStatus{NoPartialMessages, PartialMessagesExtensionNoSupport, PeerSupportsPartialMessages, PeerRequestsPartialMessages} {
+		for _, b := range []PartialMessageStatus{NoPartialMessages, PartialMessagesExtensionNoSupport, PeerSupportsPartialMessages, PeerRequestsPartialMessages} {
 			for i := range 2 {
 				tcs = append(tcs, TestCase{hostSupport: []PartialMessageStatus{a, b}, publisherIdx: i})
 			}
@@ -5145,9 +5147,14 @@ func TestPairwiseInteractionWithPartialMessages(t *testing.T) {
 
 			for i, h := range hosts {
 				var opts []Option
+				// For debugging:
+				// slog.SetLogLoggerLevel(slog.LevelDebug)
+				// opts = append(opts, WithRPCLogger(slog.Default().With("host_idx", i)))
 				var topicOpts []TopicOpt
 				switch tc.hostSupport[i] {
 				case NoPartialMessages:
+				case PartialMessagesExtensionNoSupport:
+					opts = append(opts, WithPartialMessagesExtension(partialExt[i]))
 				case PeerSupportsPartialMessages:
 					opts = append(opts, WithPartialMessagesExtension(partialExt[i]))
 					topicOpts = append(topicOpts, SupportsPartialMessages())
@@ -5209,7 +5216,8 @@ func TestPairwiseInteractionWithPartialMessages(t *testing.T) {
 					t.Fatal(err)
 				}
 
-				if tc.hostSupport[i] != NoPartialMessages {
+				switch tc.hostSupport[i] {
+				case PeerSupportsPartialMessages, PeerRequestsPartialMessages:
 					err = psubs[i].PublishPartialMessage(topic, msg1, partialmessages.PublishOptions{})
 					if err != nil {
 						t.Fatal(err)
