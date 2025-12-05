@@ -99,7 +99,7 @@ func MergeBitmap(left, right PartsMetadata) PartsMetadata {
 	return PartsMetadata(bitmap.Merge(bitmap.Bitmap(left), bitmap.Bitmap(right)))
 }
 
-type PartialMessageExtension struct {
+type PartialMessagesExtension struct {
 	Logger *slog.Logger
 
 	MergePartsMetadata func(topic string, left, right PartsMetadata) PartsMetadata
@@ -154,7 +154,7 @@ type Router interface {
 	PeerRequestsPartial(peer peer.ID, topic string) bool
 }
 
-func (e *PartialMessageExtension) groupState(topic string, groupID []byte, peerInitiated bool, from peer.ID) (*partialMessageStatePerGroupPerTopic, error) {
+func (e *PartialMessagesExtension) groupState(topic string, groupID []byte, peerInitiated bool, from peer.ID) (*partialMessageStatePerGroupPerTopic, error) {
 	statePerTopic, ok := e.statePerTopicPerGroup[topic]
 	if !ok {
 		statePerTopic = make(map[string]*partialMessageStatePerGroupPerTopic)
@@ -184,7 +184,7 @@ func (e *PartialMessageExtension) groupState(topic string, groupID []byte, peerI
 	return state, nil
 }
 
-func (e *PartialMessageExtension) Init(router Router) error {
+func (e *PartialMessagesExtension) Init(router Router) error {
 	e.router = router
 	if e.Logger == nil {
 		return errors.New("field Logger must be set")
@@ -212,7 +212,7 @@ func (e *PartialMessageExtension) Init(router Router) error {
 	return nil
 }
 
-func (e *PartialMessageExtension) PublishPartial(topic string, partial Message, opts PublishOptions) error {
+func (e *PartialMessagesExtension) PublishPartial(topic string, partial Message, opts PublishOptions) error {
 	groupID := partial.GroupID()
 	myPartsMeta := partial.PartsMetadata()
 
@@ -290,10 +290,10 @@ func (e *PartialMessageExtension) PublishPartial(topic string, partial Message, 
 	return nil
 }
 
-func (e *PartialMessageExtension) AddPeer(id peer.ID) {
+func (e *PartialMessagesExtension) AddPeer(id peer.ID) {
 }
 
-func (e *PartialMessageExtension) RemovePeer(id peer.ID) {
+func (e *PartialMessagesExtension) RemovePeer(id peer.ID) {
 	for topic, statePerTopic := range e.statePerTopicPerGroup {
 		for _, state := range statePerTopic {
 			delete(state.peerState, id)
@@ -304,7 +304,7 @@ func (e *PartialMessageExtension) RemovePeer(id peer.ID) {
 	}
 }
 
-func (e *PartialMessageExtension) Heartbeat() {
+func (e *PartialMessagesExtension) Heartbeat() {
 	for topic, statePerTopic := range e.statePerTopicPerGroup {
 		for group, s := range statePerTopic {
 			if s.groupTTL == 0 {
@@ -322,12 +322,12 @@ func (e *PartialMessageExtension) Heartbeat() {
 	}
 }
 
-func (e *PartialMessageExtension) sendRPC(to peer.ID, rpc *pb.PartialMessagesExtension) {
+func (e *PartialMessagesExtension) sendRPC(to peer.ID, rpc *pb.PartialMessagesExtension) {
 	e.Logger.Debug("Sending RPC", "to", to, "rpc", rpc)
 	e.router.SendRPC(to, rpc, false)
 }
 
-func (e *PartialMessageExtension) HandleRPC(from peer.ID, rpc *pb.PartialMessagesExtension) error {
+func (e *PartialMessagesExtension) HandleRPC(from peer.ID, rpc *pb.PartialMessagesExtension) error {
 	if rpc == nil {
 		return nil
 	}
