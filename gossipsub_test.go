@@ -5241,3 +5241,123 @@ func TestPairwiseInteractionWithPartialMessages(t *testing.T) {
 		})
 	}
 }
+
+func TestNoIDONTWANTWithPartialMessage(t *testing.T) {
+	hs := getDefaultHosts(t, 3)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	type rpcWithMeta struct {
+		from, to peer.ID
+		rpc      *RPC
+	}
+
+	receivedRPCs := make(chan *rpcWithMeta, 20)
+
+	pubsubs := getGossipsubsOptFn(ctx, hs,
+		func(i int, h host.Host) []Option {
+			tracer := &mockRawTracer{
+				onRecvRPC: func(r *RPC) {
+					copy := *r
+					receivedRPCs <- &rpcWithMeta{
+						from: r.from,
+						to:   h.ID(),
+						rpc:  &copy,
+					}
+				},
+			}
+			return []Option{
+				WithPartialMessagesExtension(
+					&partialmessages.PartialMessagesExtension{
+						MergePartsMetadata: func(topic string, left, right partialmessages.PartsMetadata) partialmessages.PartsMetadata {
+							return partialmessages.MergeBitmap(left, right)
+						},
+						Logger:        slog.Default(),
+						OnIncomingRPC: func(from peer.ID, rpc *pb.PartialMessagesExtension) error { return nil },
+						ValidateRPC:   func(from peer.ID, rpc *pb.PartialMessagesExtension) error { return nil },
+					},
+				),
+				WithRawTracer(tracer),
+			}
+		})
+
+	for i, h := range hs {
+		t.Logf("Host ID of node %v: %s\n", i, h.ID())
+	}
+
+	hs[0].Connect(ctx, peer.AddrInfo{
+		ID:    hs[1].ID(),
+		Addrs: hs[1].Addrs(),
+	})
+	hs[1].Connect(ctx, peer.AddrInfo{
+		ID:    hs[2].ID(),
+		Addrs: hs[2].Addrs(),
+	})
+
+	var topics []*Topic
+	var receivedMessage [3]atomic.Bool
+	const topicStr = "test-topic"
+	for i, ps := range pubsubs {
+		var topicOpts []TopicOpt
+		switch i {
+		case 0:
+			topicOpts = append(topicOpts, SupportsPartialMessages())
+		case 1:
+			topicOpts = append(topicOpts, RequestPartialMessages())
+		}
+		topic, err := ps.Join(topicStr, topicOpts...)
+		if err != nil {
+			t.Fatal(err)
+		}
+		topics = append(topics, topic)
+		sub, err := topic.Subscribe()
+		if err != nil {
+			t.Fatal(err)
+		}
+		go func() {
+			for {
+				msg, err := sub.Next(ctx)
+				if errors.Is(err, context.Canceled) {
+					return
+				}
+				if err != nil {
+					panic(err)
+				}
+				t.Logf("%v Received message from %s\n", i, msg.GetFrom())
+				receivedMessage[i].Store(true)
+			}
+		}()
+	}
+
+	// Let mesh form
+	time.Sleep(time.Second)
+	msg := make([]byte, GossipSubIDontWantMessageThreshold)
+	err := topics[2].Publish(ctx, msg)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+outer:
+	for {
+		select {
+		case rpc := <-receivedRPCs:
+			// Peer 1 shouldn't send any IDONTWANTS.
+			// because:
+			//   - Peer 2 send the message, so shouldn't receive an IDONTWANT.
+			//   - Peer 0 supports partial messages and peer 1 requested partial
+			//   messages. It will not receive a full message from peer 1.
+			if rpc.from == hs[1].ID() && len(rpc.rpc.Control.GetIdontwant()) > 0 {
+				t.Fatalf("Received unexpected IDONTWANT from %s", rpc.from)
+			}
+			t.Logf("Received RPC: %s->%s %+v\n", rpc.from, rpc.to, rpc.rpc)
+		case <-time.After(2 * time.Second):
+			break outer
+		}
+	}
+
+	for i := range receivedMessage {
+		if !receivedMessage[i].Load() {
+			t.Fatal("Peer did not receive a full message")
+		}
+	}
+}
