@@ -128,7 +128,7 @@ type testPartialMessage struct {
 	Parts      [testPartialMessageLeaves][]byte
 	Proofs     [testPartialMessageLeaves][]merkle.ProofStep
 
-	republish func(*testPartialMessage, []byte)
+	republish func(partial *testPartialMessage, newParts PartsMetadata)
 	onErr     func(error)
 }
 
@@ -263,7 +263,7 @@ func (t *testPartialMessageChecker) MergePartsMetadata(left, right PartsMetadata
 
 // EmptyMessage implements InvariantChecker.
 func (t *testPartialMessageChecker) EmptyMessage() *testPartialMessage {
-	return &testPartialMessage{Commitment: t.fullMessage.Commitment, republish: func(pm *testPartialMessage, _ []byte) {}}
+	return &testPartialMessage{Commitment: t.fullMessage.Commitment, republish: func(pm *testPartialMessage, _ PartsMetadata) {}}
 }
 
 // Equal implements InvariantChecker.
@@ -337,7 +337,7 @@ func TestExamplePartialMessageImpl(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	full.republish = func(pm *testPartialMessage, _ []byte) {}
+	full.republish = func(pm *testPartialMessage, _ PartsMetadata) {}
 
 	invariant := &testPartialMessageChecker{
 		fullMessage: full,
@@ -433,20 +433,21 @@ func createPeers(t *testing.T, topic string, n int, nonMesh bool) *testPeers {
 				if pm == nil {
 					pm = &testPartialMessage{
 						Commitment: groupID,
-						republish: func(pm *testPartialMessage, _ []byte) {
+						republish: func(pm *testPartialMessage, _ PartsMetadata) {
 							handlers[i].PublishPartial(topic, pm, PublishOptions{})
 						},
 					}
 					testPeers.partialMessages[currentPeer][topic][groupKey] = pm
 				}
 
+				beforeParts := pm.PartsMetadata()
 				// Extend the partial message with the incoming data
 				recvdNewData := pm.extendFromEncodedPartialMessage(from, rpc.PartialMessage)
 
 				if recvdNewData {
-					// Publish to all peers our new data.
-					// We'll request and fulfill any
-					handler.PublishPartial(topic, pm, PublishOptions{})
+					newParts := bitmap.Bitmap(pm.PartsMetadata())
+					newParts.Xor(bitmap.Bitmap(beforeParts))
+					pm.republish(pm, PartsMetadata(newParts))
 					return nil
 				}
 
@@ -505,7 +506,7 @@ func (tp *testPeers) getOrCreatePartialMessage(peerIndex int, topic string, grou
 		handler := tp.handlers[peerIndex]
 		pm = &testPartialMessage{
 			Commitment: groupID,
-			republish: func(pm *testPartialMessage, _ []byte) {
+			republish: func(pm *testPartialMessage, _ PartsMetadata) {
 				handler.PublishPartial(topic, pm, PublishOptions{})
 			},
 		}
@@ -558,7 +559,7 @@ func newFullTestMessage(r io.Reader, ext *PartialMessagesExtension, topic string
 	for i := range out.Parts {
 		out.Proofs[i] = merkle.MerkleProof(out.Parts[:], i)
 	}
-	out.republish = func(pm *testPartialMessage, _ []byte) {
+	out.republish = func(pm *testPartialMessage, _ PartsMetadata) {
 		ext.PublishPartial(topic, pm, PublishOptions{})
 	}
 	return out, nil
@@ -567,7 +568,7 @@ func newFullTestMessage(r io.Reader, ext *PartialMessagesExtension, topic string
 func newEmptyTestMessage(commitment []byte, ext *PartialMessagesExtension, topic string) *testPartialMessage {
 	return &testPartialMessage{
 		Commitment: commitment,
-		republish: func(pm *testPartialMessage, _ []byte) {
+		republish: func(pm *testPartialMessage, _ PartsMetadata) {
 			ext.PublishPartial(topic, pm, PublishOptions{})
 		},
 	}
@@ -619,15 +620,13 @@ func TestPartialMessages(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		msgBytes, err := h1Msg.PartialMessageBytes(nil)
+		// h1 knows the full message and eager pushes
+		err = peers.handlers[0].PublishPartial(topic, h1Msg, PublishOptions{
+			EagerPushWithPartsMetadata: []byte{0x00}, // All parts
+		})
 		if err != nil {
 			t.Fatal(err)
 		}
-
-		// h1 knows the full message and eager pushes
-		peers.handlers[0].PublishPartial(topic, h1Msg, PublishOptions{
-			EagerPush: msgBytes,
-		})
 
 		// h2 will receive partial message data through OnIncomingRPC
 		// We can access it through our tracking system
@@ -646,14 +645,10 @@ func TestPartialMessages(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		msgBytes, err = h2Msg.PartialMessageBytes(nil)
-		if err != nil {
-			t.Fatal(err)
-		}
 
 		// h2 knows the full message and eager pushes
 		peers.handlers[1].PublishPartial(topic, h2Msg, PublishOptions{
-			EagerPush: msgBytes,
+			EagerPushWithPartsMetadata: []byte{0x00}, // All parts h2 has
 		})
 
 		// h1 will receive partial message data through OnIncomingRPC
@@ -701,7 +696,6 @@ func TestPartialMessages(t *testing.T) {
 		peers := createPeers(t, topic, 2, true)
 		peers.network.addPeers()
 		defer peers.network.removePeers()
-		slog.Debug("starting")
 
 		h1Msg, err := newFullTestMessage(rand, peers.handlers[0], topic)
 		if err != nil {
@@ -968,26 +962,26 @@ func TestPartialMessages(t *testing.T) {
 			h1Msg.Parts[i] = fullMsg.Parts[i]
 			h1Msg.Proofs[i] = fullMsg.Proofs[i]
 		}
-		h1MsgEncoded, err := h1Msg.PartialMessageBytes(nil)
-		if err != nil {
-			t.Fatal(err)
-		}
 
 		// Peer 2 has no parts
 		h2Msg := newEmptyTestMessage(fullMsg.Commitment, peers.handlers[1], topic)
 
 		// Eagerly push new data to peers
-		h2Msg.republish = func(pm *testPartialMessage, newData []byte) {
-			peers.handlers[1].PublishPartial(topic, pm, PublishOptions{EagerPush: newData})
+		h2Msg.republish = func(pm *testPartialMessage, newParts PartsMetadata) {
+			// Flip because we want to select these parts for the eager push
+			bitmap.Bitmap(newParts).Flip()
+			peers.handlers[1].PublishPartial(topic, pm, PublishOptions{EagerPushWithPartsMetadata: newParts})
 		}
 		// Peer 3 has no parts
 		h3Msg := newEmptyTestMessage(fullMsg.Commitment, peers.handlers[2], topic)
 		// Eagerly push new data to peers
-		h3Msg.republish = func(pm *testPartialMessage, newData []byte) {
-			peers.handlers[2].PublishPartial(topic, pm, PublishOptions{EagerPush: newData})
+		h3Msg.republish = func(pm *testPartialMessage, newParts PartsMetadata) {
+			// Flip because we want to select these parts for the eager push
+			bitmap.Bitmap(newParts).Flip()
+			peers.handlers[2].PublishPartial(topic, pm, PublishOptions{EagerPushWithPartsMetadata: newParts})
 		}
 		// All peers publish their partial messages
-		peers.handlers[0].PublishPartial(topic, h1Msg, PublishOptions{EagerPush: h1MsgEncoded})
+		peers.handlers[0].PublishPartial(topic, h1Msg, PublishOptions{EagerPushWithPartsMetadata: []byte{0x00}})
 		peers.registerMessage(0, topic, h1Msg)
 		peers.handlers[1].PublishPartial(topic, h2Msg, PublishOptions{})
 		peers.registerMessage(1, topic, h2Msg)
