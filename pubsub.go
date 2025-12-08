@@ -17,6 +17,8 @@ import (
 	"github.com/libp2p/go-libp2p-pubsub/partialmessages"
 	pb "github.com/libp2p/go-libp2p-pubsub/pb"
 	"github.com/libp2p/go-libp2p-pubsub/timecache"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/metric/noop"
 
 	"github.com/libp2p/go-libp2p/core/crypto"
@@ -265,6 +267,7 @@ type Message struct {
 	ReceivedFrom  peer.ID
 	ValidatorData interface{}
 	Local         bool
+	startPublish  time.Time
 }
 
 func (m *Message) GetFrom() peer.ID {
@@ -929,6 +932,10 @@ func (p *PubSub) processLoop(ctx context.Context) {
 
 		case msg := <-p.sendMsg:
 			p.publishMessage(msg)
+			if !msg.startPublish.IsZero() {
+				took := time.Since(msg.startPublish)
+				p.metrics.publishLatencyMilliseconds.Record(context.Background(), 1000*took.Seconds(), metric.WithAttributes(attribute.String("topic", msg.GetTopic())))
+			}
 
 		case batchAndOpts := <-p.sendMessageBatch:
 			p.publishMessageBatch(batchAndOpts)

@@ -300,6 +300,7 @@ func (v *validation) validateWorker() {
 }
 
 func (v *validation) sendMsgBlocking(msg *Message) error {
+	msg.startPublish = time.Now()
 	select {
 	case v.p.sendMsg <- msg:
 		return nil
