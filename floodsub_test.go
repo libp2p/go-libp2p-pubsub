@@ -42,7 +42,7 @@ func checkMessageRouting(t *testing.T, topic string, pubs []*PubSub, subs []*Sub
 	}
 }
 
-func connect(t *testing.T, a, b host.Host) {
+func connect(t testing.TB, a, b host.Host) {
 	err := b.Connect(context.Background(), peer.AddrInfo{ID: a.ID(), Addrs: a.Addrs()})
 	if err != nil {
 		t.Fatal(err)
@@ -53,7 +53,7 @@ func sparseConnect(t *testing.T, hosts []host.Host) {
 	connectSome(t, hosts, 3)
 }
 
-func denseConnect(t *testing.T, hosts []host.Host) {
+func denseConnect(t testing.TB, hosts []host.Host) {
 	connectSome(t, hosts, 10)
 }
 
@@ -63,7 +63,7 @@ func ringConnect(t *testing.T, hosts []host.Host) {
 	}
 }
 
-func connectSome(t *testing.T, hosts []host.Host, d int) {
+func connectSome(t testing.TB, hosts []host.Host, d int) {
 	for i, a := range hosts {
 		for j := 0; j < d; j++ {
 			n := mrand.Intn(len(hosts))

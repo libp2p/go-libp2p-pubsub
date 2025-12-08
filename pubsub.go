@@ -262,6 +262,7 @@ type Message struct {
 	ID            string
 	ReceivedFrom  peer.ID
 	ValidatorData interface{}
+	done          chan struct{}
 	Local         bool
 }
 
@@ -923,9 +924,15 @@ func (p *PubSub) processLoop(ctx context.Context) {
 
 		case msg := <-p.sendMsg:
 			p.publishMessage(msg)
+			if msg.done != nil {
+				close(msg.done)
+			}
 
 		case batchAndOpts := <-p.sendMessageBatch:
 			p.publishMessageBatch(batchAndOpts)
+			if batchAndOpts.done != nil {
+				close(batchAndOpts.done)
+			}
 
 		case req := <-p.sendPartialMsg:
 			p.publishPartialMessage(req)
@@ -1778,10 +1785,13 @@ func (p *PubSub) PublishBatch(batch *MessageBatch, opts ...BatchPubOpt) error {
 	}
 	setDefaultBatchPublishOptions(publishOptions)
 
+	done := make(chan struct{})
 	p.sendMessageBatch <- messageBatchAndPublishOptions{
 		messages: batch.take(),
 		opts:     publishOptions,
+		done:     done,
 	}
+	<-done
 
 	return nil
 }

@@ -302,6 +302,7 @@ func (v *validation) validateWorker() {
 func (v *validation) sendMsgBlocking(msg *Message) error {
 	select {
 	case v.p.sendMsg <- msg:
+		<-msg.done
 		return nil
 	case <-v.p.ctx.Done():
 		return v.p.ctx.Err()

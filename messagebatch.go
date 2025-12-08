@@ -32,6 +32,7 @@ func (mb *MessageBatch) take() []*Message {
 type messageBatchAndPublishOptions struct {
 	messages []*Message
 	opts     *BatchPublishOptions
+	done     chan struct{}
 }
 
 // RPCScheduler schedules outgoing RPCs.

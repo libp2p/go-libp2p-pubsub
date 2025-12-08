@@ -10,7 +10,7 @@ import (
 	"github.com/libp2p/go-libp2p/core/network"
 )
 
-func getDefaultHosts(t *testing.T, n int) []host.Host {
+func getDefaultHosts(t testing.TB, n int) []host.Host {
 	var out []host.Host
 
 	for i := 0; i < n; i++ {

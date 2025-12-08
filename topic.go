@@ -246,6 +246,7 @@ func (t *Topic) Publish(ctx context.Context, data []byte, opts ...PubOpt) error 
 		}
 		return err
 	}
+	msg.done = make(chan struct{})
 	return t.p.val.sendMsgBlocking(msg)
 }
 
