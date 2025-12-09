@@ -761,8 +761,8 @@ func TestPartialMessages(t *testing.T) {
 				count++
 			}
 		}
-		if count != 2 {
-			t.Fatal("h2 should only have sent two parts updates")
+		if count != 1 {
+			t.Fatal("h2 should only have sent one part updates")
 		}
 
 		// Assert h2 has the full message
@@ -821,8 +821,8 @@ func TestPartialMessages(t *testing.T) {
 				count++
 			}
 		}
-		if count != 2 {
-			t.Fatal("h2 should only have sent two parts updates")
+		if count != 1 {
+			t.Fatal("h2 should only have sent one part update")
 		}
 
 		// Assert h2 has the full message

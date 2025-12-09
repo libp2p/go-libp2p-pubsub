@@ -246,7 +246,6 @@ func (e *PartialMessagesExtension) PublishPartial(topic string, partial Message,
 
 		var rpc pb.PartialMessagesExtension
 		var sendRPC bool
-		var inResponseToIWant bool
 
 		pState, peerStateOk := state.peerState[p]
 		if !peerStateOk {
@@ -254,8 +253,9 @@ func (e *PartialMessagesExtension) PublishPartial(topic string, partial Message,
 			state.peerState[p] = pState
 		}
 
+		havePeersPartsMetadata := pState.partsMetadata != nil
 		// Try to fulfill any wants from the peer
-		if requestedPartial && pState.partsMetadata != nil {
+		if requestedPartial && havePeersPartsMetadata {
 			// This peer has previously asked for a certain part. We'll give
 			// them what we can.
 			pm, err := partial.PartialMessageBytes(pState.partsMetadata)
@@ -270,17 +270,19 @@ func (e *PartialMessagesExtension) PublishPartial(topic string, partial Message,
 				log.Debug("Respond to peer's IWant")
 				sendRPC = true
 				rpc.PartialMessage = pm
-				inResponseToIWant = true
 			}
 		}
 
 		// Only send the eager push to the peer if:
-		//   - we didn't reply to an explicit request
+		//   - we don't have the peer's parts metadata
 		//   - we have something to eager push
-		if requestedPartial && !inResponseToIWant && len(eagerData) > 0 {
+		if requestedPartial && !havePeersPartsMetadata && len(eagerData) > 0 {
 			log.Debug("Eager pushing")
 			sendRPC = true
 			rpc.PartialMessage = eagerData
+			// Merge the peer's empty partsMetadata with the parts we eagerly pushed.
+			// This tracks what has been sent to the peer and avoids sending duplicates.
+			pState.partsMetadata = e.MergePartsMetadata(topic, pState.partsMetadata, opts.EagerPushWithPartsMetadata)
 		}
 
 		// Only send parts metadata if it was different then before
@@ -382,6 +384,17 @@ func (e *PartialMessagesExtension) HandleRPC(from peer.ID, rpc *pb.PartialMessag
 			state.peerState[from] = pState
 		}
 		pState.partsMetadata = e.MergePartsMetadata(rpc.GetTopicID(), pState.partsMetadata, rpc.PartsMetadata)
+	}
+
+	if pState, ok := state.peerState[from]; ok && len(pState.sentPartsMetadata) > 0 && len(rpc.PartialMessage) > 0 {
+		// We have previously sent this peer our parts metadata and they have
+		// sent us a partial message. We can update the peer's view of our parts
+		// by merging our parts and their parts.
+		//
+		// This works if they are responding to our request or
+		// if they send data eagerly. In the latter case, they will update our
+		// view when they receive our parts metadata.
+		pState.sentPartsMetadata = e.MergePartsMetadata(rpc.GetTopicID(), pState.sentPartsMetadata, pState.partsMetadata)
 	}
 
 	return e.OnIncomingRPC(from, rpc)
