@@ -31,11 +31,6 @@ type PartsMetadata []byte
 // complete, partially complete, or empty. It is up to the application to define
 // how a message is split into parts and recombined, as well as how missing and
 // available parts are represented.
-//
-// It is passed to Gossipsub with a PublishPartialMessage method call. Gossipsub
-// keeps a reference to this object, so the implementation should either not
-// mutate this object in a separate goroutine after handing it to Gossipsub, or
-// take care to make the object thread safe.
 type Message interface {
 	GroupID() []byte
 
