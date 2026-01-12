@@ -128,6 +128,15 @@ type testPartialMessage struct {
 	Parts      [testPartialMessageLeaves][]byte
 	Proofs     [testPartialMessageLeaves][]merkle.ProofStep
 
+	// EagerPushHeader is extra data included only when eager pushing.
+	// This demonstrates how applications can include additional metadata
+	// on the first push to a peer.
+	EagerPushHeader []byte
+	// shouldEagerPush indicates if this message should perform eager push.
+	// Only true for messages created by the sender, not for messages extended
+	// from received data.
+	shouldEagerPush bool
+
 	republish func(partial *testPartialMessage, newParts PartsMetadata)
 	onErr     func(error)
 }
@@ -166,6 +175,11 @@ func (pm *testPartialMessage) extendFromEncodedPartialMessage(_ peer.ID, data []
 	if !bytes.Equal(pm.Commitment, decoded.Commitment) {
 		pm.onErr(errors.New("commitment mismatch"))
 		return
+	}
+
+	// Copy eager push header if present (only sent on eager push)
+	if len(decoded.EagerPushHeader) > 0 && len(pm.EagerPushHeader) == 0 {
+		pm.EagerPushHeader = decoded.EagerPushHeader
 	}
 
 	for i, part := range decoded.Parts {
@@ -219,13 +233,42 @@ func (pm *testPartialMessage) shouldRequest(partsMetadata []byte) bool {
 	return iWant.Cmp(&zero) != 0
 }
 
-// PartialMessageBytes implements PartialMessage.
+// EagerPartialMessageBytes implements Message.
+func (pm *testPartialMessage) EagerPartialMessageBytes() ([]byte, PartsMetadata, error) {
+	// Only eager push if explicitly requested (not for received messages)
+	if !pm.shouldEagerPush {
+		return nil, nil, nil
+	}
+
+	var tempMessage testPartialMessage
+	tempMessage.Commitment = pm.Commitment
+	tempMessage.EagerPushHeader = pm.EagerPushHeader
+
+	// Include all available parts
+	for i := range pm.Parts {
+		if len(pm.Parts[i]) == 0 {
+			continue
+		}
+		tempMessage.Parts[i] = pm.Parts[i]
+		tempMessage.Proofs[i] = pm.Proofs[i]
+	}
+
+	b, err := json.Marshal(tempMessage)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return b, pm.PartsMetadata(), nil
+}
+
+// PartialMessageBytes implements Message.
 func (pm *testPartialMessage) PartialMessageBytes(metadata PartsMetadata) ([]byte, error) {
 	peerHas := bitmap.Bitmap(metadata)
 
 	var added bool
 	var tempMessage testPartialMessage
 	tempMessage.Commitment = pm.Commitment
+
 	for i := range pm.Parts {
 		if peerHas.Get(i) {
 			continue
@@ -619,11 +662,12 @@ func TestPartialMessages(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+		// Set eager push header - this should only be sent on eager push
+		h1Msg.EagerPushHeader = []byte("h1-eager-header")
+		h1Msg.shouldEagerPush = true
 
 		// h1 knows the full message and eager pushes
-		err = peers.handlers[0].PublishPartial(topic, h1Msg, PublishOptions{
-			EagerPushWithPartsMetadata: []byte{0x00}, // All parts
-		})
+		err = peers.handlers[0].PublishPartial(topic, h1Msg, PublishOptions{})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -641,15 +685,22 @@ func TestPartialMessages(t *testing.T) {
 			t.Fatal("h2 should have the full message")
 		}
 
+		// Assert h2 received the eager push header from h1
+		if !bytes.Equal(lastPartialMessageh2.EagerPushHeader, h1Msg.EagerPushHeader) {
+			t.Fatalf("h2 should have received eager push header from h1, got %q, want %q",
+				lastPartialMessageh2.EagerPushHeader, h1Msg.EagerPushHeader)
+		}
+
 		h2Msg, err := newFullTestMessage(rand, peers.handlers[1], topic)
 		if err != nil {
 			t.Fatal(err)
 		}
+		// Set eager push header for h2's message
+		h2Msg.EagerPushHeader = []byte("h2-eager-header")
+		h2Msg.shouldEagerPush = true
 
 		// h2 knows the full message and eager pushes
-		peers.handlers[1].PublishPartial(topic, h2Msg, PublishOptions{
-			EagerPushWithPartsMetadata: []byte{0x00}, // All parts h2 has
-		})
+		peers.handlers[1].PublishPartial(topic, h2Msg, PublishOptions{})
 
 		// h1 will receive partial message data through OnIncomingRPC
 		// We can access it through our tracking system
@@ -662,6 +713,12 @@ func TestPartialMessages(t *testing.T) {
 		// Assert h1 has the full message
 		if !lastPartialMessageh1.complete() {
 			t.Fatal("h1 should have the full message")
+		}
+
+		// Assert h1 received the eager push header from h2
+		if !bytes.Equal(lastPartialMessageh1.EagerPushHeader, h2Msg.EagerPushHeader) {
+			t.Fatalf("h1 should have received eager push header from h2, got %q, want %q",
+				lastPartialMessageh1.EagerPushHeader, h2Msg.EagerPushHeader)
 		}
 	})
 
@@ -968,20 +1025,16 @@ func TestPartialMessages(t *testing.T) {
 
 		// Eagerly push new data to peers
 		h2Msg.republish = func(pm *testPartialMessage, newParts PartsMetadata) {
-			// Flip because we want to select these parts for the eager push
-			bitmap.Bitmap(newParts).Flip()
-			peers.handlers[1].PublishPartial(topic, pm, PublishOptions{EagerPushWithPartsMetadata: newParts})
+			peers.handlers[1].PublishPartial(topic, pm, PublishOptions{})
 		}
 		// Peer 3 has no parts
 		h3Msg := newEmptyTestMessage(fullMsg.Commitment, peers.handlers[2], topic)
 		// Eagerly push new data to peers
 		h3Msg.republish = func(pm *testPartialMessage, newParts PartsMetadata) {
-			// Flip because we want to select these parts for the eager push
-			bitmap.Bitmap(newParts).Flip()
-			peers.handlers[2].PublishPartial(topic, pm, PublishOptions{EagerPushWithPartsMetadata: newParts})
+			peers.handlers[2].PublishPartial(topic, pm, PublishOptions{})
 		}
 		// All peers publish their partial messages
-		peers.handlers[0].PublishPartial(topic, h1Msg, PublishOptions{EagerPushWithPartsMetadata: []byte{0x00}})
+		peers.handlers[0].PublishPartial(topic, h1Msg, PublishOptions{})
 		peers.registerMessage(0, topic, h1Msg)
 		peers.handlers[1].PublishPartial(topic, h2Msg, PublishOptions{})
 		peers.registerMessage(1, topic, h2Msg)

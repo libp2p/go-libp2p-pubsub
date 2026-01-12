@@ -4511,6 +4511,11 @@ func (m *minimalTestPartialMessage) GroupID() []byte {
 	return m.Group
 }
 
+func (m *minimalTestPartialMessage) EagerPartialMessageBytes() ([]byte, partialmessages.PartsMetadata, error) {
+	// Return nil to indicate no eager push data
+	return nil, nil, nil
+}
+
 func (m *minimalTestPartialMessage) PartialMessageBytes(peerPartsMetadata partialmessages.PartsMetadata) ([]byte, error) {
 	if len(peerPartsMetadata) == 0 {
 		return nil, errors.New("invalid metadata")
