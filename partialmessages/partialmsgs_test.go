@@ -1064,6 +1064,190 @@ func TestPartialMessages(t *testing.T) {
 	})
 }
 
+func TestGossipDelivery(t *testing.T) {
+	topic := "test-topic"
+	rand := rand.New(rand.NewSource(42))
+
+	// Create peers where h2 is NOT in h1's mesh but IS in h1's gossipPeers
+	// This tests the gossip path
+	nw := &mockNetworkPartialMessages{
+		t:           t,
+		pendingMsgs: make(map[peer.ID][]rpcWithFrom),
+		allSentMsgs: make(map[peer.ID][]rpcWithFrom),
+		handlers:    make(map[peer.ID]*PartialMessagesExtension),
+	}
+
+	h1ID := peer.ID("h1")
+	h2ID := peer.ID("h2")
+
+	partialMessages := map[peer.ID]map[string]map[string]*testPartialMessage{
+		h1ID: make(map[string]map[string]*testPartialMessage),
+		h2ID: make(map[string]map[string]*testPartialMessage),
+	}
+
+	var h1Handler, h2Handler *PartialMessagesExtension
+
+	// Create h1 router - h2 is NOT in mesh but IS in gossipPeers
+	h1Router := &testRouter{
+		sendRPC: func(p peer.ID, r *pubsub_pb.PartialMessagesExtension, urgent bool) {
+			nw.sendRPC(h1ID, p, r, urgent)
+		},
+		meshPeers: func(topic string) iter.Seq[peer.ID] {
+			// h2 is NOT in mesh
+			return func(yield func(peer.ID) bool) {}
+		},
+	}
+
+	// Create h2 router - h1 is NOT in mesh
+	h2Router := &testRouter{
+		sendRPC: func(p peer.ID, r *pubsub_pb.PartialMessagesExtension, urgent bool) {
+			nw.sendRPC(h2ID, p, r, urgent)
+		},
+		meshPeers: func(topic string) iter.Seq[peer.ID] {
+			// h1 is NOT in mesh
+			return func(yield func(peer.ID) bool) {}
+		},
+	}
+
+	// Create h1 handler
+	h1Handler = &PartialMessagesExtension{
+		Logger: slog.Default().With("id", "h1"),
+		MergePartsMetadata: func(_ string, left, right PartsMetadata) PartsMetadata {
+			return MergeBitmap(left, right)
+		},
+		OnIncomingRPC: func(from peer.ID, rpc *pubsub_pb.PartialMessagesExtension) error {
+			if partialMessages[h1ID][topic] == nil {
+				partialMessages[h1ID][topic] = make(map[string]*testPartialMessage)
+			}
+			groupKey := string(rpc.GroupID)
+			pm := partialMessages[h1ID][topic][groupKey]
+			if pm == nil {
+				pm = &testPartialMessage{
+					Commitment: rpc.GroupID,
+					republish: func(pm *testPartialMessage, _ PartsMetadata) {
+						h1Handler.PublishPartial(topic, pm, PublishOptions{})
+					},
+				}
+				partialMessages[h1ID][topic][groupKey] = pm
+			}
+			pm.extendFromEncodedPartialMessage(from, rpc.PartialMessage)
+			h1Handler.PublishPartial(topic, pm, PublishOptions{})
+			return nil
+		},
+		ValidateRPC: func(_ peer.ID, rpc *pubsub_pb.PartialMessagesExtension) error {
+			return nil
+		},
+		GroupTTLByHeatbeat: 5,
+	}
+	h1Handler.Init(h1Router)
+
+	// Create h2 handler
+	h2Handler = &PartialMessagesExtension{
+		Logger: slog.Default().With("id", "h2"),
+		MergePartsMetadata: func(_ string, left, right PartsMetadata) PartsMetadata {
+			return MergeBitmap(left, right)
+		},
+		OnIncomingRPC: func(from peer.ID, rpc *pubsub_pb.PartialMessagesExtension) error {
+			if partialMessages[h2ID][topic] == nil {
+				partialMessages[h2ID][topic] = make(map[string]*testPartialMessage)
+			}
+			groupKey := string(rpc.GroupID)
+			pm := partialMessages[h2ID][topic][groupKey]
+			if pm == nil {
+				pm = &testPartialMessage{
+					Commitment: rpc.GroupID,
+					republish: func(pm *testPartialMessage, _ PartsMetadata) {
+						h2Handler.PublishPartial(topic, pm, PublishOptions{})
+					},
+				}
+				partialMessages[h2ID][topic][groupKey] = pm
+			}
+			pm.extendFromEncodedPartialMessage(from, rpc.PartialMessage)
+			h2Handler.PublishPartial(topic, pm, PublishOptions{})
+			return nil
+		},
+		ValidateRPC: func(_ peer.ID, rpc *pubsub_pb.PartialMessagesExtension) error {
+			return nil
+		},
+		GroupTTLByHeatbeat: 5,
+	}
+	h2Handler.Init(h2Router)
+
+	nw.handlers[h1ID] = h1Handler
+	nw.handlers[h2ID] = h2Handler
+
+	// Add peers to each other
+	h1Handler.AddPeer(h2ID)
+	h2Handler.AddPeer(h1ID)
+
+	// Create full message for h1
+	h1Msg, err := newFullTestMessage(rand, h1Handler, topic)
+	if err != nil {
+		t.Fatal(err)
+	}
+	partialMessages[h1ID][topic] = make(map[string]*testPartialMessage)
+	partialMessages[h1ID][topic][string(h1Msg.GroupID())] = h1Msg
+
+	// h1 publishes - since h2 is not in mesh, nothing should be sent to h2 yet
+	h1Handler.PublishPartial(topic, h1Msg, PublishOptions{})
+
+	// Handle any pending RPCs (should be none to h2 since not in mesh)
+	for nw.handleRPCs() {
+	}
+
+	// Assert h2 does NOT have the message yet
+	h2Msg := partialMessages[h2ID][topic][string(h1Msg.GroupID())]
+	if h2Msg != nil && h2Msg.complete() {
+		t.Fatal("h2 should NOT have the message before gossip")
+	}
+
+	h1Handler.EmitGossip(topic, []peer.ID{h2ID})
+
+	// Handle RPCs - h2 should receive partsMetadata via gossip and request data
+	for nw.handleRPCs() {
+	}
+
+	// Assert h2 now has the full message
+	h2Msg = partialMessages[h2ID][topic][string(h1Msg.GroupID())]
+	if h2Msg == nil || !h2Msg.complete() {
+		t.Fatal("h2 should have the full message after gossip")
+	}
+
+	// Count partsMetadata RPCs sent to h2 so far
+	partsMetadataCountBefore := 0
+	for _, rpc := range nw.allSentMsgs[h2ID] {
+		if rpc.rpc.PartsMetadata != nil && rpc.rpc.PartialMessage == nil {
+			partsMetadataCountBefore++
+		}
+	}
+
+	// EmitGossip - deduplication should prevent sending partsMetadata again
+	h1Handler.EmitGossip(topic, []peer.ID{h2ID})
+	for nw.handleRPCs() {
+	}
+
+	// Count partsMetadata RPCs sent to h2 after second heartbeat
+	partsMetadataCountAfter := 0
+	for _, rpc := range nw.allSentMsgs[h2ID] {
+		if rpc.rpc.PartsMetadata != nil && rpc.rpc.PartialMessage == nil {
+			partsMetadataCountAfter++
+		}
+	}
+
+	// Assert deduplication works - no additional partsMetadata RPCs should have been sent
+	if partsMetadataCountAfter != partsMetadataCountBefore {
+		t.Fatalf("deduplication failed: expected %d partsMetadata RPCs, got %d", partsMetadataCountBefore, partsMetadataCountAfter)
+	}
+
+	// Cleanup
+	h1Handler.RemovePeer(h2ID)
+	h2Handler.RemovePeer(h1ID)
+	for range 10 {
+		h1Handler.Heartbeat()
+		h2Handler.Heartbeat()
+	}
+}
+
 func TestPeerInitiatedCounter(t *testing.T) {
 	// slog.SetLogLoggerLevel(slog.LevelDebug)
 	topic := "test-topic"

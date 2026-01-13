@@ -217,11 +217,10 @@ func (r partialMessageRouter) MeshPeers(topic string) iter.Seq[peer.ID] {
 		}
 
 		for peer := range peerSet {
-			if r.gs.extensions.peerExtensions[peer].PartialMessages {
-				if (r.gs.iRequestPartial(topic) && r.gs.peerSupportsSendingPartial(peer, topic)) || (r.gs.iSupportSendingPartial(topic) && r.gs.peerRequestsPartial(peer, topic)) {
-					if !yield(peer) {
-						return
-					}
+			if r.gs.extensions.peerExtensions[peer].PartialMessages &&
+				(r.gs.iRequestPartial(topic) && r.gs.peerSupportsSendingPartial(peer, topic)) || (r.gs.iSupportSendingPartial(topic) && r.gs.peerRequestsPartial(peer, topic)) {
+				if !yield(peer) {
+					return
 				}
 			}
 		}

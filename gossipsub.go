@@ -2010,6 +2010,7 @@ func (gs *GossipSubRouter) emitGossip(topic string, exclude map[peer.ID]struct{}
 	for p := range gs.p.topics[topic] {
 		_, inExclude := exclude[p]
 		_, direct := gs.direct[p]
+
 		if !inExclude && !direct && gs.feature(GossipSubFeatureMesh, gs.peers[p]) && gs.score.Score(p) >= gs.gossipThreshold {
 			peers = append(peers, p)
 		}
@@ -2028,6 +2029,9 @@ func (gs *GossipSubRouter) emitGossip(topic string, exclude map[peer.ID]struct{}
 	}
 	peers = peers[:target]
 
+	// avoid a reallocation to collect peers that requested partial messages.
+	partialMessagePeers := peers[:0]
+
 	// Emit the IHAVE gossip to the selected peers.
 	for _, p := range peers {
 		peerMids := mids
@@ -2039,7 +2043,18 @@ func (gs *GossipSubRouter) emitGossip(topic string, exclude map[peer.ID]struct{}
 			shuffleStrings(mids)
 			copy(peerMids, mids)
 		}
+
+		if gs.iSupportSendingPartial(topic) && gs.peerRequestsPartial(p, topic) {
+			partialMessagePeers = append(partialMessagePeers, p)
+			// We should send the peer partial messages for gossip instead
+			continue
+		}
+
 		gs.enqueueGossip(p, &pb.ControlIHave{TopicID: &topic, MessageIDs: peerMids})
+	}
+
+	if len(partialMessagePeers) > 0 {
+		gs.extensions.partialMessagesExtension.EmitGossip(topic, partialMessagePeers)
 	}
 }
 

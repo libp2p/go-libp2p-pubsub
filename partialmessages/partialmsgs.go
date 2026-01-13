@@ -65,6 +65,8 @@ type partialMessageStatePerGroupPerTopic struct {
 	peerState   map[peer.ID]*peerState
 	groupTTL    int
 	initiatedBy peer.ID // zero value if we initiated the group
+
+	myLastPartsMetadata []byte
 }
 
 func newPartialMessageStatePerTopicGroup(groupTTL int) *partialMessageStatePerGroupPerTopic {
@@ -214,6 +216,7 @@ func (e *PartialMessagesExtension) PublishPartial(topic string, partial Message,
 	}
 
 	state.groupTTL = max(e.GroupTTLByHeatbeat, minGroupTTL)
+	state.myLastPartsMetadata = slices.Clone(myPartsMeta)
 
 	var peers iter.Seq[peer.ID]
 	if len(opts.PublishToPeers) > 0 {
@@ -337,6 +340,38 @@ func (e *PartialMessagesExtension) Heartbeat() {
 				}
 			} else {
 				s.groupTTL--
+			}
+		}
+	}
+}
+
+func (e *PartialMessagesExtension) EmitGossip(topic string, peers []peer.ID) {
+	topicState, ok := e.statePerTopicPerGroup[topic]
+	if !ok {
+		return
+	}
+
+	for group, s := range topicState {
+		if s.remotePeerInitiated() || len(s.myLastPartsMetadata) == 0 {
+			continue
+		}
+
+		rpc := &pb.PartialMessagesExtension{
+			TopicID:       &topic,
+			GroupID:       []byte(group),
+			PartsMetadata: s.myLastPartsMetadata,
+		}
+
+		for _, peer := range peers {
+			pState, peerStateOk := s.peerState[peer]
+			if !peerStateOk {
+				pState = &peerState{}
+				s.peerState[peer] = pState
+			}
+
+			if !bytes.Equal(rpc.PartsMetadata, pState.sentPartsMetadata) {
+				pState.sentPartsMetadata = rpc.PartsMetadata
+				e.sendRPC(peer, rpc)
 			}
 		}
 	}
