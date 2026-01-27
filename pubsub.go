@@ -1345,7 +1345,7 @@ func (p *PubSub) handleIncomingRPC(rpc *RPC) {
 		}
 	}
 
-	p.tracer.RecvRPC(rpc)
+	p.tracer.RecvRPC(rpc, rpc.from)
 
 	subs := rpc.GetSubscriptions()
 	if len(subs) != 0 && p.subFilter != nil {

@@ -174,7 +174,7 @@ func (gt *gossipTracer) Leave(topic string)                   {}
 func (gt *gossipTracer) Graft(p peer.ID, topic string)        {}
 func (gt *gossipTracer) Prune(p peer.ID, topic string)        {}
 func (gt *gossipTracer) DuplicateMessage(msg *Message)        {}
-func (gt *gossipTracer) RecvRPC(rpc *RPC)                     {}
+func (gt *gossipTracer) RecvRPC(rpc *RPC, p peer.ID)          {}
 func (gt *gossipTracer) SendRPC(rpc *RPC, p peer.ID)          {}
 func (gt *gossipTracer) DropRPC(rpc *RPC, p peer.ID)          {}
 func (gt *gossipTracer) UndeliverableMessage(msg *Message)    {}

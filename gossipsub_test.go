@@ -3051,7 +3051,7 @@ type mockRawTracer struct {
 	onRecvRPC func(*RPC)
 }
 
-func (m *mockRawTracer) RecvRPC(rpc *RPC) {
+func (m *mockRawTracer) RecvRPC(rpc *RPC, p peer.ID) {
 	if m.onRecvRPC != nil {
 		m.onRecvRPC(rpc)
 	}

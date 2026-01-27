@@ -49,7 +49,7 @@ type RawTracer interface {
 	// ThrottlePeer is invoked when a peer is throttled by the peer gater.
 	ThrottlePeer(p peer.ID)
 	// RecvRPC is invoked when an incoming RPC is received.
-	RecvRPC(rpc *RPC)
+	RecvRPC(rpc *RPC, from peer.ID)
 	// SendRPC is invoked when a RPC is sent.
 	SendRPC(rpc *RPC, p peer.ID)
 	// DropRPC is invoked when an outbound RPC is dropped, typically because of a queue full.
@@ -247,13 +247,13 @@ func (t *pubsubTracer) RemovePeer(p peer.ID) {
 	t.tracer.Trace(evt)
 }
 
-func (t *pubsubTracer) RecvRPC(rpc *RPC) {
+func (t *pubsubTracer) RecvRPC(rpc *RPC, p peer.ID) {
 	if t == nil {
 		return
 	}
 
 	for _, tr := range t.raw {
-		tr.RecvRPC(rpc)
+		tr.RecvRPC(rpc, p)
 	}
 
 	if t.tracer == nil {
