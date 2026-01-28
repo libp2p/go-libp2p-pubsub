@@ -234,7 +234,7 @@ func (pm *testPartialMessage) shouldRequest(partsMetadata []byte) bool {
 }
 
 // EagerPartialMessageBytes implements Message.
-func (pm *testPartialMessage) EagerPartialMessageBytes() ([]byte, PartsMetadata, error) {
+func (pm *testPartialMessage) EagerPartialMessageBytes(to peer.ID) ([]byte, PartsMetadata, error) {
 	// Only eager push if explicitly requested (not for received messages)
 	if !pm.shouldEagerPush {
 		return nil, nil, nil

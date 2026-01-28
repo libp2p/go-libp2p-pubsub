@@ -4511,7 +4511,7 @@ func (m *minimalTestPartialMessage) GroupID() []byte {
 	return m.Group
 }
 
-func (m *minimalTestPartialMessage) EagerPartialMessageBytes() ([]byte, partialmessages.PartsMetadata, error) {
+func (m *minimalTestPartialMessage) EagerPartialMessageBytes(to peer.ID) ([]byte, partialmessages.PartsMetadata, error) {
 	// Return nil to indicate no eager push data
 	return nil, nil, nil
 }

@@ -39,11 +39,11 @@ type Message interface {
 	PartialMessageBytes(partsMetadata PartsMetadata) (msg []byte, _ error)
 
 	// EagerPartialMessageBytes returns an encoded partial message to be sent to
-	// peer whose parts metadata is unknown. It is valid for an implementation
-	// to return `nil, nil, nil` if it has no eager push data it would like to
-	// send. The returned partsMetadata should represent the parts the remote
-	// peer should have after decoding this message.
-	EagerPartialMessageBytes() (msg []byte, partsMetadata PartsMetadata, _ error)
+	// the given peer whose parts metadata is unknown. It is valid for an
+	// implementation to return `nil, nil, nil` if it has no eager push data it
+	// would like to send. The returned partsMetadata should represent the parts
+	// the remote peer should have after decoding this message.
+	EagerPartialMessageBytes(to peer.ID) (msg []byte, partsMetadata PartsMetadata, _ error)
 
 	PartsMetadata() PartsMetadata
 }
@@ -225,10 +225,6 @@ func (e *PartialMessagesExtension) PublishPartial(topic string, partial Message,
 		peers = e.peersToPublishTo(topic, state)
 	}
 
-	eagerData, eagerPartsMeta, err := partial.EagerPartialMessageBytes()
-	if err != nil {
-		return err
-	}
 	for p := range peers {
 		log := e.Logger.With("peer", p)
 		requestedPartial := e.router.PeerRequestsPartial(p, topic)
@@ -265,13 +261,19 @@ func (e *PartialMessagesExtension) PublishPartial(topic string, partial Message,
 		// Only send the eager push to the peer if:
 		//   - we don't have the peer's parts metadata
 		//   - we have something to eager push
-		if requestedPartial && !havePeersPartsMetadata && len(eagerData) > 0 {
-			log.Debug("Eager pushing")
-			sendRPC = true
-			rpc.PartialMessage = eagerData
-			// Merge the peer's empty partsMetadata with the parts we eagerly pushed.
-			// This tracks what has been sent to the peer and avoids sending duplicates.
-			pState.partsMetadata = e.MergePartsMetadata(topic, pState.partsMetadata, eagerPartsMeta)
+		if requestedPartial && !havePeersPartsMetadata {
+			eagerData, eagerPartsMeta, err := partial.EagerPartialMessageBytes(p)
+			if err != nil {
+				return err
+			}
+			if len(eagerData) > 0 {
+				log.Debug("Eager pushing")
+				sendRPC = true
+				rpc.PartialMessage = eagerData
+				// Merge the peer's empty partsMetadata with the parts we eagerly pushed.
+				// This tracks what has been sent to the peer and avoids sending duplicates.
+				pState.partsMetadata = e.MergePartsMetadata(topic, pState.partsMetadata, eagerPartsMeta)
+			}
 		}
 
 		// Only send parts metadata if it was different then before
