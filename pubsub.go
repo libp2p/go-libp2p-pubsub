@@ -276,6 +276,10 @@ type RPC struct {
 	from peer.ID
 }
 
+func (rpc *RPC) From() peer.ID {
+	return rpc.from
+}
+
 // LogValue implements slog.LogValuer.
 func (rpc *RPC) LogValue() slog.Value {
 	// Messages
