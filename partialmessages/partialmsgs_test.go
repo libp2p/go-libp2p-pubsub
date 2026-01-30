@@ -1370,6 +1370,40 @@ func TestPeerInitiatedCounter(t *testing.T) {
 	assertCounts(0, map[peer.ID]int{})
 }
 
+// TestPartsMetadataCopied verifies that PublishPartial clones the PartsMetadata
+// so the caller is free to mutate it after the function returns.
+func TestPartsMetadataCopied(t *testing.T) {
+	topic := "test-topic"
+	rand := rand.New(rand.NewSource(0))
+
+	peers := createPeers(t, topic, 2, false)
+	peers.network.addPeers()
+	defer peers.network.removePeers()
+
+	h1Msg, err := newFullTestMessage(rand, peers.handlers[0], topic)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Get the parts metadata before publishing
+	metaBefore := h1Msg.PartsMetadata()
+
+	// Publish the partial message
+	peers.handlers[0].PublishPartial(topic, h1Msg, PublishOptions{})
+
+	// Mutate the parts metadata after publishing (simulating caller mutation)
+	metaAfter := h1Msg.PartsMetadata()
+	for i := range metaAfter {
+		metaAfter[i] = 0
+	}
+
+	// The internal state should still have the original metadata
+	state := peers.handlers[0].statePerTopicPerGroup[topic][string(h1Msg.GroupID())]
+	if !bytes.Equal(state.myLastPartsMetadata, metaBefore) {
+		t.Fatal("internal state was mutated by caller; PartsMetadata should be copied")
+	}
+}
+
 func FuzzPeerInitiatedCounter(f *testing.F) {
 	topic := "test-topic"
 	f.Fuzz(func(t *testing.T, script []byte, totalLimit uint8, peerLimit uint8) {

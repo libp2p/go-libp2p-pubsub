@@ -208,7 +208,6 @@ func (e *PartialMessagesExtension) Init(router Router) error {
 
 func (e *PartialMessagesExtension) PublishPartial(topic string, partial Message, opts PublishOptions) error {
 	groupID := partial.GroupID()
-	myPartsMeta := partial.PartsMetadata()
 
 	state, err := e.groupState(topic, groupID, false, "")
 	if err != nil {
@@ -216,7 +215,11 @@ func (e *PartialMessagesExtension) PublishPartial(topic string, partial Message,
 	}
 
 	state.groupTTL = max(e.GroupTTLByHeatbeat, minGroupTTL)
-	state.myLastPartsMetadata = slices.Clone(myPartsMeta)
+
+	// Copy this as the owner of the partial message if free to mutate the
+	// returned metadata after this function returns.
+	myPartsMeta := slices.Clone(partial.PartsMetadata())
+	state.myLastPartsMetadata = myPartsMeta
 
 	var peers iter.Seq[peer.ID]
 	if len(opts.PublishToPeers) > 0 {
