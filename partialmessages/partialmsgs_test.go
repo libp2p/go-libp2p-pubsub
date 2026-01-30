@@ -15,7 +15,6 @@ import (
 	"testing"
 
 	"github.com/libp2p/go-libp2p-pubsub/internal/merkle"
-	"github.com/libp2p/go-libp2p-pubsub/partialmessages/bitmap"
 	pubsub_pb "github.com/libp2p/go-libp2p-pubsub/pb"
 	"github.com/libp2p/go-libp2p/core/peer"
 )
@@ -152,13 +151,13 @@ func (pm *testPartialMessage) complete() bool {
 
 // AvailableParts returns a bitmap of available parts
 func (pm *testPartialMessage) PartsMetadata() PartsMetadata {
-	out := bitmap.NewBitmapWithOnesCount(testPartialMessageLeaves)
+	out := NewBitmapWithOnesCount(testPartialMessageLeaves)
 	for i, part := range pm.Parts {
 		if len(part) == 0 {
 			out.Clear(i)
 		}
 	}
-	return PartsMetadata(out)
+	return Bitmap(out)
 }
 
 func (pm *testPartialMessage) extendFromEncodedPartialMessage(_ peer.ID, data []byte) (extended bool) {
@@ -220,7 +219,7 @@ func (pm *testPartialMessage) GroupID() []byte {
 
 func (pm *testPartialMessage) shouldRequest(partsMetadata []byte) bool {
 	var myParts big.Int
-	myParts.SetBytes(pm.PartsMetadata())
+	myParts.SetBytes(pm.PartsMetadata().Encode())
 	var zero big.Int
 
 	var peerHas big.Int
@@ -262,8 +261,8 @@ func (pm *testPartialMessage) EagerPartialMessageBytes() ([]byte, PartsMetadata,
 }
 
 // PartialMessageBytes implements Message.
-func (pm *testPartialMessage) PartialMessageBytes(metadata PartsMetadata) ([]byte, error) {
-	peerHas := bitmap.Bitmap(metadata)
+func (pm *testPartialMessage) PartialMessageBytes(metadata PartsMetadata) ([]byte, PartsMetadata, error) {
+	peerHas := Bitmap(metadata.Encode())
 
 	var added bool
 	var tempMessage testPartialMessage
@@ -285,15 +284,17 @@ func (pm *testPartialMessage) PartialMessageBytes(metadata PartsMetadata) ([]byt
 	}
 
 	if !added {
-		return nil, nil
+		return nil, nil, nil
 	}
 
 	b, err := json.Marshal(tempMessage)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
-	return b, nil
+	merged := pm.PartsMetadata().Clone()
+	merged.Merge(metadata)
+	return b, merged, nil
 }
 
 type testPartialMessageChecker struct {
@@ -301,7 +302,9 @@ type testPartialMessageChecker struct {
 }
 
 func (t *testPartialMessageChecker) MergePartsMetadata(left, right PartsMetadata) PartsMetadata {
-	return MergeBitmap(left, right)
+	m := left.Clone()
+	m.Merge(right)
+	return m
 }
 
 // EmptyMessage implements InvariantChecker.
@@ -460,8 +463,8 @@ func createPeers(t *testing.T, topic string, n int, nonMesh bool) *testPeers {
 		// Create handler
 		handler = &PartialMessagesExtension{
 			Logger: slog.Default().With("id", i),
-			MergePartsMetadata: func(_ string, left, right PartsMetadata) PartsMetadata {
-				return MergeBitmap(left, right)
+			DecodePartsMetadata: func(_ peer.ID, rpc *pubsub_pb.PartialMessagesExtension) (PartsMetadata, error) {
+				return Bitmap(rpc.PartsMetadata), nil
 			},
 			OnIncomingRPC: func(from peer.ID, rpc *pubsub_pb.PartialMessagesExtension) error {
 				// Handle incoming partial message data - use testPeers to track state
@@ -488,9 +491,9 @@ func createPeers(t *testing.T, topic string, n int, nonMesh bool) *testPeers {
 				recvdNewData := pm.extendFromEncodedPartialMessage(from, rpc.PartialMessage)
 
 				if recvdNewData {
-					newParts := bitmap.Bitmap(pm.PartsMetadata())
-					newParts.Xor(bitmap.Bitmap(beforeParts))
-					pm.republish(pm, PartsMetadata(newParts))
+					newParts := Bitmap(pm.PartsMetadata().Encode())
+					newParts.Xor(Bitmap(beforeParts.Encode()))
+					pm.republish(pm, Bitmap(newParts))
 					return nil
 				}
 
@@ -499,7 +502,7 @@ func createPeers(t *testing.T, topic string, n int, nonMesh bool) *testPeers {
 				peerHasUsefulData := pm.shouldRequest(rpc.PartsMetadata)
 
 				var iHave big.Int
-				iHave.SetBytes(pm.PartsMetadata())
+				iHave.SetBytes(pm.PartsMetadata().Encode())
 
 				var peerHas big.Int
 				peerHas.SetBytes(rpc.PartsMetadata)
@@ -803,7 +806,7 @@ func TestPartialMessages(t *testing.T) {
 
 		emptyMsg := &testPartialMessage{}
 		emptyMetadata := emptyMsg.PartsMetadata()
-		if bytes.Equal(peers.network.pendingMsgs[peers.peers[0]][0].rpc.PartsMetadata, emptyMetadata) {
+		if bytes.Equal(peers.network.pendingMsgs[peers.peers[0]][0].rpc.PartsMetadata, emptyMetadata.Encode()) {
 			t.Fatal("h2 request should not be the same as an empty message")
 		}
 
@@ -863,7 +866,7 @@ func TestPartialMessages(t *testing.T) {
 
 		emptyMsg := &testPartialMessage{}
 		emptyMetadata := emptyMsg.PartsMetadata()
-		if bytes.Equal(peers.network.pendingMsgs[peers.peers[0]][0].rpc.PartsMetadata, emptyMetadata) {
+		if bytes.Equal(peers.network.pendingMsgs[peers.peers[0]][0].rpc.PartsMetadata, emptyMetadata.Encode()) {
 			t.Fatal("h2 metadata should not be the same as an empty message's metadata")
 		}
 
@@ -1112,8 +1115,8 @@ func TestGossipDelivery(t *testing.T) {
 	// Create h1 handler
 	h1Handler = &PartialMessagesExtension{
 		Logger: slog.Default().With("id", "h1"),
-		MergePartsMetadata: func(_ string, left, right PartsMetadata) PartsMetadata {
-			return MergeBitmap(left, right)
+		DecodePartsMetadata: func(_ peer.ID, rpc *pubsub_pb.PartialMessagesExtension) (PartsMetadata, error) {
+			return Bitmap(rpc.PartsMetadata), nil
 		},
 		OnIncomingRPC: func(from peer.ID, rpc *pubsub_pb.PartialMessagesExtension) error {
 			if partialMessages[h1ID][topic] == nil {
@@ -1144,8 +1147,8 @@ func TestGossipDelivery(t *testing.T) {
 	// Create h2 handler
 	h2Handler = &PartialMessagesExtension{
 		Logger: slog.Default().With("id", "h2"),
-		MergePartsMetadata: func(_ string, left, right PartsMetadata) PartsMetadata {
-			return MergeBitmap(left, right)
+		DecodePartsMetadata: func(_ peer.ID, rpc *pubsub_pb.PartialMessagesExtension) (PartsMetadata, error) {
+			return Bitmap(rpc.PartsMetadata), nil
 		},
 		OnIncomingRPC: func(from peer.ID, rpc *pubsub_pb.PartialMessagesExtension) error {
 			if partialMessages[h2ID][topic] == nil {
@@ -1258,8 +1261,8 @@ func TestPeerInitiatedCounter(t *testing.T) {
 	}
 	handler := PartialMessagesExtension{
 		Logger: slog.Default(),
-		MergePartsMetadata: func(topic string, left, right PartsMetadata) PartsMetadata {
-			return left
+		DecodePartsMetadata: func(_ peer.ID, rpc *pubsub_pb.PartialMessagesExtension) (PartsMetadata, error) {
+			return Bitmap(rpc.PartsMetadata), nil
 		},
 		OnIncomingRPC: func(from peer.ID, rpc *pubsub_pb.PartialMessagesExtension) error {
 			// Ignore for this test
@@ -1386,8 +1389,8 @@ func FuzzPeerInitiatedCounter(f *testing.F) {
 
 		handler := PartialMessagesExtension{
 			Logger: slog.Default(),
-			MergePartsMetadata: func(topic string, left, right PartsMetadata) PartsMetadata {
-				return left
+			DecodePartsMetadata: func(_ peer.ID, rpc *pubsub_pb.PartialMessagesExtension) (PartsMetadata, error) {
+				return Bitmap(rpc.PartsMetadata), nil
 			},
 			OnIncomingRPC: func(from peer.ID, rpc *pubsub_pb.PartialMessagesExtension) error {
 				// Ignore for this test
