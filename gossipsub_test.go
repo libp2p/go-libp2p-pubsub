@@ -4510,14 +4510,10 @@ func (m *minimalTestPartialMessage) GroupID() []byte {
 	return m.Group
 }
 
-func (m *minimalTestPartialMessage) EagerPartialMessageBytes() ([]byte, partialmessages.PartsMetadata, error) {
-	// Return nil to indicate no eager push data
-	return nil, nil, nil
-}
-
-func (m *minimalTestPartialMessage) PartialMessageBytes(peerPartsMetadata partialmessages.PartsMetadata) ([]byte, partialmessages.PartsMetadata, error) {
+func (m *minimalTestPartialMessage) PartialMessageBytes(from peer.ID, peerPartsMetadata partialmessages.PartsMetadata) ([]byte, partialmessages.PartsMetadata, error) {
 	if peerPartsMetadata == nil || len(peerPartsMetadata.Encode()) == 0 {
-		return nil, nil, errors.New("invalid metadata")
+		// No eager push data for this test implementation
+		return nil, nil, nil
 	}
 	peerHas := partialmessages.Bitmap(peerPartsMetadata.Encode())
 
@@ -4806,7 +4802,7 @@ func TestPeerSupportsPartialMessages(t *testing.T) {
 				if pm.onIncomingRPC(from, rpc) {
 					go psubs[i].PublishPartialMessage(topic, pm, partialmessages.PublishOptions{})
 					if pm.complete() {
-						encoded, _, _ := pm.PartialMessageBytes(partialmessages.Bitmap([]byte{0}))
+						encoded, _, _ := pm.PartialMessageBytes("", partialmessages.Bitmap([]byte{0}))
 						go func() {
 							err := psubs[i].Publish(topic, encoded)
 							if err != nil {
@@ -4889,7 +4885,7 @@ func TestPeerSupportsPartialMessages(t *testing.T) {
 					t.Fatal(err)
 				}
 			}
-			encoded, _, err := fullMsg.PartialMessageBytes(partialmessages.Bitmap([]byte{0}))
+			encoded, _, err := fullMsg.PartialMessageBytes("", partialmessages.Bitmap([]byte{0}))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -5211,7 +5207,7 @@ func TestPairwiseInteractionWithPartialMessages(t *testing.T) {
 
 				partialMessageStore[i][topic+string(group)] = msg1
 
-				encoded, _, err := msg1.PartialMessageBytes(partialmessages.Bitmap([]byte{0}))
+				encoded, _, err := msg1.PartialMessageBytes("", partialmessages.Bitmap([]byte{0}))
 				if err != nil {
 					t.Fatal(err)
 				}

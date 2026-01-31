@@ -53,14 +53,13 @@ type Message interface {
 
 	// PartialMessageBytes takes the opaque parts metadata and returns an
 	// encoded partial message that fulfills as much of the request as possible.
-	PartialMessageBytes(partsMetadata PartsMetadata) (msg []byte, nextPartsMetadata PartsMetadata, _ error)
-
-	// EagerPartialMessageBytes returns an encoded partial message to be sent to
-	// peer whose parts metadata is unknown. It is valid for an implementation
-	// to return `nil, nil, nil` if it has no eager push data it would like to
-	// send. The returned partsMetadata should represent the parts the remote
-	// peer should have after decoding this message.
-	EagerPartialMessageBytes() (msg []byte, nextPartsMetadata PartsMetadata, _ error)
+	//
+	// partsMetadata is nil if the node has not seen it's peer's partsMetadata,
+	// applications can still eagerly push data in this case.
+	//
+	// The returned partsMetadata should represent the parts the remote peer
+	// should have after decoding this message.
+	PartialMessageBytes(from peer.ID, partsMetadata PartsMetadata) (msg []byte, nextPartsMetadata PartsMetadata, _ error)
 
 	PartsMetadata() PartsMetadata
 }
@@ -238,10 +237,6 @@ func (e *PartialMessagesExtension) PublishPartial(topic string, partial Message,
 		peers = e.peersToPublishTo(topic, state)
 	}
 
-	eagerData, eagerPartsMeta, err := partial.EagerPartialMessageBytes()
-	if err != nil {
-		return err
-	}
 	for p := range peers {
 		log := e.Logger.With("peer", p)
 		requestedPartial := e.router.PeerRequestsPartial(p, topic)
@@ -255,12 +250,9 @@ func (e *PartialMessagesExtension) PublishPartial(topic string, partial Message,
 			state.peerState[p] = pState
 		}
 
-		havePeersPartsMetadata := pState.partsMetadata != nil
-		// Try to fulfill any wants from the peer
-		if requestedPartial && havePeersPartsMetadata {
-			// This peer has previously asked for a certain part. We'll give
-			// them what we can.
-			pm, nextParts, err := partial.PartialMessageBytes(pState.partsMetadata)
+		if requestedPartial {
+			// This peer requested partial messages, we'll give them what we can
+			pm, nextParts, err := partial.PartialMessageBytes(p, pState.partsMetadata)
 			if err != nil {
 				log.Warn("partial message extension failed to get partial message bytes", "error", err)
 				// Possibly a bad request, we'll delete the request as we will likely error next time we try to handle it
@@ -276,16 +268,6 @@ func (e *PartialMessagesExtension) PublishPartial(topic string, partial Message,
 					pState.partsMetadata = nextParts
 				}
 			}
-		}
-
-		// Only send the eager push to the peer if:
-		//   - we don't have the peer's parts metadata
-		//   - we have something to eager push
-		if requestedPartial && !havePeersPartsMetadata && len(eagerData) > 0 {
-			log.Debug("Eager pushing")
-			sendRPC = true
-			rpc.PartialMessage = eagerData
-			pState.partsMetadata = eagerPartsMeta
 		}
 
 		// Only send parts metadata if it was different then before
