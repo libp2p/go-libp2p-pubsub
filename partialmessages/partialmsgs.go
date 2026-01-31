@@ -10,8 +10,6 @@ import (
 	"github.com/libp2p/go-libp2p/core/peer"
 )
 
-// TODO: Add gossip fallback (pick random connected peers and send ihave/iwants)
-
 const minGroupTTL = 3
 
 // defaultPeerInitiatedGroupLimitPerTopic limits the total number (per topic) of
