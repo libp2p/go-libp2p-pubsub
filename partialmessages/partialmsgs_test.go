@@ -232,36 +232,36 @@ func (pm *testPartialMessage) shouldRequest(partsMetadata []byte) bool {
 	return iWant.Cmp(&zero) != 0
 }
 
-// EagerPartialMessageBytes implements Message.
-func (pm *testPartialMessage) EagerPartialMessageBytes() ([]byte, PartsMetadata, error) {
-	// Only eager push if explicitly requested (not for received messages)
-	if !pm.shouldEagerPush {
-		return nil, nil, nil
-	}
-
-	var tempMessage testPartialMessage
-	tempMessage.Commitment = pm.Commitment
-	tempMessage.EagerPushHeader = pm.EagerPushHeader
-
-	// Include all available parts
-	for i := range pm.Parts {
-		if len(pm.Parts[i]) == 0 {
-			continue
-		}
-		tempMessage.Parts[i] = pm.Parts[i]
-		tempMessage.Proofs[i] = pm.Proofs[i]
-	}
-
-	b, err := json.Marshal(tempMessage)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	return b, pm.PartsMetadata(), nil
-}
-
 // PartialMessageBytes implements Message.
-func (pm *testPartialMessage) PartialMessageBytes(metadata PartsMetadata) ([]byte, PartsMetadata, error) {
+func (pm *testPartialMessage) PartialMessageBytes(from peer.ID, metadata PartsMetadata) ([]byte, PartsMetadata, error) {
+	// Handle eager push case when we don't have peer's metadata
+	if metadata == nil {
+		// Only eager push if explicitly requested (not for received messages)
+		if !pm.shouldEagerPush {
+			return nil, nil, nil
+		}
+
+		var tempMessage testPartialMessage
+		tempMessage.Commitment = pm.Commitment
+		tempMessage.EagerPushHeader = pm.EagerPushHeader
+
+		// Include all available parts
+		for i := range pm.Parts {
+			if len(pm.Parts[i]) == 0 {
+				continue
+			}
+			tempMessage.Parts[i] = pm.Parts[i]
+			tempMessage.Proofs[i] = pm.Proofs[i]
+		}
+
+		b, err := json.Marshal(tempMessage)
+		if err != nil {
+			return nil, nil, err
+		}
+
+		return b, pm.PartsMetadata(), nil
+	}
+
 	peerHas := Bitmap(metadata.Encode())
 
 	var added bool

@@ -38,7 +38,7 @@ type InvariantChecker[P Message] interface {
 func TestPartialMessageInvariants[P Message](t *testing.T, checker InvariantChecker[P]) {
 	extend := func(a, b P) (P, error) {
 		emptyParts := checker.EmptyMessage().PartsMetadata()
-		encodedB, _, err := b.PartialMessageBytes(emptyParts)
+		encodedB, _, err := b.PartialMessageBytes("", emptyParts)
 		if err != nil {
 			var out P
 			return out, err
@@ -66,7 +66,7 @@ func TestPartialMessageInvariants[P Message](t *testing.T, checker InvariantChec
 
 		recombined := checker.EmptyMessage()
 		for _, part := range parts {
-			b, _, err := part.PartialMessageBytes(recombined.PartsMetadata())
+			b, _, err := part.PartialMessageBytes("", recombined.PartsMetadata())
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -88,7 +88,7 @@ func TestPartialMessageInvariants[P Message](t *testing.T, checker InvariantChec
 		emptyMsgPartsMeta := emptyMessage.PartsMetadata()
 
 		// Empty message should not be able to fulfill any request
-		response, _, err := emptyMessage.PartialMessageBytes(emptyMsgPartsMeta)
+		response, _, err := emptyMessage.PartialMessageBytes("", emptyMsgPartsMeta)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -125,7 +125,7 @@ func TestPartialMessageInvariants[P Message](t *testing.T, checker InvariantChec
 		emptyMsgPartsMeta := emptyMessage.PartsMetadata()
 
 		// Request all parts from the partial message
-		response1, _, err := parts[0].PartialMessageBytes(emptyMsgPartsMeta)
+		response1, _, err := parts[0].PartialMessageBytes("", emptyMsgPartsMeta)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -154,7 +154,7 @@ func TestPartialMessageInvariants[P Message](t *testing.T, checker InvariantChec
 		}
 
 		// The remaining partial message should be able to fulfill the "rest" request
-		response2, _, err := remainingPartial.PartialMessageBytes(rest1)
+		response2, _, err := remainingPartial.PartialMessageBytes("", rest1)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -197,7 +197,7 @@ func TestPartialMessageInvariants[P Message](t *testing.T, checker InvariantChec
 
 		// Request with empty metadata should return all available parts
 		emptyMeta := checker.EmptyMessage().PartsMetadata()
-		response, _, err := fullMessage.PartialMessageBytes(emptyMeta)
+		response, _, err := fullMessage.PartialMessageBytes("", emptyMeta)
 		rest := checker.MergePartsMetadata(emptyMeta, fullMessage.PartsMetadata())
 		if err != nil {
 			t.Fatal(err)
@@ -250,7 +250,7 @@ func TestPartialMessageInvariants[P Message](t *testing.T, checker InvariantChec
 			// Get the MissingParts() and have the full message fulfill the request
 			msgPartsMeta := testMsg.PartsMetadata()
 
-			response, _, err := fullMessage.PartialMessageBytes(msgPartsMeta)
+			response, _, err := fullMessage.PartialMessageBytes("", msgPartsMeta)
 			rest := checker.MergePartsMetadata(msgPartsMeta, fullMessage.PartsMetadata())
 			if err != nil {
 				t.Fatal(err)
