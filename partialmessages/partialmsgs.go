@@ -258,7 +258,6 @@ func (e *PartialMessagesExtension) PublishPartial(topic string, partial Message,
 				continue
 			}
 			if len(pm) > 0 {
-				log.Debug("Respond to peer's IWant")
 				sendRPC = true
 				rpc.PartialMessage = pm
 				// Only update peer's parts metadata if we actually sent data
