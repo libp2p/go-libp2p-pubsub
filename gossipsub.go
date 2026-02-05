@@ -881,7 +881,10 @@ func (gs *GossipSubRouter) Preprocess(from peer.ID, msgs []*Message) {
 }
 
 func (gs *GossipSubRouter) HandleRPC(rpc *RPC) {
-	gs.extensions.HandleRPC(rpc)
+	err := gs.extensions.HandleRPC(rpc)
+	if err != nil {
+		gs.logger.Warn("error in handling RPC", "from", rpc.from, "err", err)
+	}
 
 	ctl := rpc.GetControl()
 	if ctl == nil {
