@@ -1,14 +1,18 @@
 package partialmessages
 
 import (
+	"bytes"
 	"errors"
 	"iter"
 	"log/slog"
 	"slices"
 
+	"github.com/libp2p/go-libp2p-pubsub/partialmessages/bitmap"
 	pb "github.com/libp2p/go-libp2p-pubsub/pb"
 	"github.com/libp2p/go-libp2p/core/peer"
 )
+
+// TODO: Add gossip fallback (pick random connected peers and send ihave/iwants)
 
 const minGroupTTL = 3
 
@@ -21,26 +25,7 @@ const defaultPeerInitiatedGroupLimitPerTopicPerPeer = 8
 
 // PartsMetadata returns metadata about the parts this partial message
 // contains and, possibly implicitly, the parts it wants.
-//
-// The following invariant must be true for any implementation:
-//
-// Given that A and B are the same concrete type that implement PartsMetadata,
-//
-// A.Merge(B)
-// B.IsSubset(A) == true
-//
-// If A and B are separate concrete types, it may be impossible to merge them,
-// so IsSubset is not expected to return true.
-type PartsMetadata interface {
-	Encode() []byte
-	// Clone returns a deep clone
-	Clone() PartsMetadata
-	// Merge creates a union with the provided PartsMetadata.
-	// Merge(nil) is a no-op.
-	Merge(PartsMetadata)
-	// Returns true if the object is a subset of B.
-	IsSubset(B PartsMetadata) bool
-}
+type PartsMetadata []byte
 
 // Message is a message that can be broken up into parts. It can be
 // complete, partially complete, or empty. It is up to the application to define
@@ -51,13 +36,14 @@ type Message interface {
 
 	// PartialMessageBytes takes the opaque parts metadata and returns an
 	// encoded partial message that fulfills as much of the request as possible.
-	//
-	// partsMetadata is nil if the node has not seen it's peer's partsMetadata,
-	// applications can still eagerly push data in this case.
-	//
-	// The returned partsMetadata should represent the parts the remote peer
-	// should have after decoding this message.
-	PartialMessageBytes(remote peer.ID, partsMetadata PartsMetadata) (msg []byte, nextPartsMetadata PartsMetadata, _ error)
+	PartialMessageBytes(partsMetadata PartsMetadata) (msg []byte, _ error)
+
+	// EagerPartialMessageBytes returns an encoded partial message to be sent to
+	// peer whose parts metadata is unknown. It is valid for an implementation
+	// to return `nil, nil, nil` if it has no eager push data it would like to
+	// send. The returned partsMetadata should represent the parts the remote
+	// peer should have after decoding this message.
+	EagerPartialMessageBytes() (msg []byte, partsMetadata PartsMetadata, _ error)
 
 	PartsMetadata() PartsMetadata
 }
@@ -80,7 +66,7 @@ type partialMessageStatePerGroupPerTopic struct {
 	groupTTL    int
 	initiatedBy peer.ID // zero value if we initiated the group
 
-	myLastPartsMetadata PartsMetadata
+	myLastPartsMetadata []byte
 }
 
 func newPartialMessageStatePerTopicGroup(groupTTL int) *partialMessageStatePerGroupPerTopic {
@@ -103,24 +89,29 @@ func (s *partialMessageStatePerGroupPerTopic) clearPeerMetadata(peerID peer.ID) 
 	}
 }
 
+// MergeBitmap is a helper function for merging parts metadata if they are a
+// bitmap.
+func MergeBitmap(left, right PartsMetadata) PartsMetadata {
+	return PartsMetadata(bitmap.Merge(bitmap.Bitmap(left), bitmap.Bitmap(right)))
+}
+
 type PartialMessagesExtension struct {
 	Logger *slog.Logger
 
+	MergePartsMetadata func(topic string, left, right PartsMetadata) PartsMetadata
+
 	// OnIncomingRPC is called whenever we receive an encoded
-	// partial message from a peer. This function MUST be fast and non-blocking.
+	// partial message from a peer. This func MUST be fast and non-blocking.
 	// If you need to do slow work, dispatch the work to your own goroutine.
 	OnIncomingRPC func(from peer.ID, rpc *pb.PartialMessagesExtension) error
 
 	// ValidateRPC should be a fast function that performs some
-	// basic sanity checks on incoming RPC.
-	// Some example validations:
+	// basic sanity checks on incoming RPC. For example:
 	//   - Is this a known topic?
 	//   - Is the groupID well formed per application semantics?
+	//   - If this is a PartialIHAVE/PartialIWant, is the request metadata within
+	//     expected bounds?
 	ValidateRPC func(from peer.ID, rpc *pb.PartialMessagesExtension) error
-
-	// DecodePartsMetadata should return the decoded PartsMetadata from the RPC.
-	// The RPC is guaranteed to have partsMetadata set.
-	DecodePartsMetadata func(from peer.ID, rpc *pb.PartialMessagesExtension) (PartsMetadata, error)
 
 	// PeerInitiatedGroupLimitPerTopic limits the number of Group states all
 	// peers can initialize per topic. A group state is initialized by a peer if
@@ -195,12 +186,13 @@ func (e *PartialMessagesExtension) Init(router Router) error {
 	if e.ValidateRPC == nil {
 		return errors.New("field ValidateRPC must be set")
 	}
-	if e.DecodePartsMetadata == nil {
-		return errors.New("field DecodePartsMetadata must be set")
-	}
 	if e.OnIncomingRPC == nil {
 		return errors.New("field OnIncomingRPC must be set")
 	}
+	if e.MergePartsMetadata == nil {
+		return errors.New("field MergePartsMetadata must be set")
+	}
+
 	if e.PeerInitiatedGroupLimitPerTopic == 0 {
 		e.PeerInitiatedGroupLimitPerTopic = defaultPeerInitiatedGroupLimitPerTopic
 	}
@@ -216,6 +208,7 @@ func (e *PartialMessagesExtension) Init(router Router) error {
 
 func (e *PartialMessagesExtension) PublishPartial(topic string, partial Message, opts PublishOptions) error {
 	groupID := partial.GroupID()
+	myPartsMeta := partial.PartsMetadata()
 
 	state, err := e.groupState(topic, groupID, false, "")
 	if err != nil {
@@ -223,10 +216,7 @@ func (e *PartialMessagesExtension) PublishPartial(topic string, partial Message,
 	}
 
 	state.groupTTL = max(e.GroupTTLByHeatbeat, minGroupTTL)
-
-	// Copy this defensively to avoid aliasing issues.
-	myPartsMeta := partial.PartsMetadata().Clone()
-	state.myLastPartsMetadata = myPartsMeta
+	state.myLastPartsMetadata = slices.Clone(myPartsMeta)
 
 	var peers iter.Seq[peer.ID]
 	if len(opts.PublishToPeers) > 0 {
@@ -235,6 +225,10 @@ func (e *PartialMessagesExtension) PublishPartial(topic string, partial Message,
 		peers = e.peersToPublishTo(topic, state)
 	}
 
+	eagerData, eagerPartsMeta, err := partial.EagerPartialMessageBytes()
+	if err != nil {
+		return err
+	}
 	for p := range peers {
 		log := e.Logger.With("peer", p)
 		requestedPartial := e.router.PeerRequestsPartial(p, topic)
@@ -248,35 +242,44 @@ func (e *PartialMessagesExtension) PublishPartial(topic string, partial Message,
 			state.peerState[p] = pState
 		}
 
-		if requestedPartial {
-			// This peer requested partial messages, we'll give them what we can
-			pm, nextParts, err := partial.PartialMessageBytes(p, pState.partsMetadata)
+		havePeersPartsMetadata := pState.partsMetadata != nil
+		// Try to fulfill any wants from the peer
+		if requestedPartial && havePeersPartsMetadata {
+			// This peer has previously asked for a certain part. We'll give
+			// them what we can.
+			pm, err := partial.PartialMessageBytes(pState.partsMetadata)
 			if err != nil {
 				log.Warn("partial message extension failed to get partial message bytes", "error", err)
 				// Possibly a bad request, we'll delete the request as we will likely error next time we try to handle it
 				state.clearPeerMetadata(p)
 				continue
 			}
+			pState.partsMetadata = e.MergePartsMetadata(topic, pState.partsMetadata, myPartsMeta)
 			if len(pm) > 0 {
+				log.Debug("Respond to peer's IWant")
 				sendRPC = true
 				rpc.PartialMessage = pm
-				// Only update peer's parts metadata if we actually sent data
-				if nextParts != nil {
-					pState.partsMetadata = nextParts
-				}
 			}
 		}
 
-		// Only send parts metadata if it was different then before
-		if pState.sentPartsMetadata == nil || !myPartsMeta.IsSubset(pState.sentPartsMetadata) {
-			log.Debug("Including parts metadata", "sent parts", pState.sentPartsMetadata, "my parts", myPartsMeta)
+		// Only send the eager push to the peer if:
+		//   - we don't have the peer's parts metadata
+		//   - we have something to eager push
+		if requestedPartial && !havePeersPartsMetadata && len(eagerData) > 0 {
+			log.Debug("Eager pushing")
 			sendRPC = true
-			if pState.sentPartsMetadata == nil {
-				pState.sentPartsMetadata = myPartsMeta.Clone()
-			} else {
-				pState.sentPartsMetadata.Merge(myPartsMeta)
-			}
-			rpc.PartsMetadata = pState.sentPartsMetadata.Encode()
+			rpc.PartialMessage = eagerData
+			// Merge the peer's empty partsMetadata with the parts we eagerly pushed.
+			// This tracks what has been sent to the peer and avoids sending duplicates.
+			pState.partsMetadata = e.MergePartsMetadata(topic, pState.partsMetadata, eagerPartsMeta)
+		}
+
+		// Only send parts metadata if it was different then before
+		if pState.sentPartsMetadata == nil || !bytes.Equal(myPartsMeta, pState.sentPartsMetadata) {
+			log.Debug("Including parts metadata")
+			sendRPC = true
+			pState.sentPartsMetadata = myPartsMeta
+			rpc.PartsMetadata = myPartsMeta
 		}
 
 		if sendRPC {
@@ -349,14 +352,14 @@ func (e *PartialMessagesExtension) EmitGossip(topic string, peers []peer.ID) {
 	}
 
 	for group, s := range topicState {
-		if s.remotePeerInitiated() || s.myLastPartsMetadata == nil {
+		if s.remotePeerInitiated() || len(s.myLastPartsMetadata) == 0 {
 			continue
 		}
 
 		rpc := &pb.PartialMessagesExtension{
 			TopicID:       &topic,
 			GroupID:       []byte(group),
-			PartsMetadata: s.myLastPartsMetadata.Encode(),
+			PartsMetadata: s.myLastPartsMetadata,
 		}
 
 		for _, peer := range peers {
@@ -366,13 +369,8 @@ func (e *PartialMessagesExtension) EmitGossip(topic string, peers []peer.ID) {
 				s.peerState[peer] = pState
 			}
 
-			if pState.sentPartsMetadata == nil || !s.myLastPartsMetadata.IsSubset(pState.sentPartsMetadata) {
-				pState.sentPartsMetadata = s.myLastPartsMetadata
-				if pState.sentPartsMetadata == nil {
-					pState.sentPartsMetadata = s.myLastPartsMetadata.Clone()
-				} else {
-					pState.sentPartsMetadata.Merge(s.myLastPartsMetadata)
-				}
+			if !bytes.Equal(rpc.PartsMetadata, pState.sentPartsMetadata) {
+				pState.sentPartsMetadata = rpc.PartsMetadata
 				e.sendRPC(peer, rpc)
 			}
 		}
@@ -388,19 +386,8 @@ func (e *PartialMessagesExtension) HandleRPC(from peer.ID, rpc *pb.PartialMessag
 	if rpc == nil {
 		return nil
 	}
-
-	err := e.ValidateRPC(from, rpc)
-	if err != nil {
+	if err := e.ValidateRPC(from, rpc); err != nil {
 		return err
-	}
-
-	var peerPartsMetadata PartsMetadata
-
-	if len(rpc.PartsMetadata) > 0 {
-		peerPartsMetadata, err = e.DecodePartsMetadata(from, rpc)
-		if err != nil {
-			return err
-		}
 	}
 	e.Logger.Debug("Received RPC", "from", from, "rpc", rpc)
 	topic := rpc.GetTopicID()
@@ -411,21 +398,16 @@ func (e *PartialMessagesExtension) HandleRPC(from peer.ID, rpc *pb.PartialMessag
 		return err
 	}
 
-	pState, peerStateOk := state.peerState[from]
-	if peerPartsMetadata != nil {
-		if !peerStateOk {
-			peerStateOk = true
+	if rpc.PartsMetadata != nil {
+		pState, ok := state.peerState[from]
+		if !ok {
 			pState = &peerState{}
 			state.peerState[from] = pState
 		}
-		if pState.partsMetadata == nil {
-			pState.partsMetadata = peerPartsMetadata
-		} else {
-			pState.partsMetadata.Merge(peerPartsMetadata)
-		}
+		pState.partsMetadata = e.MergePartsMetadata(rpc.GetTopicID(), pState.partsMetadata, rpc.PartsMetadata)
 	}
 
-	if peerStateOk && pState.sentPartsMetadata != nil && pState.partsMetadata != nil && len(rpc.PartialMessage) > 0 {
+	if pState, ok := state.peerState[from]; ok && len(pState.sentPartsMetadata) > 0 && len(rpc.PartialMessage) > 0 {
 		// We have previously sent this peer our parts metadata and they have
 		// sent us a partial message. We can update the peer's view of our parts
 		// by merging our parts and their parts.
@@ -433,15 +415,10 @@ func (e *PartialMessagesExtension) HandleRPC(from peer.ID, rpc *pb.PartialMessag
 		// This works if they are responding to our request or
 		// if they send data eagerly. In the latter case, they will update our
 		// view when they receive our parts metadata.
-		pState.sentPartsMetadata.Merge(pState.partsMetadata)
+		pState.sentPartsMetadata = e.MergePartsMetadata(rpc.GetTopicID(), pState.sentPartsMetadata, pState.partsMetadata)
 	}
 
-	err = e.OnIncomingRPC(from, rpc)
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return e.OnIncomingRPC(from, rpc)
 }
 
 type peerInitiatedGroupCounterState struct {
