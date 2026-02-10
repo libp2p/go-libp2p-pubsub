@@ -38,7 +38,7 @@ type InvariantChecker[P Message] interface {
 func TestPartialMessageInvariants[P Message](t *testing.T, checker InvariantChecker[P]) {
 	extend := func(a, b P) (P, error) {
 		emptyParts := checker.EmptyMessage().PartsMetadata()
-		encodedB, _, err := b.PartialMessageBytes("", emptyParts)
+		encodedB, err := b.PartialMessageBytes(emptyParts)
 		if err != nil {
 			var out P
 			return out, err
@@ -66,7 +66,7 @@ func TestPartialMessageInvariants[P Message](t *testing.T, checker InvariantChec
 
 		recombined := checker.EmptyMessage()
 		for _, part := range parts {
-			b, _, err := part.PartialMessageBytes("", recombined.PartsMetadata())
+			b, err := part.PartialMessageBytes(recombined.PartsMetadata())
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -88,7 +88,7 @@ func TestPartialMessageInvariants[P Message](t *testing.T, checker InvariantChec
 		emptyMsgPartsMeta := emptyMessage.PartsMetadata()
 
 		// Empty message should not be able to fulfill any request
-		response, _, err := emptyMessage.PartialMessageBytes("", emptyMsgPartsMeta)
+		response, err := emptyMessage.PartialMessageBytes(emptyMsgPartsMeta)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -99,7 +99,7 @@ func TestPartialMessageInvariants[P Message](t *testing.T, checker InvariantChec
 		}
 
 		// The rest should be the same as the original request since nothing was fulfilled
-		if len(rest.Encode()) == 0 && len(emptyMsgPartsMeta.Encode()) > 0 {
+		if len(rest) == 0 && len(emptyMsgPartsMeta) > 0 {
 			t.Error("Empty message should return the full request as 'rest' when it cannot fulfill anything")
 		}
 	})
@@ -125,7 +125,7 @@ func TestPartialMessageInvariants[P Message](t *testing.T, checker InvariantChec
 		emptyMsgPartsMeta := emptyMessage.PartsMetadata()
 
 		// Request all parts from the partial message
-		response1, _, err := parts[0].PartialMessageBytes("", emptyMsgPartsMeta)
+		response1, err := parts[0].PartialMessageBytes(emptyMsgPartsMeta)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -137,10 +137,10 @@ func TestPartialMessageInvariants[P Message](t *testing.T, checker InvariantChec
 		}
 
 		// Rest should be non-zero and different from original request since something was fulfilled
-		if len(rest1.Encode()) == 0 {
+		if len(rest1) == 0 {
 			t.Fatal("Rest should be non-zero when partial fulfillment occurred")
 		}
-		if bytes.Equal(rest1.Encode(), emptyMsgPartsMeta.Encode()) {
+		if bytes.Equal(rest1, emptyMsgPartsMeta) {
 			t.Fatalf("Rest should be different from original request since partial fulfillment occurred")
 		}
 
@@ -154,7 +154,7 @@ func TestPartialMessageInvariants[P Message](t *testing.T, checker InvariantChec
 		}
 
 		// The remaining partial message should be able to fulfill the "rest" request
-		response2, _, err := remainingPartial.PartialMessageBytes("", rest1)
+		response2, err := remainingPartial.PartialMessageBytes(rest1)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -166,7 +166,7 @@ func TestPartialMessageInvariants[P Message](t *testing.T, checker InvariantChec
 		}
 
 		// After fulfilling the rest, the metadata should be the same as full
-		if !bytes.Equal(rest2.Encode(), fullMessage.PartsMetadata().Encode()) {
+		if !bytes.Equal(rest2, fullMessage.PartsMetadata()) {
 			t.Errorf("After fulfilling all parts, the parts metadata should be the same as the full message, saw %v", rest2)
 		}
 
@@ -197,7 +197,7 @@ func TestPartialMessageInvariants[P Message](t *testing.T, checker InvariantChec
 
 		// Request with empty metadata should return all available parts
 		emptyMeta := checker.EmptyMessage().PartsMetadata()
-		response, _, err := fullMessage.PartialMessageBytes("", emptyMeta)
+		response, err := fullMessage.PartialMessageBytes(emptyMeta)
 		rest := checker.MergePartsMetadata(emptyMeta, fullMessage.PartsMetadata())
 		if err != nil {
 			t.Fatal(err)
@@ -209,7 +209,7 @@ func TestPartialMessageInvariants[P Message](t *testing.T, checker InvariantChec
 		}
 
 		// Should have no remaining parts since full message can fulfill everything
-		if !bytes.Equal(rest.Encode(), fullMessage.PartsMetadata().Encode()) {
+		if !bytes.Equal(rest, fullMessage.PartsMetadata()) {
 			t.Error("Full message should have no remaining parts when fulfilling empty metadata request")
 		}
 	})
@@ -224,7 +224,7 @@ func TestPartialMessageInvariants[P Message](t *testing.T, checker InvariantChec
 		fullMsgPartsMeta := fullMessage.PartsMetadata()
 
 		// Assert available parts is non-zero length
-		if len(fullMsgPartsMeta.Encode()) == 0 {
+		if len(fullMsgPartsMeta) == 0 {
 			t.Error("Full message should have non-zero available parts")
 		}
 
@@ -243,21 +243,21 @@ func TestPartialMessageInvariants[P Message](t *testing.T, checker InvariantChec
 
 		for i, testMsg := range testMessages {
 			// Assert that ShouldRequest returns true for the available parts
-			if !checker.ShouldRequest(testMsg, "", fullMsgPartsMeta.Encode()) {
+			if !checker.ShouldRequest(testMsg, "", fullMsgPartsMeta) {
 				t.Errorf("Message %d should request the available parts", i)
 			}
 
 			// Get the MissingParts() and have the full message fulfill the request
 			msgPartsMeta := testMsg.PartsMetadata()
 
-			response, _, err := fullMessage.PartialMessageBytes("", msgPartsMeta)
+			response, err := fullMessage.PartialMessageBytes(msgPartsMeta)
 			rest := checker.MergePartsMetadata(msgPartsMeta, fullMessage.PartsMetadata())
 			if err != nil {
 				t.Fatal(err)
 			}
 
 			// Assert that the rest is nil
-			if !bytes.Equal(rest.Encode(), fullMessage.PartsMetadata().Encode()) {
+			if !bytes.Equal(rest, fullMessage.PartsMetadata()) {
 				t.Errorf("rest should be equal to fullMessage.PartsMetadata() for message %d", i)
 			}
 
