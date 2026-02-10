@@ -12,6 +12,7 @@ import (
 	"math/big"
 	"math/rand"
 	"reflect"
+	"slices"
 	"testing"
 
 	"github.com/libp2p/go-libp2p-pubsub/internal/merkle"
@@ -51,6 +52,11 @@ type mockNetworkPartialMessages struct {
 	allSentMsgs map[peer.ID][]rpcWithFrom
 
 	handlers map[peer.ID]*PartialMessagesExtension
+
+	// deferredPublishes are executed after each RPC handling round.
+	// This is needed because OnIncomingRPC may want to call PublishPartial,
+	// but HandleRPC hasn't stored the updated PeerState yet at that point.
+	deferredPublishes []func()
 }
 
 func (m *mockNetworkPartialMessages) addPeers() {
@@ -97,6 +103,15 @@ func (m *mockNetworkPartialMessages) handleRPCs() bool {
 			var rpc rpcWithFrom
 			rpc, m.pendingMsgs[id] = m.pendingMsgs[id][0], m.pendingMsgs[id][1:]
 			h.HandleRPC(rpc.from, rpc.rpc)
+		}
+	}
+	// Process deferred publishes (queued by OnIncomingRPC callbacks).
+	// These must run after HandleRPC has stored the updated PeerState.
+	for len(m.deferredPublishes) > 0 {
+		pubs := m.deferredPublishes
+		m.deferredPublishes = nil
+		for _, pub := range pubs {
+			pub()
 		}
 	}
 	moreLeft := false
@@ -233,67 +248,67 @@ func (pm *testPartialMessage) shouldRequest(partsMetadata []byte) bool {
 	return iWant.Cmp(&zero) != 0
 }
 
-// EagerPartialMessageBytes implements Message.
-func (pm *testPartialMessage) EagerPartialMessageBytes() ([]byte, PartsMetadata, error) {
-	// Only eager push if explicitly requested (not for received messages)
-	if !pm.shouldEagerPush {
-		return nil, nil, nil
-	}
+// ForPeer implements Message.
+func (pm *testPartialMessage) ForPeer(remote peer.ID, requestedMessage bool, peerState PeerState) (PeerState, []byte, PartsMetadata, error) {
+	myPartsMeta := pm.PartsMetadata()
 
-	var tempMessage testPartialMessage
-	tempMessage.Commitment = pm.Commitment
-	tempMessage.EagerPushHeader = pm.EagerPushHeader
-
-	// Include all available parts
-	for i := range pm.Parts {
-		if len(pm.Parts[i]) == 0 {
-			continue
+	var encodedMsg []byte
+	if requestedMessage {
+		if peerState.RecvdState != nil {
+			// Peer has told us what they have — send parts they're missing
+			peerHas := bitmap.Bitmap(peerState.RecvdState.(PartsMetadata))
+			var added bool
+			var tempMessage testPartialMessage
+			tempMessage.Commitment = pm.Commitment
+			for i := range pm.Parts {
+				if peerHas.Get(i) {
+					continue
+				}
+				if len(pm.Parts[i]) == 0 {
+					continue
+				}
+				tempMessage.Parts[i] = pm.Parts[i]
+				tempMessage.Proofs[i] = pm.Proofs[i]
+				added = true
+			}
+			if added {
+				b, err := json.Marshal(tempMessage)
+				if err != nil {
+					return peerState, nil, nil, err
+				}
+				encodedMsg = b
+			}
+			peerState.RecvdState = PartsMetadata(MergeBitmap(peerState.RecvdState.(PartsMetadata), myPartsMeta))
+		} else if pm.shouldEagerPush {
+			// No peer metadata yet, eager push all parts + header
+			var tempMessage testPartialMessage
+			tempMessage.Commitment = pm.Commitment
+			tempMessage.EagerPushHeader = pm.EagerPushHeader
+			for i := range pm.Parts {
+				if len(pm.Parts[i]) == 0 {
+					continue
+				}
+				tempMessage.Parts[i] = pm.Parts[i]
+				tempMessage.Proofs[i] = pm.Proofs[i]
+			}
+			b, err := json.Marshal(tempMessage)
+			if err != nil {
+				return peerState, nil, nil, err
+			}
+			encodedMsg = b
+			peerState.RecvdState = PartsMetadata(slices.Clone(myPartsMeta))
 		}
-		tempMessage.Parts[i] = pm.Parts[i]
-		tempMessage.Proofs[i] = pm.Proofs[i]
 	}
 
-	b, err := json.Marshal(tempMessage)
-	if err != nil {
-		return nil, nil, err
+	// Send partsMetadata if different from what we last sent
+	var partsMetadataToSend PartsMetadata
+	sentPartsMetadata, _ := peerState.SentState.(PartsMetadata)
+	if !bytes.Equal([]byte(myPartsMeta), []byte(sentPartsMetadata)) {
+		partsMetadataToSend = myPartsMeta
+		peerState.SentState = PartsMetadata(slices.Clone(myPartsMeta))
 	}
 
-	return b, pm.PartsMetadata(), nil
-}
-
-// PartialMessageBytes implements Message.
-func (pm *testPartialMessage) PartialMessageBytes(metadata PartsMetadata) ([]byte, error) {
-	peerHas := bitmap.Bitmap(metadata)
-
-	var added bool
-	var tempMessage testPartialMessage
-	tempMessage.Commitment = pm.Commitment
-
-	for i := range pm.Parts {
-		if peerHas.Get(i) {
-			continue
-		}
-
-		if len(pm.Parts[i]) == 0 {
-			// We can't fulfill this part
-			continue
-		}
-
-		tempMessage.Parts[i] = pm.Parts[i]
-		tempMessage.Proofs[i] = pm.Proofs[i]
-		added = true
-	}
-
-	if !added {
-		return nil, nil
-	}
-
-	b, err := json.Marshal(tempMessage)
-	if err != nil {
-		return nil, err
-	}
-
-	return b, nil
+	return peerState, encodedMsg, partsMetadataToSend, nil
 }
 
 var _ Message = (*testPartialMessage)(nil)
@@ -367,10 +382,14 @@ func createPeers(t *testing.T, topic string, n int, nonMesh bool) *testPeers {
 		// Create handler
 		handler = &PartialMessagesExtension{
 			Logger: slog.Default().With("id", i),
-			MergePartsMetadata: func(_ string, left, right PartsMetadata) PartsMetadata {
-				return MergeBitmap(left, right)
+			GossipForPeer: func(topic string, groupID string, remote peer.ID, peerState PeerState) (PeerState, []byte, PartsMetadata, error) {
+				pm := testPeers.partialMessages[currentPeer][topic][groupID]
+				if pm == nil {
+					return peerState, nil, nil, nil
+				}
+				return pm.ForPeer(remote, false, peerState)
 			},
-			OnIncomingRPC: func(from peer.ID, rpc *pubsub_pb.PartialMessagesExtension) error {
+			OnIncomingRPC: func(from peer.ID, peerState PeerState, rpc *pubsub_pb.PartialMessagesExtension) (PeerState, error) {
 				// Handle incoming partial message data - use testPeers to track state
 				// Get or create the partial message for this topic/group
 				if testPeers.partialMessages[currentPeer][topic] == nil {
@@ -384,10 +403,18 @@ func createPeers(t *testing.T, topic string, n int, nonMesh bool) *testPeers {
 					pm = &testPartialMessage{
 						Commitment: groupID,
 						republish: func(pm *testPartialMessage, _ PartsMetadata) {
-							handlers[i].PublishPartial(topic, pm, PublishOptions{})
+							nw.deferredPublishes = append(nw.deferredPublishes, func() {
+								handlers[i].PublishPartial(topic, pm, PublishOptions{})
+							})
 						},
 					}
 					testPeers.partialMessages[currentPeer][topic][groupKey] = pm
+				}
+
+				// Merge peer's partsMetadata
+				if rpc.PartsMetadata != nil {
+					existing, _ := peerState.RecvdState.(PartsMetadata)
+					peerState.RecvdState = PartsMetadata(MergeBitmap(existing, rpc.PartsMetadata))
 				}
 
 				beforeParts := pm.PartsMetadata()
@@ -395,38 +422,42 @@ func createPeers(t *testing.T, topic string, n int, nonMesh bool) *testPeers {
 				recvdNewData := pm.extendFromEncodedPartialMessage(from, rpc.PartialMessage)
 
 				if recvdNewData {
-					newParts := bitmap.Bitmap(pm.PartsMetadata())
-					newParts.Xor(bitmap.Bitmap(beforeParts))
-					pm.republish(pm, PartsMetadata(newParts))
-					return nil
+					// Peer can infer we now have these parts
+					existingSent, _ := peerState.SentState.(PartsMetadata)
+					peerState.SentState = PartsMetadata(MergeBitmap(existingSent, pm.PartsMetadata()))
+					newParts := PartsMetadata(bitmap.Bitmap(pm.PartsMetadata()))
+					newPartsCopy := slices.Clone(newParts)
+					newPartsCopy2 := bitmap.Bitmap(newPartsCopy)
+					newPartsCopy2.Xor(bitmap.Bitmap(beforeParts))
+					nw.deferredPublishes = append(nw.deferredPublishes, func() {
+						pm.republish(pm, PartsMetadata(newPartsCopy2))
+					})
+					return peerState, nil
 				}
-
-				var zeroInt big.Int
 
 				peerHasUsefulData := pm.shouldRequest(rpc.PartsMetadata)
 
-				var iHave big.Int
-				iHave.SetBytes(pm.PartsMetadata())
-
-				var peerHas big.Int
-				peerHas.SetBytes(rpc.PartsMetadata)
-
-				var peerWants big.Int
-				peerWants.Xor(&iHave, &peerHas)
-				peerWants.And(&peerWants, &iHave)
-
-				weHaveUsefulData := peerWants.Cmp(&zeroInt) != 0
+				myParts := pm.PartsMetadata()
+				peerHasBM := bitmap.Bitmap(peerState.RecvdState.(PartsMetadata))
+				myPartsBM := bitmap.Bitmap(myParts)
+				wantBM := bitmap.Bitmap(make([]byte, len(myParts)))
+				copy(wantBM, myPartsBM)
+				wantBM.Xor(peerHasBM)
+				wantBM.And(myPartsBM)
+				weHaveUsefulData := false
+				for i := range testPartialMessageLeaves {
+					if wantBM.Get(i) {
+						weHaveUsefulData = true
+						break
+					}
+				}
 
 				if weHaveUsefulData || peerHasUsefulData {
-					handler.PublishPartial(topic, pm, PublishOptions{})
+					nw.deferredPublishes = append(nw.deferredPublishes, func() {
+						handler.PublishPartial(topic, pm, PublishOptions{})
+					})
 				}
-				return nil
-			},
-			ValidateRPC: func(_ peer.ID, rpc *pubsub_pb.PartialMessagesExtension) error {
-				if len(rpc.PartsMetadata) > 1024 {
-					return errors.New("metadata too large")
-				}
-				return nil
+				return peerState, nil
 			},
 			GroupTTLByHeatbeat: 5,
 		}
@@ -1016,66 +1047,65 @@ func TestGossipDelivery(t *testing.T) {
 		},
 	}
 
-	// Create h1 handler
-	h1Handler = &PartialMessagesExtension{
-		Logger: slog.Default().With("id", "h1"),
-		MergePartsMetadata: func(_ string, left, right PartsMetadata) PartsMetadata {
-			return MergeBitmap(left, right)
-		},
-		OnIncomingRPC: func(from peer.ID, rpc *pubsub_pb.PartialMessagesExtension) error {
-			if partialMessages[h1ID][topic] == nil {
-				partialMessages[h1ID][topic] = make(map[string]*testPartialMessage)
+	gossipOnIncomingRPC := func(selfID peer.ID, selfHandler **PartialMessagesExtension) func(peer.ID, PeerState, *pubsub_pb.PartialMessagesExtension) (PeerState, error) {
+		return func(from peer.ID, peerState PeerState, rpc *pubsub_pb.PartialMessagesExtension) (PeerState, error) {
+			if partialMessages[selfID][topic] == nil {
+				partialMessages[selfID][topic] = make(map[string]*testPartialMessage)
 			}
 			groupKey := string(rpc.GroupID)
-			pm := partialMessages[h1ID][topic][groupKey]
+			pm := partialMessages[selfID][topic][groupKey]
 			if pm == nil {
 				pm = &testPartialMessage{
 					Commitment: rpc.GroupID,
 					republish: func(pm *testPartialMessage, _ PartsMetadata) {
-						h1Handler.PublishPartial(topic, pm, PublishOptions{})
+						nw.deferredPublishes = append(nw.deferredPublishes, func() {
+							(*selfHandler).PublishPartial(topic, pm, PublishOptions{})
+						})
 					},
 				}
-				partialMessages[h1ID][topic][groupKey] = pm
+				partialMessages[selfID][topic][groupKey] = pm
 			}
-			pm.extendFromEncodedPartialMessage(from, rpc.PartialMessage)
-			h1Handler.PublishPartial(topic, pm, PublishOptions{})
-			return nil
-		},
-		ValidateRPC: func(_ peer.ID, rpc *pubsub_pb.PartialMessagesExtension) error {
-			return nil
-		},
+			if rpc.PartsMetadata != nil {
+				existing, _ := peerState.RecvdState.(PartsMetadata)
+				peerState.RecvdState = PartsMetadata(MergeBitmap(existing, rpc.PartsMetadata))
+			}
+			recvdNewData := pm.extendFromEncodedPartialMessage(from, rpc.PartialMessage)
+			if recvdNewData {
+				// Peer can infer our updated parts since they sent us data
+				existingSent, _ := peerState.SentState.(PartsMetadata)
+				peerState.SentState = PartsMetadata(MergeBitmap(existingSent, pm.PartsMetadata()))
+			}
+			nw.deferredPublishes = append(nw.deferredPublishes, func() {
+				(*selfHandler).PublishPartial(topic, pm, PublishOptions{})
+			})
+			return peerState, nil
+		}
+	}
+
+	gossipForPeer := func(selfID peer.ID) func(string, string, peer.ID, PeerState) (PeerState, []byte, PartsMetadata, error) {
+		return func(topic string, groupID string, remote peer.ID, peerState PeerState) (PeerState, []byte, PartsMetadata, error) {
+			pm := partialMessages[selfID][topic][groupID]
+			if pm == nil {
+				return peerState, nil, nil, nil
+			}
+			return pm.ForPeer(remote, false, peerState)
+		}
+	}
+
+	// Create h1 handler
+	h1Handler = &PartialMessagesExtension{
+		Logger:             slog.Default().With("id", "h1"),
+		GossipForPeer:      gossipForPeer(h1ID),
+		OnIncomingRPC:      gossipOnIncomingRPC(h1ID, &h1Handler),
 		GroupTTLByHeatbeat: 5,
 	}
 	h1Handler.Init(h1Router)
 
 	// Create h2 handler
 	h2Handler = &PartialMessagesExtension{
-		Logger: slog.Default().With("id", "h2"),
-		MergePartsMetadata: func(_ string, left, right PartsMetadata) PartsMetadata {
-			return MergeBitmap(left, right)
-		},
-		OnIncomingRPC: func(from peer.ID, rpc *pubsub_pb.PartialMessagesExtension) error {
-			if partialMessages[h2ID][topic] == nil {
-				partialMessages[h2ID][topic] = make(map[string]*testPartialMessage)
-			}
-			groupKey := string(rpc.GroupID)
-			pm := partialMessages[h2ID][topic][groupKey]
-			if pm == nil {
-				pm = &testPartialMessage{
-					Commitment: rpc.GroupID,
-					republish: func(pm *testPartialMessage, _ PartsMetadata) {
-						h2Handler.PublishPartial(topic, pm, PublishOptions{})
-					},
-				}
-				partialMessages[h2ID][topic][groupKey] = pm
-			}
-			pm.extendFromEncodedPartialMessage(from, rpc.PartialMessage)
-			h2Handler.PublishPartial(topic, pm, PublishOptions{})
-			return nil
-		},
-		ValidateRPC: func(_ peer.ID, rpc *pubsub_pb.PartialMessagesExtension) error {
-			return nil
-		},
+		Logger:             slog.Default().With("id", "h2"),
+		GossipForPeer:      gossipForPeer(h2ID),
+		OnIncomingRPC:      gossipOnIncomingRPC(h2ID, &h2Handler),
 		GroupTTLByHeatbeat: 5,
 	}
 	h2Handler.Init(h2Router)
@@ -1165,15 +1195,15 @@ func TestPeerInitiatedCounter(t *testing.T) {
 	}
 	handler := PartialMessagesExtension{
 		Logger: slog.Default(),
-		MergePartsMetadata: func(topic string, left, right PartsMetadata) PartsMetadata {
-			return left
+		GossipForPeer: func(topic string, groupID string, remote peer.ID, peerState PeerState) (PeerState, []byte, PartsMetadata, error) {
+			return peerState, nil, nil, nil
 		},
-		OnIncomingRPC: func(from peer.ID, rpc *pubsub_pb.PartialMessagesExtension) error {
-			// Ignore for this test
-			return nil
-		},
-		ValidateRPC: func(from peer.ID, rpc *pubsub_pb.PartialMessagesExtension) error {
-			return nil
+		OnIncomingRPC: func(from peer.ID, peerState PeerState, rpc *pubsub_pb.PartialMessagesExtension) (PeerState, error) {
+			if rpc.PartsMetadata != nil {
+				existing, _ := peerState.RecvdState.(PartsMetadata)
+				peerState.RecvdState = PartsMetadata(MergeBitmap(existing, rpc.PartsMetadata))
+			}
+			return peerState, nil
 		},
 		PeerInitiatedGroupLimitPerTopic:        4,
 		PeerInitiatedGroupLimitPerTopicPerPeer: 2,
@@ -1293,15 +1323,15 @@ func FuzzPeerInitiatedCounter(f *testing.F) {
 
 		handler := PartialMessagesExtension{
 			Logger: slog.Default(),
-			MergePartsMetadata: func(topic string, left, right PartsMetadata) PartsMetadata {
-				return left
+			GossipForPeer: func(topic string, groupID string, remote peer.ID, peerState PeerState) (PeerState, []byte, PartsMetadata, error) {
+				return peerState, nil, nil, nil
 			},
-			OnIncomingRPC: func(from peer.ID, rpc *pubsub_pb.PartialMessagesExtension) error {
-				// Ignore for this test
-				return nil
-			},
-			ValidateRPC: func(from peer.ID, rpc *pubsub_pb.PartialMessagesExtension) error {
-				return nil
+			OnIncomingRPC: func(from peer.ID, peerState PeerState, rpc *pubsub_pb.PartialMessagesExtension) (PeerState, error) {
+				if rpc.PartsMetadata != nil {
+					existing, _ := peerState.RecvdState.(PartsMetadata)
+					peerState.RecvdState = PartsMetadata(MergeBitmap(existing, rpc.PartsMetadata))
+				}
+				return peerState, nil
 			},
 			GroupTTLByHeatbeat:                     minGroupTTL,
 			PeerInitiatedGroupLimitPerTopic:        int(totalLimit),
