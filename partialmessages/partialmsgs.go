@@ -287,6 +287,9 @@ func (e *PartialMessagesExtension) PublishPartial(topic string, partial Message,
 			pState.partsMetadata = e.MergePartsMetadata(topic, pState.partsMetadata, eagerPartsMeta)
 		}
 
+		// Maybe a better API for both the above Merges is peerState = MergeForOutgoingRPC(existing peerState struct, partsMetadata to send)
+		// Or we let partial.PartialMessageBytes/EagerPartialMessageBytes return the updated parts metadata/peerState.
+
 		// Only send parts metadata if it was different then before
 		if pState.sentPartsMetadata == nil || !bytes.Equal(myPartsMeta, pState.sentPartsMetadata) {
 			log.Debug("Including parts metadata")
