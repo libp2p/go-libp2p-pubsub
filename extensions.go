@@ -149,10 +149,6 @@ func (es *extensionsState) extensionsAddPeer(id peer.ID) {
 	if es.myExtensions.TestExtension && es.peerExtensions[id].TestExtension {
 		es.testExtension.AddPeer(id)
 	}
-
-	if es.myExtensions.PartialMessages && es.peerExtensions[id].PartialMessages {
-		es.partialMessagesExtension.AddPeer(id)
-	}
 }
 
 // extensionsRemovePeer is always called after extensionsAddPeer.
