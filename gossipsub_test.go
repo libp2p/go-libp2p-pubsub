@@ -1340,6 +1340,114 @@ func TestGossipsubDirectPeers(t *testing.T) {
 	}
 }
 
+func TestGossipsubDynamicDirectPeers(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	h := getDefaultHosts(t, 3)
+	psubs := []*PubSub{
+		getGossipsub(ctx, h[0], WithDirectConnectTicks(2)),
+		getGossipsub(ctx, h[1], WithDirectConnectTicks(2)),
+		getGossipsub(ctx, h[2], WithDirectConnectTicks(2)),
+	}
+
+	// test dinamic addition of direct-peers to h[1]
+	gs1, ok := psubs[1].rt.(*GossipSubRouter)
+	gs1.AddDirectPeer(peer.AddrInfo{ID: h[2].ID(), Addrs: h[2].Addrs()})
+	if !ok {
+		t.Fatal("expecte gossipsub router for test")
+	}
+
+	// test dinamic addition of direct-peers to h[2]
+	gs2, ok := psubs[1].rt.(*GossipSubRouter)
+	gs2.AddDirectPeer(peer.AddrInfo{ID: h[1].ID(), Addrs: h[1].Addrs()})
+	if !ok {
+		t.Fatal("expecte gossipsub router for test")
+	}
+
+	// check that the nodes are indeed added as direct peers
+	directPs1 := gs1.directPeers()
+	directPs2 := gs2.directPeers()
+	if !slices.Contains(directPs1, h[2].ID()) || !slices.Contains(directPs1, h[1].ID()) {
+		t.Fatalf(
+			"expected direct connections at test peers, got 1: %d and 2: %d",
+			len(directPs1), len(directPs2),
+		)
+	}
+
+	connect(t, h[0], h[1])
+	connect(t, h[0], h[2])
+
+	// verify that the direct peers connected
+	time.Sleep(2 * time.Second)
+	if len(h[1].Network().ConnsToPeer(h[2].ID())) == 0 {
+		t.Fatal("expected a connection between direct peers")
+	}
+
+	// build the mesh
+	var subs []*Subscription
+	for _, ps := range psubs {
+		sub, err := ps.Subscribe("test")
+		if err != nil {
+			t.Fatal(err)
+		}
+		subs = append(subs, sub)
+	}
+
+	time.Sleep(time.Second)
+
+	// publish some messages
+	for i := 0; i < 3; i++ {
+		msg := []byte(fmt.Sprintf("message %d", i))
+		psubs[i].Publish("test", msg)
+
+		for _, sub := range subs {
+			assertReceive(t, sub, msg)
+		}
+	}
+
+	// disconnect the direct peers to test reconnection
+	for _, c := range h[1].Network().ConnsToPeer(h[2].ID()) {
+		c.Close()
+	}
+
+	time.Sleep(5 * time.Second)
+
+	if len(h[1].Network().ConnsToPeer(h[2].ID())) == 0 {
+		t.Fatal("expected a connection between direct peers")
+	}
+
+	// publish some messages
+	for i := 0; i < 3; i++ {
+		msg := []byte(fmt.Sprintf("message %d", i))
+		psubs[i].Publish("test", msg)
+
+		for _, sub := range subs {
+			assertReceive(t, sub, msg)
+		}
+	}
+
+	// remove peer from direct from directPeers
+	gs1.RemoveDirectPeer(h[2].ID())
+	gs2.RemoveDirectPeer(h[1].ID())
+	directs1 := gs1.directPeerLen()
+	directs2 := gs2.directPeerLen()
+	if directs1 != 0 || directs2 != 0 {
+		t.Fatalf("expected no direct connections at test peers, got 1: %d and 2: %d", directs1, directs2)
+	}
+
+	// disconnect the direct peers to test reconnection
+	for _, c := range h[1].Network().ConnsToPeer(h[2].ID()) {
+		c.Close()
+	}
+
+	time.Sleep(5 * time.Second)
+
+	if len(h[1].Network().ConnsToPeer(h[2].ID())) != 0 {
+		t.Fatal("expected no-connection between peers as they aren't direct peers anymore")
+	}
+}
+
 func TestGossipSubPeerFilter(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
