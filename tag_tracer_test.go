@@ -53,7 +53,7 @@ func TestTagTracerDirectPeerTags(t *testing.T) {
 
 	// in the real world, tagTracer.direct is set in the WithDirectPeers option function
 	tt.direct = make(map[peer.ID]struct{})
-	tt.direct[p1] = struct{}{}
+	tt.addDirectPeer(p1)
 
 	tt.AddPeer(p1, GossipSubID_v10)
 	tt.AddPeer(p2, GossipSubID_v10)
@@ -68,6 +68,11 @@ func TestTagTracerDirectPeerTags(t *testing.T) {
 		if cmgr.IsProtected(p, tag) {
 			t.Fatal("expected non-direct peer to be unprotected")
 		}
+	}
+
+	tt.removeDirectPeer(p1)
+	if cmgr.IsProtected(p1, tag) {
+		t.Fatal("expected direct peer to not be protected")
 	}
 }
 

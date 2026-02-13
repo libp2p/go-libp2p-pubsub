@@ -181,6 +181,20 @@ func (t *tagTracer) nearFirstPeers(msg *Message) []peer.ID {
 	return peers
 }
 
+func (t *tagTracer) addDirectPeer(p peer.ID) {
+	t.Lock()
+	defer t.Unlock()
+	t.direct[p] = struct{}{}
+	t.cmgr.Protect(p, "pubsub:<direct>")
+}
+
+func (t *tagTracer) removeDirectPeer(p peer.ID) {
+	t.Lock()
+	defer t.Unlock()
+	delete(t.direct, p)
+	t.cmgr.Unprotect(p, "pubsub:<direct>")
+}
+
 // -- RawTracer interface methods
 var _ RawTracer = (*tagTracer)(nil)
 
