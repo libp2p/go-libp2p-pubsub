@@ -841,7 +841,7 @@ func (gs *GossipSubRouter) directPeers() []peer.ID {
 	defer gs.directRWM.RUnlock()
 	directPeers := make([]peer.ID, len(gs.direct))
 	i := 0
-	for p, _ := range gs.direct {
+	for p := range gs.direct {
 		directPeers[i] = p
 		i++
 	}
