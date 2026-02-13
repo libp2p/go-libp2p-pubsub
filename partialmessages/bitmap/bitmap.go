@@ -1,8 +1,7 @@
-package partialmessages
+package bitmap
 
 import (
 	"math/bits"
-	"slices"
 )
 
 type Bitmap []byte
@@ -82,46 +81,4 @@ func (b Bitmap) Flip() {
 	for i := range b {
 		b[i] ^= 0xff
 	}
-}
-
-func (b Bitmap) Encode() []byte {
-	return []byte(slices.Clone(b))
-}
-
-func (b Bitmap) Clone() PartsMetadata {
-	if b == nil {
-		return Bitmap(nil)
-	}
-	clone := make(Bitmap, len(b))
-	copy(clone, b)
-	return clone
-}
-
-func (b Bitmap) Merge(other PartsMetadata) {
-	if other == nil {
-		return
-	}
-	if o, ok := other.(Bitmap); ok {
-		b.Or(o)
-	}
-}
-
-func (b Bitmap) IsSubset(other PartsMetadata) bool {
-	if other == nil {
-		return b.IsZero()
-	}
-	o, ok := other.(Bitmap)
-	if !ok {
-		return false
-	}
-	for i := range b {
-		var otherByte byte
-		if i < len(o) {
-			otherByte = o[i]
-		}
-		if b[i]&^otherByte != 0 {
-			return false
-		}
-	}
-	return true
 }
