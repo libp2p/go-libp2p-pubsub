@@ -1827,6 +1827,22 @@ func (p *PubSub) publishPartialMessage(req publishPartialMessageReq) {
 	req.errCh <- rt.extensions.partialMessagesExtension.PublishPartial(req.topic, req.partialMessage, req.opts)
 }
 
+// NumMeshPeers returns the number of peers in the mesh for the given topic.
+// Only works with GossipSubRouter; returns 0 otherwise.
+func (p *PubSub) NumMeshPeers(topic string) int {
+	gs, ok := p.rt.(*GossipSubRouter)
+	if !ok {
+		return 0
+	}
+	ch := make(chan int, 1)
+	select {
+	case p.eval <- func() { ch <- len(gs.mesh[topic]) }:
+		return <-ch
+	case <-p.ctx.Done():
+		return 0
+	}
+}
+
 func (p *PubSub) nextSeqno() []byte {
 	seqno := make([]byte, 8)
 	counter := atomic.AddUint64(&p.counter, 1)
