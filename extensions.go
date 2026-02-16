@@ -72,7 +72,7 @@ func (pe *PeerExtensions) ExtendRPC(rpc *RPC) *RPC {
 // Using an interface type to avoid bubbling up PartialMessage's generics up to
 // pubsub.
 //
-// Purposely not trying to make an generic extension interface as there is only
+// Purposely not trying to make a generic extension interface as there is only
 // one real consumer (partial messages). This may change in the future.
 type partialMessageInterface interface {
 	RemovePeer(peer.ID)
@@ -186,7 +186,7 @@ func (es *extensionsState) Heartbeat() {
 	}
 }
 
-func WithPartialMessagesExtension[PeerState partialmessages.IsZeroer](pm *partialmessages.PartialMessagesExtension[PeerState]) Option {
+func WithPartialMessagesExtension[PeerState any](pm *partialmessages.PartialMessagesExtension[PeerState]) Option {
 	return func(ps *PubSub) error {
 		gs, ok := ps.rt.(*GossipSubRouter)
 		if !ok {
@@ -206,8 +206,8 @@ func WithPartialMessagesExtension[PeerState partialmessages.IsZeroer](pm *partia
 // PublishPartial uses the given PubSub instance to publish partial messages.
 // This is a standalone function rather a method on PubSub due to the generic
 // type parameter.
-func PublishPartial[PeerState partialmessages.IsZeroer](ps *PubSub, topic string, message partialmessages.Message[PeerState], opts partialmessages.PublishOptions) error {
-	resp := make(chan error)
+func PublishPartial[PeerState any](ps *PubSub, topic string, message partialmessages.Message[PeerState], opts partialmessages.PublishOptions) error {
+	resp := make(chan error, 1)
 	select {
 	case <-ps.ctx.Done():
 		return ps.ctx.Err()
