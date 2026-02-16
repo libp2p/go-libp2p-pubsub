@@ -69,6 +69,18 @@ func (pe *PeerExtensions) ExtendRPC(rpc *RPC) *RPC {
 	return rpc
 }
 
+// Using an interface type to avoid bubbling up PartialMessage's generics up to
+// pubsub.
+//
+// Purposely not trying to make an generic extension interface as there is only
+// one real consumer (partial messages). This may change in the future.
+type partialMessageInterface interface {
+	RemovePeer(peer.ID)
+	HandleRPC(from peer.ID, rpc *pubsub_pb.PartialMessagesExtension) error
+	Heartbeat()
+	EmitGossip(topic string, peers []peer.ID)
+}
+
 type extensionsState struct {
 	myExtensions      PeerExtensions
 	peerExtensions    map[peer.ID]PeerExtensions // peer's extensions
@@ -77,7 +89,7 @@ type extensionsState struct {
 	sendRPC           func(p peer.ID, r *RPC, urgent bool)
 	testExtension     *testExtension
 
-	partialMessagesExtension *partialmessages.PartialMessagesExtension
+	partialMessagesExtension partialMessageInterface
 }
 
 func newExtensionsState(myExtensions PeerExtensions, reportMisbehavior func(peer.ID), sendRPC func(peer.ID, *RPC, bool)) *extensionsState {
@@ -174,7 +186,7 @@ func (es *extensionsState) Heartbeat() {
 	}
 }
 
-func WithPartialMessagesExtension(pm *partialmessages.PartialMessagesExtension) Option {
+func WithPartialMessagesExtension[PeerState partialmessages.IsZeroer](pm *partialmessages.PartialMessagesExtension[PeerState]) Option {
 	return func(ps *PubSub) error {
 		gs, ok := ps.rt.(*GossipSubRouter)
 		if !ok {
@@ -188,6 +200,45 @@ func WithPartialMessagesExtension(pm *partialmessages.PartialMessagesExtension) 
 		gs.extensions.myExtensions.PartialMessages = true
 		gs.extensions.partialMessagesExtension = pm
 		return nil
+	}
+}
+
+// PublishPartial uses the given PubSub instance to publish partial messages.
+// This is a standalone function rather a method on PubSub due to the generic
+// type parameter.
+func PublishPartial[PeerState partialmessages.IsZeroer](ps *PubSub, topic string, message partialmessages.Message[PeerState], opts partialmessages.PublishOptions) error {
+	resp := make(chan error)
+	select {
+	case <-ps.ctx.Done():
+		return ps.ctx.Err()
+	case ps.eval <- func() {
+		defer close(resp)
+
+		rt, ok := ps.rt.(*GossipSubRouter)
+		if !ok {
+			resp <- errors.New("partial publishing is only supported by the GossipSub router")
+			return
+		}
+
+		if rt.extensions.partialMessagesExtension == nil {
+			resp <- errors.New("partial publishing is not enabled")
+			return
+		}
+		pme, ok := rt.extensions.partialMessagesExtension.(*partialmessages.PartialMessagesExtension[PeerState])
+		if !ok {
+			resp <- errors.New("incompatible partial messages extension type")
+			return
+		}
+
+		resp <- pme.PublishPartial(topic, message, opts)
+	}:
+	}
+
+	select {
+	case <-ps.ctx.Done():
+		return ps.ctx.Err()
+	case r := <-resp:
+		return r
 	}
 }
 
