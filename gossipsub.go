@@ -298,7 +298,6 @@ func DefaultGossipSubRouter(h host.Host) *GossipSubRouter {
 		fanout:          make(map[string]map[peer.ID]struct{}),
 		lastpub:         make(map[string]int64),
 		gossip:          make(map[peer.ID][]*pb.ControlIHave),
-		direct:          make(map[peer.ID]struct{}),
 		control:         make(map[peer.ID]*pb.ControlMessage),
 		backoff:         make(map[string]map[peer.ID]time.Time),
 		peerhave:        make(map[peer.ID]int),
@@ -829,37 +828,17 @@ func (gs *GossipSubRouter) EnoughPeers(topic string, suggested int) bool {
 }
 
 func (gs *GossipSubRouter) AddDirectPeer(pi peer.AddrInfo) {
-	addPeerFn := func() {
-		gs.direct[pi.ID] = struct{}{}
-		gs.p.host.Peerstore().AddAddrs(pi.ID, pi.Addrs, peerstore.PermanentAddrTTL)
-		gs.tagTracer.addDirectPeer(pi.ID)
+	if gs.direct == nil {
+		gs.direct = make(map[peer.ID]struct{})
 	}
-	gs.runSyncEvalFn(addPeerFn)
+	gs.direct[pi.ID] = struct{}{}
+	gs.p.host.Peerstore().AddAddrs(pi.ID, pi.Addrs, peerstore.PermanentAddrTTL)
+	gs.tagTracer.addDirectPeer(pi.ID)
 }
 
 func (gs *GossipSubRouter) RemoveDirectPeer(p peer.ID) {
-	rmPeerFn := func() {
-		delete(gs.direct, p)
-		gs.tagTracer.removeDirectPeer(p)
-	}
-	gs.runSyncEvalFn(rmPeerFn)
-}
-
-// evalSync is generic helper to run custom functions using the pubsub eval channel
-func (gs *GossipSubRouter) runSyncEvalFn(fn func()) {
-	doneC := make(chan struct{})
-	syncFn := func() {
-		fn()
-		close(doneC)
-	}
-	select {
-	case gs.p.eval <- syncFn:
-		select {
-		case <-doneC:
-		case <-gs.p.ctx.Done():
-		}
-	case <-gs.p.ctx.Done():
-	}
+	delete(gs.direct, p)
+	gs.tagTracer.removeDirectPeer(p)
 }
 
 func (gs *GossipSubRouter) AcceptFrom(p peer.ID) AcceptStatus {
@@ -2045,6 +2024,7 @@ func (gs *GossipSubRouter) emitGossip(topic string, exclude map[peer.ID]struct{}
 	for p := range gs.p.topics[topic] {
 		_, inExclude := exclude[p]
 		_, direct := gs.direct[p]
+
 		if !inExclude && !direct && gs.feature(GossipSubFeatureMesh, gs.peers[p]) && gs.score.Score(p) >= gs.gossipThreshold {
 			peers = append(peers, p)
 		}

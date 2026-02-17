@@ -217,10 +217,6 @@ type PubSubRouter interface {
 	AddPeer(peer.ID, protocol.ID, *RPC) *RPC
 	// RemovePeer notifies the router that a peer has been disconnected.
 	RemovePeer(peer.ID)
-	// AddDirectPeer tags the peer as a direct peer at the internal router
-	AddDirectPeer(peer.AddrInfo)
-	// RemoveDirectPeer un-tags the peer from being direct peer at the internal router
-	RemoveDirectPeer(peer.ID)
 	// EnoughPeers returns whether the router needs more peers before it's ready to publish new records.
 	// Suggested (if greater than 0) is a suggested number of peers that the router should need.
 	EnoughPeers(topic string, suggested int) bool
@@ -1914,12 +1910,43 @@ type addRelayReq struct {
 	resp  chan RelayCancelFunc
 }
 
+func (p *PubSub) syncEval(f func()) error {
+	done := make(chan struct{})
+	syncFn := func() {
+		defer close(done)
+		f()
+	}
+	select {
+	case p.eval <- syncFn:
+		select {
+		case <-done:
+		case <-p.ctx.Done():
+			return p.ctx.Err()
+		}
+	case <-p.ctx.Done():
+		return p.ctx.Err()
+	}
+	return nil
+}
+
 // AddDirectPeer tags the peer as a direct peer at the internal router
-func (p *PubSub) AddDirectPeer(pInfo peer.AddrInfo) {
-	p.rt.AddDirectPeer(pInfo)
+func (p *PubSub) AddDirectPeer(pInfo peer.AddrInfo) error {
+	gs, ok := p.rt.(*GossipSubRouter)
+	if !ok {
+		return errors.New("Add direct Peer only supported by gossipsub")
+	}
+	return p.syncEval(func() {
+		gs.AddDirectPeer(pInfo)
+	})
 }
 
 // RemoveDirectPeer un-tags the peer from being direct peer at the internal router
-func (p *PubSub) RemoveDirectPeer(pid peer.ID) {
-	p.rt.RemoveDirectPeer(pid)
+func (p *PubSub) RemoveDirectPeer(pid peer.ID) error {
+	gs, ok := p.rt.(*GossipSubRouter)
+	if !ok {
+		return errors.New("Remove direct Peer only supported by gossipsub")
+	}
+	return p.syncEval(func() {
+		gs.RemoveDirectPeer(pid)
+	})
 }

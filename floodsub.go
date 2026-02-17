@@ -109,7 +109,3 @@ func (fs *FloodSubRouter) Join(topic string) {
 func (fs *FloodSubRouter) Leave(topic string) {
 	fs.tracer.Leave(topic)
 }
-
-func (fs *FloodSubRouter) AddDirectPeer(p peer.AddrInfo) {}
-
-func (fs *FloodSubRouter) RemoveDirectPeer(p peer.ID) {}
