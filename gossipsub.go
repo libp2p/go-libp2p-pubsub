@@ -834,11 +834,7 @@ func (gs *GossipSubRouter) AddDirectPeer(pi peer.AddrInfo) {
 		gs.p.host.Peerstore().AddAddrs(pi.ID, pi.Addrs, peerstore.PermanentAddrTTL)
 		gs.tagTracer.addDirectPeer(pi.ID)
 	}
-	select {
-	case gs.p.eval <- addPeerFn:
-	case <-gs.p.ctx.Done():
-		return
-	}
+	gs.runSyncEvalFn(addPeerFn)
 }
 
 func (gs *GossipSubRouter) RemoveDirectPeer(p peer.ID) {
@@ -846,10 +842,23 @@ func (gs *GossipSubRouter) RemoveDirectPeer(p peer.ID) {
 		delete(gs.direct, p)
 		gs.tagTracer.removeDirectPeer(p)
 	}
+	gs.runSyncEvalFn(rmPeerFn)
+}
+
+// evalSync is generic helper to run custom functions using the pubsub eval channel
+func (gs *GossipSubRouter) runSyncEvalFn(fn func()) {
+	doneC := make(chan struct{})
+	syncFn := func() {
+		fn()
+		close(doneC)
+	}
 	select {
-	case gs.p.eval <- rmPeerFn:
+	case gs.p.eval <- syncFn:
+		select {
+		case <-doneC:
+		case <-gs.p.ctx.Done():
+		}
 	case <-gs.p.ctx.Done():
-		return
 	}
 }
 
@@ -1466,8 +1475,8 @@ func (gs *GossipSubRouter) Join(topic string) {
 				// filter our current peers, direct peers, peers we are backing off, and
 				// peers with negative scores
 				_, inMesh := gmap[p]
-				_, doBackOff := backoff[p]
 				_, direct := gs.direct[p]
+				_, doBackOff := backoff[p]
 				return !inMesh && !direct && !doBackOff && gs.score.Score(p) >= 0
 			})
 			for _, p := range more {
@@ -1481,8 +1490,8 @@ func (gs *GossipSubRouter) Join(topic string) {
 		backoff := gs.backoff[topic]
 		peers := gs.getPeers(topic, gs.params.D, func(p peer.ID) bool {
 			// filter direct peers, peers we are backing off and peers with negative score
-			_, doBackOff := backoff[p]
 			_, direct := gs.direct[p]
+			_, doBackOff := backoff[p]
 			return !direct && !doBackOff && gs.score.Score(p) >= 0
 		})
 		gmap = peerListToMap(peers)

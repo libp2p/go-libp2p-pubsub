@@ -169,3 +169,7 @@ func (rs *RandomSubRouter) Join(topic string) {
 func (rs *RandomSubRouter) Leave(topic string) {
 	rs.tracer.Join(topic)
 }
+
+func (rs *RandomSubRouter) AddDirectPeer(p peer.AddrInfo) {}
+
+func (rs *RandomSubRouter) RemoveDirectPeer(p peer.ID) {}

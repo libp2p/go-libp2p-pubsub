@@ -217,6 +217,10 @@ type PubSubRouter interface {
 	AddPeer(peer.ID, protocol.ID, *RPC) *RPC
 	// RemovePeer notifies the router that a peer has been disconnected.
 	RemovePeer(peer.ID)
+	// AddDirectPeer tags the peer as a direct peer at the internal router
+	AddDirectPeer(peer.AddrInfo)
+	// RemoveDirectPeer un-tags the peer from being direct peer at the internal router
+	RemoveDirectPeer(peer.ID)
 	// EnoughPeers returns whether the router needs more peers before it's ready to publish new records.
 	// Suggested (if greater than 0) is a suggested number of peers that the router should need.
 	EnoughPeers(topic string, suggested int) bool
@@ -1908,4 +1912,14 @@ type RelayCancelFunc func()
 type addRelayReq struct {
 	topic string
 	resp  chan RelayCancelFunc
+}
+
+// AddDirectPeer tags the peer as a direct peer at the internal router
+func (p *PubSub) AddDirectPeer(pInfo peer.AddrInfo) {
+	p.rt.AddDirectPeer(pInfo)
+}
+
+// RemoveDirectPeer un-tags the peer from being direct peer at the internal router
+func (p *PubSub) RemoveDirectPeer(pid peer.ID) {
+	p.rt.RemoveDirectPeer(pid)
 }
