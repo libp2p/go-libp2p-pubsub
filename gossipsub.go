@@ -10,7 +10,6 @@ import (
 	"math/rand"
 	"slices"
 	"sort"
-	"sync"
 	"time"
 
 	pb "github.com/libp2p/go-libp2p-pubsub/pb"
@@ -590,7 +589,6 @@ type GossipSubRouter struct {
 	peers      map[peer.ID]protocol.ID // peer protocols
 	extensions *extensionsState
 
-	directRWM    sync.RWMutex
 	direct       map[peer.ID]struct{}             // direct peers
 	mesh         map[string]map[peer.ID]struct{}  // topic meshes
 	fanout       map[string]map[peer.ID]struct{}  // topic fanout
@@ -691,12 +689,12 @@ func (gs *GossipSubRouter) Attach(p *PubSub) {
 	go gs.manageAddrBook()
 
 	// connect to direct peers
-	if gs.directPeerLen() > 0 {
+	if len(gs.direct) > 0 {
 		go func() {
 			if gs.params.DirectConnectInitialDelay > 0 {
 				time.Sleep(gs.params.DirectConnectInitialDelay)
 			}
-			for _, p := range gs.directPeers() {
+			for p := range gs.direct {
 				gs.connect <- connectInfo{p: p}
 			}
 		}()
@@ -830,48 +828,34 @@ func (gs *GossipSubRouter) EnoughPeers(topic string, suggested int) bool {
 	return false
 }
 
-func (gs *GossipSubRouter) directPeerLen() int {
-	gs.directRWM.RLock()
-	defer gs.directRWM.RUnlock()
-	return len(gs.direct)
-}
-
-func (gs *GossipSubRouter) directPeers() []peer.ID {
-	gs.directRWM.RLock()
-	defer gs.directRWM.RUnlock()
-	directPeers := make([]peer.ID, len(gs.direct))
-	i := 0
-	for p := range gs.direct {
-		directPeers[i] = p
-		i++
-	}
-	return directPeers
-}
-
-func (gs *GossipSubRouter) isDirectPeer(p peer.ID) bool {
-	gs.directRWM.RLock()
-	defer gs.directRWM.RUnlock()
-	_, isDirect := gs.direct[p]
-	return isDirect
-}
-
 func (gs *GossipSubRouter) AddDirectPeer(pi peer.AddrInfo) {
-	gs.directRWM.Lock()
-	defer gs.directRWM.Unlock()
-	gs.direct[pi.ID] = struct{}{}
-	gs.p.host.Peerstore().AddAddrs(pi.ID, pi.Addrs, peerstore.PermanentAddrTTL)
-	gs.tagTracer.addDirectPeer(pi.ID)
+	addPeerFn := func() {
+		gs.direct[pi.ID] = struct{}{}
+		gs.p.host.Peerstore().AddAddrs(pi.ID, pi.Addrs, peerstore.PermanentAddrTTL)
+		gs.tagTracer.addDirectPeer(pi.ID)
+	}
+	select {
+	case gs.p.eval <- addPeerFn:
+	case <-gs.p.ctx.Done():
+		return
+	}
 }
 
 func (gs *GossipSubRouter) RemoveDirectPeer(p peer.ID) {
-	gs.directRWM.Lock()
-	defer gs.directRWM.Unlock()
-	delete(gs.direct, p)
-	gs.tagTracer.removeDirectPeer(p)
+	rmPeerFn := func() {
+		delete(gs.direct, p)
+		gs.tagTracer.removeDirectPeer(p)
+	}
+	select {
+	case gs.p.eval <- rmPeerFn:
+	case <-gs.p.ctx.Done():
+		return
+	}
 }
 
 func (gs *GossipSubRouter) AcceptFrom(p peer.ID) AcceptStatus {
-	if gs.isDirectPeer(p) {
+	_, direct := gs.direct[p]
+	if direct {
 		return AcceptAll
 	}
 
@@ -1095,7 +1079,8 @@ func (gs *GossipSubRouter) handleGraft(p peer.ID, ctl *pb.ControlMessage) []*pb.
 		}
 
 		// we don't GRAFT to/from direct peers; complain loudly if this happens
-		if gs.isDirectPeer(p) {
+		_, direct := gs.direct[p]
+		if direct {
 			gs.logger.Warn("GRAFT: ignoring request from direct peer", "peer", p)
 			// this is possibly a bug from non-reciprocal configuration; send a PRUNE
 			prune = append(prune, topic)
@@ -1365,13 +1350,14 @@ func (gs *GossipSubRouter) rpcs(msg *Message) iter.Seq2[peer.ID, *RPC] {
 
 		if gs.floodPublish && from == gs.p.host.ID() {
 			for p := range tmap {
-				if gs.isDirectPeer(p) || gs.score.Score(p) >= gs.publishThreshold {
+				_, direct := gs.direct[p]
+				if direct || gs.score.Score(p) >= gs.publishThreshold {
 					tosend[p] = struct{}{}
 				}
 			}
 		} else {
 			// direct peers
-			for _, p := range gs.directPeers() {
+			for p := range gs.direct {
 				_, inTopic := tmap[p]
 				if inTopic {
 					tosend[p] = struct{}{}
@@ -1393,7 +1379,8 @@ func (gs *GossipSubRouter) rpcs(msg *Message) iter.Seq2[peer.ID, *RPC] {
 				if !ok || len(gmap) == 0 {
 					// we don't have any, pick some with score above the publish threshold
 					peers := gs.getPeers(topic, gs.params.D, func(p peer.ID) bool {
-						return !gs.isDirectPeer(p) && gs.score.Score(p) >= gs.publishThreshold
+						_, direct := gs.direct[p]
+						return !direct && gs.score.Score(p) >= gs.publishThreshold
 					})
 
 					if len(peers) > 0 {
@@ -1480,7 +1467,8 @@ func (gs *GossipSubRouter) Join(topic string) {
 				// peers with negative scores
 				_, inMesh := gmap[p]
 				_, doBackOff := backoff[p]
-				return !inMesh && !gs.isDirectPeer(p) && !doBackOff && gs.score.Score(p) >= 0
+				_, direct := gs.direct[p]
+				return !inMesh && !direct && !doBackOff && gs.score.Score(p) >= 0
 			})
 			for _, p := range more {
 				gmap[p] = struct{}{}
@@ -1494,7 +1482,8 @@ func (gs *GossipSubRouter) Join(topic string) {
 		peers := gs.getPeers(topic, gs.params.D, func(p peer.ID) bool {
 			// filter direct peers, peers we are backing off and peers with negative score
 			_, doBackOff := backoff[p]
-			return !gs.isDirectPeer(p) && !doBackOff && gs.score.Score(p) >= 0
+			_, direct := gs.direct[p]
+			return !direct && !doBackOff && gs.score.Score(p) >= 0
 		})
 		gmap = peerListToMap(peers)
 		gs.mesh[topic] = gmap
@@ -1714,7 +1703,8 @@ func (gs *GossipSubRouter) heartbeat() {
 				// filter our current and direct peers, peers we are backing off, and peers with negative score
 				_, inMesh := peers[p]
 				_, doBackoff := backoff[p]
-				return !inMesh && !doBackoff && !gs.isDirectPeer(p) && score(p) >= 0
+				_, direct := gs.direct[p]
+				return !inMesh && !doBackoff && !direct && score(p) >= 0
 			})
 
 			for _, p := range plst {
@@ -1803,7 +1793,8 @@ func (gs *GossipSubRouter) heartbeat() {
 					// filter our current and direct peers, peers we are backing off, and peers with negative score
 					_, inMesh := peers[p]
 					_, doBackoff := backoff[p]
-					return !inMesh && !doBackoff && !gs.isDirectPeer(p) && gs.outbound[p] && score(p) >= 0
+					_, direct := gs.direct[p]
+					return !inMesh && !doBackoff && !direct && gs.outbound[p] && score(p) >= 0
 				})
 
 				for _, p := range plst {
@@ -1835,7 +1826,8 @@ func (gs *GossipSubRouter) heartbeat() {
 				plst = gs.getPeers(topic, gs.params.OpportunisticGraftPeers, func(p peer.ID) bool {
 					_, inMesh := peers[p]
 					_, doBackoff := backoff[p]
-					return !inMesh && !doBackoff && !gs.isDirectPeer(p) && score(p) > medianScore
+					_, direct := gs.direct[p]
+					return !inMesh && !doBackoff && !direct && score(p) > medianScore
 				})
 
 				for _, p := range plst {
@@ -1875,7 +1867,8 @@ func (gs *GossipSubRouter) heartbeat() {
 			plst := gs.getPeers(topic, ineed, func(p peer.ID) bool {
 				// filter our current and direct peers and peers with score above the publish threshold
 				_, inFanout := peers[p]
-				return !inFanout && !gs.isDirectPeer(p) && score(p) >= gs.publishThreshold
+				_, direct := gs.direct[p]
+				return !inFanout && !direct && score(p) >= gs.publishThreshold
 			})
 
 			for _, p := range plst {
@@ -1965,7 +1958,7 @@ func (gs *GossipSubRouter) directConnect() {
 	}
 
 	var toconnect []peer.ID
-	for _, p := range gs.directPeers() {
+	for p := range gs.direct {
 		_, connected := gs.peers[p]
 		if !connected {
 			toconnect = append(toconnect, p)
@@ -2042,7 +2035,8 @@ func (gs *GossipSubRouter) emitGossip(topic string, exclude map[peer.ID]struct{}
 	peers := make([]peer.ID, 0, len(gs.p.topics[topic]))
 	for p := range gs.p.topics[topic] {
 		_, inExclude := exclude[p]
-		if !inExclude && !gs.isDirectPeer(p) && gs.feature(GossipSubFeatureMesh, gs.peers[p]) && gs.score.Score(p) >= gs.gossipThreshold {
+		_, direct := gs.direct[p]
+		if !inExclude && !direct && gs.feature(GossipSubFeatureMesh, gs.peers[p]) && gs.score.Score(p) >= gs.gossipThreshold {
 			peers = append(peers, p)
 		}
 	}
