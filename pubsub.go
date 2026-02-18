@@ -1933,7 +1933,7 @@ func (p *PubSub) syncEval(f func()) error {
 func (p *PubSub) AddDirectPeer(pInfo peer.AddrInfo) error {
 	gs, ok := p.rt.(*GossipSubRouter)
 	if !ok {
-		return errors.New("Add direct Peer only supported by gossipsub")
+		return errors.New("add direct peer only supported by gossipsub")
 	}
 	return p.syncEval(func() {
 		gs.AddDirectPeer(pInfo)
@@ -1944,7 +1944,7 @@ func (p *PubSub) AddDirectPeer(pInfo peer.AddrInfo) error {
 func (p *PubSub) RemoveDirectPeer(pid peer.ID) error {
 	gs, ok := p.rt.(*GossipSubRouter)
 	if !ok {
-		return errors.New("Remove direct Peer only supported by gossipsub")
+		return errors.New("remove direct peer only supported by gossipsub")
 	}
 	return p.syncEval(func() {
 		gs.RemoveDirectPeer(pid)

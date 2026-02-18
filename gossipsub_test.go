@@ -1351,13 +1351,13 @@ func TestGossipsubDynamicDirectPeers(t *testing.T) {
 		getGossipsub(ctx, h[2], WithDirectConnectTicks(2)),
 	}
 
-	listDirectPeers := func(rt PubSubRouter) int {
+	listDirectPeers := func(psb *PubSub) int {
 		directPeers := 0
-		gspRt, _ := rt.(*GossipSubRouter)
+		gspRt, _ := psb.rt.(*GossipSubRouter)
 		fn := func() {
 			directPeers = len(gspRt.direct)
 		}
-		gspRt.runSyncEvalFn(fn)
+		psb.syncEval(fn)
 		return directPeers
 	}
 
@@ -1368,7 +1368,7 @@ func TestGossipsubDynamicDirectPeers(t *testing.T) {
 	// give enough time to the state machine to process the direct additions
 	time.Sleep(time.Second)
 
-	if listDirectPeers(psubs[1].rt) < 1 || listDirectPeers(psubs[2].rt) < 1 {
+	if listDirectPeers(psubs[1]) < 1 || listDirectPeers(psubs[2]) < 1 {
 		t.Fatal("expected 1 direct peer at both gsp rts")
 	}
 
@@ -1379,7 +1379,7 @@ func TestGossipsubDynamicDirectPeers(t *testing.T) {
 	// give enough time to the state machine to process the direct additions
 	time.Sleep(time.Second)
 
-	if listDirectPeers(psubs[1].rt) > 0 || listDirectPeers(psubs[2].rt) > 0 {
+	if listDirectPeers(psubs[1]) > 0 || listDirectPeers(psubs[2]) > 0 {
 		t.Fatal("expected no direct peers both gsp rts")
 	}
 }

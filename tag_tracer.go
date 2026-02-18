@@ -83,7 +83,9 @@ func (t *tagTracer) Start(gs *GossipSubRouter, logger *slog.Logger) {
 	t.logger = logger
 
 	t.idGen = gs.p.idGen
-	t.direct = gs.direct
+	if gs.direct != nil {
+		t.direct = gs.direct
+	}
 }
 
 func (t *tagTracer) tagPeerIfDirect(p peer.ID) {
