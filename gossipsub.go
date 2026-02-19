@@ -533,7 +533,10 @@ func WithDirectPeers(pis []peer.AddrInfo) Option {
 		gs.direct = direct
 
 		if gs.tagTracer != nil {
-			gs.tagTracer.direct = direct
+			gs.tagTracer.isDirect = func(p peer.ID) bool {
+				_, ok := gs.direct[p]
+				return ok
+			}
 		}
 
 		return nil
@@ -833,12 +836,12 @@ func (gs *GossipSubRouter) AddDirectPeer(pi peer.AddrInfo) {
 	}
 	gs.direct[pi.ID] = struct{}{}
 	gs.p.host.Peerstore().AddAddrs(pi.ID, pi.Addrs, peerstore.PermanentAddrTTL)
-	gs.tagTracer.addDirectPeer(pi.ID)
+	gs.tagTracer.protectDirect(pi.ID)
 }
 
 func (gs *GossipSubRouter) RemoveDirectPeer(p peer.ID) {
 	delete(gs.direct, p)
-	gs.tagTracer.removeDirectPeer(p)
+	gs.tagTracer.unprotectDirect(p)
 }
 
 func (gs *GossipSubRouter) AcceptFrom(p peer.ID) AcceptStatus {
