@@ -4512,13 +4512,16 @@ func (m *minimalTestPartialMessage) GroupID() []byte {
 	return m.Group
 }
 
-func (m *minimalTestPartialMessage) PublishActions(peers iter.Seq2[peer.ID, partialmessages.PeerInfo], peerStates map[peer.ID]peerState) iter.Seq2[peer.ID, partialmessages.PublishAction] {
+func noOpPublishActions(peerStates map[peer.ID]peerState, peerRequestsPartial func(peer.ID) bool) iter.Seq2[peer.ID, partialmessages.PublishAction] {
+	return func(yield func(peer.ID, partialmessages.PublishAction) bool) {}
+}
+
+func (m *minimalTestPartialMessage) publishActions(peerStates map[peer.ID]peerState, peerRequestsPartial func(peer.ID) bool) iter.Seq2[peer.ID, partialmessages.PublishAction] {
 	myPartsMeta := m.PartsMetadata()
 	return func(yield func(peer.ID, partialmessages.PublishAction) bool) {
-		for p, info := range peers {
-			ps := peerStates[p]
+		for p, ps := range peerStates {
 			var encodedMsg []byte
-			if info.RequestedPartialMessage && ps.recvd != nil {
+			if peerRequestsPartial(p) && ps.recvd != nil {
 				peerHas := ps.recvd
 				var temp minimalTestPartialMessage
 				temp.Group = m.Group
@@ -4560,8 +4563,6 @@ type peerState struct {
 	sent  bitmap.Bitmap
 }
 
-var _ partialmessages.Message[peerState] = (*minimalTestPartialMessage)(nil)
-
 func TestPartialMessages(t *testing.T) {
 	topic := "test-topic"
 	const hostCount = 5
@@ -4589,12 +4590,12 @@ func TestPartialMessages(t *testing.T) {
 	for i := range partialExt {
 		partialExt[i] = &partialmessages.PartialMessagesExtension[peerState]{
 			Logger: logger.With("id", i),
-			GossipActions: func(topic, groupID string, peers iter.Seq2[peer.ID, partialmessages.PeerInfo], peerStates map[peer.ID]peerState) iter.Seq2[peer.ID, partialmessages.PublishAction] {
-				pm := partialMessageStore[i][topic+groupID]
+			GossipActions: func(topic string, groupID []byte) partialmessages.PublishActionsFn[peerState] {
+				pm := partialMessageStore[i][topic+string(groupID)]
 				if pm == nil {
-					return func(yield func(peer.ID, partialmessages.PublishAction) bool) {}
+					return noOpPublishActions
 				}
-				return pm.PublishActions(peers, peerStates)
+				return pm.publishActions
 			},
 			OnIncomingRPC: func(from peer.ID, peerStates map[peer.ID]peerState, rpc *pb.PartialMessagesExtension) error {
 				peerState := peerStates[from]
@@ -4616,7 +4617,7 @@ func TestPartialMessages(t *testing.T) {
 				}
 				peerStates[from] = peerState
 				if shouldRepublish {
-					go PublishPartial(psubs[i], topic, pm, partialmessages.PublishOptions{})
+					go PublishPartial(psubs[i], topic, pm.GroupID(), pm.publishActions)
 				}
 				return nil
 			},
@@ -4648,7 +4649,7 @@ func TestPartialMessages(t *testing.T) {
 		},
 	}
 	partialMessageStore[0][topic+string(group)] = msg1
-	err := PublishPartial(psubs[0], topic, msg1, partialmessages.PublishOptions{})
+	err := PublishPartial(psubs[0], topic, msg1.GroupID(), msg1.publishActions)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -4716,12 +4717,12 @@ func TestPeerSupportsPartialMessages(t *testing.T) {
 	for i := range partialExt {
 		partialExt[i] = &partialmessages.PartialMessagesExtension[peerState]{
 			Logger: logger.With("id", i),
-			GossipActions: func(topic, groupID string, peers iter.Seq2[peer.ID, partialmessages.PeerInfo], peerStates map[peer.ID]peerState) iter.Seq2[peer.ID, partialmessages.PublishAction] {
-				pm := partialMessageStore[i][topic+groupID]
+			GossipActions: func(topic string, groupID []byte) partialmessages.PublishActionsFn[peerState] {
+				pm := partialMessageStore[i][topic+string(groupID)]
 				if pm == nil {
-					return func(yield func(peer.ID, partialmessages.PublishAction) bool) {}
+					return noOpPublishActions
 				}
-				return pm.PublishActions(peers, peerStates)
+				return pm.publishActions
 			},
 			OnIncomingRPC: func(from peer.ID, peerStates map[peer.ID]peerState, rpc *pb.PartialMessagesExtension) error {
 				peerState := peerStates[from]
@@ -4754,7 +4755,7 @@ func TestPeerSupportsPartialMessages(t *testing.T) {
 				}
 				peerStates[from] = peerState
 				if shouldRepublish {
-					go PublishPartial(psubs[i], topic, pm, partialmessages.PublishOptions{})
+					go PublishPartial(psubs[i], topic, pm.GroupID(), pm.publishActions)
 					if pm.complete() {
 						encoded, _ := json.Marshal(pm)
 						go func() {
@@ -4821,7 +4822,7 @@ func TestPeerSupportsPartialMessages(t *testing.T) {
 	// message request to peers that support partial messages.
 	partialMessageStore[0][topic+string(group)] = emptyMsg
 	// first host has no data
-	err := PublishPartial(psubs[0], topic, emptyMsg, partialmessages.PublishOptions{})
+	err := PublishPartial(psubs[0], topic, emptyMsg.GroupID(), emptyMsg.publishActions)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -4833,7 +4834,8 @@ func TestPeerSupportsPartialMessages(t *testing.T) {
 			continue
 		} else {
 			if i != 1 {
-				err := PublishPartial(psubs[i], topic, partialMessageStore[i][topic+string(group)], partialmessages.PublishOptions{})
+				pm := partialMessageStore[i][topic+string(group)]
+				err := PublishPartial(psubs[i], topic, pm.GroupID(), pm.publishActions)
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -4912,12 +4914,12 @@ func TestSkipPublishingToPeersRequestingPartialMessages(t *testing.T) {
 	for i := range partialExt {
 		partialExt[i] = &partialmessages.PartialMessagesExtension[peerState]{
 			Logger: logger,
-			GossipActions: func(topic, groupID string, peers iter.Seq2[peer.ID, partialmessages.PeerInfo], peerStates map[peer.ID]peerState) iter.Seq2[peer.ID, partialmessages.PublishAction] {
-				pm := partialMessageStore[i][topic+groupID]
+			GossipActions: func(topic string, groupID []byte) partialmessages.PublishActionsFn[peerState] {
+				pm := partialMessageStore[i][topic+string(groupID)]
 				if pm == nil {
-					return func(yield func(peer.ID, partialmessages.PublishAction) bool) {}
+					return noOpPublishActions
 				}
-				return pm.PublishActions(peers, peerStates)
+				return pm.publishActions
 			},
 			OnIncomingRPC: func(from peer.ID, peerStates map[peer.ID]peerState, rpc *pb.PartialMessagesExtension) error {
 				peerState := peerStates[from]
@@ -4940,7 +4942,7 @@ func TestSkipPublishingToPeersRequestingPartialMessages(t *testing.T) {
 				}
 				peerStates[from] = peerState
 				if shouldRepublish {
-					go PublishPartial(psubs[i], topicID, pm, partialmessages.PublishOptions{})
+					go PublishPartial(psubs[i], topicID, pm.GroupID(), pm.publishActions)
 				}
 				return nil
 			},
@@ -5073,12 +5075,12 @@ func TestPairwiseInteractionWithPartialMessages(t *testing.T) {
 				}
 				partialExt[i] = &partialmessages.PartialMessagesExtension[peerState]{
 					Logger: logger.With("id", i),
-					GossipActions: func(topic, groupID string, peers iter.Seq2[peer.ID, partialmessages.PeerInfo], peerStates map[peer.ID]peerState) iter.Seq2[peer.ID, partialmessages.PublishAction] {
-						pm := partialMessageStore[i][topic+groupID]
+					GossipActions: func(topic string, groupID []byte) partialmessages.PublishActionsFn[peerState] {
+						pm := partialMessageStore[i][topic+string(groupID)]
 						if pm == nil {
-							return func(yield func(peer.ID, partialmessages.PublishAction) bool) {}
+							return noOpPublishActions
 						}
-						return pm.PublishActions(peers, peerStates)
+						return pm.publishActions
 					},
 					OnIncomingRPC: func(from peer.ID, peerStates map[peer.ID]peerState, rpc *pb.PartialMessagesExtension) error {
 						peerState := peerStates[from]
@@ -5111,7 +5113,7 @@ func TestPairwiseInteractionWithPartialMessages(t *testing.T) {
 								receivedMessage <- struct{}{}
 							}
 
-							go PublishPartial(psubs[i], topic, pm, partialmessages.PublishOptions{})
+							go PublishPartial(psubs[i], topic, pm.GroupID(), pm.publishActions)
 						}
 						return nil
 					},
@@ -5191,7 +5193,7 @@ func TestPairwiseInteractionWithPartialMessages(t *testing.T) {
 
 				switch tc.hostSupport[i] {
 				case PeerSupportsPartialMessages, PeerRequestsPartialMessages:
-					err = PublishPartial(psubs[i], topic, msg1, partialmessages.PublishOptions{})
+					err = PublishPartial(psubs[i], topic, msg1.GroupID(), msg1.publishActions)
 					if err != nil {
 						t.Fatal(err)
 					}
@@ -5242,8 +5244,8 @@ func TestNoIDONTWANTWithPartialMessage(t *testing.T) {
 			return []Option{
 				WithPartialMessagesExtension(
 					&partialmessages.PartialMessagesExtension[peerState]{
-						GossipActions: func(topic, groupID string, peers iter.Seq2[peer.ID, partialmessages.PeerInfo], peerStates map[peer.ID]peerState) iter.Seq2[peer.ID, partialmessages.PublishAction] {
-							return func(yield func(peer.ID, partialmessages.PublishAction) bool) {}
+						GossipActions: func(topic string, groupID []byte) partialmessages.PublishActionsFn[peerState] {
+							return noOpPublishActions
 						},
 						Logger: slog.Default(),
 						OnIncomingRPC: func(from peer.ID, peerStates map[peer.ID]peerState, rpc *pb.PartialMessagesExtension) error {
