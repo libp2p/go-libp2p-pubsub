@@ -206,7 +206,7 @@ func WithPartialMessagesExtension[PeerState any](pm *partialmessages.PartialMess
 // PublishPartial uses the given PubSub instance to publish partial messages.
 // This is a standalone function rather a method on PubSub due to the generic
 // type parameter.
-func PublishPartial[PeerState any](ps *PubSub, topic string, message partialmessages.Message[PeerState], opts partialmessages.PublishOptions) error {
+func PublishPartial[PeerState any](ps *PubSub, topic string, groupID []byte, publishActionsFn partialmessages.PublishActionsFn[PeerState]) error {
 	resp := make(chan error, 1)
 	select {
 	case <-ps.ctx.Done():
@@ -230,7 +230,7 @@ func PublishPartial[PeerState any](ps *PubSub, topic string, message partialmess
 			return
 		}
 
-		resp <- pme.PublishPartial(topic, message, opts)
+		resp <- pme.PublishPartial(topic, groupID, publishActionsFn)
 	}:
 	}
 
