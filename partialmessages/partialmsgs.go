@@ -4,7 +4,7 @@ import (
 	"errors"
 	"iter"
 	"log/slog"
-	"slices"
+	"maps"
 
 	pb "github.com/libp2p/go-libp2p-pubsub/pb"
 	"github.com/libp2p/go-libp2p/core/peer"
@@ -23,98 +23,67 @@ const defaultPeerInitiatedGroupLimitPerTopicPerPeer = 8
 // contains and, possibly implicitly, the parts it wants.
 type PartsMetadata []byte
 
-// Message is a message that can be broken up into parts. It can be
-// complete, partially complete, or empty. It is up to the application to define
-// how a message is split into parts and recombined, as well as how missing and
-// available parts are represented.
-type Message interface {
-	GroupID() []byte
-
-	// ForPeer takes the remote's peer ID, if the peer requested partial
-	// message data, and its peerState and returns an encoded partial message that
-	// fulfills some or all of the request.
-	//
-	// If requestedMessage is false, the returned encoded message MUST be empty,
-	// as the peer does not want encoded partial messages. The implementation
-	// SHOULD still return relevant partsMetadataToSend.
-	//
-	// The implementation should update:
-	// - peerState.RecvdState to remember what parts we've sent to this peer.
-	// - peerState.SentState to include the parts we've sent, as the
-	//   peer can learn we have these parts on reception of this message.
-	//
-	// peerState.RecvdState is nil if the node has not seen its peer's
-	// partsMetadata, applications can still eagerly push data in this case.
-	//
-	// The returned encodedMsg and partsMetadataToSend are sent to the peer. If
-	// either is nil, that field will not be set. If both are nil, no message is
-	// sent to the peer.
-	//
-	// Implementations SHOULD avoid returning duplicate or redundant
-	// partsMetadataToSend. i.e. if a previously sent PartsMetadata is up to
-	// date, implementations SHOULD return `nil` for `partsMetadataToSend`.
-	ForPeer(remote peer.ID, requestedMessage bool, peerState PeerState) (next PeerState, encodedMsg []byte, partsMetadataToSend PartsMetadata, _ error)
+type PeerInfo struct {
+	// If RequestedPartialMessage is false, the peer does not want encoded
+	// partial messages. The encoded message in a PublishAction MUST be
+	// empty for this peer. The implementation SHOULD still send relevant
+	// partsMetadataToSend.
+	RequestedPartialMessage bool
 }
 
-// PeerState is the state we keep per peer. Gossipsub manages the lifecycle of
-// this state, but does not use it. Applications SHOULD use this to avoid
-// sending redundant data.
-type PeerState struct {
-	// Opaque (to gossipsub) state used by the application to track a peer's
-	// state (e.g. PartsMetadata)
-	RecvdState any
-	// Opaque (to gossipsub) state used by the application to track peer's view
-	// of our state (e.g. PartsMetadata we've sent or that can be derived)
-	SentState any
+type PublishAction struct {
+	// EncodedPartialMessage is the encoded PartialMessage that will be sent to
+	// this peer.
+	EncodedPartialMessage []byte
+	// EncodedPartsMetadata is the PartsMetadata that will be sent to this peer.
+	EncodedPartsMetadata []byte
+
+	// Err signals an error that will be bubbled up to the caller of
+	// PublishPartial. Returning an error does not prevent other PublishActions
+	// from executing or affect the PeerState map.
+	Err error
 }
 
-func (ps *PeerState) IsZero() bool {
-	return ps.RecvdState == nil && ps.SentState == nil
-}
-
-type partialMessageStatePerGroupPerTopic struct {
-	peerState   map[peer.ID]PeerState
+type partialMessageStatePerGroupPerTopic[P any] struct {
+	peerState   map[peer.ID]P
 	groupTTL    int
 	initiatedBy peer.ID // zero value if we initiated the group
 }
 
-func newPartialMessageStatePerTopicGroup(groupTTL int) *partialMessageStatePerGroupPerTopic {
-	return &partialMessageStatePerGroupPerTopic{
-		peerState: make(map[peer.ID]PeerState),
+func newPartialMessageStatePerTopicGroup[P any](groupTTL int) *partialMessageStatePerGroupPerTopic[P] {
+	return &partialMessageStatePerGroupPerTopic[P]{
+		peerState: make(map[peer.ID]P),
 		groupTTL:  max(groupTTL, minGroupTTL),
 	}
 }
 
-func (s *partialMessageStatePerGroupPerTopic) remotePeerInitiated() bool {
+func (s *partialMessageStatePerGroupPerTopic[P]) remotePeerInitiated() bool {
 	return s.initiatedBy != ""
 }
 
-type PartialMessagesExtension struct {
+type PartialMessagesExtension[PeerState any] struct {
 	Logger *slog.Logger
 
-	// GossipForPeer is analogous to Message.ForPeer, except its used when
-	// emitting Gossipsub gossip to peers not in our mesh. Implementations
-	// should return an updated PeerState following the same guidelines outlined
-	// in Message.ForPeer's doc comment.
-	GossipForPeer func(topic string, groupID string, remote peer.ID, peerState PeerState) (next PeerState, encodedMsg []byte, partsMetadataToSend PartsMetadata, _ error)
+	// GossipActions is called when gossiping to peers on the given topic and
+	// groupID. It should return a PublishActionsFn to be used for sending
+	// messages to these peers.
+	GossipActions func(topic string, groupID []byte) PublishActionsFn[PeerState]
 
 	// OnIncomingRPC is called whenever we receive an encoded
 	// partial message from a peer. This function MUST be fast and non-blocking.
 	// If you need to do slow work (e.g. validation), dispatch the work to your
 	// own goroutine.
 	//
-	// This function MUST return an updated PeerState updated with the received
+	// This function SHOULD update the peer's PeerState with the received
 	// rpc.PartsMetadata and rpc.PartialMessage.
 	//
-	// In particular it SHOULD use the rpc.PartialMessage contents to:
-	//  - update PeerState.RecvdState (we can infer they have a part if they have given it us)
-	//  - update PeerState.SentState (they can infer an update if they have given us a part)
+	// An implementation may be able to infer some peer state from the
+	// rpc.PartialMessage, for example:
+	//  - peer's received state (we can infer they have a part if they have given it us)
+	//  - our last update to a peer (they can infer an update if they have given us a part)
 	//
-	// If PublishPartial is called within this callback, the ForPeer methods
-	// will not see the latest PeerState.
-	//
-	// If the rpc should be ignored, the application can return an empty PeerState.
-	OnIncomingRPC func(from peer.ID, peerState PeerState, rpc *pb.PartialMessagesExtension) (PeerState, error)
+	// If the rpc should be ignored, the application can leave peerStates unmodified
+	OnIncomingRPC func(from peer.ID, peerStates map[peer.ID]PeerState, rpc *pb.PartialMessagesExtension) error
 
 	// PeerInitiatedGroupLimitPerTopic limits the number of Group states all
 	// peers can initialize per topic. A group state is initialized by a peer if
@@ -130,8 +99,8 @@ type PartialMessagesExtension struct {
 	// publishing a partial message for the group.
 	GroupTTLByHeatbeat int
 
-	// map topic -> map[group]partialMessageStatePerGroupPerTopic
-	statePerTopicPerGroup map[string]map[string]*partialMessageStatePerGroupPerTopic
+	// map topic -> TopicState
+	statePerTopicPerGroup map[string]map[string]*partialMessageStatePerGroupPerTopic[PeerState]
 
 	// map[topic]counter
 	peerInitiatedGroupCounter map[string]*peerInitiatedGroupCounterState
@@ -151,16 +120,16 @@ type Router interface {
 	PeerRequestsPartial(peer peer.ID, topic string) bool
 }
 
-func (e *PartialMessagesExtension) groupState(topic string, groupID []byte, peerInitiated bool, from peer.ID) (*partialMessageStatePerGroupPerTopic, error) {
-	statePerTopic, ok := e.statePerTopicPerGroup[topic]
+func (e *PartialMessagesExtension[PeerState]) groupState(topic string, groupID []byte, peerInitiated bool, from peer.ID) (*partialMessageStatePerGroupPerTopic[PeerState], error) {
+	tState, ok := e.statePerTopicPerGroup[topic]
 	if !ok {
-		statePerTopic = make(map[string]*partialMessageStatePerGroupPerTopic)
-		e.statePerTopicPerGroup[topic] = statePerTopic
+		tState = make(map[string]*partialMessageStatePerGroupPerTopic[PeerState])
+		e.statePerTopicPerGroup[topic] = tState
 	}
 	if _, ok := e.peerInitiatedGroupCounter[topic]; !ok {
 		e.peerInitiatedGroupCounter[topic] = &peerInitiatedGroupCounterState{}
 	}
-	state, ok := statePerTopic[string(groupID)]
+	gState, ok := tState[string(groupID)]
 	if !ok {
 		if peerInitiated {
 			err := e.peerInitiatedGroupCounter[topic].Inc(e.PeerInitiatedGroupLimitPerTopic, e.PeerInitiatedGroupLimitPerTopicPerPeer, from)
@@ -169,19 +138,19 @@ func (e *PartialMessagesExtension) groupState(topic string, groupID []byte, peer
 			}
 		}
 
-		state = newPartialMessageStatePerTopicGroup(e.GroupTTLByHeatbeat)
-		statePerTopic[string(groupID)] = state
-		state.initiatedBy = from
+		gState = newPartialMessageStatePerTopicGroup[PeerState](e.GroupTTLByHeatbeat)
+		tState[string(groupID)] = gState
+		gState.initiatedBy = from
 	}
-	if !peerInitiated && state.remotePeerInitiated() {
+	if !peerInitiated && gState.remotePeerInitiated() {
 		// We've tried to initiate this state as well, so it's no longer peer initiated.
-		e.peerInitiatedGroupCounter[topic].Dec(state.initiatedBy)
-		state.initiatedBy = ""
+		e.peerInitiatedGroupCounter[topic].Dec(gState.initiatedBy)
+		gState.initiatedBy = ""
 	}
-	return state, nil
+	return gState, nil
 }
 
-func (e *PartialMessagesExtension) Init(router Router) error {
+func (e *PartialMessagesExtension[PeerState]) Init(router Router) error {
 	e.router = router
 	if e.Logger == nil {
 		return errors.New("field Logger must be set")
@@ -189,8 +158,8 @@ func (e *PartialMessagesExtension) Init(router Router) error {
 	if e.OnIncomingRPC == nil {
 		return errors.New("field OnIncomingRPC must be set")
 	}
-	if e.GossipForPeer == nil {
-		return errors.New("field GossipForPeer must be set")
+	if e.GossipActions == nil {
+		return errors.New("field GossipActions must be set")
 	}
 
 	if e.PeerInitiatedGroupLimitPerTopic == 0 {
@@ -200,98 +169,86 @@ func (e *PartialMessagesExtension) Init(router Router) error {
 		e.PeerInitiatedGroupLimitPerTopicPerPeer = defaultPeerInitiatedGroupLimitPerTopicPerPeer
 	}
 
-	e.statePerTopicPerGroup = make(map[string]map[string]*partialMessageStatePerGroupPerTopic)
+	e.statePerTopicPerGroup = make(map[string]map[string]*partialMessageStatePerGroupPerTopic[PeerState])
 	e.peerInitiatedGroupCounter = make(map[string]*peerInitiatedGroupCounterState)
 
 	return nil
 }
 
-func (e *PartialMessagesExtension) PublishPartial(topic string, partial Message, opts PublishOptions) error {
-	groupID := partial.GroupID()
+func (e *PartialMessagesExtension[PeerState]) publish(topic string, groupID []byte, actions iter.Seq2[peer.ID, PublishAction]) error {
+	var err error
+	for p, action := range actions {
+		if action.Err != nil {
+			err = errors.Join(err, action.Err)
+			continue
+		}
 
-	state, err := e.groupState(topic, groupID, false, "")
+		peerRequestedPartial := e.router.PeerRequestsPartial(p, topic)
+		if (peerRequestedPartial && len(action.EncodedPartialMessage) > 0) || len(action.EncodedPartsMetadata) > 0 {
+			var rpc pb.PartialMessagesExtension
+			rpc.TopicID = &topic
+			rpc.GroupID = []byte(groupID)
+			if peerRequestedPartial {
+				rpc.PartialMessage = action.EncodedPartialMessage
+			}
+			rpc.PartsMetadata = action.EncodedPartsMetadata
+			e.sendRPC(p, &rpc)
+		}
+	}
+	return err
+}
+
+// PublishActionsFn should return an iterator of PublishActions describing what
+// messages to send to whom.
+//
+// The function SHOULD update the peer's peerState in the map to track the
+// parts we've sent to this peer, along with any other peer-specific application
+// data.
+//
+// The function should use the peerRequestsPartial to avoid encoding a partial
+// message if the peer did not request one.
+//
+// A peer's peerState will be the zero value if this is the first time
+// interacting with this peer. Applications can still eagerly push data in
+// this case by returning the appropriate PublishAction.
+//
+// Implementations SHOULD avoid returning duplicate or redundant
+// EncodedPartsMetadata i.e. if a previously sent PartsMetadata is up to date,
+// implementations SHOULD return `nil` for `EncodedPartsMetadata`.
+type PublishActionsFn[PeerState any] func(peerStates map[peer.ID]PeerState, peerRequestsPartial func(peer.ID) bool) iter.Seq2[peer.ID, PublishAction]
+
+func (e *PartialMessagesExtension[PeerState]) PublishPartial(topic string, groupID []byte, publishActionsFn PublishActionsFn[PeerState]) error {
+	gState, err := e.groupState(topic, groupID, false, "")
 	if err != nil {
 		return err
 	}
 
-	state.groupTTL = max(e.GroupTTLByHeatbeat, minGroupTTL)
+	gState.groupTTL = max(e.GroupTTLByHeatbeat, minGroupTTL)
 
-	var peers iter.Seq[peer.ID]
-	if len(opts.PublishToPeers) > 0 {
-		peers = slices.Values(opts.PublishToPeers)
-	} else {
-		peers = e.peersToPublishTo(topic, state)
-	}
-
-	for p := range peers {
-		log := e.Logger.With("peer", p)
-		requestedPartial := e.router.PeerRequestsPartial(p, topic)
-
-		pState := state.peerState[p]
-		var rpc pb.PartialMessagesExtension
-		var sendRPC bool
-
-		// Ask the application for message data
-		pState, pm, partsMetadata, err := partial.ForPeer(p, requestedPartial, pState)
-		if err != nil {
-			log.Warn("partial message extension failed to get partial message bytes", "error", err)
-			// Possibly a bad request, we'll delete the request as we will
-			// likely error next time we try to handle it
-			delete(state.peerState, p)
-			continue
-		}
-		// If the application cleared the peerState, we don't need to track it anymore
-		if pState.IsZero() {
-			delete(state.peerState, p)
-		} else {
-			state.peerState[p] = pState
-		}
-		if requestedPartial && len(pm) > 0 {
-			log.Debug("Respond to peer's partsMetadata")
-			sendRPC = true
-			rpc.PartialMessage = pm
-		}
-		if len(partsMetadata) > 0 {
-			log.Debug("Including parts metadata")
-			sendRPC = true
-			rpc.PartsMetadata = partsMetadata
-		}
-
-		if sendRPC {
-			rpc.TopicID = &topic
-			rpc.GroupID = groupID
-			e.sendRPC(p, &rpc)
-		}
-	}
-
-	return nil
+	e.initPeerState(topic, gState)
+	return e.publish(topic, []byte(groupID), publishActionsFn(
+		gState.peerState,
+		func(p peer.ID) bool {
+			return e.router.PeerRequestsPartial(p, topic)
+		},
+	))
 }
 
-// peersToPublishTo returns a iter.Seq of peers to publish to. It combines peers
-// in the group state with mesh peers for the topic.
-// Group state peers are used to cover the fanout and gossip message cases where
-// the peer would not be in our mesh.
-func (e *PartialMessagesExtension) peersToPublishTo(topic string, state *partialMessageStatePerGroupPerTopic) iter.Seq[peer.ID] {
-	return func(yield func(peer.ID) bool) {
-		for p := range state.peerState {
-			if !yield(p) {
-				return
-			}
-		}
-		for p := range e.router.MeshPeers(topic) {
-			if _, ok := state.peerState[p]; !ok {
-				if !yield(p) {
-					return
-				}
-			}
+// initPeerState initializes the peer state of MeshPeers that aren't already in
+// our peerState map.
+func (e *PartialMessagesExtension[PeerState]) initPeerState(topic string, gState *partialMessageStatePerGroupPerTopic[PeerState]) {
+	for p := range e.router.MeshPeers(topic) {
+		if _, ok := gState.peerState[p]; !ok {
+			var newState PeerState
+			gState.peerState[p] = newState
 		}
 	}
 }
 
-func (e *PartialMessagesExtension) RemovePeer(id peer.ID) {
-	for topic, statePerTopic := range e.statePerTopicPerGroup {
-		for _, state := range statePerTopic {
-			delete(state.peerState, id)
+func (e *PartialMessagesExtension[PeerState]) RemovePeer(id peer.ID) {
+	for topic, tState := range e.statePerTopicPerGroup {
+		for _, gState := range tState {
+			delete(gState.peerState, id)
 		}
 		if ctr, ok := e.peerInitiatedGroupCounter[topic]; ok {
 			ctr.RemovePeer(id)
@@ -299,66 +256,68 @@ func (e *PartialMessagesExtension) RemovePeer(id peer.ID) {
 	}
 }
 
-func (e *PartialMessagesExtension) Heartbeat() {
-	for topic, statePerTopic := range e.statePerTopicPerGroup {
-		for group, s := range statePerTopic {
-			if s.groupTTL == 0 {
-				delete(statePerTopic, group)
-				if len(statePerTopic) == 0 {
+func (e *PartialMessagesExtension[PeerState]) Heartbeat() {
+	for topic, tState := range e.statePerTopicPerGroup {
+		for group, gState := range tState {
+			if gState.groupTTL == 0 || len(gState.peerState) == 0 {
+				delete(tState, group)
+				if len(tState) == 0 {
 					delete(e.statePerTopicPerGroup, topic)
 				}
-				if s.remotePeerInitiated() {
-					e.peerInitiatedGroupCounter[topic].Dec(s.initiatedBy)
+				if gState.remotePeerInitiated() {
+					e.peerInitiatedGroupCounter[topic].Dec(gState.initiatedBy)
 				}
 			} else {
-				s.groupTTL--
+				gState.groupTTL--
 			}
 		}
 	}
 }
 
-func (e *PartialMessagesExtension) EmitGossip(topic string, peers []peer.ID) {
-	topicState, ok := e.statePerTopicPerGroup[topic]
+func (e *PartialMessagesExtension[PeerState]) EmitGossip(topic string, peers []peer.ID) {
+	tState, ok := e.statePerTopicPerGroup[topic]
 	if !ok {
 		return
 	}
 
-	for group, s := range topicState {
-		if s.remotePeerInitiated() {
+	for group, gState := range tState {
+		if gState.remotePeerInitiated() {
 			continue
 		}
-
-		for _, peer := range peers {
-			var rpc pb.PartialMessagesExtension
-			pState := s.peerState[peer]
-			pState, msg, partsMetadataToSend, err := e.GossipForPeer(topic, group, peer, pState)
+		var newGossipPeerCount int
+		for _, p := range peers {
+			if _, ok := gState.peerState[p]; !ok {
+				newGossipPeerCount++
+			}
+		}
+		if newGossipPeerCount > 0 {
+			// We only emit gossip for peers not already in our group state.
+			// Peers in the group state are handled the same as mesh peers.
+			peerStates := make(map[peer.ID]PeerState, newGossipPeerCount)
+			for _, p := range peers {
+				var newState PeerState
+				peerStates[p] = newState
+			}
+			publishActions := e.GossipActions(topic, []byte(group))(
+				peerStates,
+				func(p peer.ID) bool {
+					return e.router.PeerRequestsPartial(p, topic)
+				})
+			maps.Copy(gState.peerState, peerStates)
+			err := e.publish(topic, []byte(group), publishActions)
 			if err != nil {
-				e.Logger.Error("Failed to encode partial message", "error", err)
-				continue
-			}
-			// If the application cleared the peerState, we don't need to track it anymore
-			if pState.IsZero() {
-				delete(s.peerState, peer)
-			} else {
-				s.peerState[peer] = pState
-			}
-			if len(msg) > 0 || len(partsMetadataToSend) > 0 {
-				rpc.TopicID = &topic
-				rpc.GroupID = []byte(group)
-				rpc.PartialMessage = msg
-				rpc.PartsMetadata = partsMetadataToSend
-				e.sendRPC(peer, &rpc)
+				e.Logger.Error("Failed to publish gossip message", "topic", topic, "group", group, "error", err)
 			}
 		}
 	}
 }
 
-func (e *PartialMessagesExtension) sendRPC(to peer.ID, rpc *pb.PartialMessagesExtension) {
+func (e *PartialMessagesExtension[PeerState]) sendRPC(to peer.ID, rpc *pb.PartialMessagesExtension) {
 	e.Logger.Debug("Sending RPC", "to", to, "rpc", rpc)
 	e.router.SendRPC(to, rpc, false)
 }
 
-func (e *PartialMessagesExtension) HandleRPC(from peer.ID, rpc *pb.PartialMessagesExtension) error {
+func (e *PartialMessagesExtension[PeerState]) HandleRPC(from peer.ID, rpc *pb.PartialMessagesExtension) error {
 	if rpc == nil {
 		return nil
 	}
@@ -367,44 +326,14 @@ func (e *PartialMessagesExtension) HandleRPC(from peer.ID, rpc *pb.PartialMessag
 	topic := rpc.GetTopicID()
 	groupID := rpc.GroupID
 
-	var groupStateExists bool
-	if statePerTopic, topicStateOk := e.statePerTopicPerGroup[topic]; topicStateOk {
-		_, groupStateExists = statePerTopic[string(groupID)]
-	}
-
-	if !groupStateExists {
-		// If we don't have the groupState, only create it if there is something
-		// worth storing.
-		pState, err := e.OnIncomingRPC(from, PeerState{}, rpc)
-		if err != nil {
-			return err
-		}
-		if !pState.IsZero() {
-			state, err := e.groupState(topic, groupID, true, from)
-			if err != nil {
-				return err
-			}
-			state.peerState[from] = pState
-		}
-		return nil
-	}
-
 	state, err := e.groupState(topic, groupID, true, from)
 	if err != nil {
 		return err
 	}
-	pState := state.peerState[from]
 
-	pState, err = e.OnIncomingRPC(from, pState, rpc)
+	err = e.OnIncomingRPC(from, state.peerState, rpc)
 	if err != nil {
 		return err
-	}
-
-	// If the application cleared the pState, we don't need to track it anymore
-	if pState.IsZero() {
-		delete(state.peerState, from)
-	} else {
-		state.peerState[from] = pState
 	}
 
 	return nil

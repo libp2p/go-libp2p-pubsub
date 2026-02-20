@@ -14,7 +14,6 @@ import (
 	"time"
 
 	"github.com/libp2p/go-libp2p-pubsub/internal/gologshim"
-	"github.com/libp2p/go-libp2p-pubsub/partialmessages"
 	pb "github.com/libp2p/go-libp2p-pubsub/pb"
 	"github.com/libp2p/go-libp2p-pubsub/timecache"
 
@@ -152,8 +151,6 @@ type PubSub struct {
 
 	// sendMessageBatch publishes a batch of messages
 	sendMessageBatch chan messageBatchAndPublishOptions
-
-	sendPartialMsg chan publishPartialMessageReq
 
 	// addVal handles validator registration requests
 	addVal chan *addValReq
@@ -542,7 +539,6 @@ func NewPubSub(ctx context.Context, h host.Host, rt PubSubRouter, opts ...Option
 		getTopics:             make(chan *topicReq),
 		sendMsg:               make(chan *Message, 32),
 		sendMessageBatch:      make(chan messageBatchAndPublishOptions, 1),
-		sendPartialMsg:        make(chan publishPartialMessageReq, 1),
 		addVal:                make(chan *addValReq),
 		rmVal:                 make(chan *rmValReq),
 		eval:                  make(chan func()),
@@ -930,9 +926,6 @@ func (p *PubSub) processLoop(ctx context.Context) {
 
 		case batchAndOpts := <-p.sendMessageBatch:
 			p.publishMessageBatch(batchAndOpts)
-
-		case req := <-p.sendPartialMsg:
-			p.publishPartialMessage(req)
 
 		case req := <-p.addVal:
 			p.val.AddValidator(req)
@@ -1788,43 +1781,6 @@ func (p *PubSub) PublishBatch(batch *MessageBatch, opts ...BatchPubOpt) error {
 	}
 
 	return nil
-}
-
-type publishPartialMessageReq struct {
-	topic          string
-	partialMessage partialmessages.Message
-	opts           partialmessages.PublishOptions
-	errCh          chan error
-}
-
-func (p *PubSub) PublishPartialMessage(topic string, partialMessage partialmessages.Message, opts partialmessages.PublishOptions) error {
-	errCh := make(chan error, 1)
-	select {
-	case p.sendPartialMsg <- publishPartialMessageReq{
-		topic:          topic,
-		partialMessage: partialMessage,
-		opts:           opts,
-		errCh:          errCh,
-	}:
-	case <-p.ctx.Done():
-		return p.ctx.Err()
-	}
-	return <-errCh
-}
-
-func (p *PubSub) publishPartialMessage(req publishPartialMessageReq) {
-	rt, ok := p.rt.(*GossipSubRouter)
-	if !ok {
-		req.errCh <- errors.New("partial publishing is only supported by the GossipSub router")
-		return
-	}
-
-	if rt.extensions.partialMessagesExtension == nil {
-		req.errCh <- errors.New("partial publishing is not enabled")
-		return
-	}
-
-	req.errCh <- rt.extensions.partialMessagesExtension.PublishPartial(req.topic, req.partialMessage, req.opts)
 }
 
 func (p *PubSub) nextSeqno() []byte {
