@@ -4,6 +4,7 @@ import (
 	"errors"
 	"iter"
 	"log/slog"
+	"maps"
 
 	pb "github.com/libp2p/go-libp2p-pubsub/pb"
 	"github.com/libp2p/go-libp2p/core/peer"
@@ -99,7 +100,7 @@ type PartialMessagesExtension[PeerState any] struct {
 	GroupTTLByHeatbeat int
 
 	// map topic -> TopicState
-	statePerTopicPerGroup map[string]*topicState[PeerState]
+	statePerTopicPerGroup map[string]map[string]*partialMessageStatePerGroupPerTopic[PeerState]
 
 	// map[topic]counter
 	peerInitiatedGroupCounter map[string]*peerInitiatedGroupCounterState
@@ -119,35 +120,16 @@ type Router interface {
 	PeerRequestsPartial(peer peer.ID, topic string) bool
 }
 
-type peerTopicState struct {
-	requestsPartial bool
-}
-
-type topicState[PeerState any] struct {
-	peerTopicState map[peer.ID]peerTopicState
-	// map[group]partialMessageStatePerGroupPerTopic
-	groupStates map[string]*partialMessageStatePerGroupPerTopic[PeerState]
-}
-
-func (tState *topicState[PeerState]) peerRequestsPartial(peerID peer.ID) bool {
-	if s, ok := tState.peerTopicState[peerID]; ok {
-		return s.requestsPartial
-	}
-	return false
-}
-
 func (e *PartialMessagesExtension[PeerState]) groupState(topic string, groupID []byte, peerInitiated bool, from peer.ID) (*partialMessageStatePerGroupPerTopic[PeerState], error) {
 	tState, ok := e.statePerTopicPerGroup[topic]
 	if !ok {
-		tState = &topicState[PeerState]{
-			groupStates: make(map[string]*partialMessageStatePerGroupPerTopic[PeerState]),
-		}
+		tState = make(map[string]*partialMessageStatePerGroupPerTopic[PeerState])
 		e.statePerTopicPerGroup[topic] = tState
 	}
 	if _, ok := e.peerInitiatedGroupCounter[topic]; !ok {
 		e.peerInitiatedGroupCounter[topic] = &peerInitiatedGroupCounterState{}
 	}
-	gState, ok := tState.groupStates[string(groupID)]
+	gState, ok := tState[string(groupID)]
 	if !ok {
 		if peerInitiated {
 			err := e.peerInitiatedGroupCounter[topic].Inc(e.PeerInitiatedGroupLimitPerTopic, e.PeerInitiatedGroupLimitPerTopicPerPeer, from)
@@ -157,7 +139,7 @@ func (e *PartialMessagesExtension[PeerState]) groupState(topic string, groupID [
 		}
 
 		gState = newPartialMessageStatePerTopicGroup[PeerState](e.GroupTTLByHeatbeat)
-		tState.groupStates[string(groupID)] = gState
+		tState[string(groupID)] = gState
 		gState.initiatedBy = from
 	}
 	if !peerInitiated && gState.remotePeerInitiated() {
@@ -187,7 +169,7 @@ func (e *PartialMessagesExtension[PeerState]) Init(router Router) error {
 		e.PeerInitiatedGroupLimitPerTopicPerPeer = defaultPeerInitiatedGroupLimitPerTopicPerPeer
 	}
 
-	e.statePerTopicPerGroup = make(map[string]*topicState[PeerState])
+	e.statePerTopicPerGroup = make(map[string]map[string]*partialMessageStatePerGroupPerTopic[PeerState])
 	e.peerInitiatedGroupCounter = make(map[string]*peerInitiatedGroupCounterState)
 
 	return nil
@@ -246,7 +228,9 @@ func (e *PartialMessagesExtension[PeerState]) PublishPartial(topic string, group
 	e.initPeerState(topic, gState)
 	return e.publish(topic, []byte(groupID), publishActionsFn(
 		gState.peerState,
-		e.statePerTopicPerGroup[topic].peerRequestsPartial,
+		func(p peer.ID) bool {
+			return e.router.PeerRequestsPartial(p, topic)
+		},
 	))
 }
 
@@ -259,25 +243,11 @@ func (e *PartialMessagesExtension[PeerState]) initPeerState(topic string, gState
 			gState.peerState[p] = newState
 		}
 	}
-
-	// If we have a gState, we have a tState.
-	tState := e.statePerTopicPerGroup[topic]
-	if tState.peerTopicState == nil {
-		tState.peerTopicState = make(map[peer.ID]peerTopicState)
-	}
-	// Track peer topic state
-	for p := range gState.peerState {
-		if _, ok := tState.peerTopicState[p]; !ok {
-			tState.peerTopicState[p] = peerTopicState{
-				requestsPartial: e.router.PeerRequestsPartial(p, topic),
-			}
-		}
-	}
 }
 
 func (e *PartialMessagesExtension[PeerState]) RemovePeer(id peer.ID) {
 	for topic, tState := range e.statePerTopicPerGroup {
-		for _, gState := range tState.groupStates {
+		for _, gState := range tState {
 			delete(gState.peerState, id)
 		}
 		if ctr, ok := e.peerInitiatedGroupCounter[topic]; ok {
@@ -288,10 +258,10 @@ func (e *PartialMessagesExtension[PeerState]) RemovePeer(id peer.ID) {
 
 func (e *PartialMessagesExtension[PeerState]) Heartbeat() {
 	for topic, tState := range e.statePerTopicPerGroup {
-		for group, gState := range tState.groupStates {
+		for group, gState := range tState {
 			if gState.groupTTL == 0 || len(gState.peerState) == 0 {
-				delete(tState.groupStates, group)
-				if len(tState.groupStates) == 0 {
+				delete(tState, group)
+				if len(tState) == 0 {
 					delete(e.statePerTopicPerGroup, topic)
 				}
 				if gState.remotePeerInitiated() {
@@ -310,7 +280,7 @@ func (e *PartialMessagesExtension[PeerState]) EmitGossip(topic string, peers []p
 		return
 	}
 
-	for group, gState := range tState.groupStates {
+	for group, gState := range tState {
 		if gState.remotePeerInitiated() {
 			continue
 		}
@@ -323,26 +293,17 @@ func (e *PartialMessagesExtension[PeerState]) EmitGossip(topic string, peers []p
 		if newGossipPeerCount > 0 {
 			// We only emit gossip for peers not already in our group state.
 			// Peers in the group state are handled the same as mesh peers.
-
-			if tState.peerTopicState == nil {
-				tState.peerTopicState = make(map[peer.ID]peerTopicState)
-			}
-
 			peerStates := make(map[peer.ID]PeerState, newGossipPeerCount)
 			for _, p := range peers {
 				var newState PeerState
 				peerStates[p] = newState
-				if _, ok := tState.peerTopicState[p]; !ok {
-					tState.peerTopicState[p] = peerTopicState{
-						requestsPartial: e.router.PeerRequestsPartial(p, topic),
-					}
-				}
 			}
-			publishActions := e.GossipActions(topic, []byte(group))(peerStates, tState.peerRequestsPartial)
-			for p, ps := range peerStates {
-				// Merge any new peer states
-				gState.peerState[p] = ps
-			}
+			publishActions := e.GossipActions(topic, []byte(group))(
+				peerStates,
+				func(p peer.ID) bool {
+					return e.router.PeerRequestsPartial(p, topic)
+				})
+			maps.Copy(gState.peerState, peerStates)
 			err := e.publish(topic, []byte(group), publishActions)
 			if err != nil {
 				e.Logger.Error("Failed to publish gossip message", "topic", topic, "group", group, "error", err)
