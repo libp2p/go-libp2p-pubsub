@@ -1340,6 +1340,50 @@ func TestGossipsubDirectPeers(t *testing.T) {
 	}
 }
 
+func TestGossipsubDynamicDirectPeers(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	h := getDefaultHosts(t, 3)
+	psubs := []*PubSub{
+		getGossipsub(ctx, h[0], WithDirectConnectTicks(2)),
+		getGossipsub(ctx, h[1], WithDirectConnectTicks(2)),
+		getGossipsub(ctx, h[2], WithDirectConnectTicks(2)),
+	}
+
+	listDirectPeers := func(psb *PubSub) int {
+		directPeers := 0
+		gspRt, _ := psb.rt.(*GossipSubRouter)
+		fn := func() {
+			directPeers = len(gspRt.direct)
+		}
+		psb.syncEval(fn)
+		return directPeers
+	}
+
+	// test dinamic addition of direct-peers to h[1] and h[2]
+	psubs[1].AddDirectPeer(peer.AddrInfo{ID: h[2].ID(), Addrs: h[2].Addrs()})
+	psubs[2].AddDirectPeer(peer.AddrInfo{ID: h[1].ID(), Addrs: h[1].Addrs()})
+
+	// give enough time to the state machine to process the direct additions
+	time.Sleep(time.Second)
+
+	if listDirectPeers(psubs[1]) < 1 || listDirectPeers(psubs[2]) < 1 {
+		t.Fatal("expected 1 direct peer at both gsp rts")
+	}
+
+	// remove peer from direct from directPeers
+	psubs[1].RemoveDirectPeer(h[2].ID())
+	psubs[2].RemoveDirectPeer(h[1].ID())
+
+	// give enough time to the state machine to process the direct additions
+	time.Sleep(time.Second)
+
+	if listDirectPeers(psubs[1]) > 0 || listDirectPeers(psubs[2]) > 0 {
+		t.Fatal("expected no direct peers both gsp rts")
+	}
+}
+
 func TestGossipSubPeerFilter(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

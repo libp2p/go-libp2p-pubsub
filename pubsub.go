@@ -1909,3 +1909,44 @@ type addRelayReq struct {
 	topic string
 	resp  chan RelayCancelFunc
 }
+
+func (p *PubSub) syncEval(f func()) error {
+	done := make(chan struct{})
+	syncFn := func() {
+		defer close(done)
+		f()
+	}
+	select {
+	case p.eval <- syncFn:
+		select {
+		case <-done:
+		case <-p.ctx.Done():
+			return p.ctx.Err()
+		}
+	case <-p.ctx.Done():
+		return p.ctx.Err()
+	}
+	return nil
+}
+
+// AddDirectPeer tags the peer as a direct peer at the internal router
+func (p *PubSub) AddDirectPeer(pInfo peer.AddrInfo) error {
+	gs, ok := p.rt.(*GossipSubRouter)
+	if !ok {
+		return errors.New("add direct peer only supported by gossipsub")
+	}
+	return p.syncEval(func() {
+		gs.AddDirectPeer(pInfo)
+	})
+}
+
+// RemoveDirectPeer un-tags the peer from being direct peer at the internal router
+func (p *PubSub) RemoveDirectPeer(pid peer.ID) error {
+	gs, ok := p.rt.(*GossipSubRouter)
+	if !ok {
+		return errors.New("remove direct peer only supported by gossipsub")
+	}
+	return p.syncEval(func() {
+		gs.RemoveDirectPeer(pid)
+	})
+}
