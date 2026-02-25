@@ -5405,3 +5405,121 @@ outer:
 		}
 	}
 }
+
+func TestGossipsubFanoutOnly(t *testing.T) {
+	// Test that a fanout-only topic can publish to the network but its
+	// subscriber only receives locally published messages.
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	hosts := getDefaultHosts(t, 5)
+	psubs := getGossipsubs(ctx, hosts)
+
+	topicID := "foobar"
+
+	// hosts[0] joins with FanoutOnly - it should be able to publish but never
+	// join the mesh, so its subscriber should not receive remote messages.
+	fanoutTopic, err := psubs[0].Join(topicID, FanoutOnly())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// The rest subscribe normally.
+	var normalSubs []*Subscription
+	for _, ps := range psubs[1:] {
+		sub, err := ps.Subscribe(topicID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		normalSubs = append(normalSubs, sub)
+	}
+
+	// Also subscribe on the fanout-only topic. Since it's fanout-only, this
+	// must not trigger a p2p subscription.
+	fanoutSub, err := fanoutTopic.Subscribe()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	denseConnect(t, hosts)
+
+	// Wait for heartbeats to build mesh.
+	time.Sleep(2 * time.Second)
+
+	// Publish from the fanout-only node. Normal subscribers should receive it
+	// because the router uses fanout to forward the message.
+	fanoutMsg := []byte("from fanout-only node")
+	if err := fanoutTopic.Publish(ctx, fanoutMsg); err != nil {
+		t.Fatal(err)
+	}
+
+	for i, sub := range normalSubs {
+		tctx, tcancel := context.WithTimeout(ctx, 5*time.Second)
+		got, err := sub.Next(tctx)
+		tcancel()
+		if err != nil {
+			t.Fatalf("normal sub %d did not receive fanout message: %v", i, err)
+		}
+		if !bytes.Equal(got.Data, fanoutMsg) {
+			t.Fatalf("normal sub %d got wrong message", i)
+		}
+	}
+
+	// The fanout subscriber should also get the locally published message.
+	tctx, tcancel := context.WithTimeout(ctx, 5*time.Second)
+	got, err := fanoutSub.Next(tctx)
+	tcancel()
+	if err != nil {
+		t.Fatal("fanout subscriber did not receive locally published message:", err)
+	}
+	if !bytes.Equal(got.Data, fanoutMsg) {
+		t.Fatal("fanout subscriber got wrong message")
+	}
+
+	// Now publish from a normal node. The fanout subscriber must NOT receive
+	// it because the fanout-only topic never joined the mesh.
+	remoteMsg := []byte("from normal node")
+	if err := psubs[1].Publish(topicID, remoteMsg); err != nil {
+		t.Fatal(err)
+	}
+
+	// The other normal subscribers should receive it.
+	for i, sub := range normalSubs[1:] {
+		tctx, tcancel := context.WithTimeout(ctx, 5*time.Second)
+		got, err := sub.Next(tctx)
+		tcancel()
+		if err != nil {
+			t.Fatalf("normal sub %d did not receive remote message: %v", i+1, err)
+		}
+		if !bytes.Equal(got.Data, remoteMsg) {
+			t.Fatalf("normal sub %d got wrong message", i+1)
+		}
+	}
+
+	// The fanout subscriber should NOT receive the remote message.
+	tctx, tcancel = context.WithTimeout(ctx, time.Second)
+	_, err = fanoutSub.Next(tctx)
+	tcancel()
+	if err == nil {
+		t.Fatal("fanout subscriber received a remote message but should not have")
+	}
+}
+
+func TestGossipsubFanoutOnlyRelay(t *testing.T) {
+	// Test that Relay() returns an error on a fanout-only topic.
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	hosts := getDefaultHosts(t, 1)
+	ps := getGossipsub(ctx, hosts[0])
+
+	topic, err := ps.Join("foobar", FanoutOnly())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = topic.Relay()
+	if !errors.Is(err, ErrFanoutOnlyTopic) {
+		t.Fatalf("expected ErrFanoutOnlyTopic, got: %v", err)
+	}
+}
