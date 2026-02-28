@@ -4556,10 +4556,6 @@ func (m *minimalTestPartialMessage) GroupID() []byte {
 	return m.Group
 }
 
-func noOpPublishActions(peerStates map[peer.ID]peerState, peerRequestsPartial func(peer.ID) bool) iter.Seq2[peer.ID, partialmessages.PublishAction] {
-	return func(yield func(peer.ID, partialmessages.PublishAction) bool) {}
-}
-
 func (m *minimalTestPartialMessage) publishActions(peerStates map[peer.ID]peerState, peerRequestsPartial func(peer.ID) bool) iter.Seq2[peer.ID, partialmessages.PublishAction] {
 	myPartsMeta := m.PartsMetadata()
 	return func(yield func(peer.ID, partialmessages.PublishAction) bool) {
@@ -4634,12 +4630,12 @@ func TestPartialMessages(t *testing.T) {
 	for i := range partialExt {
 		partialExt[i] = &partialmessages.PartialMessagesExtension[peerState]{
 			Logger: logger.With("id", i),
-			GossipActions: func(topic string, groupID []byte) partialmessages.PublishActionsFn[peerState] {
+			OnEmitGossip: func(topic string, groupID []byte, gossipPeers []peer.ID, peerStates map[peer.ID]peerState) {
 				pm := partialMessageStore[i][topic+string(groupID)]
 				if pm == nil {
-					return noOpPublishActions
+					return
 				}
-				return pm.publishActions
+				partialExt[i].PublishPartial(topic, groupID, pm.publishActions)
 			},
 			OnIncomingRPC: func(from peer.ID, peerStates map[peer.ID]peerState, rpc *pb.PartialMessagesExtension) error {
 				peerState := peerStates[from]
@@ -4761,12 +4757,12 @@ func TestPeerSupportsPartialMessages(t *testing.T) {
 	for i := range partialExt {
 		partialExt[i] = &partialmessages.PartialMessagesExtension[peerState]{
 			Logger: logger.With("id", i),
-			GossipActions: func(topic string, groupID []byte) partialmessages.PublishActionsFn[peerState] {
+			OnEmitGossip: func(topic string, groupID []byte, gossipPeers []peer.ID, peerStates map[peer.ID]peerState) {
 				pm := partialMessageStore[i][topic+string(groupID)]
 				if pm == nil {
-					return noOpPublishActions
+					return
 				}
-				return pm.publishActions
+				partialExt[i].PublishPartial(topic, groupID, pm.publishActions)
 			},
 			OnIncomingRPC: func(from peer.ID, peerStates map[peer.ID]peerState, rpc *pb.PartialMessagesExtension) error {
 				peerState := peerStates[from]
@@ -4958,12 +4954,12 @@ func TestSkipPublishingToPeersRequestingPartialMessages(t *testing.T) {
 	for i := range partialExt {
 		partialExt[i] = &partialmessages.PartialMessagesExtension[peerState]{
 			Logger: logger,
-			GossipActions: func(topic string, groupID []byte) partialmessages.PublishActionsFn[peerState] {
+			OnEmitGossip: func(topic string, groupID []byte, gossipPeers []peer.ID, peerStates map[peer.ID]peerState) {
 				pm := partialMessageStore[i][topic+string(groupID)]
 				if pm == nil {
-					return noOpPublishActions
+					return
 				}
-				return pm.publishActions
+				partialExt[i].PublishPartial(topic, groupID, pm.publishActions)
 			},
 			OnIncomingRPC: func(from peer.ID, peerStates map[peer.ID]peerState, rpc *pb.PartialMessagesExtension) error {
 				peerState := peerStates[from]
@@ -5119,12 +5115,12 @@ func TestPairwiseInteractionWithPartialMessages(t *testing.T) {
 				}
 				partialExt[i] = &partialmessages.PartialMessagesExtension[peerState]{
 					Logger: logger.With("id", i),
-					GossipActions: func(topic string, groupID []byte) partialmessages.PublishActionsFn[peerState] {
+					OnEmitGossip: func(topic string, groupID []byte, gossipPeers []peer.ID, peerStates map[peer.ID]peerState) {
 						pm := partialMessageStore[i][topic+string(groupID)]
 						if pm == nil {
-							return noOpPublishActions
+							return
 						}
-						return pm.publishActions
+						partialExt[i].PublishPartial(topic, groupID, pm.publishActions)
 					},
 					OnIncomingRPC: func(from peer.ID, peerStates map[peer.ID]peerState, rpc *pb.PartialMessagesExtension) error {
 						peerState := peerStates[from]
@@ -5288,8 +5284,7 @@ func TestNoIDONTWANTWithPartialMessage(t *testing.T) {
 			return []Option{
 				WithPartialMessagesExtension(
 					&partialmessages.PartialMessagesExtension[peerState]{
-						GossipActions: func(topic string, groupID []byte) partialmessages.PublishActionsFn[peerState] {
-							return noOpPublishActions
+						OnEmitGossip: func(topic string, groupID []byte, gossipPeers []peer.ID, peerStates map[peer.ID]peerState) {
 						},
 						Logger: slog.Default(),
 						OnIncomingRPC: func(from peer.ID, peerStates map[peer.ID]peerState, rpc *pb.PartialMessagesExtension) error {
