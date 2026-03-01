@@ -93,7 +93,7 @@ func (fs *FloodSubRouter) Publish(msg *Message) {
 
 		err := q.Push(out, false)
 		if err != nil {
-			fs.p.logger.Info("dropping message to peer: queue full", "peer", pid)
+			fs.p.logger.Warn("dropping message to peer: queue full", "peer", pid)
 			fs.tracer.DropRPC(out, pid)
 			// Drop it. The peer is too slow.
 			continue

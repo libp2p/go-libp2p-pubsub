@@ -1213,7 +1213,7 @@ func (p *PubSub) announce(topic string, sub bool) {
 	for pid, peer := range p.peers {
 		err := peer.Push(out, false)
 		if err != nil {
-			p.logger.Info("Can't send announce message to peer: queue full; scheduling retry", "peer", pid)
+			p.logger.Warn("Can't send announce message to peer: queue full; scheduling retry", "peer", pid)
 			p.tracer.DropRPC(out, pid)
 			go p.announceRetry(pid, topic, sub)
 			continue
@@ -1266,7 +1266,7 @@ func (p *PubSub) doAnnounceRetry(pid peer.ID, topic string, sub bool) {
 	out := rpcWithSubs(subopt)
 	err := peer.Push(out, false)
 	if err != nil {
-		p.logger.Info("Can't send announce message to peer: queue full; scheduling retry", "peer", pid)
+		p.logger.Warn("Can't send announce message to peer: queue full; scheduling retry", "peer", pid)
 		p.tracer.DropRPC(out, pid)
 		go p.announceRetry(pid, topic, sub)
 		return
@@ -1284,7 +1284,7 @@ func (p *PubSub) notifySubs(msg *Message) {
 		case f.ch <- msg:
 		default:
 			p.tracer.UndeliverableMessage(msg)
-			p.logger.Info("Can't deliver message to subscription for topic; subscriber too slow", "topic", topic)
+			p.logger.Warn("Can't deliver message to subscription for topic; subscriber too slow", "topic", topic)
 		}
 	}
 }
