@@ -112,7 +112,7 @@ type validatorImpl struct {
 // async request to add a topic validators
 type addValReq struct {
 	topic    string
-	validate interface{}
+	validate any
 	timeout  time.Duration
 	throttle int
 	inline   bool
@@ -140,7 +140,7 @@ func newValidation() *validation {
 func (v *validation) Start(p *PubSub) {
 	v.p = p
 	v.tracer = p.tracer
-	for i := 0; i < v.validateWorkers; i++ {
+	for range v.validateWorkers {
 		go v.validateWorker()
 	}
 }
@@ -452,7 +452,7 @@ func (v *validation) validateTopic(vals []*validatorImpl, src peer.ID, msg *Mess
 
 	result := ValidationAccept
 loop:
-	for i := 0; i < rcount; i++ {
+	for range rcount {
 		switch <-rch {
 		case ValidationAccept:
 		case ValidationReject:

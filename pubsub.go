@@ -258,7 +258,7 @@ type Message struct {
 	*pb.Message
 	ID            string
 	ReceivedFrom  peer.ID
-	ValidatorData interface{}
+	ValidatorData any
 	Local         bool
 }
 

@@ -9,7 +9,7 @@ import (
 	"log/slog"
 	"math/rand"
 	"slices"
-	"sort"
+	"cmp"
 	"time"
 
 	pb "github.com/libp2p/go-libp2p-pubsub/pb"
@@ -704,7 +704,7 @@ func (gs *GossipSubRouter) Attach(p *PubSub) {
 }
 
 func (gs *GossipSubRouter) manageAddrBook() {
-	sub, err := gs.p.host.EventBus().Subscribe([]interface{}{
+	sub, err := gs.p.host.EventBus().Subscribe([]any{
 		&event.EvtPeerIdentificationCompleted{},
 		&event.EvtPeerConnectednessChanged{},
 	})
@@ -1709,8 +1709,8 @@ func (gs *GossipSubRouter) heartbeat() {
 
 			// sort by score (but shuffle first for the case we don't use the score)
 			shufflePeers(plst)
-			sort.Slice(plst, func(i, j int) bool {
-				return score(plst[i]) > score(plst[j])
+			slices.SortFunc(plst, func(a, b peer.ID) int {
+				return cmp.Compare(score(b), score(a))
 			})
 
 			// We keep the first D_score peers by score and the remaining up to D randomly
@@ -1805,8 +1805,8 @@ func (gs *GossipSubRouter) heartbeat() {
 
 			// now compute the median peer score in the mesh
 			plst := peerMapToList(peers)
-			sort.Slice(plst, func(i, j int) bool {
-				return score(plst[i]) < score(plst[j])
+			slices.SortFunc(plst, func(a, b peer.ID) int {
+				return cmp.Compare(score(a), score(b))
 			})
 			medianIndex := len(peers) / 2
 			medianScore := scores[plst[medianIndex]]
