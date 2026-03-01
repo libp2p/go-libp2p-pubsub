@@ -683,7 +683,7 @@ func (gs *GossipSubRouter) Attach(p *PubSub) {
 	go gs.heartbeatTimer()
 
 	// start the PX connectors
-	for i := 0; i < gs.params.Connectors; i++ {
+	for range gs.params.Connectors {
 		go gs.connector()
 	}
 
