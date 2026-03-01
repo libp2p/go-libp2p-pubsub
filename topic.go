@@ -151,8 +151,9 @@ func (t *Topic) Subscribe(opts ...SubOpt) (*Subscription, error) {
 	}
 
 	sub := &Subscription{
-		topic: t.topic,
-		ctx:   t.p.ctx,
+		topic:   t.topic,
+		ctx:     t.p.ctx,
+		selfPid: t.p.host.ID(),
 	}
 
 	for _, opt := range opts {
