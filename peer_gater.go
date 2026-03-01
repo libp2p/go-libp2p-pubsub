@@ -5,7 +5,8 @@ import (
 	"fmt"
 	"log/slog"
 	"math/rand"
-	"sort"
+	"cmp"
+	"slices"
 	"sync"
 	"time"
 
@@ -314,8 +315,8 @@ func (pg *peerGater) getPeerIP(p peer.ID) string {
 			}
 			streams[c.ID()] = len(c.GetStreams())
 		}
-		sort.Slice(conns, func(i, j int) bool {
-			return streams[conns[i].ID()] > streams[conns[j].ID()]
+		slices.SortFunc(conns, func(a, b network.Conn) int {
+			return cmp.Compare(streams[b.ID()], streams[a.ID()])
 		})
 		return connToIP(conns[0])
 	}
