@@ -34,7 +34,7 @@ func TestBackoff_Update(t *testing.T) {
 		t.Fatalf("invalid initialization: %v, \t, %s", d, err)
 	}
 
-	for i := 0; i < maxBackoffAttempts-1; i++ {
+	for i := range maxBackoffAttempts-1 {
 		got, err := b.updateAndGet(id1)
 		if err != nil {
 			t.Fatalf("unexpected error post update: %s", err)
@@ -90,7 +90,7 @@ func TestBackoff_Clean(t *testing.T) {
 	maxBackoffAttempts := 100 // setting attempts to a high number hence testing cleanup logic.
 	b := newBackoff(ctx, size, cleanupInterval, maxBackoffAttempts)
 
-	for i := 0; i < size; i++ {
+	for i := range size {
 		id := peer.ID(fmt.Sprintf("peer-%d", i))
 		_, err := b.updateAndGet(id)
 		if err != nil {

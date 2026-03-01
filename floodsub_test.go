@@ -162,7 +162,7 @@ func TestBasicFloodsub(t *testing.T) {
 
 	time.Sleep(time.Millisecond * 100)
 
-	for i := 0; i < 100; i++ {
+	for i := range 100 {
 		msg := []byte(fmt.Sprintf("%d the flooooooood %d", i, i))
 
 		owner := mrand.Intn(len(psubs))
@@ -972,7 +972,7 @@ func TestMessageSender(t *testing.T) {
 
 	time.Sleep(time.Millisecond * 100)
 
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		for j := 0; j < 100; j++ {
 			msg := []byte(fmt.Sprintf("%d sent %d", i, j))
 
@@ -1143,7 +1143,7 @@ func TestPubsubWithAssortedOptions(t *testing.T) {
 
 	time.Sleep(time.Second)
 
-	for i := 0; i < 2; i++ {
+	for i := range 2 {
 		msg := []byte(fmt.Sprintf("message %d", i))
 		psubs[i].Publish("test", msg)
 

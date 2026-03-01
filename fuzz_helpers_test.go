@@ -46,7 +46,7 @@ func generateControl(data []byte, limit int) *pb.ControlMessage {
 	ctl := &pb.ControlMessage{}
 
 	ctl.Iwant = make([]*pb.ControlIWant, 0, numIWANTMsgs)
-	for i := 0; i < numIWANTMsgs; i++ {
+	for i := range numIWANTMsgs {
 		msgSize := int(generateU16(&data)) % limit
 		msgCount := int(generateU16(&data)) % limit
 		ctl.Iwant = append(ctl.Iwant, &pb.ControlIWant{})
@@ -60,7 +60,7 @@ func generateControl(data []byte, limit int) *pb.ControlMessage {
 	}
 
 	ctl.Ihave = make([]*pb.ControlIHave, 0, numIHAVEMsgs)
-	for i := 0; i < numIHAVEMsgs; i++ {
+	for i := range numIHAVEMsgs {
 		msgSize := int(generateU16(&data)) % limit
 		msgCount := int(generateU16(&data)) % limit
 		topicSize := int(generateU16(&data)) % limit
@@ -78,7 +78,7 @@ func generateControl(data []byte, limit int) *pb.ControlMessage {
 
 	numGraft := int(generateU16(&data)) % limit
 	ctl.Graft = make([]*pb.ControlGraft, 0, numGraft)
-	for i := 0; i < numGraft; i++ {
+	for range numGraft {
 		topicSize := int(generateU16(&data)) % limit
 		topic := string(make([]byte, topicSize))
 		ctl.Graft = append(ctl.Graft, &pb.ControlGraft{TopicID: &topic})
@@ -89,7 +89,7 @@ func generateControl(data []byte, limit int) *pb.ControlMessage {
 
 	numPrune := int(generateU16(&data)) % limit
 	ctl.Prune = make([]*pb.ControlPrune, 0, numPrune)
-	for i := 0; i < numPrune; i++ {
+	for range numPrune {
 		topicSize := int(generateU16(&data)) % limit
 		topic := string(make([]byte, topicSize))
 		ctl.Prune = append(ctl.Prune, &pb.ControlPrune{TopicID: &topic})
@@ -107,7 +107,7 @@ func generateRPC(data []byte, limit int) *RPC {
 
 	msgCount := int(generateU16(&data)) % (limit / 2)
 	rpc.Publish = make([]*pb.Message, 0, msgCount)
-	for i := 0; i < msgCount; i++ {
+	for range msgCount {
 		msg := generateMessage(data, limit)
 
 		sizeTester.Publish = []*pb.Message{msg}
@@ -122,7 +122,7 @@ func generateRPC(data []byte, limit int) *RPC {
 
 	subCount := int(generateU16(&data)) % (limit / 2)
 	rpc.Subscriptions = make([]*pb.RPC_SubOpts, 0, subCount)
-	for i := 0; i < subCount; i++ {
+	for range subCount {
 		sub := generateSub(data, limit)
 
 		sizeTester.Subscriptions = []*pb.RPC_SubOpts{sub}

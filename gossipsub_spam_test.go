@@ -207,7 +207,7 @@ func TestGossipsubAttackSpamIHAVE(t *testing.T) {
 					time.Sleep(20 * time.Millisecond)
 
 					// Send a bunch of IHAVEs
-					for i := 0; i < 3*GossipSubMaxIHaveLength; i++ {
+					for i := range 3*GossipSubMaxIHaveLength {
 						ihavelst := []string{"someid" + strconv.Itoa(i)}
 						ihave := []*pb.ControlIHave{{TopicID: sub.Topicid, MessageIDs: ihavelst}}
 						orpc := rpcWithControl(nil, ihave, nil, nil, nil, nil)
@@ -237,7 +237,7 @@ func TestGossipsubAttackSpamIHAVE(t *testing.T) {
 					}
 
 					// Send a bunch of IHAVEs
-					for i := 0; i < 3*GossipSubMaxIHaveLength; i++ {
+					for i := range 3*GossipSubMaxIHaveLength {
 						ihavelst := []string{"someid" + strconv.Itoa(i+100)}
 						ihave := []*pb.ControlIHave{{TopicID: sub.Topicid, MessageIDs: ihavelst}}
 						orpc := rpcWithControl(nil, ihave, nil, nil, nil, nil)
@@ -718,7 +718,7 @@ func TestGossipsubAttackInvalidMessageSpam(t *testing.T) {
 
 					// Send a bunch of messages with no signature (these will
 					// fail validation and reduce the attacker's score)
-					for i := 0; i < 100; i++ {
+					for i := range 100 {
 						msg := &pb.Message{
 							Data:  []byte("some data" + strconv.Itoa(i)),
 							Topic: &mytopic,
@@ -848,7 +848,7 @@ func TestGossipsubAttackSpamIDONTWANT(t *testing.T) {
 					// Generate a message and send IDONTWANT to the middle peer
 					data := make([]byte, 16)
 					var mid string
-					for i := 0; i < 1+GossipSubMaxIDontWantMessages; i++ {
+					for range 1+GossipSubMaxIDontWantMessages {
 						rand.Read(data)
 						mid = msgID(&pb.Message{Data: data})
 						writeMsg(&pb.RPC{
@@ -924,7 +924,7 @@ func TestGossipsubHandleIDontwantSpam(t *testing.T) {
 	}
 	exceededIDWLength := GossipSubMaxIDontWantLength + 1
 	var idwIds []string
-	for i := 0; i < exceededIDWLength; i++ {
+	for i := range exceededIDWLength {
 		idwIds = append(idwIds, fmt.Sprintf("idontwant-%d", i))
 	}
 	rPid := hosts[1].ID()

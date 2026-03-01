@@ -99,7 +99,7 @@ func TestTagTracerDeliveryTags(t *testing.T) {
 	tt.Join(topic1)
 	tt.Join(topic2)
 
-	for i := 0; i < 20; i++ {
+	for i := range 20 {
 		// deliver only 5 messages to topic 2 (less than the cap)
 		topic := &topic1
 		if i < 5 {
@@ -190,7 +190,7 @@ func TestTagTracerDeliveryTagsNearFirst(t *testing.T) {
 
 	tt.Join(topic)
 
-	for i := 0; i < GossipSubConnTagMessageDeliveryCap+5; i++ {
+	for i := range GossipSubConnTagMessageDeliveryCap+5 {
 		msg := &Message{
 			ReceivedFrom: p,
 			Message: &pb.Message{

@@ -17,11 +17,11 @@ func TestMessageCache(t *testing.T) {
 		msgs[i] = makeTestMessage(i)
 	}
 
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		mcache.Put(&Message{Message: msgs[i]})
 	}
 
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		mid := msgID(msgs[i])
 		m, ok := mcache.Get(mid)
 		if !ok {
@@ -38,7 +38,7 @@ func TestMessageCache(t *testing.T) {
 		t.Fatalf("Expected 10 gossip IDs; got %d", len(gids))
 	}
 
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		mid := msgID(msgs[i])
 		if mid != gids[i] {
 			t.Fatalf("GossipID mismatch for message %d", i)
@@ -50,7 +50,7 @@ func TestMessageCache(t *testing.T) {
 		mcache.Put(&Message{Message: msgs[i]})
 	}
 
-	for i := 0; i < 20; i++ {
+	for i := range 20 {
 		mid := msgID(msgs[i])
 		m, ok := mcache.Get(mid)
 		if !ok {
@@ -67,7 +67,7 @@ func TestMessageCache(t *testing.T) {
 		t.Fatalf("Expected 20 gossip IDs; got %d", len(gids))
 	}
 
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		mid := msgID(msgs[i])
 		if mid != gids[10+i] {
 			t.Fatalf("GossipID mismatch for message %d", i)
@@ -105,7 +105,7 @@ func TestMessageCache(t *testing.T) {
 		t.Fatalf("Expected 50 messages in the cache; got %d", len(mcache.msgs))
 	}
 
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		mid := msgID(msgs[i])
 		_, ok := mcache.Get(mid)
 		if ok {
@@ -130,7 +130,7 @@ func TestMessageCache(t *testing.T) {
 		t.Fatalf("Expected 30 gossip IDs; got %d", len(gids))
 	}
 
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		mid := msgID(msgs[50+i])
 		if mid != gids[i] {
 			t.Fatalf("GossipID mismatch for message %d", i)

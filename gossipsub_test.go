@@ -123,7 +123,7 @@ func TestSparseGossipsub(t *testing.T) {
 	// wait for heartbeats to build mesh
 	time.Sleep(time.Second * 2)
 
-	for i := 0; i < 100; i++ {
+	for i := range 100 {
 		msg := []byte(fmt.Sprintf("%d it's not a floooooood %d", i, i))
 
 		owner := mrand.Intn(len(psubs))
@@ -164,7 +164,7 @@ func TestDenseGossipsub(t *testing.T) {
 	// wait for heartbeats to build mesh
 	time.Sleep(time.Second * 2)
 
-	for i := 0; i < 100; i++ {
+	for i := range 100 {
 		msg := []byte(fmt.Sprintf("%d it's not a floooooood %d", i, i))
 
 		owner := mrand.Intn(len(psubs))
@@ -205,7 +205,7 @@ func TestGossipsubFanout(t *testing.T) {
 	// wait for heartbeats to build mesh
 	time.Sleep(time.Second * 2)
 
-	for i := 0; i < 100; i++ {
+	for i := range 100 {
 		msg := []byte(fmt.Sprintf("%d it's not a floooooood %d", i, i))
 
 		owner := 0
@@ -233,7 +233,7 @@ func TestGossipsubFanout(t *testing.T) {
 	// wait for a heartbeat
 	time.Sleep(time.Second * 1)
 
-	for i := 0; i < 100; i++ {
+	for i := range 100 {
 		msg := []byte(fmt.Sprintf("%d it's not a floooooood %d", i, i))
 
 		owner := 0
@@ -274,7 +274,7 @@ func TestGossipsubFanoutMaintenance(t *testing.T) {
 	// wait for heartbeats to build mesh
 	time.Sleep(time.Second * 2)
 
-	for i := 0; i < 100; i++ {
+	for i := range 100 {
 		msg := []byte(fmt.Sprintf("%d it's not a floooooood %d", i, i))
 
 		owner := 0
@@ -313,7 +313,7 @@ func TestGossipsubFanoutMaintenance(t *testing.T) {
 
 	time.Sleep(time.Second * 2)
 
-	for i := 0; i < 100; i++ {
+	for i := range 100 {
 		msg := []byte(fmt.Sprintf("%d it's not a floooooood %d", i, i))
 
 		owner := 0
@@ -359,7 +359,7 @@ func TestGossipsubFanoutExpiry(t *testing.T) {
 	// wait for heartbeats to build mesh
 	time.Sleep(time.Second * 2)
 
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		msg := []byte(fmt.Sprintf("%d it's not a floooooood %d", i, i))
 
 		owner := 0
@@ -418,7 +418,7 @@ func TestGossipsubGossip(t *testing.T) {
 	// wait for heartbeats to build mesh
 	time.Sleep(time.Second * 2)
 
-	for i := 0; i < 100; i++ {
+	for i := range 100 {
 		msg := []byte(fmt.Sprintf("%d it's not a floooooood %d", i, i))
 
 		owner := mrand.Intn(len(psubs))
@@ -476,7 +476,7 @@ func TestGossipsubGossipPiggyback(t *testing.T) {
 	// wait for heartbeats to build mesh
 	time.Sleep(time.Second * 2)
 
-	for i := 0; i < 100; i++ {
+	for i := range 100 {
 		msg := []byte(fmt.Sprintf("%d it's not a floooooood %d", i, i))
 
 		owner := mrand.Intn(len(psubs))
@@ -537,7 +537,7 @@ func TestGossipsubGossipPropagation(t *testing.T) {
 
 	time.Sleep(time.Second * 1)
 
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		msg := []byte(fmt.Sprintf("%d it's not a floooooood %d", i, i))
 
 		owner := 0
@@ -568,7 +568,7 @@ func TestGossipsubGossipPropagation(t *testing.T) {
 	}
 
 	var collect [][]byte
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		for _, sub := range msgs2 {
 			got, err := sub.Next(ctx)
 			if err != nil {
@@ -578,7 +578,7 @@ func TestGossipsubGossipPropagation(t *testing.T) {
 		}
 	}
 
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		msg := []byte(fmt.Sprintf("%d it's not a floooooood %d", i, i))
 		gotit := false
 		for j := 0; j < len(collect); j++ {
@@ -623,7 +623,7 @@ func TestGossipsubPrune(t *testing.T) {
 	// wait a bit to take effect
 	time.Sleep(time.Millisecond * 100)
 
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		msg := []byte(fmt.Sprintf("%d it's not a floooooood %d", i, i))
 
 		owner := mrand.Intn(len(psubs))
@@ -720,7 +720,7 @@ func TestGossipsubPruneBackoffTime(t *testing.T) {
 		t.Errorf("missing too many backoffs: %v", missingBackoffs)
 	}
 
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		msg := []byte(fmt.Sprintf("%d it's not a floooooood %d", i, i))
 
 		// Don't publish from host 0, since everyone should have pruned it.
@@ -766,7 +766,7 @@ func TestGossipsubGraft(t *testing.T) {
 
 	time.Sleep(time.Second * 1)
 
-	for i := 0; i < 100; i++ {
+	for i := range 100 {
 		msg := []byte(fmt.Sprintf("%d it's not a floooooood %d", i, i))
 
 		owner := mrand.Intn(len(psubs))
@@ -815,7 +815,7 @@ func TestGossipsubRemovePeer(t *testing.T) {
 	// wait a heartbeat
 	time.Sleep(time.Second * 1)
 
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		msg := []byte(fmt.Sprintf("%d it's not a floooooood %d", i, i))
 
 		owner := 5 + mrand.Intn(len(psubs)-5)
@@ -844,7 +844,7 @@ func TestGossipsubGraftPruneRetry(t *testing.T) {
 
 	var topics []string
 	var msgs [][]*Subscription
-	for i := 0; i < 35; i++ {
+	for i := range 35 {
 		topic := fmt.Sprintf("topic%d", i)
 		topics = append(topics, topic)
 
@@ -913,7 +913,7 @@ func TestGossipsubControlPiggyback(t *testing.T) {
 	done := make(chan struct{})
 	go func() {
 		owner := mrand.Intn(len(psubs))
-		for i := 0; i < 10000; i++ {
+		for range 10000 {
 			msg := []byte("background flooooood")
 			psubs[owner].Publish("flood", msg)
 		}
@@ -927,7 +927,7 @@ func TestGossipsubControlPiggyback(t *testing.T) {
 	// in the background flood
 	var topics []string
 	var msgs [][]*Subscription
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		topic := fmt.Sprintf("topic%d", i)
 		topics = append(topics, topic)
 
@@ -990,7 +990,7 @@ func TestMixedGossipsub(t *testing.T) {
 	// wait for heartbeats to build mesh
 	time.Sleep(time.Second * 2)
 
-	for i := 0; i < 100; i++ {
+	for i := range 100 {
 		msg := []byte(fmt.Sprintf("%d it's not a floooooood %d", i, i))
 
 		owner := mrand.Intn(len(psubs))
@@ -1172,7 +1172,7 @@ func TestGossipsubStarTopology(t *testing.T) {
 	}
 
 	// send a message from each peer and assert it was propagated
-	for i := 0; i < 20; i++ {
+	for i := range 20 {
 		msg := []byte(fmt.Sprintf("message %d", i))
 		psubs[i].Publish("test", msg)
 
@@ -1268,7 +1268,7 @@ func TestGossipsubStarTopologyWithSignedPeerRecords(t *testing.T) {
 	}
 
 	// send a message from each peer and assert it was propagated
-	for i := 0; i < 20; i++ {
+	for i := range 20 {
 		msg := []byte(fmt.Sprintf("message %d", i))
 		psubs[i].Publish("test", msg)
 
@@ -1311,7 +1311,7 @@ func TestGossipsubDirectPeers(t *testing.T) {
 	time.Sleep(time.Second)
 
 	// publish some messages
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		msg := []byte(fmt.Sprintf("message %d", i))
 		psubs[i].Publish("test", msg)
 
@@ -1332,7 +1332,7 @@ func TestGossipsubDirectPeers(t *testing.T) {
 	}
 
 	// publish some messages
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		msg := []byte(fmt.Sprintf("message %d", i))
 		psubs[i].Publish("test", msg)
 
@@ -1455,7 +1455,7 @@ func TestGossipsubDirectPeersFanout(t *testing.T) {
 	time.Sleep(time.Second)
 
 	// h2 publishes some messages to build a fanout
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		msg := []byte(fmt.Sprintf("message %d", i))
 		psubs[2].Publish("test", msg)
 
@@ -1540,7 +1540,7 @@ func TestGossipsubFloodPublish(t *testing.T) {
 	time.Sleep(time.Second)
 
 	// send a message from the star and assert it was received
-	for i := 0; i < 20; i++ {
+	for i := range 20 {
 		msg := []byte(fmt.Sprintf("message %d", i))
 		psubs[0].Publish("test", msg)
 
@@ -1666,7 +1666,7 @@ func TestGossipsubNegativeScore(t *testing.T) {
 
 	time.Sleep(3 * time.Second)
 
-	for i := 0; i < 20; i++ {
+	for i := range 20 {
 		msg := []byte(fmt.Sprintf("message %d", i))
 		psubs[i%20].Publish("test", msg)
 		time.Sleep(20 * time.Millisecond)
@@ -1993,7 +1993,7 @@ func TestGossipsubOpportunisticGrafting(t *testing.T) {
 	}
 
 	// publish a bunch of messages from the real hosts
-	for i := 0; i < 1000; i++ {
+	for i := range 1000 {
 		msg := []byte(fmt.Sprintf("message %d", i))
 		psubs[i%10].Publish("test", msg)
 		time.Sleep(20 * time.Millisecond)
@@ -2248,7 +2248,7 @@ func TestGossipsubPeerScoreInspect(t *testing.T) {
 
 	time.Sleep(time.Second)
 
-	for i := 0; i < 20; i++ {
+	for i := range 20 {
 		msg := []byte(fmt.Sprintf("message %d", i))
 		psubs[i%2].Publish("test", msg)
 		time.Sleep(20 * time.Millisecond)
@@ -2407,7 +2407,7 @@ func TestGossipsubRPCFragmentation(t *testing.T) {
 	// publish a bunch of fairly large messages from the real host
 	nMessages := 1000
 	msgSize := 20000
-	for i := 0; i < nMessages; i++ {
+	for range nMessages {
 		msg := make([]byte, msgSize)
 		crand.Read(msg)
 		ps.Publish("test", msg)
@@ -2590,7 +2590,7 @@ func TestFragmentRPCFunction(t *testing.T) {
 		},
 	}
 	rpc.Publish = make([]*pb.Message, nMessages)
-	for i := 0; i < nMessages; i++ {
+	for i := range nMessages {
 		rpc.Publish[i] = mkMsg(msgSize)
 	}
 	results, err = fragmentRPC(rpc, limit)
@@ -2659,7 +2659,7 @@ func TestFragmentRPCFunction(t *testing.T) {
 	msgsPerTopic := 100 // enough that a single IHAVE or IWANT will exceed the limit
 	rpc.Control.Ihave = make([]*pb.ControlIHave, nTopics)
 	rpc.Control.Iwant = make([]*pb.ControlIWant, nTopics)
-	for i := 0; i < nTopics; i++ {
+	for i := range nTopics {
 		messageIds := make([]string, msgsPerTopic)
 		for m := 0; m < msgsPerTopic; m++ {
 			mid := make([]byte, messageIdSize)
@@ -2971,7 +2971,7 @@ func TestGossipsubIdontwantSend(t *testing.T) {
 					time.Sleep(100 * time.Millisecond)
 
 					// Publish messages from the first peer
-					for i := 0; i < 10; i++ {
+					for range 10 {
 						publishMsg()
 					}
 				}()
@@ -3294,7 +3294,7 @@ func TestGossipsubIdontwantNonMesh(t *testing.T) {
 					time.Sleep(100 * time.Millisecond)
 
 					// Publish messages from the first peer
-					for i := 0; i < 10; i++ {
+					for range 10 {
 						publishMsg()
 					}
 				}()
@@ -3382,7 +3382,7 @@ func TestGossipsubIdontwantIncompat(t *testing.T) {
 					time.Sleep(100 * time.Millisecond)
 
 					// Publish messages from the first peer
-					for i := 0; i < 10; i++ {
+					for range 10 {
 						publishMsg()
 					}
 				}()
@@ -3470,7 +3470,7 @@ func TestGossipsubIdontwantSmallMessage(t *testing.T) {
 					time.Sleep(100 * time.Millisecond)
 
 					// Publish messages from the first peer
-					for i := 0; i < 10; i++ {
+					for range 10 {
 						publishMsg()
 					}
 				}()
@@ -3704,7 +3704,7 @@ func TestGossipsubPruneMeshCorrectly(t *testing.T) {
 	params.Dhi = 8
 
 	psubs := make([]*PubSub, 9)
-	for i := 0; i < 9; i++ {
+	for i := range 9 {
 		psubs[i] = getGossipsub(ctx, hosts[i],
 			WithGossipSubParams(params),
 			WithMessageIdFn(msgID))
@@ -3760,7 +3760,7 @@ func TestRoundRobinMessageIDScheduler(t *testing.T) {
 		var strategy RoundRobinMessageIDScheduler
 
 		peers := make([]peer.ID, numPeers)
-		for i := 0; i < int(numPeers); i++ {
+		for i := range int(numPeers) {
 			peers[i] = peer.ID(fmt.Sprintf("peer%d", i))
 		}
 
@@ -3804,7 +3804,7 @@ func TestRoundRobinMessageIDScheduler(t *testing.T) {
 		// 2.
 		seen := make(map[string]bool)
 		expected := make(map[string]bool)
-		for i := 0; i < int(numMessages); i++ {
+		for i := range int(numMessages) {
 			expected[fmt.Sprintf("msg%d", i)] = true
 		}
 
@@ -3908,7 +3908,7 @@ func TestMessageBatchPublish(t *testing.T) {
 
 			var batch MessageBatch
 			var wg sync.WaitGroup
-			for i := 0; i < numMessages; i++ {
+			for i := range numMessages {
 				msg := []byte(fmt.Sprintf("%d it's not a floooooood %d", i, i))
 				if concurrentAdd {
 					wg.Add(1)
@@ -4014,7 +4014,7 @@ func BenchmarkSplitRPCLargeMessages(b *testing.B) {
 		const numRPCs = 30
 		const msgSize = 50 * 1024
 		rpc := &RPC{}
-		for i := 0; i < numRPCs; i++ {
+		for range numRPCs {
 			addToRPC(rpc, 20, msgSize+r.Intn(100))
 		}
 
@@ -4030,7 +4030,7 @@ func BenchmarkSplitRPCLargeMessages(b *testing.B) {
 		const numRPCs = 2
 		const msgSize = DefaultMaxMessageSize - 100
 		rpc := &RPC{}
-		for i := 0; i < numRPCs; i++ {
+		for range numRPCs {
 			addToRPC(rpc, 1, msgSize)
 		}
 

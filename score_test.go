@@ -108,7 +108,7 @@ func TestScoreFirstMessageDeliveries(t *testing.T) {
 
 	// deliver a bunch of messages from peer A
 	nMessages := 100
-	for i := 0; i < nMessages; i++ {
+	for i := range nMessages {
 		pbMsg := makeTestMessage(i)
 		pbMsg.Topic = &mytopic
 		msg := Message{ReceivedFrom: peerA, Message: pbMsg}
@@ -148,7 +148,7 @@ func TestScoreFirstMessageDeliveriesCap(t *testing.T) {
 
 	// deliver a bunch of messages from peer A
 	nMessages := 100
-	for i := 0; i < nMessages; i++ {
+	for i := range nMessages {
 		pbMsg := makeTestMessage(i)
 		pbMsg.Topic = &mytopic
 		msg := Message{ReceivedFrom: peerA, Message: pbMsg}
@@ -188,7 +188,7 @@ func TestScoreFirstMessageDeliveriesDecay(t *testing.T) {
 
 	// deliver a bunch of messages from peer A
 	nMessages := 100
-	for i := 0; i < nMessages; i++ {
+	for i := range nMessages {
 		pbMsg := makeTestMessage(i)
 		pbMsg.Topic = &mytopic
 		msg := Message{ReceivedFrom: peerA, Message: pbMsg}
@@ -205,7 +205,7 @@ func TestScoreFirstMessageDeliveriesDecay(t *testing.T) {
 
 	// refreshing the scores applies the decay param
 	decayIntervals := 10
-	for i := 0; i < decayIntervals; i++ {
+	for range decayIntervals {
 		ps.refreshScores()
 		expected *= topicScoreParams.FirstMessageDeliveriesDecay
 	}
@@ -268,7 +268,7 @@ func TestScoreMeshMessageDeliveries(t *testing.T) {
 	// and duplicates outside the window from peer C.
 	nMessages := 100
 	wg := sync.WaitGroup{}
-	for i := 0; i < nMessages; i++ {
+	for i := range nMessages {
 		pbMsg := makeTestMessage(i)
 		pbMsg.Topic = &mytopic
 		msg := Message{ReceivedFrom: peerA, Message: pbMsg}
@@ -338,7 +338,7 @@ func TestScoreMeshMessageDeliveriesDecay(t *testing.T) {
 
 	// deliver messages from peer A
 	nMessages := 40
-	for i := 0; i < nMessages; i++ {
+	for i := range nMessages {
 		pbMsg := makeTestMessage(i)
 		pbMsg.Topic = &mytopic
 		msg := Message{ReceivedFrom: peerA, Message: pbMsg}
@@ -355,7 +355,7 @@ func TestScoreMeshMessageDeliveriesDecay(t *testing.T) {
 
 	// we need to refresh enough times for the decay to bring us below the threshold
 	decayedDeliveryCount := float64(nMessages) * topicScoreParams.MeshMessageDeliveriesDecay
-	for i := 0; i < 20; i++ {
+	for range 20 {
 		ps.refreshScores()
 		decayedDeliveryCount *= topicScoreParams.MeshMessageDeliveriesDecay
 	}
@@ -412,7 +412,7 @@ func TestScoreMeshFailurePenalty(t *testing.T) {
 
 	// deliver messages from peer A. peer B does nothing
 	nMessages := 100
-	for i := 0; i < nMessages; i++ {
+	for i := range nMessages {
 		pbMsg := makeTestMessage(i)
 		pbMsg.Topic = &mytopic
 		msg := Message{ReceivedFrom: peerA, Message: pbMsg}
@@ -472,7 +472,7 @@ func TestScoreInvalidMessageDeliveries(t *testing.T) {
 	ps.Graft(peerA, mytopic)
 
 	nMessages := 100
-	for i := 0; i < nMessages; i++ {
+	for i := range nMessages {
 		pbMsg := makeTestMessage(i)
 		pbMsg.Topic = &mytopic
 		msg := Message{ReceivedFrom: peerA, Message: pbMsg}
@@ -509,7 +509,7 @@ func TestScoreInvalidMessageDeliveriesDecay(t *testing.T) {
 	ps.Graft(peerA, mytopic)
 
 	nMessages := 100
-	for i := 0; i < nMessages; i++ {
+	for i := range nMessages {
 		pbMsg := makeTestMessage(i)
 		pbMsg.Topic = &mytopic
 		msg := Message{ReceivedFrom: peerA, Message: pbMsg}
@@ -524,7 +524,7 @@ func TestScoreInvalidMessageDeliveriesDecay(t *testing.T) {
 	}
 
 	// refresh scores a few times to apply decay
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		ps.refreshScores()
 		expected *= math.Pow(topicScoreParams.InvalidMessageDeliveriesDecay, 2)
 	}
@@ -946,7 +946,7 @@ func TestScoreRecapTopicParams(t *testing.T) {
 
 	// deliver a bunch of messages from peer A, with duplicates within the window from peer B,
 	nMessages := 100
-	for i := 0; i < nMessages; i++ {
+	for i := range nMessages {
 		pbMsg := makeTestMessage(i)
 		pbMsg.Topic = &mytopic
 		msg := Message{ReceivedFrom: peerA, Message: pbMsg}
@@ -1028,7 +1028,7 @@ func TestScoreResetTopicParams(t *testing.T) {
 
 	// reject a bunch of messages
 	nMessages := 100
-	for i := 0; i < nMessages; i++ {
+	for i := range nMessages {
 		pbMsg := makeTestMessage(i)
 		pbMsg.Topic = &mytopic
 		msg := Message{ReceivedFrom: peerA, Message: pbMsg}

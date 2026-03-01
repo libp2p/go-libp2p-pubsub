@@ -197,7 +197,7 @@ func TestSimpleDiscovery(t *testing.T) {
 	}
 
 	// Try random peers sending messages and make sure they are received
-	for i := 0; i < 100; i++ {
+	for i := range 100 {
 		msg := []byte(fmt.Sprintf("%d the flooooooood %d", i, i))
 
 		owner := rand.Intn(len(psubs))
@@ -264,14 +264,14 @@ func TestGossipSubDiscoveryAfterBootstrap(t *testing.T) {
 		waitUntilGossipsubMeshCount(ps, topic, partitionSize-1)
 	}
 
-	for i := 0; i < partitionSize; i++ {
+	for i := range partitionSize {
 		if _, err := server1.Advertise("floodsub:"+topic, *host.InfoFromHost(hosts[i+partitionSize]), ttl); err != nil {
 			t.Fatal(err)
 		}
 	}
 
 	// test the mesh
-	for i := 0; i < 100; i++ {
+	for i := range 100 {
 		msg := []byte(fmt.Sprintf("%d it's not a floooooood %d", i, i))
 
 		owner := rand.Intn(numHosts)
