@@ -1150,7 +1150,7 @@ func TestWithSelfNotification(t *testing.T) {
 	// Use a short timeout to verify no message arrives.
 	noMsgCtx, noMsgCancel := context.WithTimeout(ctx, time.Second)
 	defer noMsgCancel()
-	m, err = subNoSelf.Next(noMsgCtx)
+	_, err = subNoSelf.Next(noMsgCtx)
 	if err == nil {
 		t.Fatal("expected no message on self-notification-disabled subscription, but got one")
 	}
