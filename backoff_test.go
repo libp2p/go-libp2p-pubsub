@@ -34,7 +34,7 @@ func TestBackoff_Update(t *testing.T) {
 		t.Fatalf("invalid initialization: %v, \t, %s", d, err)
 	}
 
-	for i := range maxBackoffAttempts-1 {
+	for i := range maxBackoffAttempts - 1 {
 		got, err := b.updateAndGet(id1)
 		if err != nil {
 			t.Fatalf("unexpected error post update: %s", err)

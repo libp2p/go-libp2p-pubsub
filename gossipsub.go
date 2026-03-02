@@ -1,6 +1,7 @@
 package pubsub
 
 import (
+	"cmp"
 	"context"
 	"crypto/sha256"
 	"fmt"
@@ -9,7 +10,6 @@ import (
 	"log/slog"
 	"math/rand"
 	"slices"
-	"cmp"
 	"time"
 
 	pb "github.com/libp2p/go-libp2p-pubsub/pb"

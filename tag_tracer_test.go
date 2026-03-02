@@ -190,7 +190,7 @@ func TestTagTracerDeliveryTagsNearFirst(t *testing.T) {
 
 	tt.Join(topic)
 
-	for i := range GossipSubConnTagMessageDeliveryCap+5 {
+	for i := range GossipSubConnTagMessageDeliveryCap + 5 {
 		msg := &Message{
 			ReceivedFrom: p,
 			Message: &pb.Message{

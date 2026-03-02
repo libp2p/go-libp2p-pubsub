@@ -1,11 +1,11 @@
 package pubsub
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"log/slog"
 	"math/rand"
-	"cmp"
 	"slices"
 	"sync"
 	"time"
