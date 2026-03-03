@@ -24,6 +24,10 @@ func (p *PubSub) getHelloPacket() *RPC {
 	subscriptions := make(map[string]bool)
 
 	for t := range p.mySubs {
+		// don't announce fanout-only topics
+		if topic := p.myTopics[t]; topic != nil && topic.fanoutOnly {
+			continue
+		}
 		subscriptions[t] = true
 	}
 
