@@ -1082,7 +1082,7 @@ func TestWithLocalPublication(t *testing.T) {
 	}
 }
 
-func TestWithSelfNotification(t *testing.T) {
+func TestWithSkipOwnMessageNotification(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
@@ -1103,7 +1103,7 @@ func TestWithSelfNotification(t *testing.T) {
 	}
 
 	// Subscribe on host 0 with self-notification disabled.
-	subNoSelf, err := topic0.Subscribe(WithSelfNotification(false))
+	subNoSelf, err := topic0.Subscribe(WithSkipOwnMessageNotification(false))
 	if err != nil {
 		t.Fatal(err)
 	}
