@@ -1696,11 +1696,11 @@ func WithBufferSize(size int) SubOpt {
 	}
 }
 
-// WithSkipOwnMessageNotification is a Subscribe option to control whether messages published
+// WithSelfNotification is a Subscribe option to control whether messages published
 // by the local node are delivered to this subscription. By default, the subscription
 // receives all messages, including those published by the local host.
 // Set to false to filter out messages that were published by the local node.
-func WithSkipOwnMessageNotification(enabled bool) SubOpt {
+func WithSelfNotification(enabled bool) SubOpt {
 	return func(sub *Subscription) error {
 		sub.skipSelf = !enabled
 		return nil
