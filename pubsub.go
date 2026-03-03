@@ -1280,7 +1280,7 @@ func (p *PubSub) notifySubs(msg *Message) {
 	topic := msg.GetTopic()
 	subs := p.mySubs[topic]
 	for f := range subs {
-		if f.skipSelf && msg.ReceivedFrom == f.selfPid {
+		if f.filter != nil && !f.filter(msg) {
 			continue
 		}
 		select {
@@ -1696,13 +1696,14 @@ func WithBufferSize(size int) SubOpt {
 	}
 }
 
-// WithSelfNotification is a Subscribe option to control whether messages published
-// by the local node are delivered to this subscription. By default, the subscription
-// receives all messages, including those published by the local host.
-// Set to false to filter out messages that were published by the local node.
-func WithSelfNotification(enabled bool) SubOpt {
+// WithMessageFilter sets a filter function for the subscription.
+// Messages for which the filter function returns false are dropped
+// before entering the subscription's channel buffer.
+// This filtering happens in notifySubs, so filtered messages never
+// consume buffer capacity.
+func WithMessageFilter(filter func(*Message) bool) SubOpt {
 	return func(sub *Subscription) error {
-		sub.skipSelf = !enabled
+		sub.filter = filter
 		return nil
 	}
 }

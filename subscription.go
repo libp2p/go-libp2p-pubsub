@@ -3,8 +3,6 @@ package pubsub
 import (
 	"context"
 	"sync"
-
-	"github.com/libp2p/go-libp2p/core/peer"
 )
 
 // Subscription handles the details of a particular Topic subscription.
@@ -17,9 +15,10 @@ type Subscription struct {
 	err      error
 	once     sync.Once
 
-	// selfPid is the peer ID of the local host, used for filtering.
-	selfPid  peer.ID
-	skipSelf bool
+	// filter is an optional function to filter messages before delivery.
+	// Messages for which filter returns false are dropped before entering
+	// the subscription channel buffer. Nil means accept all messages.
+	filter func(*Message) bool
 }
 
 // Topic returns the topic string associated with the Subscription

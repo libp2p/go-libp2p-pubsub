@@ -1082,7 +1082,7 @@ func TestWithLocalPublication(t *testing.T) {
 	}
 }
 
-func TestWithSelfNotification(t *testing.T) {
+func TestWithMessageFilter(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
@@ -1102,8 +1102,11 @@ func TestWithSelfNotification(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Subscribe on host 0 with self-notification disabled.
-	subNoSelf, err := topic0.Subscribe(WithSelfNotification(false))
+	// Subscribe on host 0 with a filter that skips self-published messages.
+	selfID := hosts[0].ID()
+	subNoSelf, err := topic0.Subscribe(WithMessageFilter(func(msg *Message) bool {
+		return msg.ReceivedFrom != selfID
+	}))
 	if err != nil {
 		t.Fatal(err)
 	}
