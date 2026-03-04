@@ -1289,6 +1289,9 @@ func (p *PubSub) notifySubs(msg *Message) {
 	topic := msg.GetTopic()
 	subs := p.mySubs[topic]
 	for f := range subs {
+		if f.filter != nil && !f.filter(msg) {
+			continue
+		}
 		select {
 		case f.ch <- msg:
 		default:
@@ -1711,6 +1714,31 @@ func WithBufferSize(size int) SubOpt {
 		sub.ch = make(chan *Message, size)
 		return nil
 	}
+}
+
+// WithMessageFilter sets a filter function for the subscription.
+// Messages for which the filter function returns false are dropped
+// before entering the subscription's channel buffer.
+// This filtering happens in notifySubs, so filtered messages never
+// consume buffer capacity.
+func WithMessageFilter(filter func(*Message) bool) SubOpt {
+	return func(sub *Subscription) error {
+		sub.filter = filter
+		return nil
+	}
+}
+
+// WithSelfMessageFilter is a convenience filter that drops messages
+// published by the local node before they enter the subscription channel.
+// This is equivalent to:
+//
+//	WithMessageFilter(func(msg *Message) bool {
+//		return msg.ReceivedFrom != self
+//	})
+func WithSelfMessageFilter(self peer.ID) SubOpt {
+	return WithMessageFilter(func(msg *Message) bool {
+		return msg.ReceivedFrom != self
+	})
 }
 
 type topicReq struct {
