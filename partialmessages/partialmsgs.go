@@ -110,12 +110,6 @@ type PartialMessagesExtension[PeerState any] struct {
 	router Router
 }
 
-type PublishOptions struct {
-	// PublishToPeers limits the publishing to only the specified peers.
-	// If nil, will use the topic's mesh peers.
-	PublishToPeers []peer.ID
-}
-
 type Router interface {
 	SendRPC(p peer.ID, r *pb.PartialMessagesExtension, urgent bool)
 	MeshPeers(topic string) iter.Seq[peer.ID]
