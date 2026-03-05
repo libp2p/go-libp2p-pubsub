@@ -246,9 +246,13 @@ type partialMessageRouter struct {
 	gs *GossipSubRouter
 }
 
-// PeerRequestsPartial implements partialmessages.Router.
+// PeerRequestsPartial returns true if a peer requested partial messages on this topic.
+//
+// It does not check if we support partial messages on the topic, because we may
+// not be subscribed to that topic and thus not have that information.
+// Callers should not use this if they don't support partial messages on this topic.
 func (r partialMessageRouter) PeerRequestsPartial(peer peer.ID, topic string) bool {
-	return r.gs.iSupportSendingPartial(topic) && r.gs.peerRequestsPartial(peer, topic)
+	return r.gs.peerRequestsPartial(peer, topic)
 }
 
 // MeshPeers implements partialmessages.Router.
