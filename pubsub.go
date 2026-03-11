@@ -922,6 +922,8 @@ func (p *PubSub) processLoop(ctx context.Context) {
 			p.handleIncomingRPC(rpc)
 
 		case msg := <-p.sendMsg:
+			id := p.idGen.ID(msg)
+			slog.Default().Error("calling publish top level", "from", "sendMsg", "msgID", id)
 			p.publishMessage(msg)
 
 		case batchAndOpts := <-p.sendMessageBatch:
@@ -1495,6 +1497,7 @@ func (p *PubSub) pushMsg(msg *Message) {
 		return
 	}
 
+	slog.Default().Error("calling publish top level", "from", "pushMsg", "msgID", id)
 	if p.markSeen(id) {
 		p.publishMessage(msg)
 	}
@@ -1535,7 +1538,9 @@ func (p *PubSub) checkSigningPolicy(msg *Message) error {
 func (p *PubSub) publishMessage(msg *Message) {
 	p.tracer.DeliverMessage(msg)
 	p.notifySubs(msg)
+	id := p.idGen.ID(msg)
 	if !msg.Local {
+		slog.Default().Error("calling publish", "from", "publishMessage", "msgID", id)
 		p.rt.Publish(msg)
 	}
 }
@@ -1903,6 +1908,28 @@ func (p *PubSub) syncEval(f func()) error {
 		return p.ctx.Err()
 	}
 	return nil
+}
+
+// NumMeshPeers returns the number of peers in the mesh for the given topic.
+func (p *PubSub) NumMeshPeers(topic string) (int, error) {
+	gs, ok := p.rt.(*GossipSubRouter)
+	if !ok {
+		return 0, errors.New("num mesh peers only supported by gossipsub")
+	}
+	resp := make(chan int, 1)
+	select {
+	case p.eval <- func() {
+		resp <- len(gs.mesh[topic])
+	}:
+		select {
+		case n := <-resp:
+			return n, nil
+		case <-p.ctx.Done():
+			return 0, p.ctx.Err()
+		}
+	case <-p.ctx.Done():
+		return 0, p.ctx.Err()
+	}
 }
 
 // AddDirectPeer tags the peer as a direct peer at the internal router

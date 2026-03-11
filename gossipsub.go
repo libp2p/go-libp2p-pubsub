@@ -24,6 +24,7 @@ import (
 	"github.com/libp2p/go-libp2p/p2p/host/peerstore/pstoremem"
 	ma "github.com/multiformats/go-multiaddr"
 	manet "github.com/multiformats/go-multiaddr/net"
+	quic "github.com/quic-go/quic-go"
 )
 
 const (
@@ -423,6 +424,35 @@ func WithFloodPublish(floodPublish bool) Option {
 	}
 }
 
+// WithDisableIHaveGossip is a gossipsub router option that disables IHAVE gossip.
+// When this is enabled, the router will not emit IHAVE messages to non-mesh peers,
+// and will not respond to incoming IHAVE messages with IWANT requests.
+func WithDisableIHaveGossip(disable bool) Option {
+	return func(ps *PubSub) error {
+		gs, ok := ps.rt.(*GossipSubRouter)
+		if !ok {
+			return fmt.Errorf("pubsub router is not gossipsub")
+		}
+
+		gs.disableIHave = disable
+
+		return nil
+	}
+}
+
+// WithRTTReporter is a gossipsub router option that enables periodic logging of
+// smoothed RTT to mesh peers over QUIC connections.
+func WithRTTReporter(enable bool) Option {
+	return func(ps *PubSub) error {
+		gs, ok := ps.rt.(*GossipSubRouter)
+		if !ok {
+			return fmt.Errorf("pubsub router is not gossipsub")
+		}
+		gs.enableRTTReporter = enable
+		return nil
+	}
+}
+
 // WithPeerExchange is a gossipsub router option that enables Peer eXchange on PRUNE.
 // This should generally be enabled in bootstrappers and well connected/trusted nodes
 // used for bootstrapping.
@@ -645,6 +675,12 @@ type GossipSubRouter struct {
 
 	// whether to use flood publishing
 	floodPublish bool
+
+	// whether to disable IHAVE gossip; when true, the router will not emit or respond to IHAVE messages
+	disableIHave bool
+
+	// whether to enable periodic RTT reporting for mesh peers
+	enableRTTReporter bool
 
 	// number of heartbeats since the beginning of time; this allows us to amortize some resource
 	// clean up -- eg backoff clean up.
@@ -920,6 +956,10 @@ func (gs *GossipSubRouter) HandleRPC(rpc *RPC) {
 }
 
 func (gs *GossipSubRouter) handleIHave(p peer.ID, ctl *pb.ControlMessage) []*pb.ControlIWant {
+	if gs.disableIHave {
+		return nil
+	}
+
 	// we ignore IHAVE gossip from any peer whose score is below the gossip threshold
 	score := gs.score.Score(p)
 	if score < gs.gossipThreshold {
@@ -1003,6 +1043,7 @@ func (gs *GossipSubRouter) handleIWant(p peer.ID, ctl *pb.ControlMessage) []*pb.
 
 	ihave := make(map[string]*pb.Message)
 	for _, iwant := range ctl.GetIwant() {
+		slog.Default().Error("IWANT: received request", "peer", p, "messageIDs", iwant.GetMessageIDs())
 		for _, mid := range iwant.GetMessageIDs() {
 			// Check if that peer has sent IDONTWANT before, if so don't send them the message
 			if _, ok := gs.unwanted[p][computeChecksum(mid)]; ok {
@@ -1032,6 +1073,7 @@ func (gs *GossipSubRouter) handleIWant(p peer.ID, ctl *pb.ControlMessage) []*pb.
 	}
 
 	gs.logger.Debug("IWANT: Sending messages to peer", "messageCount", len(ihave), "peer", p)
+	slog.Default().Error("IWANT: enqueuing response", "messageCount", len(ihave), "peer", p)
 
 	msgs := make([]*pb.Message, 0, len(ihave))
 	for _, msg := range ihave {
@@ -1320,6 +1362,7 @@ func (gs *GossipSubRouter) PublishBatch(messages []*Message, opts *BatchPublishO
 
 func (gs *GossipSubRouter) Publish(msg *Message) {
 	for p, rpc := range gs.rpcs(msg) {
+		gs.logger.Error("enqueued message to peer", "msgID", msg.ID, "peer", p)
 		gs.sendRPC(p, rpc, false)
 	}
 }
@@ -1616,6 +1659,26 @@ func (gs *GossipSubRouter) heartbeatTimer() {
 	}
 }
 
+func (gs *GossipSubRouter) reportRTT() {
+	for topic, peers := range gs.mesh {
+		slog.Default().Error("mesh topic", "topic", topic, "numPeers", len(peers))
+		for p := range peers {
+			conns := gs.p.host.Network().ConnsToPeer(p)
+			for _, c := range conns {
+				var qc *quic.Conn
+				if ok := c.As(&qc); ok {
+					stats := qc.ConnectionStats()
+					slog.Default().Error("peer RTT",
+						"topic", topic,
+						"peer", p,
+						"smoothedRTT_ms", stats.SmoothedRTT.Milliseconds())
+					break // one connection per peer is enough
+				}
+			}
+		}
+	}
+}
+
 func (gs *GossipSubRouter) heartbeat() {
 	start := time.Now()
 	defer func() {
@@ -1882,6 +1945,10 @@ func (gs *GossipSubRouter) heartbeat() {
 	gs.mcache.Shift()
 
 	gs.extensions.Heartbeat()
+
+	if gs.enableRTTReporter {
+		gs.reportRTT()
+	}
 }
 
 func (gs *GossipSubRouter) clearIHaveCounters() {
@@ -2005,6 +2072,10 @@ func (gs *GossipSubRouter) sendGraftPrune(tograft, toprune map[peer.ID][]string,
 // emitGossip emits IHAVE gossip advertising items in the message cache window
 // of this topic.
 func (gs *GossipSubRouter) emitGossip(topic string, exclude map[peer.ID]struct{}) {
+	if gs.disableIHave {
+		return
+	}
+
 	mids := gs.mcache.GetGossipIDs(topic)
 	if len(mids) == 0 {
 		return
