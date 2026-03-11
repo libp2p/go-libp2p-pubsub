@@ -5494,3 +5494,94 @@ func TestGossipsubFanoutOnlyRelay(t *testing.T) {
 		t.Fatalf("expected ErrFanoutOnlyTopic, got: %v", err)
 	}
 }
+
+func TestGossipsubDisableIHave(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	hosts := getDefaultHosts(t, 2)
+	legit := hosts[0]
+	attacker := hosts[1]
+
+	// Set up gossipsub with IHave disabled
+	ps, err := NewGossipSub(ctx, legit, WithDisableIHaveGossip(true))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	mytopic := "mytopic"
+	_, err = ps.Subscribe(mytopic)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	iwantCount := atomic.Int32{}
+	ihaveCount := atomic.Int32{}
+
+	newMockGS(ctx, t, attacker, func(writeMsg func(*pb.RPC), irpc *pb.RPC) {
+		// When the legit host connects it will send us its subscriptions
+		for _, sub := range irpc.GetSubscriptions() {
+			if sub.GetSubscribe() {
+				// Subscribe and graft to become a mesh peer
+				writeMsg(&pb.RPC{
+					Subscriptions: []*pb.RPC_SubOpts{{Subscribe: sub.Subscribe, Topicid: sub.Topicid}},
+					Control:       &pb.ControlMessage{Graft: []*pb.ControlGraft{{TopicID: sub.Topicid}}},
+				})
+
+				go func() {
+					defer cancel()
+
+					time.Sleep(20 * time.Millisecond)
+
+					// Prune ourselves from the mesh so we become a non-mesh peer
+					// that should normally receive IHave gossip
+					writeMsg(&pb.RPC{
+						Control: &pb.ControlMessage{Prune: []*pb.ControlPrune{{TopicID: sub.Topicid}}},
+					})
+
+					time.Sleep(20 * time.Millisecond)
+
+					// Publish a message so the legit host has something to gossip about
+					data := make([]byte, 16)
+					crand.Read(data)
+					if err := ps.Publish(mytopic, data); err != nil {
+						t.Errorf("error publishing: %s", err)
+						return
+					}
+
+					// Wait for a heartbeat to pass so gossip would have been emitted
+					time.Sleep(2 * GossipSubHeartbeatInterval)
+
+					// Verify no IHave messages were sent
+					if c := ihaveCount.Load(); c > 0 {
+						t.Errorf("expected no IHAVE messages but got %d", c)
+						return
+					}
+
+					// Now send IHave to the legit host and verify it doesn't respond with IWANT
+					ihavelst := []string{"someid1", "someid2"}
+					ihave := []*pb.ControlIHave{{TopicID: sub.Topicid, MessageIDs: ihavelst}}
+					orpc := rpcWithControl(nil, ihave, nil, nil, nil, nil)
+					writeMsg(&orpc.RPC)
+
+					// Wait for potential IWANT response
+					time.Sleep(GossipSubHeartbeatInterval)
+
+					if c := iwantCount.Load(); c > 0 {
+						t.Errorf("expected no IWANT responses but got %d", c)
+						return
+					}
+				}()
+			}
+		}
+
+		if ctl := irpc.GetControl(); ctl != nil {
+			ihaveCount.Add(int32(len(ctl.GetIhave())))
+			iwantCount.Add(int32(len(ctl.GetIwant())))
+		}
+	})
+
+	connect(t, hosts[0], hosts[1])
+
+	<-ctx.Done()
+}

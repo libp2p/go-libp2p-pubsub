@@ -110,6 +110,16 @@ func (p *PubSub) handleNewStream(s network.Stream) {
 		p.rpcLogger.Debug("received", "peer", s.Conn().RemotePeer(), "duration_s", timeToReceive.Seconds(), "rpc", rpc)
 
 		rpc.from = peer
+
+		if p.metricsTracer != nil {
+			p.metricsTracer.OnRPCReceived(
+				peer,
+				timeToReceive,
+				&rpc.RPC,
+				p.idGen,
+			)
+		}
+
 		select {
 		case p.incoming <- rpc:
 		case <-p.ctx.Done():
@@ -196,12 +206,25 @@ func (p *PubSub) handleSendingMessages(ctx context.Context, s network.Stream, ou
 			return err
 		}
 
+		writeStart := time.Now()
 		_, err = s.Write(buf)
 		if err != nil {
 			p.rpcLogger.Debug("failed to send message", "peer", s.Conn().RemotePeer(), "rpc", rpc, "err", err)
 			return err
 		}
+		writeDuration := time.Since(writeStart)
 		p.rpcLogger.Debug("sent", "peer", s.Conn().RemotePeer(), "rpc", rpc)
+
+		if p.metricsTracer != nil {
+			pid := s.Conn().RemotePeer()
+			p.metricsTracer.OnRPCSent(
+				pid,
+				writeDuration,
+				&rpc.RPC,
+				p.idGen,
+			)
+		}
+
 		return nil
 	}
 
