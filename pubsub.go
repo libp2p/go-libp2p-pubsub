@@ -198,6 +198,7 @@ type PubSub struct {
 	// The return value of the inspector function is an error indicating whether the RPC should be processed or not.
 	// If the error is nil, the RPC is processed as usual. If the error is non-nil, the RPC is dropped.
 	appSpecificRpcInspector func(peer.ID, *RPC) error
+	rpcHandler              RPCHandler
 }
 
 // PubSubRouter is the message router component of PubSub.
@@ -555,6 +556,7 @@ func NewPubSub(ctx context.Context, h host.Host, rt PubSubRouter, opts ...Option
 		idGen:                 newMsgIdGenerator(),
 		counter:               uint64(time.Now().UnixNano()),
 	}
+	ps.rpcHandler = ps.rootRPCHandler
 
 	for _, opt := range opts {
 		err := opt(ps)
@@ -832,6 +834,28 @@ func WithSeenMessagesStrategy(strategy timecache.Strategy) Option {
 func WithAppSpecificRpcInspector(inspector func(peer.ID, *RPC) error) Option {
 	return func(ps *PubSub) error {
 		ps.appSpecificRpcInspector = inspector
+		return nil
+	}
+}
+
+// RPCSender sends an RPC to the given peer.
+type RPCSender func(to peer.ID, rpc *RPC)
+
+// RPCHandler processes an incoming RPC from the given peer. The sender callback
+// can be used to send RPCs to other peers as part of handling. A reference to
+// the sender MUST NOT be kept after the handler returns.
+type RPCHandler func(from peer.ID, rpc *RPC, sender RPCSender) error
+
+// RPCMiddleware wraps an RPCHandler to intercept incoming RPCs.
+type RPCMiddleware func(next RPCHandler) RPCHandler
+
+// WithRPCMiddleware adds a middleware that wraps the RPC processing pipeline.
+// Each call wraps the current handler, so the last WithRPCMiddleware option
+// produces the outermost handler (executed first). The appSpecificRpcInspector,
+// if set, runs before the middleware chain.
+func WithRPCMiddleware(middleware RPCMiddleware) Option {
+	return func(ps *PubSub) error {
+		ps.rpcHandler = middleware(ps.rpcHandler)
 		return nil
 	}
 }
@@ -1351,15 +1375,27 @@ func (p *PubSub) handleIncomingRPC(rpc *RPC) {
 		}
 	}
 
-	p.tracer.RecvRPC(rpc)
+	err := p.rpcHandler(rpc.from, rpc, p.rpcSender)
+	if err != nil {
+		p.logger.Warn("error handling rpc", "err", err)
+	}
+}
 
+func (p *PubSub) rpcSender(to peer.ID, rpc *RPC) {
+	if q := p.peers[to]; q != nil {
+		q.Push(rpc, false)
+	}
+}
+
+func (p *PubSub) rootRPCHandler(_ peer.ID, rpc *RPC, _ RPCSender) error {
+	p.tracer.RecvRPC(rpc)
 	subs := rpc.GetSubscriptions()
 	if len(subs) != 0 && p.subFilter != nil {
 		var err error
 		subs, err = p.subFilter.FilterIncomingSubscriptions(rpc.from, subs)
 		if err != nil {
 			p.logger.Debug("subscription filter error; ignoring RPC", "err", err)
-			return
+			return nil
 		}
 	}
 
@@ -1404,7 +1440,7 @@ func (p *PubSub) handleIncomingRPC(rpc *RPC) {
 	switch p.rt.AcceptFrom(rpc.from) {
 	case AcceptNone:
 		p.logger.Debug("received RPC from router graylisted peer; dropping RPC", "peer", rpc.from)
-		return
+		return nil
 
 	case AcceptControl:
 		if len(rpc.GetPublish()) > 0 {
@@ -1432,6 +1468,7 @@ func (p *PubSub) handleIncomingRPC(rpc *RPC) {
 	}
 
 	p.rt.HandleRPC(rpc)
+	return nil
 }
 
 // DefaultMsgIdFn returns a unique ID of the passed Message
