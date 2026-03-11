@@ -21,6 +21,12 @@ func Merge(left, right Bitmap) Bitmap {
 	return out
 }
 
+func (b Bitmap) Clone() Bitmap {
+	out := make(Bitmap, len(b))
+	copy(out, b)
+	return out
+}
+
 func (b Bitmap) IsZero() bool {
 	for i := range b {
 		if b[i] != 0 {

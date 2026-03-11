@@ -3,6 +3,7 @@ package pubsub
 import (
 	"errors"
 	"iter"
+	"time"
 
 	"github.com/libp2p/go-libp2p-pubsub/partialmessages"
 	pubsub_pb "github.com/libp2p/go-libp2p-pubsub/pb"
@@ -265,11 +266,20 @@ func (r partialMessageRouter) MeshPeers(topic string) iter.Seq[peer.ID] {
 	return func(yield func(peer.ID) bool) {
 		peerSet, ok := r.gs.mesh[topic]
 		if !ok {
-			// Possibly a fanout topic
+			// Not in mesh for this topic, use fanout peers.
+			// Populate fanout if empty, same as rpcs() does during Publish().
 			peerSet, ok = r.gs.fanout[topic]
-			if !ok {
-				return
+			if !ok || len(peerSet) == 0 {
+				peers := r.gs.getPeers(topic, r.gs.params.D, func(p peer.ID) bool {
+					_, direct := r.gs.direct[p]
+					return !direct && r.gs.score.Score(p) >= r.gs.publishThreshold
+				})
+				if len(peers) > 0 {
+					peerSet = peerListToMap(peers)
+					r.gs.fanout[topic] = peerSet
+				}
 			}
+			r.gs.lastpub[topic] = time.Now().UnixNano()
 		}
 
 		for peer := range peerSet {

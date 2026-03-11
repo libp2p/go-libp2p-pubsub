@@ -74,6 +74,8 @@ type PubSub struct {
 
 	tracer *pubsubTracer
 
+	metricsTracer MetricsTracer
+
 	logger *slog.Logger
 	// rpcLogger is a logger that is only used to log RPC sends and receives
 	rpcLogger *slog.Logger
@@ -282,9 +284,13 @@ func (rpc *RPC) LogValue() slog.Value {
 	// Messages
 	msgs := make([]any, 0, len(rpc.Publish))
 	for _, msg := range rpc.Publish {
+		var topic string
+		if msg.Topic != nil {
+			topic = *msg.Topic
+		}
 		msgs = append(msgs, slog.Group(
 			"message",
-			slog.Any("topic", msg.Topic),
+			slog.Any("topic", topic),
 			slog.Any("dataPrefix", msg.Data[0:min(len(msg.Data), 32)]),
 			slog.Any("dataLen", len(msg.Data)),
 		))
@@ -1918,6 +1924,28 @@ func (p *PubSub) syncEval(f func()) error {
 		return p.ctx.Err()
 	}
 	return nil
+}
+
+// NumMeshPeers returns the number of peers in the mesh for the given topic.
+func (p *PubSub) NumMeshPeers(topic string) (int, error) {
+	gs, ok := p.rt.(*GossipSubRouter)
+	if !ok {
+		return 0, errors.New("num mesh peers only supported by gossipsub")
+	}
+	resp := make(chan int, 1)
+	select {
+	case p.eval <- func() {
+		resp <- len(gs.mesh[topic])
+	}:
+		select {
+		case n := <-resp:
+			return n, nil
+		case <-p.ctx.Done():
+			return 0, p.ctx.Err()
+		}
+	case <-p.ctx.Done():
+		return 0, p.ctx.Err()
+	}
 }
 
 // AddDirectPeer tags the peer as a direct peer at the internal router

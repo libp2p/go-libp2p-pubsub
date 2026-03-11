@@ -10,6 +10,7 @@ import (
 	"math/rand"
 	"slices"
 	"sort"
+	"strings"
 	"time"
 
 	pb "github.com/libp2p/go-libp2p-pubsub/pb"
@@ -22,8 +23,10 @@ import (
 	"github.com/libp2p/go-libp2p/core/protocol"
 	"github.com/libp2p/go-libp2p/core/record"
 	"github.com/libp2p/go-libp2p/p2p/host/peerstore/pstoremem"
+	yamux "github.com/libp2p/go-yamux/v5"
 	ma "github.com/multiformats/go-multiaddr"
 	manet "github.com/multiformats/go-multiaddr/net"
+	quic "github.com/quic-go/quic-go"
 )
 
 const (
@@ -423,6 +426,35 @@ func WithFloodPublish(floodPublish bool) Option {
 	}
 }
 
+// WithDisableIHaveGossip is a gossipsub router option that disables IHAVE gossip.
+// When this is enabled, the router will not emit IHAVE messages to non-mesh peers,
+// and will not respond to incoming IHAVE messages with IWANT requests.
+func WithDisableIHaveGossip(disable bool) Option {
+	return func(ps *PubSub) error {
+		gs, ok := ps.rt.(*GossipSubRouter)
+		if !ok {
+			return fmt.Errorf("pubsub router is not gossipsub")
+		}
+
+		gs.disableIHave = disable
+
+		return nil
+	}
+}
+
+// WithRTTReporter is a gossipsub router option that enables periodic logging of
+// smoothed RTT to mesh peers over QUIC connections.
+func WithRTTReporter(enable bool) Option {
+	return func(ps *PubSub) error {
+		gs, ok := ps.rt.(*GossipSubRouter)
+		if !ok {
+			return fmt.Errorf("pubsub router is not gossipsub")
+		}
+		gs.enableRTTReporter = enable
+		return nil
+	}
+}
+
 // WithPeerExchange is a gossipsub router option that enables Peer eXchange on PRUNE.
 // This should generally be enabled in bootstrappers and well connected/trusted nodes
 // used for bootstrapping.
@@ -645,6 +677,12 @@ type GossipSubRouter struct {
 
 	// whether to use flood publishing
 	floodPublish bool
+
+	// whether to disable IHAVE gossip; when true, the router will not emit or respond to IHAVE messages
+	disableIHave bool
+
+	// whether to enable periodic RTT reporting for mesh peers
+	enableRTTReporter bool
 
 	// number of heartbeats since the beginning of time; this allows us to amortize some resource
 	// clean up -- eg backoff clean up.
@@ -923,6 +961,10 @@ func (gs *GossipSubRouter) HandleRPC(rpc *RPC) {
 }
 
 func (gs *GossipSubRouter) handleIHave(p peer.ID, ctl *pb.ControlMessage) []*pb.ControlIWant {
+	if gs.disableIHave {
+		return nil
+	}
+
 	// we ignore IHAVE gossip from any peer whose score is below the gossip threshold
 	score := gs.score.Score(p)
 	if score < gs.gossipThreshold {
@@ -1618,6 +1660,51 @@ func (gs *GossipSubRouter) heartbeatTimer() {
 		}
 	}
 }
+func (gs *GossipSubRouter) reportMeshSize() {
+	if gs.p.metricsTracer == nil {
+		return
+	}
+	for topic, peers := range gs.mesh {
+		gs.p.metricsTracer.OnMeshSize(topic, len(peers))
+	}
+}
+
+func (gs *GossipSubRouter) reportRTT() {
+	if gs.p.metricsTracer == nil {
+		return
+	}
+	for topic, peers := range gs.mesh {
+		for p := range peers {
+			conns := gs.p.host.Network().ConnsToPeer(p)
+			for _, c := range conns {
+				if rtt, transport := gs.connRTT(c); rtt > 0 {
+					remoteAddr := ""
+					if na, err := manet.ToNetAddr(c.RemoteMultiaddr()); err == nil {
+						remoteAddr = na.String()
+					}
+					gs.p.metricsTracer.OnPeerRTT(p, topic, rtt, transport, remoteAddr)
+				}
+			}
+		}
+	}
+}
+
+// connRTT extracts the smoothed RTT from a connection.
+// Returns the RTT and transport name, or (0, "") if unavailable.
+func (gs *GossipSubRouter) connRTT(c network.Conn) (time.Duration, string) {
+	if strings.Contains(c.RemoteMultiaddr().String(), "quic") {
+		var qc *quic.Conn
+		if ok := c.As(&qc); ok {
+			return qc.ConnectionStats().SmoothedRTT, "quic"
+		}
+		return 0, ""
+	}
+	var ys *yamux.Session
+	if ok := c.As(&ys); ok {
+		return ys.RTT(), "yamux"
+	}
+	return 0, ""
+}
 
 func (gs *GossipSubRouter) heartbeat() {
 	start := time.Now()
@@ -1885,6 +1972,12 @@ func (gs *GossipSubRouter) heartbeat() {
 	gs.mcache.Shift()
 
 	gs.extensions.Heartbeat()
+
+	if gs.enableRTTReporter && gs.heartbeatTicks%100 == 0 {
+		gs.reportRTT()
+	}
+
+	gs.reportMeshSize()
 }
 
 func (gs *GossipSubRouter) clearIHaveCounters() {
@@ -2008,6 +2101,10 @@ func (gs *GossipSubRouter) sendGraftPrune(tograft, toprune map[peer.ID][]string,
 // emitGossip emits IHAVE gossip advertising items in the message cache window
 // of this topic.
 func (gs *GossipSubRouter) emitGossip(topic string, exclude map[peer.ID]struct{}) {
+	if gs.disableIHave {
+		return
+	}
+
 	mids := gs.mcache.GetGossipIDs(topic)
 	if len(mids) == 0 {
 		return
