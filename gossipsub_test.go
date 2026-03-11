@@ -65,6 +65,156 @@ func getGossipsubs(ctx context.Context, hs []host.Host, opts ...Option) []*PubSu
 	return psubs
 }
 
+func TestRPCMiddleware(t *testing.T) {
+	t.Run("observes RPCs", func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+
+		hosts := getDefaultHosts(t, 2)
+
+		var rpcCount atomic.Int64
+		middleware := func(next RPCHandler) RPCHandler {
+			return func(from peer.ID, rpc *RPC, sender RPCSender) error {
+				rpcCount.Add(1)
+				return next(from, rpc, sender)
+			}
+		}
+
+		psubs := getGossipsubs(ctx, hosts, WithRPCMiddleware(middleware))
+
+		topic := "foobar"
+		sub0, err := psubs[0].Subscribe(topic)
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, err = psubs[1].Subscribe(topic)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		connect(t, hosts[0], hosts[1])
+		time.Sleep(time.Second)
+
+		msg := []byte("hello middleware")
+		err = psubs[1].Publish(topic, msg)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		got, err := sub0.Next(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !bytes.Equal(msg, got.Data) {
+			t.Fatalf("got wrong message: expected %s, got %s", msg, got.Data)
+		}
+
+		if c := rpcCount.Load(); c == 0 {
+			t.Fatal("middleware was never called")
+		}
+	})
+
+	t.Run("blocks RPCs", func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+
+		hosts := getDefaultHosts(t, 2)
+
+		blockAll := func(next RPCHandler) RPCHandler {
+			return func(from peer.ID, rpc *RPC, sender RPCSender) error {
+				return fmt.Errorf("blocked")
+			}
+		}
+
+		psubs := getGossipsubs(ctx, hosts, WithRPCMiddleware(blockAll))
+
+		topic := "foobar"
+		sub0, err := psubs[0].Subscribe(topic)
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, err = psubs[1].Subscribe(topic)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		connect(t, hosts[0], hosts[1])
+		time.Sleep(time.Second)
+
+		err = psubs[1].Publish(topic, []byte("should be blocked"))
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		select {
+		case <-sub0.ch:
+			t.Fatal("expected message to be blocked by middleware")
+		case <-time.After(time.Second):
+			// expected
+		}
+	})
+
+	t.Run("ordering", func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+
+		hosts := getDefaultHosts(t, 2)
+
+		var order []string
+		var mu sync.Mutex
+
+		makeMiddleware := func(name string) RPCMiddleware {
+			return func(next RPCHandler) RPCHandler {
+				return func(from peer.ID, rpc *RPC, sender RPCSender) error {
+					mu.Lock()
+					order = append(order, name)
+					mu.Unlock()
+					return next(from, rpc, sender)
+				}
+			}
+		}
+
+		psubs := getGossipsubs(ctx, hosts,
+			WithRPCMiddleware(makeMiddleware("first")),
+			WithRPCMiddleware(makeMiddleware("second")),
+		)
+
+		topic := "foobar"
+		sub0, err := psubs[0].Subscribe(topic)
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, err = psubs[1].Subscribe(topic)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		connect(t, hosts[0], hosts[1])
+		time.Sleep(time.Second)
+
+		err = psubs[1].Publish(topic, []byte("order test"))
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		_, err = sub0.Next(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		mu.Lock()
+		defer mu.Unlock()
+		// Last middleware applied wraps outermost, so "second" runs before "first"
+		if len(order) < 2 {
+			t.Fatalf("expected at least 2 middleware calls, got %d", len(order))
+		}
+		// Find the first pair to verify ordering
+		if order[0] != "second" || order[1] != "first" {
+			t.Fatalf("expected middleware order [second, first], got %v", order[:2])
+		}
+	})
+}
+
 func TestGossipSubParamsValidate(t *testing.T) {
 	params := DefaultGossipSubParams()
 	params.Dhi = 1
