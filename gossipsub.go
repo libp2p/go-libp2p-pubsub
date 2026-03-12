@@ -662,6 +662,13 @@ func (gs *GossipSubRouter) Protocols() []protocol.ID {
 	return gs.protos
 }
 
+// MeshPeerMap returns the mesh peer map. Caller SHOULD NOT mutate this map.
+// MUST be called by the goroutine that owns the gossipsubrouter (not safe for
+// concurrent use)
+func (gs *GossipSubRouter) MeshPeerMap() map[string]map[peer.ID]struct{} {
+	return gs.mesh
+}
+
 func (gs *GossipSubRouter) Attach(p *PubSub) {
 	gs.p = p
 	gs.logger = p.logger
