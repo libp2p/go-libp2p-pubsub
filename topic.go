@@ -16,6 +16,9 @@ import (
 // ErrTopicClosed is returned if a Topic is utilized after it has been closed
 var ErrTopicClosed = errors.New("this Topic is closed, try opening a new one")
 
+// ErrFanoutOnlyTopic is returned if a relay is requested on a fanout-only topic
+var ErrFanoutOnlyTopic = errors.New("cannot relay on a fanout-only topic")
+
 // ErrNilSignKey is returned if a nil private key was provided
 var ErrNilSignKey = errors.New("nil sign key")
 
@@ -32,6 +35,8 @@ type Topic struct {
 
 	mux    sync.RWMutex
 	closed bool
+
+	fanoutOnly bool
 
 	requestPartialMessages  bool
 	supportsPartialMessages bool
@@ -191,6 +196,9 @@ func (t *Topic) Relay() (RelayCancelFunc, error) {
 	defer t.mux.RUnlock()
 	if t.closed {
 		return nil, ErrTopicClosed
+	}
+	if t.fanoutOnly {
+		return nil, ErrFanoutOnlyTopic
 	}
 
 	out := make(chan RelayCancelFunc, 1)
