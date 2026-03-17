@@ -10,120 +10,122 @@ import (
 )
 
 func TestPeerGater(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	synctestTest(t, func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
 
-	peerA := peer.ID("A")
-	peerAip := "1.2.3.4"
+		peerA := peer.ID("A")
+		peerAip := "1.2.3.4"
 
-	params := NewPeerGaterParams(.1, .9, .999)
-	err := params.validate()
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	pg := newPeerGater(ctx, nil, params, slog.Default())
-	pg.getIP = func(p peer.ID) string {
-		switch p {
-		case peerA:
-			return peerAip
-		default:
-			return "<wtf>"
+		params := NewPeerGaterParams(.1, .9, .999)
+		err := params.validate()
+		if err != nil {
+			t.Fatal(err)
 		}
-	}
 
-	pg.AddPeer(peerA, "")
+		pg := newPeerGater(ctx, nil, params, slog.Default())
+		pg.getIP = func(p peer.ID) string {
+			switch p {
+			case peerA:
+				return peerAip
+			default:
+				return "<wtf>"
+			}
+		}
 
-	status := pg.AcceptFrom(peerA)
-	if status != AcceptAll {
-		t.Fatal("expected AcceptAll")
-	}
+		pg.AddPeer(peerA, "")
 
-	msg := &Message{ReceivedFrom: peerA}
+		status := pg.AcceptFrom(peerA)
+		if status != AcceptAll {
+			t.Fatal("expected AcceptAll")
+		}
 
-	pg.ValidateMessage(msg)
-	status = pg.AcceptFrom(peerA)
-	if status != AcceptAll {
-		t.Fatal("expected AcceptAll")
-	}
+		msg := &Message{ReceivedFrom: peerA}
 
-	pg.RejectMessage(msg, RejectValidationQueueFull)
-	status = pg.AcceptFrom(peerA)
-	if status != AcceptAll {
-		t.Fatal("expected AcceptAll")
-	}
-
-	pg.RejectMessage(msg, RejectValidationThrottled)
-	status = pg.AcceptFrom(peerA)
-	if status != AcceptAll {
-		t.Fatal("expected AcceptAll")
-	}
-
-	for i := 0; i < 100; i++ {
-		pg.RejectMessage(msg, RejectValidationIgnored)
-		pg.RejectMessage(msg, RejectValidationFailed)
-	}
-
-	accepted := false
-	for i := 0; !accepted && i < 1000; i++ {
+		pg.ValidateMessage(msg)
 		status = pg.AcceptFrom(peerA)
-		if status == AcceptControl {
-			accepted = true
+		if status != AcceptAll {
+			t.Fatal("expected AcceptAll")
 		}
-	}
-	if !accepted {
-		t.Fatal("expected AcceptControl")
-	}
 
-	for i := 0; i < 100; i++ {
-		pg.DeliverMessage(msg)
-	}
-
-	accepted = false
-	for i := 0; !accepted && i < 1000; i++ {
+		pg.RejectMessage(msg, RejectValidationQueueFull)
 		status = pg.AcceptFrom(peerA)
-		if status == AcceptAll {
-			accepted = true
+		if status != AcceptAll {
+			t.Fatal("expected AcceptAll")
 		}
-	}
-	if !accepted {
-		t.Fatal("expected to accept at least once")
-	}
 
-	for i := 0; i < 100; i++ {
-		pg.decayStats()
-	}
+		pg.RejectMessage(msg, RejectValidationThrottled)
+		status = pg.AcceptFrom(peerA)
+		if status != AcceptAll {
+			t.Fatal("expected AcceptAll")
+		}
 
-	status = pg.AcceptFrom(peerA)
-	if status != AcceptAll {
-		t.Fatal("expected AcceptAll")
-	}
+		for i := 0; i < 100; i++ {
+			pg.RejectMessage(msg, RejectValidationIgnored)
+			pg.RejectMessage(msg, RejectValidationFailed)
+		}
 
-	pg.RemovePeer(peerA)
-	pg.Lock()
-	_, ok := pg.peerStats[peerA]
-	pg.Unlock()
-	if ok {
-		t.Fatal("still have a stat record for peerA")
-	}
+		accepted := false
+		for i := 0; !accepted && i < 1000; i++ {
+			status = pg.AcceptFrom(peerA)
+			if status == AcceptControl {
+				accepted = true
+			}
+		}
+		if !accepted {
+			t.Fatal("expected AcceptControl")
+		}
 
-	pg.Lock()
-	_, ok = pg.ipStats[peerAip]
-	pg.Unlock()
-	if !ok {
-		t.Fatal("expected to still have a stat record for peerA's ip")
-	}
+		for i := 0; i < 100; i++ {
+			pg.DeliverMessage(msg)
+		}
 
-	pg.Lock()
-	pg.ipStats[peerAip].expire = time.Now()
-	pg.Unlock()
+		accepted = false
+		for i := 0; !accepted && i < 1000; i++ {
+			status = pg.AcceptFrom(peerA)
+			if status == AcceptAll {
+				accepted = true
+			}
+		}
+		if !accepted {
+			t.Fatal("expected to accept at least once")
+		}
 
-	time.Sleep(2 * time.Second)
+		for i := 0; i < 100; i++ {
+			pg.decayStats()
+		}
 
-	pg.Lock()
-	_, ok = pg.ipStats["1.2.3.4"]
-	pg.Unlock()
-	if ok {
-		t.Fatal("still have a stat record for peerA's ip")
-	}
+		status = pg.AcceptFrom(peerA)
+		if status != AcceptAll {
+			t.Fatal("expected AcceptAll")
+		}
+
+		pg.RemovePeer(peerA)
+		pg.Lock()
+		_, ok := pg.peerStats[peerA]
+		pg.Unlock()
+		if ok {
+			t.Fatal("still have a stat record for peerA")
+		}
+
+		pg.Lock()
+		_, ok = pg.ipStats[peerAip]
+		pg.Unlock()
+		if !ok {
+			t.Fatal("expected to still have a stat record for peerA's ip")
+		}
+
+		pg.Lock()
+		pg.ipStats[peerAip].expire = time.Now()
+		pg.Unlock()
+
+		time.Sleep(2 * time.Second)
+
+		pg.Lock()
+		_, ok = pg.ipStats["1.2.3.4"]
+		pg.Unlock()
+		if ok {
+			t.Fatal("still have a stat record for peerA's ip")
+		}
+	})
 }

@@ -46,51 +46,57 @@ func getTopicEvts(topics []*Topic, opts ...TopicEventHandlerOpt) []*TopicEventHa
 }
 
 func TestTopicCloseWithOpenSubscription(t *testing.T) {
-	var sub *Subscription
-	var err error
-	testTopicCloseWithOpenResource(t,
-		func(topic *Topic) {
-			sub, err = topic.Subscribe()
-			if err != nil {
-				t.Fatal(err)
-			}
-		},
-		func() {
-			sub.Cancel()
-		},
-	)
+	synctestTest(t, func(t *testing.T) {
+		var sub *Subscription
+		var err error
+		testTopicCloseWithOpenResource(t,
+			func(topic *Topic) {
+				sub, err = topic.Subscribe()
+				if err != nil {
+					t.Fatal(err)
+				}
+			},
+			func() {
+				sub.Cancel()
+			},
+		)
+	})
 }
 
 func TestTopicCloseWithOpenEventHandler(t *testing.T) {
-	var evts *TopicEventHandler
-	var err error
-	testTopicCloseWithOpenResource(t,
-		func(topic *Topic) {
-			evts, err = topic.EventHandler()
-			if err != nil {
-				t.Fatal(err)
-			}
-		},
-		func() {
-			evts.Cancel()
-		},
-	)
+	synctestTest(t, func(t *testing.T) {
+		var evts *TopicEventHandler
+		var err error
+		testTopicCloseWithOpenResource(t,
+			func(topic *Topic) {
+				evts, err = topic.EventHandler()
+				if err != nil {
+					t.Fatal(err)
+				}
+			},
+			func() {
+				evts.Cancel()
+			},
+		)
+	})
 }
 
 func TestTopicCloseWithOpenRelay(t *testing.T) {
-	var relayCancel RelayCancelFunc
-	var err error
-	testTopicCloseWithOpenResource(t,
-		func(topic *Topic) {
-			relayCancel, err = topic.Relay()
-			if err != nil {
-				t.Fatal(err)
-			}
-		},
-		func() {
-			relayCancel()
-		},
-	)
+	synctestTest(t, func(t *testing.T) {
+		var relayCancel RelayCancelFunc
+		var err error
+		testTopicCloseWithOpenResource(t,
+			func(topic *Topic) {
+				relayCancel, err = topic.Relay()
+				if err != nil {
+					t.Fatal(err)
+				}
+			},
+			func() {
+				relayCancel()
+			},
+		)
+	})
 }
 
 func testTopicCloseWithOpenResource(t *testing.T, openResource func(topic *Topic), closeResource func()) {
@@ -134,588 +140,607 @@ func testTopicCloseWithOpenResource(t *testing.T, openResource func(topic *Topic
 }
 
 func TestTopicReuse(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	synctestTest(t, func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
 
-	const numHosts = 2
-	topicID := "foobar"
-	hosts := getDefaultHosts(t, numHosts)
+		const numHosts = 2
+		topicID := "foobar"
+		hosts := getDefaultHosts(t, numHosts)
 
-	sender := getPubsub(ctx, hosts[0], WithDiscovery(&dummyDiscovery{}))
-	receiver := getPubsub(ctx, hosts[1])
+		sender := getPubsub(ctx, hosts[0], WithDiscovery(&dummyDiscovery{}))
+		receiver := getPubsub(ctx, hosts[1])
 
-	connectAll(t, hosts)
+		connectAll(t, hosts)
 
-	// Sender creates topic
-	sendTopic, err := sender.Join(topicID)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	// Receiver creates and subscribes to the topic
-	receiveTopic, err := receiver.Join(topicID)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	sub, err := receiveTopic.Subscribe()
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	firstMsg := []byte("1")
-	if err := sendTopic.Publish(ctx, firstMsg, WithReadiness(MinTopicSize(1))); err != nil {
-		t.Fatal(err)
-	}
-
-	msg, err := sub.Next(ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !bytes.Equal(msg.GetData(), firstMsg) {
-		t.Fatal("received incorrect message")
-	}
-
-	if err := sendTopic.Close(); err != nil {
-		t.Fatal(err)
-	}
-
-	// Recreate the same topic
-	newSendTopic, err := sender.Join(topicID)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	// Try sending data with original topic
-	illegalSend := []byte("illegal")
-	if err := sendTopic.Publish(ctx, illegalSend); err != ErrTopicClosed {
-		t.Fatal(err)
-	}
-
-	timeoutCtx, timeoutCancel := context.WithTimeout(ctx, time.Second*2)
-	defer timeoutCancel()
-	msg, err = sub.Next(timeoutCtx)
-	if err != context.DeadlineExceeded {
+		// Sender creates topic
+		sendTopic, err := sender.Join(topicID)
 		if err != nil {
 			t.Fatal(err)
 		}
-		if !bytes.Equal(msg.GetData(), illegalSend) {
-			t.Fatal("received incorrect message from illegal topic")
+
+		// Receiver creates and subscribes to the topic
+		receiveTopic, err := receiver.Join(topicID)
+		if err != nil {
+			t.Fatal(err)
 		}
-		t.Fatal("received message sent by illegal topic")
-	}
-	timeoutCancel()
 
-	// Try cancelling the new topic by using the original topic
-	if err := sendTopic.Close(); err != nil {
-		t.Fatal(err)
-	}
+		sub, err := receiveTopic.Subscribe()
+		if err != nil {
+			t.Fatal(err)
+		}
 
-	secondMsg := []byte("2")
-	if err := newSendTopic.Publish(ctx, secondMsg); err != nil {
-		t.Fatal(err)
-	}
+		firstMsg := []byte("1")
+		if err := sendTopic.Publish(ctx, firstMsg, WithReadiness(MinTopicSize(1))); err != nil {
+			t.Fatal(err)
+		}
 
-	timeoutCtx, timeoutCancel = context.WithTimeout(ctx, time.Second*2)
-	defer timeoutCancel()
-	msg, err = sub.Next(timeoutCtx)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !bytes.Equal(msg.GetData(), secondMsg) {
-		t.Fatal("received incorrect message")
-	}
+		msg, err := sub.Next(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !bytes.Equal(msg.GetData(), firstMsg) {
+			t.Fatal("received incorrect message")
+		}
+
+		if err := sendTopic.Close(); err != nil {
+			t.Fatal(err)
+		}
+
+		// Recreate the same topic
+		newSendTopic, err := sender.Join(topicID)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		// Try sending data with original topic
+		illegalSend := []byte("illegal")
+		if err := sendTopic.Publish(ctx, illegalSend); err != ErrTopicClosed {
+			t.Fatal(err)
+		}
+
+		timeoutCtx, timeoutCancel := context.WithTimeout(ctx, time.Second*2)
+		defer timeoutCancel()
+		msg, err = sub.Next(timeoutCtx)
+		if err != context.DeadlineExceeded {
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !bytes.Equal(msg.GetData(), illegalSend) {
+				t.Fatal("received incorrect message from illegal topic")
+			}
+			t.Fatal("received message sent by illegal topic")
+		}
+		timeoutCancel()
+
+		// Try cancelling the new topic by using the original topic
+		if err := sendTopic.Close(); err != nil {
+			t.Fatal(err)
+		}
+
+		secondMsg := []byte("2")
+		if err := newSendTopic.Publish(ctx, secondMsg); err != nil {
+			t.Fatal(err)
+		}
+
+		timeoutCtx, timeoutCancel = context.WithTimeout(ctx, time.Second*2)
+		defer timeoutCancel()
+		msg, err = sub.Next(timeoutCtx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !bytes.Equal(msg.GetData(), secondMsg) {
+			t.Fatal("received incorrect message")
+		}
+	})
 }
 
 func TestTopicEventHandlerCancel(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	synctestTest(t, func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
 
-	const numHosts = 5
-	topicID := "foobar"
-	hosts := getDefaultHosts(t, numHosts)
-	ps := getPubsub(ctx, hosts[0])
+		const numHosts = 5
+		topicID := "foobar"
+		hosts := getDefaultHosts(t, numHosts)
+		ps := getPubsub(ctx, hosts[0])
 
-	// Try create and cancel topic
-	topic, err := ps.Join(topicID)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	evts, err := topic.EventHandler()
-	if err != nil {
-		t.Fatal(err)
-	}
-	evts.Cancel()
-	timeoutCtx, timeoutCancel := context.WithTimeout(ctx, time.Second*2)
-	defer timeoutCancel()
-	connectAll(t, hosts)
-	_, err = evts.NextPeerEvent(timeoutCtx)
-	if err != context.DeadlineExceeded {
+		// Try create and cancel topic
+		topic, err := ps.Join(topicID)
 		if err != nil {
 			t.Fatal(err)
 		}
-		t.Fatal("received event after cancel")
-	}
+
+		evts, err := topic.EventHandler()
+		if err != nil {
+			t.Fatal(err)
+		}
+		evts.Cancel()
+		timeoutCtx, timeoutCancel := context.WithTimeout(ctx, time.Second*2)
+		defer timeoutCancel()
+		connectAll(t, hosts)
+		_, err = evts.NextPeerEvent(timeoutCtx)
+		if err != context.DeadlineExceeded {
+			if err != nil {
+				t.Fatal(err)
+			}
+			t.Fatal("received event after cancel")
+		}
+	})
 }
 
 func TestSubscriptionJoinNotification(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	synctestTest(t, func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
 
-	const numLateSubscribers = 10
-	const numHosts = 20
-	hosts := getDefaultHosts(t, numHosts)
-	topics := getTopics(getPubsubs(ctx, hosts), "foobar")
-	evts := getTopicEvts(topics)
+		const numLateSubscribers = 10
+		const numHosts = 20
+		hosts := getDefaultHosts(t, numHosts)
+		topics := getTopics(getPubsubs(ctx, hosts), "foobar")
+		evts := getTopicEvts(topics)
 
-	subs := make([]*Subscription, numHosts)
-	topicPeersFound := make([]map[peer.ID]struct{}, numHosts)
+		subs := make([]*Subscription, numHosts)
+		topicPeersFound := make([]map[peer.ID]struct{}, numHosts)
 
-	// Have some peers subscribe earlier than other peers.
-	// This exercises whether we get subscription notifications from
-	// existing peers.
-	for i, topic := range topics[numLateSubscribers:] {
-		subch, err := topic.Subscribe()
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		subs[i] = subch
-	}
-
-	connectAll(t, hosts)
-
-	time.Sleep(time.Millisecond * 100)
-
-	// Have the rest subscribe
-	for i, topic := range topics[:numLateSubscribers] {
-		subch, err := topic.Subscribe()
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		subs[i+numLateSubscribers] = subch
-	}
-
-	wg := sync.WaitGroup{}
-	for i := 0; i < numHosts; i++ {
-		peersFound := make(map[peer.ID]struct{})
-		topicPeersFound[i] = peersFound
-		evt := evts[i]
-		wg.Add(1)
-		go func(peersFound map[peer.ID]struct{}) {
-			defer wg.Done()
-			for len(peersFound) < numHosts-1 {
-				event, err := evt.NextPeerEvent(ctx)
-				if err != nil {
-					panic(err)
-				}
-				if event.Type == PeerJoin {
-					peersFound[event.Peer] = struct{}{}
-				}
+		// Have some peers subscribe earlier than other peers.
+		// This exercises whether we get subscription notifications from
+		// existing peers.
+		for i, topic := range topics[numLateSubscribers:] {
+			subch, err := topic.Subscribe()
+			if err != nil {
+				t.Fatal(err)
 			}
-		}(peersFound)
-	}
 
-	wg.Wait()
-	for _, peersFound := range topicPeersFound {
-		if len(peersFound) != numHosts-1 {
-			t.Fatal("incorrect number of peers found")
+			subs[i] = subch
 		}
-	}
+
+		connectAll(t, hosts)
+
+		time.Sleep(time.Millisecond * 100)
+
+		// Have the rest subscribe
+		for i, topic := range topics[:numLateSubscribers] {
+			subch, err := topic.Subscribe()
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			subs[i+numLateSubscribers] = subch
+		}
+
+		wg := sync.WaitGroup{}
+		for i := 0; i < numHosts; i++ {
+			peersFound := make(map[peer.ID]struct{})
+			topicPeersFound[i] = peersFound
+			evt := evts[i]
+			wg.Add(1)
+			go func(peersFound map[peer.ID]struct{}) {
+				defer wg.Done()
+				for len(peersFound) < numHosts-1 {
+					event, err := evt.NextPeerEvent(ctx)
+					if err != nil {
+						panic(err)
+					}
+					if event.Type == PeerJoin {
+						peersFound[event.Peer] = struct{}{}
+					}
+				}
+			}(peersFound)
+		}
+
+		wg.Wait()
+		for _, peersFound := range topicPeersFound {
+			if len(peersFound) != numHosts-1 {
+				t.Fatal("incorrect number of peers found")
+			}
+		}
+	})
 }
 
 func TestSubscriptionLeaveNotification(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	synctestTest(t, func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
 
-	const numHosts = 20
-	hosts := getDefaultHosts(t, numHosts)
-	psubs := getPubsubs(ctx, hosts)
-	topics := getTopics(psubs, "foobar")
-	evts := getTopicEvts(topics)
+		const numHosts = 20
+		hosts := getDefaultHosts(t, numHosts)
+		psubs := getPubsubs(ctx, hosts)
+		topics := getTopics(psubs, "foobar")
+		evts := getTopicEvts(topics)
 
-	subs := make([]*Subscription, numHosts)
-	topicPeersFound := make([]map[peer.ID]struct{}, numHosts)
+		subs := make([]*Subscription, numHosts)
+		topicPeersFound := make([]map[peer.ID]struct{}, numHosts)
 
-	// Subscribe all peers and wait until they've all been found
-	for i, topic := range topics {
-		subch, err := topic.Subscribe()
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		subs[i] = subch
-	}
-
-	connectAll(t, hosts)
-
-	time.Sleep(time.Millisecond * 100)
-
-	wg := sync.WaitGroup{}
-	for i := 0; i < numHosts; i++ {
-		peersFound := make(map[peer.ID]struct{})
-		topicPeersFound[i] = peersFound
-		evt := evts[i]
-		wg.Add(1)
-		go func(peersFound map[peer.ID]struct{}) {
-			defer wg.Done()
-			for len(peersFound) < numHosts-1 {
-				event, err := evt.NextPeerEvent(ctx)
-				if err != nil {
-					panic(err)
-				}
-				if event.Type == PeerJoin {
-					peersFound[event.Peer] = struct{}{}
-				}
+		// Subscribe all peers and wait until they've all been found
+		for i, topic := range topics {
+			subch, err := topic.Subscribe()
+			if err != nil {
+				t.Fatal(err)
 			}
-		}(peersFound)
-	}
 
-	wg.Wait()
-	for _, peersFound := range topicPeersFound {
-		if len(peersFound) != numHosts-1 {
-			t.Fatal("incorrect number of peers found")
+			subs[i] = subch
 		}
-	}
 
-	// Test removing peers and verifying that they cause events
-	subs[1].Cancel()
-	_ = hosts[2].Close()
-	psubs[0].BlacklistPeer(hosts[3].ID())
+		connectAll(t, hosts)
 
-	leavingPeers := make(map[peer.ID]struct{})
-	for len(leavingPeers) < 3 {
-		event, err := evts[0].NextPeerEvent(ctx)
-		if err != nil {
-			t.Fatal(err)
+		time.Sleep(time.Millisecond * 100)
+
+		wg := sync.WaitGroup{}
+		for i := 0; i < numHosts; i++ {
+			peersFound := make(map[peer.ID]struct{})
+			topicPeersFound[i] = peersFound
+			evt := evts[i]
+			wg.Add(1)
+			go func(peersFound map[peer.ID]struct{}) {
+				defer wg.Done()
+				for len(peersFound) < numHosts-1 {
+					event, err := evt.NextPeerEvent(ctx)
+					if err != nil {
+						panic(err)
+					}
+					if event.Type == PeerJoin {
+						peersFound[event.Peer] = struct{}{}
+					}
+				}
+			}(peersFound)
 		}
-		if event.Type == PeerLeave {
-			leavingPeers[event.Peer] = struct{}{}
-		}
-	}
 
-	if _, ok := leavingPeers[hosts[1].ID()]; !ok {
-		t.Fatal(fmt.Errorf("canceling subscription did not cause a leave event"))
-	}
-	if _, ok := leavingPeers[hosts[2].ID()]; !ok {
-		t.Fatal(fmt.Errorf("closing host did not cause a leave event"))
-	}
-	if _, ok := leavingPeers[hosts[3].ID()]; !ok {
-		t.Fatal(fmt.Errorf("blacklisting peer did not cause a leave event"))
-	}
+		wg.Wait()
+		for _, peersFound := range topicPeersFound {
+			if len(peersFound) != numHosts-1 {
+				t.Fatal("incorrect number of peers found")
+			}
+		}
+
+		// Test removing peers and verifying that they cause events
+		subs[1].Cancel()
+		_ = hosts[2].Close()
+		psubs[0].BlacklistPeer(hosts[3].ID())
+
+		leavingPeers := make(map[peer.ID]struct{})
+		for len(leavingPeers) < 3 {
+			event, err := evts[0].NextPeerEvent(ctx)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if event.Type == PeerLeave {
+				leavingPeers[event.Peer] = struct{}{}
+			}
+		}
+
+		if _, ok := leavingPeers[hosts[1].ID()]; !ok {
+			t.Fatal(fmt.Errorf("canceling subscription did not cause a leave event"))
+		}
+		if _, ok := leavingPeers[hosts[2].ID()]; !ok {
+			t.Fatal(fmt.Errorf("closing host did not cause a leave event"))
+		}
+		if _, ok := leavingPeers[hosts[3].ID()]; !ok {
+			t.Fatal(fmt.Errorf("blacklisting peer did not cause a leave event"))
+		}
+	})
 }
 
 func TestSubscriptionManyNotifications(t *testing.T) {
-	t.Skip("flaky test disabled")
+	synctestTest(t, func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+		const topic = "foobar"
 
-	const topic = "foobar"
+		const numHosts = 33
+		hosts := getDefaultHosts(t, numHosts)
+		topics := getTopics(getPubsubs(ctx, hosts), topic)
+		evts := getTopicEvts(topics)
 
-	const numHosts = 33
-	hosts := getDefaultHosts(t, numHosts)
-	topics := getTopics(getPubsubs(ctx, hosts), topic)
-	evts := getTopicEvts(topics)
+		subs := make([]*Subscription, numHosts)
+		topicPeersFound := make([]map[peer.ID]struct{}, numHosts)
 
-	subs := make([]*Subscription, numHosts)
-	topicPeersFound := make([]map[peer.ID]struct{}, numHosts)
+		// Subscribe all peers except one and wait until they've all been found
+		for i := 1; i < numHosts; i++ {
+			subch, err := topics[i].Subscribe()
+			if err != nil {
+				t.Fatal(err)
+			}
 
-	// Subscribe all peers except one and wait until they've all been found
-	for i := 1; i < numHosts; i++ {
-		subch, err := topics[i].Subscribe()
+			subs[i] = subch
+		}
+
+		connectAll(t, hosts)
+
+		time.Sleep(time.Millisecond * 100)
+
+		wg := sync.WaitGroup{}
+		for i := 1; i < numHosts; i++ {
+			peersFound := make(map[peer.ID]struct{})
+			topicPeersFound[i] = peersFound
+			evt := evts[i]
+			wg.Add(1)
+			go func(peersFound map[peer.ID]struct{}) {
+				defer wg.Done()
+				for len(peersFound) < numHosts-2 {
+					event, err := evt.NextPeerEvent(ctx)
+					if err != nil {
+						panic(err)
+					}
+					if event.Type == PeerJoin {
+						peersFound[event.Peer] = struct{}{}
+					}
+				}
+			}(peersFound)
+		}
+
+		wg.Wait()
+		for _, peersFound := range topicPeersFound[1:] {
+			if len(peersFound) != numHosts-2 {
+				t.Fatalf("found %d peers, expected %d", len(peersFound), numHosts-2)
+			}
+		}
+
+		// Wait for remaining peer to find other peers
+		remPeerTopic, remPeerEvts := topics[0], evts[0]
+		for len(remPeerTopic.ListPeers()) < numHosts-1 {
+			time.Sleep(time.Millisecond * 100)
+		}
+
+		// Subscribe the remaining peer and check that all the events came through
+		sub, err := remPeerTopic.Subscribe()
 		if err != nil {
 			t.Fatal(err)
 		}
 
-		subs[i] = subch
-	}
+		subs[0] = sub
 
-	connectAll(t, hosts)
+		peerState := readAllQueuedEvents(ctx, t, remPeerEvts)
 
-	time.Sleep(time.Millisecond * 100)
+		if len(peerState) != numHosts-1 {
+			t.Fatal("incorrect number of peers found")
+		}
 
-	wg := sync.WaitGroup{}
-	for i := 1; i < numHosts; i++ {
-		peersFound := make(map[peer.ID]struct{})
-		topicPeersFound[i] = peersFound
-		evt := evts[i]
-		wg.Add(1)
-		go func(peersFound map[peer.ID]struct{}) {
-			defer wg.Done()
-			for len(peersFound) < numHosts-2 {
-				event, err := evt.NextPeerEvent(ctx)
-				if err != nil {
-					panic(err)
-				}
-				if event.Type == PeerJoin {
-					peersFound[event.Peer] = struct{}{}
-				}
+		for _, e := range peerState {
+			if e != PeerJoin {
+				t.Fatal("non Join event occurred")
 			}
-		}(peersFound)
-	}
-
-	wg.Wait()
-	for _, peersFound := range topicPeersFound[1:] {
-		if len(peersFound) != numHosts-2 {
-			t.Fatalf("found %d peers, expected %d", len(peersFound), numHosts-2)
 		}
-	}
 
-	// Wait for remaining peer to find other peers
-	remPeerTopic, remPeerEvts := topics[0], evts[0]
-	for len(remPeerTopic.ListPeers()) < numHosts-1 {
-		time.Sleep(time.Millisecond * 100)
-	}
-
-	// Subscribe the remaining peer and check that all the events came through
-	sub, err := remPeerTopic.Subscribe()
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	subs[0] = sub
-
-	peerState := readAllQueuedEvents(ctx, t, remPeerEvts)
-
-	if len(peerState) != numHosts-1 {
-		t.Fatal("incorrect number of peers found")
-	}
-
-	for _, e := range peerState {
-		if e != PeerJoin {
-			t.Fatal("non Join event occurred")
+		// Unsubscribe all peers except one and check that all the events came through
+		for i := 1; i < numHosts; i++ {
+			subs[i].Cancel()
 		}
-	}
 
-	// Unsubscribe all peers except one and check that all the events came through
-	for i := 1; i < numHosts; i++ {
-		subs[i].Cancel()
-	}
-
-	// Wait for remaining peer to disconnect from the other peers
-	for len(topics[0].ListPeers()) != 0 {
-		time.Sleep(time.Millisecond * 100)
-	}
-
-	peerState = readAllQueuedEvents(ctx, t, remPeerEvts)
-
-	if len(peerState) != numHosts-1 {
-		t.Fatal("incorrect number of peers found")
-	}
-
-	for _, e := range peerState {
-		if e != PeerLeave {
-			t.Fatal("non Leave event occurred")
+		// Wait for remaining peer to disconnect from the other peers
+		for len(topics[0].ListPeers()) != 0 {
+			time.Sleep(time.Millisecond * 100)
 		}
-	}
+
+		peerState = readAllQueuedEvents(ctx, t, remPeerEvts)
+
+		if len(peerState) != numHosts-1 {
+			t.Fatal("incorrect number of peers found")
+		}
+
+		for _, e := range peerState {
+			if e != PeerLeave {
+				t.Fatal("non Leave event occurred")
+			}
+		}
+	})
 }
 
 func TestSubscriptionNotificationSubUnSub(t *testing.T) {
 	// Resubscribe and Unsubscribe a peers and check the state for consistency
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	synctestTest(t, func(t *testing.T) {
 
-	const topic = "foobar"
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
 
-	const numHosts = 35
-	hosts := getDefaultHosts(t, numHosts)
-	topics := getTopics(getPubsubs(ctx, hosts), topic)
+		const topic = "foobar"
 
-	for i := 1; i < numHosts; i++ {
-		connect(t, hosts[0], hosts[i])
-	}
-	time.Sleep(time.Millisecond * 100)
+		const numHosts = 35
+		hosts := getDefaultHosts(t, numHosts)
+		topics := getTopics(getPubsubs(ctx, hosts), topic)
 
-	notifSubThenUnSub(ctx, t, topics)
+		for i := 1; i < numHosts; i++ {
+			connect(t, hosts[0], hosts[i])
+		}
+		time.Sleep(time.Millisecond * 100)
+
+		notifSubThenUnSub(ctx, t, topics)
+	})
 }
 
 func TestTopicRelay(t *testing.T) {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
+	synctestTest(t, func(t *testing.T) {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
 
-	const topic = "foobar"
-	const numHosts = 5
+		const topic = "foobar"
+		const numHosts = 5
 
-	hosts := getDefaultHosts(t, numHosts)
-	topics := getTopics(getPubsubs(ctx, hosts), topic)
+		hosts := getDefaultHosts(t, numHosts)
+		topics := getTopics(getPubsubs(ctx, hosts), topic)
 
-	// [0.Rel] - [1.Rel] - [2.Sub]
-	//             |
-	//           [3.Rel] - [4.Sub]
+		// [0.Rel] - [1.Rel] - [2.Sub]
+		//             |
+		//           [3.Rel] - [4.Sub]
 
-	connect(t, hosts[0], hosts[1])
-	connect(t, hosts[1], hosts[2])
-	connect(t, hosts[1], hosts[3])
-	connect(t, hosts[3], hosts[4])
+		connect(t, hosts[0], hosts[1])
+		connect(t, hosts[1], hosts[2])
+		connect(t, hosts[1], hosts[3])
+		connect(t, hosts[3], hosts[4])
 
-	time.Sleep(time.Millisecond * 100)
+		time.Sleep(time.Millisecond * 100)
 
-	var subs []*Subscription
+		var subs []*Subscription
 
-	for i, topic := range topics {
-		if i == 2 || i == 4 {
-			sub, err := topic.Subscribe()
-			if err != nil {
-				t.Fatal(err)
-			}
+		for i, topic := range topics {
+			if i == 2 || i == 4 {
+				sub, err := topic.Subscribe()
+				if err != nil {
+					t.Fatal(err)
+				}
 
-			subs = append(subs, sub)
-		} else {
-			_, err := topic.Relay()
-			if err != nil {
-				t.Fatal(err)
+				subs = append(subs, sub)
+			} else {
+				_, err := topic.Relay()
+				if err != nil {
+					t.Fatal(err)
+				}
 			}
 		}
-	}
 
-	time.Sleep(time.Millisecond * 100)
+		time.Sleep(time.Millisecond * 100)
 
-	for i := 0; i < 100; i++ {
-		msg := []byte("message")
+		for i := 0; i < 100; i++ {
+			msg := []byte("message")
 
-		owner := rand.Intn(len(topics))
+			owner := rand.Intn(len(topics))
 
-		err := topics[owner].Publish(ctx, msg)
+			err := topics[owner].Publish(ctx, msg)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			for _, sub := range subs {
+				received, err := sub.Next(ctx)
+				if err != nil {
+					t.Fatal(err)
+				}
+
+				if !bytes.Equal(msg, received.Data) {
+					t.Fatal("received message is other than expected")
+				}
+			}
+		}
+	})
+}
+
+func TestTopicRelayReuse(t *testing.T) {
+	synctestTest(t, func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+
+		const topic = "foobar"
+		const numHosts = 1
+
+		hosts := getDefaultHosts(t, numHosts)
+		pubsubs := getPubsubs(ctx, hosts)
+		topics := getTopics(pubsubs, topic)
+
+		relay1Cancel, err := topics[0].Relay()
 		if err != nil {
 			t.Fatal(err)
 		}
 
-		for _, sub := range subs {
-			received, err := sub.Next(ctx)
-			if err != nil {
-				t.Fatal(err)
-			}
-
-			if !bytes.Equal(msg, received.Data) {
-				t.Fatal("received message is other than expected")
-			}
+		relay2Cancel, err := topics[0].Relay()
+		if err != nil {
+			t.Fatal(err)
 		}
-	}
-}
 
-func TestTopicRelayReuse(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+		relay3Cancel, err := topics[0].Relay()
+		if err != nil {
+			t.Fatal(err)
+		}
 
-	const topic = "foobar"
-	const numHosts = 1
+		time.Sleep(time.Millisecond * 100)
 
-	hosts := getDefaultHosts(t, numHosts)
-	pubsubs := getPubsubs(ctx, hosts)
-	topics := getTopics(pubsubs, topic)
+		res := make(chan bool, 1)
+		pubsubs[0].eval <- func() {
+			res <- pubsubs[0].myRelays[topic] == 3
+		}
 
-	relay1Cancel, err := topics[0].Relay()
-	if err != nil {
-		t.Fatal(err)
-	}
+		isCorrectNumber := <-res
+		if !isCorrectNumber {
+			t.Fatal("incorrect number of relays")
+		}
 
-	relay2Cancel, err := topics[0].Relay()
-	if err != nil {
-		t.Fatal(err)
-	}
+		// only the first invocation should take effect
+		relay1Cancel()
+		relay1Cancel()
+		relay1Cancel()
 
-	relay3Cancel, err := topics[0].Relay()
-	if err != nil {
-		t.Fatal(err)
-	}
+		pubsubs[0].eval <- func() {
+			res <- pubsubs[0].myRelays[topic] == 2
+		}
 
-	time.Sleep(time.Millisecond * 100)
+		isCorrectNumber = <-res
+		if !isCorrectNumber {
+			t.Fatal("incorrect number of relays")
+		}
 
-	res := make(chan bool, 1)
-	pubsubs[0].eval <- func() {
-		res <- pubsubs[0].myRelays[topic] == 3
-	}
+		relay2Cancel()
+		relay3Cancel()
 
-	isCorrectNumber := <-res
-	if !isCorrectNumber {
-		t.Fatal("incorrect number of relays")
-	}
+		time.Sleep(time.Millisecond * 100)
 
-	// only the first invocation should take effect
-	relay1Cancel()
-	relay1Cancel()
-	relay1Cancel()
+		pubsubs[0].eval <- func() {
+			res <- pubsubs[0].myRelays[topic] == 0
+		}
 
-	pubsubs[0].eval <- func() {
-		res <- pubsubs[0].myRelays[topic] == 2
-	}
-
-	isCorrectNumber = <-res
-	if !isCorrectNumber {
-		t.Fatal("incorrect number of relays")
-	}
-
-	relay2Cancel()
-	relay3Cancel()
-
-	time.Sleep(time.Millisecond * 100)
-
-	pubsubs[0].eval <- func() {
-		res <- pubsubs[0].myRelays[topic] == 0
-	}
-
-	isCorrectNumber = <-res
-	if !isCorrectNumber {
-		t.Fatal("incorrect number of relays")
-	}
+		isCorrectNumber = <-res
+		if !isCorrectNumber {
+			t.Fatal("incorrect number of relays")
+		}
+	})
 }
 
 func TestTopicRelayOnClosedTopic(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	synctestTest(t, func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
 
-	const topic = "foobar"
-	const numHosts = 1
+		const topic = "foobar"
+		const numHosts = 1
 
-	hosts := getDefaultHosts(t, numHosts)
-	topics := getTopics(getPubsubs(ctx, hosts), topic)
+		hosts := getDefaultHosts(t, numHosts)
+		topics := getTopics(getPubsubs(ctx, hosts), topic)
 
-	err := topics[0].Close()
-	if err != nil {
-		t.Fatal(err)
-	}
+		err := topics[0].Close()
+		if err != nil {
+			t.Fatal(err)
+		}
 
-	_, err = topics[0].Relay()
-	if err == nil {
-		t.Fatalf("error should be returned")
-	}
+		_, err = topics[0].Relay()
+		if err == nil {
+			t.Fatalf("error should be returned")
+		}
+	})
 }
 
 func TestProducePanic(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	synctestTest(t, func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
 
-	const numHosts = 5
-	topicID := "foobar"
-	hosts := getDefaultHosts(t, numHosts)
-	ps := getPubsub(ctx, hosts[0])
+		const numHosts = 5
+		topicID := "foobar"
+		hosts := getDefaultHosts(t, numHosts)
+		ps := getPubsub(ctx, hosts[0])
 
-	// Create topic
-	topic, err := ps.Join(topicID)
-	if err != nil {
-		t.Fatal(err)
-	}
+		// Create topic
+		topic, err := ps.Join(topicID)
+		if err != nil {
+			t.Fatal(err)
+		}
 
-	// Create subscription we're going to cancel
-	s, err := topic.Subscribe()
-	if err != nil {
-		t.Fatal(err)
-	}
-	// Create second subscription to keep us alive on the subscription map
-	// after the first one is canceled
-	s2, err := topic.Subscribe()
-	if err != nil {
-		t.Fatal(err)
-	}
-	_ = s2
+		// Create subscription we're going to cancel
+		s, err := topic.Subscribe()
+		if err != nil {
+			t.Fatal(err)
+		}
+		// Create second subscription to keep us alive on the subscription map
+		// after the first one is canceled
+		s2, err := topic.Subscribe()
+		if err != nil {
+			t.Fatal(err)
+		}
+		_ = s2
 
-	s.Cancel()
-	time.Sleep(time.Second)
-	s.Cancel()
-	time.Sleep(time.Second)
+		s.Cancel()
+		time.Sleep(time.Second)
+		s.Cancel()
+		time.Sleep(time.Second)
+	})
 }
 
 func notifSubThenUnSub(ctx context.Context, t *testing.T, topics []*Topic) {
@@ -787,164 +812,167 @@ func readAllQueuedEvents(ctx context.Context, t *testing.T, evt *TopicEventHandl
 }
 
 func TestMinTopicSizeNoDiscovery(t *testing.T) {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-
-	const numHosts = 3
-	topicID := "foobar"
-	hosts := getDefaultHosts(t, numHosts)
-
-	sender := getPubsub(ctx, hosts[0])
-	receiver1 := getPubsub(ctx, hosts[1])
-	receiver2 := getPubsub(ctx, hosts[2])
-
-	connectAll(t, hosts)
-
-	// Sender creates topic
-	sendTopic, err := sender.Join(topicID)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	// Receiver creates and subscribes to the topic
-	receiveTopic1, err := receiver1.Join(topicID)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	sub1, err := receiveTopic1.Subscribe()
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	oneMsg := []byte("minimum one")
-	if err := sendTopic.Publish(ctx, oneMsg, WithReadiness(MinTopicSize(1))); err != nil {
-		t.Fatal(err)
-	}
-
-	if msg, err := sub1.Next(ctx); err != nil {
-		t.Fatal(err)
-	} else if !bytes.Equal(msg.GetData(), oneMsg) {
-		t.Fatal("received incorrect message")
-	}
-
-	twoMsg := []byte("minimum two")
-
-	// Attempting to publish with a minimum topic size of two should fail.
-	{
-		ctx, cancel := context.WithTimeout(ctx, time.Second)
+	synctestTest(t, func(t *testing.T) {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
-		if err := sendTopic.Publish(ctx, twoMsg, WithReadiness(MinTopicSize(2))); !errors.Is(err, context.DeadlineExceeded) {
+
+		const numHosts = 3
+		topicID := "foobar"
+		hosts := getDefaultHosts(t, numHosts)
+
+		sender := getPubsub(ctx, hosts[0])
+		receiver1 := getPubsub(ctx, hosts[1])
+		receiver2 := getPubsub(ctx, hosts[2])
+
+		connectAll(t, hosts)
+
+		// Sender creates topic
+		sendTopic, err := sender.Join(topicID)
+		if err != nil {
 			t.Fatal(err)
 		}
-	}
 
-	// Subscribe the second receiver; the publish should now work.
-	receiveTopic2, err := receiver2.Join(topicID)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	sub2, err := receiveTopic2.Subscribe()
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	{
-		ctx, cancel := context.WithTimeout(ctx, time.Second)
-		defer cancel()
-		if err := sendTopic.Publish(ctx, twoMsg, WithReadiness(MinTopicSize(2))); err != nil {
+		// Receiver creates and subscribes to the topic
+		receiveTopic1, err := receiver1.Join(topicID)
+		if err != nil {
 			t.Fatal(err)
 		}
-	}
 
-	if msg, err := sub2.Next(ctx); err != nil {
-		t.Fatal(err)
-	} else if !bytes.Equal(msg.GetData(), twoMsg) {
-		t.Fatal("received incorrect message")
-	}
+		sub1, err := receiveTopic1.Subscribe()
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		oneMsg := []byte("minimum one")
+		if err := sendTopic.Publish(ctx, oneMsg, WithReadiness(MinTopicSize(1))); err != nil {
+			t.Fatal(err)
+		}
+
+		if msg, err := sub1.Next(ctx); err != nil {
+			t.Fatal(err)
+		} else if !bytes.Equal(msg.GetData(), oneMsg) {
+			t.Fatal("received incorrect message")
+		}
+
+		twoMsg := []byte("minimum two")
+
+		// Attempting to publish with a minimum topic size of two should fail.
+		{
+			ctx, cancel := context.WithTimeout(ctx, time.Second)
+			defer cancel()
+			if err := sendTopic.Publish(ctx, twoMsg, WithReadiness(MinTopicSize(2))); !errors.Is(err, context.DeadlineExceeded) {
+				t.Fatal(err)
+			}
+		}
+
+		// Subscribe the second receiver; the publish should now work.
+		receiveTopic2, err := receiver2.Join(topicID)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		sub2, err := receiveTopic2.Subscribe()
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		{
+			ctx, cancel := context.WithTimeout(ctx, time.Second)
+			defer cancel()
+			if err := sendTopic.Publish(ctx, twoMsg, WithReadiness(MinTopicSize(2))); err != nil {
+				t.Fatal(err)
+			}
+		}
+
+		if msg, err := sub2.Next(ctx); err != nil {
+			t.Fatal(err)
+		} else if !bytes.Equal(msg.GetData(), twoMsg) {
+			t.Fatal("received incorrect message")
+		}
+	})
 }
 
 func TestWithTopicMsgIdFunction(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	synctestTest(t, func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
 
-	const topicA, topicB = "foobarA", "foobarB"
-	const numHosts = 2
+		const topicA, topicB = "foobarA", "foobarB"
+		const numHosts = 2
 
-	hosts := getDefaultHosts(t, numHosts)
-	pubsubs := getPubsubs(ctx, hosts, WithMessageIdFn(func(pmsg *pb.Message) string {
-		hash := sha256.Sum256(pmsg.Data)
-		return string(hash[:])
-	}))
-	connectAll(t, hosts)
+		hosts := getDefaultHosts(t, numHosts)
+		pubsubs := getPubsubs(ctx, hosts, WithMessageIdFn(func(pmsg *pb.Message) string {
+			hash := sha256.Sum256(pmsg.Data)
+			return string(hash[:])
+		}))
+		connectAll(t, hosts)
 
-	topicsA := getTopics(pubsubs, topicA)                                                      // uses global msgIdFn
-	topicsB := getTopics(pubsubs, topicB, WithTopicMessageIdFn(func(pmsg *pb.Message) string { // uses custom
-		hash := sha1.Sum(pmsg.Data)
-		return string(hash[:])
-	}))
+		topicsA := getTopics(pubsubs, topicA)                                                      // uses global msgIdFn
+		topicsB := getTopics(pubsubs, topicB, WithTopicMessageIdFn(func(pmsg *pb.Message) string { // uses custom
+			hash := sha1.Sum(pmsg.Data)
+			return string(hash[:])
+		}))
 
-	payload := []byte("pubsub rocks")
+		payload := []byte("pubsub rocks")
 
-	subA, err := topicsA[0].Subscribe()
-	if err != nil {
-		t.Fatal(err)
-	}
+		subA, err := topicsA[0].Subscribe()
+		if err != nil {
+			t.Fatal(err)
+		}
 
-	err = topicsA[1].Publish(ctx, payload, WithReadiness(MinTopicSize(1)))
-	if err != nil {
-		t.Fatal(err)
-	}
+		err = topicsA[1].Publish(ctx, payload, WithReadiness(MinTopicSize(1)))
+		if err != nil {
+			t.Fatal(err)
+		}
 
-	msgA, err := subA.Next(ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
+		msgA, err := subA.Next(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
 
-	subB, err := topicsB[0].Subscribe()
-	if err != nil {
-		t.Fatal(err)
-	}
+		subB, err := topicsB[0].Subscribe()
+		if err != nil {
+			t.Fatal(err)
+		}
 
-	err = topicsB[1].Publish(ctx, payload, WithReadiness(MinTopicSize(1)))
-	if err != nil {
-		t.Fatal(err)
-	}
+		err = topicsB[1].Publish(ctx, payload, WithReadiness(MinTopicSize(1)))
+		if err != nil {
+			t.Fatal(err)
+		}
 
-	msgB, err := subB.Next(ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
+		msgB, err := subB.Next(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
 
-	if msgA.ID == msgB.ID {
-		t.Fatal("msg ids are equal")
-	}
+		if msgA.ID == msgB.ID {
+			t.Fatal("msg ids are equal")
+		}
+	})
 }
 
 func TestTopicPublishWithKeyInvalidParameters(t *testing.T) {
-	t.Parallel()
+	synctestTest(t, func(t *testing.T) {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
+		const topic = "foobar"
+		const numHosts = 5
 
-	const topic = "foobar"
-	const numHosts = 5
+		virtualPeer := tnet.RandPeerNetParamsOrFatal(t)
+		hosts := getDefaultHosts(t, numHosts)
+		topics := getTopics(getPubsubs(ctx, hosts), topic)
 
-	virtualPeer := tnet.RandPeerNetParamsOrFatal(t)
-	hosts := getDefaultHosts(t, numHosts)
-	topics := getTopics(getPubsubs(ctx, hosts), topic)
-
-	t.Run("nil sign private key should error", func(t *testing.T) {
+		// nil sign private key should error
 		withVirtualKey := WithSecretKeyAndPeerId(nil, virtualPeer.ID)
 		err := topics[0].Publish(ctx, []byte("buff"), withVirtualKey)
 		if err != ErrNilSignKey {
 			t.Fatal("error should have been of type errNilSignKey")
 		}
-	})
-	t.Run("empty peer ID should error", func(t *testing.T) {
-		withVirtualKey := WithSecretKeyAndPeerId(virtualPeer.PrivKey, "")
-		err := topics[0].Publish(ctx, []byte("buff"), withVirtualKey)
+
+		// empty peer ID should error
+		withVirtualKey = WithSecretKeyAndPeerId(virtualPeer.PrivKey, "")
+		err = topics[0].Publish(ctx, []byte("buff"), withVirtualKey)
 		if err != ErrEmptyPeerID {
 			t.Fatal("error should have been of type errEmptyPeerID")
 		}
@@ -952,132 +980,146 @@ func TestTopicPublishWithKeyInvalidParameters(t *testing.T) {
 }
 
 func TestTopicPublishWithContextCanceled(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	synctestTest(t, func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
 
-	const topic = "foobar"
-	const numHosts = 5
+		const topic = "foobar"
+		const numHosts = 5
 
-	hosts := getDefaultHosts(t, numHosts)
-	topics := getTopics(getPubsubs(ctx, hosts), topic)
-	cancel()
+		hosts := getDefaultHosts(t, numHosts)
+		topics := getTopics(getPubsubs(ctx, hosts), topic)
+		cancel()
 
-	err := topics[0].Publish(ctx, []byte("buff"))
-	if err != context.Canceled {
-		t.Fatal("error should have been of type context.Canceled", err)
-	}
+		err := topics[0].Publish(ctx, []byte("buff"))
+		if err != context.Canceled {
+			t.Fatal("error should have been of type context.Canceled", err)
+		}
+	})
 }
 
 func TestTopicRelayPublishWithKey(t *testing.T) {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
+	synctestTest(t, func(t *testing.T) {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
 
-	const topic = "foobar"
-	const numHosts = 5
+		const topic = "foobar"
+		const numHosts = 5
 
-	virtualPeer := tnet.RandPeerNetParamsOrFatal(t)
-	hosts := getDefaultHosts(t, numHosts)
-	topics := getTopics(getPubsubs(ctx, hosts), topic)
+		virtualPeer := tnet.RandPeerNetParamsOrFatal(t)
+		hosts := getDefaultHosts(t, numHosts)
+		// Create PubSubs with a small sleep between each so that each gets a
+		// different time.Now().UnixNano() for its seqno counter. This avoids
+		// message ID collisions when multiple hosts publish with the same
+		// virtual peer ID (From+Seqno must be unique).
+		var psubs []*PubSub
+		for _, h := range hosts {
+			time.Sleep(time.Millisecond)
+			psubs = append(psubs, getPubsub(ctx, h))
+		}
+		topics := getTopics(psubs, topic)
 
-	// [0.Rel] - [1.Rel] - [2.Sub]
-	//             |
-	//           [3.Rel] - [4.Sub]
+		// [0.Rel] - [1.Rel] - [2.Sub]
+		//             |
+		//           [3.Rel] - [4.Sub]
 
-	connect(t, hosts[0], hosts[1])
-	connect(t, hosts[1], hosts[2])
-	connect(t, hosts[1], hosts[3])
-	connect(t, hosts[3], hosts[4])
+		connect(t, hosts[0], hosts[1])
+		connect(t, hosts[1], hosts[2])
+		connect(t, hosts[1], hosts[3])
+		connect(t, hosts[3], hosts[4])
 
-	time.Sleep(time.Millisecond * 100)
+		time.Sleep(time.Second)
 
-	var subs []*Subscription
+		var subs []*Subscription
 
-	for i, topicValue := range topics {
-		if i == 2 || i == 4 {
-			sub, err := topicValue.Subscribe()
-			if err != nil {
-				t.Fatal(err)
-			}
+		for i, topicValue := range topics {
+			if i == 2 || i == 4 {
+				sub, err := topicValue.Subscribe()
+				if err != nil {
+					t.Fatal(err)
+				}
 
-			subs = append(subs, sub)
-		} else {
-			_, err := topicValue.Relay()
-			if err != nil {
-				t.Fatal(err)
+				subs = append(subs, sub)
+			} else {
+				_, err := topicValue.Relay()
+				if err != nil {
+					t.Fatal(err)
+				}
 			}
 		}
-	}
 
-	time.Sleep(time.Millisecond * 100)
+		time.Sleep(time.Second)
 
-	for i := 0; i < 100; i++ {
-		msg := []byte("message")
+		for i := 0; i < 100; i++ {
+			msg := []byte("message")
 
-		owner := rand.Intn(len(topics))
+			owner := rand.Intn(len(topics))
+			withVirtualKey := WithSecretKeyAndPeerId(virtualPeer.PrivKey, virtualPeer.ID)
+			err := topics[owner].Publish(ctx, msg, withVirtualKey)
+			if err != nil {
+				t.Fatal(err)
+			}
 
-		withVirtualKey := WithSecretKeyAndPeerId(virtualPeer.PrivKey, virtualPeer.ID)
-		err := topics[owner].Publish(ctx, msg, withVirtualKey)
+			for _, sub := range subs {
+				received, errSub := sub.Next(ctx)
+				if errSub != nil {
+					t.Fatal(errSub)
+				}
+
+				if !bytes.Equal(msg, received.Data) {
+					t.Fatal("received message is other than expected")
+				}
+				if string(received.From) != string(virtualPeer.ID) {
+					t.Fatal("received message is not from the virtual peer")
+				}
+			}
+		}
+	})
+}
+
+func TestWithLocalPublication(t *testing.T) {
+	synctestTest(t, func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+
+		const topic = "test"
+
+		hosts := getDefaultHosts(t, 2)
+		pubsubs := getPubsubs(ctx, hosts)
+		topics := getTopics(pubsubs, topic)
+		connectAll(t, hosts)
+
+		payload := []byte("pubsub smashes")
+
+		local, err := topics[0].Subscribe()
 		if err != nil {
 			t.Fatal(err)
 		}
 
-		for _, sub := range subs {
-			received, errSub := sub.Next(ctx)
-			if errSub != nil {
-				t.Fatal(errSub)
-			}
-
-			if !bytes.Equal(msg, received.Data) {
-				t.Fatal("received message is other than expected")
-			}
-			if string(received.From) != string(virtualPeer.ID) {
-				t.Fatal("received message is not from the virtual peer")
-			}
+		remote, err := topics[1].Subscribe()
+		if err != nil {
+			t.Fatal(err)
 		}
-	}
-}
 
-func TestWithLocalPublication(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+		err = topics[0].Publish(ctx, payload, WithLocalPublication(true))
+		if err != nil {
+			t.Fatal(err)
+		}
 
-	const topic = "test"
+		remoteCtx, cancel := context.WithTimeout(ctx, time.Millisecond*100)
+		defer cancel()
 
-	hosts := getDefaultHosts(t, 2)
-	pubsubs := getPubsubs(ctx, hosts)
-	topics := getTopics(pubsubs, topic)
-	connectAll(t, hosts)
+		msg, err := remote.Next(remoteCtx)
+		if msg != nil || err == nil {
+			t.Fatal("unexpected msg")
+		}
 
-	payload := []byte("pubsub smashes")
-
-	local, err := topics[0].Subscribe()
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	remote, err := topics[1].Subscribe()
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	err = topics[0].Publish(ctx, payload, WithLocalPublication(true))
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	remoteCtx, cancel := context.WithTimeout(ctx, time.Millisecond*100)
-	defer cancel()
-
-	msg, err := remote.Next(remoteCtx)
-	if msg != nil || err == nil {
-		t.Fatal("unexpected msg")
-	}
-
-	msg, err = local.Next(ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !msg.Local || !bytes.Equal(msg.Data, payload) {
-		t.Fatal("wrong message")
-	}
+		msg, err = local.Next(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !msg.Local || !bytes.Equal(msg.Data, payload) {
+			t.Fatal("wrong message")
+		}
+	})
 }
