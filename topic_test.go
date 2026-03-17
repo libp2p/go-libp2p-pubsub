@@ -1081,4 +1081,3 @@ func TestWithLocalPublication(t *testing.T) {
 		t.Fatal("wrong message")
 	}
 }
-
