@@ -1181,7 +1181,7 @@ func TestWithMessageFilter(t *testing.T) {
 	}
 }
 
-func TestWithSelfMessageFilter(t *testing.T) {
+func TestSelfMessageFilter(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
@@ -1202,7 +1202,10 @@ func TestWithSelfMessageFilter(t *testing.T) {
 	}
 
 	// Subscribe on host 0 with self-published messages filtered out.
-	subNoSelf, err := topic0.Subscribe(WithSelfMessageFilter(hosts[0].ID()))
+	selfID := hosts[0].ID()
+	subNoSelf, err := topic0.Subscribe(WithMessageFilter(func(msg *Message) bool {
+		return msg.ReceivedFrom != selfID
+	}))
 	if err != nil {
 		t.Fatal(err)
 	}

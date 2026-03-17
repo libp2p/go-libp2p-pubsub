@@ -1728,19 +1728,6 @@ func WithMessageFilter(filter func(*Message) bool) SubOpt {
 	}
 }
 
-// WithSelfMessageFilter is a convenience filter that drops messages
-// published by the local node before they enter the subscription channel.
-// This is equivalent to:
-//
-//	WithMessageFilter(func(msg *Message) bool {
-//		return msg.ReceivedFrom != self
-//	})
-func WithSelfMessageFilter(self peer.ID) SubOpt {
-	return WithMessageFilter(func(msg *Message) bool {
-		return msg.ReceivedFrom != self
-	})
-}
-
 type topicReq struct {
 	resp chan []string
 }
