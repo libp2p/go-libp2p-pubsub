@@ -41,11 +41,15 @@ func init() {
 }
 
 func TestBasicSeqnoValidator1(t *testing.T) {
-	testBasicSeqnoValidator(t, time.Minute)
+	synctestTest(t, func(t *testing.T) {
+		testBasicSeqnoValidator(t, time.Minute)
+	})
 }
 
 func TestBasicSeqnoValidator2(t *testing.T) {
-	testBasicSeqnoValidator(t, time.Nanosecond)
+	synctestTest(t, func(t *testing.T) {
+		testBasicSeqnoValidator(t, time.Nanosecond)
+	})
 }
 
 func testBasicSeqnoValidator(t *testing.T, ttl time.Duration) {
@@ -97,55 +101,57 @@ func testBasicSeqnoValidator(t *testing.T, ttl time.Duration) {
 }
 
 func TestBasicSeqnoValidatorReplay(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	synctestTest(t, func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
 
-	hosts := getDefaultHosts(t, 20)
-	psubs := getPubsubsWithOptionC(ctx, hosts[:19],
-		func(i int) Option {
-			return WithDefaultValidator(NewBasicSeqnoValidator(newMockPeerMetadataStore(), slog.Default()))
-		},
-		func(i int) Option {
-			return WithSeenMessagesTTL(time.Nanosecond)
-		},
-	)
-	_ = newReplayActor(t, ctx, hosts[19])
+		hosts := getDefaultHosts(t, 20)
+		psubs := getPubsubsWithOptionC(ctx, hosts[:19],
+			func(i int) Option {
+				return WithDefaultValidator(NewBasicSeqnoValidator(newMockPeerMetadataStore(), slog.Default()))
+			},
+			func(i int) Option {
+				return WithSeenMessagesTTL(time.Nanosecond)
+			},
+		)
+		_ = newReplayActor(t, ctx, hosts[19])
 
-	var msgs []*Subscription
-	for _, ps := range psubs {
-		subch, err := ps.Subscribe("foobar")
-		if err != nil {
-			t.Fatal(err)
+		var msgs []*Subscription
+		for _, ps := range psubs {
+			subch, err := ps.Subscribe("foobar")
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			msgs = append(msgs, subch)
 		}
 
-		msgs = append(msgs, subch)
-	}
+		sparseConnect(t, hosts)
 
-	sparseConnect(t, hosts)
+		time.Sleep(time.Millisecond * 100)
 
-	time.Sleep(time.Millisecond * 100)
+		for i := 0; i < 10; i++ {
+			msg := []byte(fmt.Sprintf("%d the flooooooood %d", i, i))
 
-	for i := 0; i < 10; i++ {
-		msg := []byte(fmt.Sprintf("%d the flooooooood %d", i, i))
+			owner := rng.Intn(len(psubs))
 
-		owner := rng.Intn(len(psubs))
+			psubs[owner].Publish("foobar", msg)
 
-		psubs[owner].Publish("foobar", msg)
+			for _, sub := range msgs {
+				got, err := sub.Next(ctx)
+				if err != nil {
+					t.Fatal(sub.err)
+				}
+				if !bytes.Equal(msg, got.Data) {
+					t.Fatal("got wrong message!")
+				}
+			}
+		}
 
 		for _, sub := range msgs {
-			got, err := sub.Next(ctx)
-			if err != nil {
-				t.Fatal(sub.err)
-			}
-			if !bytes.Equal(msg, got.Data) {
-				t.Fatal("got wrong message!")
-			}
+			assertNeverReceives(t, sub, time.Second)
 		}
-	}
-
-	for _, sub := range msgs {
-		assertNeverReceives(t, sub, time.Second)
-	}
+	})
 }
 
 type mockPeerMetadataStore struct {
