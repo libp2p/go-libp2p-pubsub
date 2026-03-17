@@ -1,4 +1,4 @@
-name: Go Test
+name: Go Tests
 
 on:
   pull_request:
@@ -10,12 +10,34 @@ on:
 permissions:
   contents: read
 
-concurrency:
-  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.event_name == 'push' && github.sha || github.ref }}
-  cancel-in-progress: true
-
 jobs:
-  go-test:
-    uses: ipdxco/unified-github-workflows/.github/workflows/go-test.yml@v1.0
-    secrets:
-      CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        go:
+          - { go-version: stable }
+          - { go-version: oldstable }
+          - { go-version-file: go.mod }
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@v6
+        with:
+          go-version: ${{ matrix.go.go-version }}
+          go-version-file: ${{ matrix.go.go-version-file }}
+      - run: go test ./...
+  test-race:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@v6
+        with:
+          go-version: stable
+      - run: go test -race ./...
