@@ -1289,6 +1289,9 @@ func (p *PubSub) notifySubs(msg *Message) {
 	topic := msg.GetTopic()
 	subs := p.mySubs[topic]
 	for f := range subs {
+		if f.filter != nil && !f.filter(msg) {
+			continue
+		}
 		select {
 		case f.ch <- msg:
 		default:
@@ -1709,6 +1712,18 @@ func (p *PubSub) Subscribe(topic string, opts ...SubOpt) (*Subscription, error) 
 func WithBufferSize(size int) SubOpt {
 	return func(sub *Subscription) error {
 		sub.ch = make(chan *Message, size)
+		return nil
+	}
+}
+
+// WithMessageFilter sets a filter function for the subscription.
+// Messages for which the filter function returns false are dropped
+// before entering the subscription's channel buffer.
+// This filtering happens in notifySubs, so filtered messages never
+// consume buffer capacity.
+func WithMessageFilter(filter func(*Message) bool) SubOpt {
+	return func(sub *Subscription) error {
+		sub.filter = filter
 		return nil
 	}
 }
