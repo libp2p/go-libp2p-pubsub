@@ -192,69 +192,73 @@ func (ts *traceStats) check(t *testing.T) {
 }
 
 func TestJSONTracer(t *testing.T) {
-	tracer, err := NewJSONTracer("/tmp/trace.out.json")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	testWithTracer(t, tracer)
-	time.Sleep(time.Second)
-	tracer.Close()
-
-	var stats traceStats
-	var evt pb.TraceEvent
-
-	f, err := os.Open("/tmp/trace.out.json")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer f.Close()
-
-	dec := json.NewDecoder(f)
-	for {
-		evt.Reset()
-		err := dec.Decode(&evt)
+	synctestTest(t, func(t *testing.T) {
+		tracer, err := NewJSONTracer("/tmp/trace.out.json")
 		if err != nil {
-			break
+			t.Fatal(err)
 		}
 
-		stats.process(&evt)
-	}
+		testWithTracer(t, tracer)
+		time.Sleep(time.Second)
+		tracer.Close()
 
-	stats.check(t)
+		var stats traceStats
+		var evt pb.TraceEvent
+
+		f, err := os.Open("/tmp/trace.out.json")
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer f.Close()
+
+		dec := json.NewDecoder(f)
+		for {
+			evt.Reset()
+			err := dec.Decode(&evt)
+			if err != nil {
+				break
+			}
+
+			stats.process(&evt)
+		}
+
+		stats.check(t)
+	})
 }
 
 func TestPBTracer(t *testing.T) {
-	tracer, err := NewPBTracer("/tmp/trace.out.pb")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	testWithTracer(t, tracer)
-	time.Sleep(time.Second)
-	tracer.Close()
-
-	var stats traceStats
-	var evt pb.TraceEvent
-
-	f, err := os.Open("/tmp/trace.out.pb")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer f.Close()
-
-	r := protoio.NewDelimitedReader(f, 1<<20)
-	for {
-		evt.Reset()
-		err := r.ReadMsg(&evt)
+	synctestTest(t, func(t *testing.T) {
+		tracer, err := NewPBTracer("/tmp/trace.out.pb")
 		if err != nil {
-			break
+			t.Fatal(err)
 		}
 
-		stats.process(&evt)
-	}
+		testWithTracer(t, tracer)
+		time.Sleep(time.Second)
+		tracer.Close()
 
-	stats.check(t)
+		var stats traceStats
+		var evt pb.TraceEvent
+
+		f, err := os.Open("/tmp/trace.out.pb")
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer f.Close()
+
+		r := protoio.NewDelimitedReader(f, 1<<20)
+		for {
+			evt.Reset()
+			err := r.ReadMsg(&evt)
+			if err != nil {
+				break
+			}
+
+			stats.process(&evt)
+		}
+
+		stats.check(t)
+	})
 }
 
 type mockRemoteTracer struct {
@@ -298,24 +302,28 @@ func (mrt *mockRemoteTracer) check(t *testing.T) {
 }
 
 func TestRemoteTracer(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	synctestTest(t, func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
 
-	hosts := getDefaultHosts(t, 2)
-	h1 := hosts[0]
-	h2 := hosts[1]
+		hosts := getDefaultHosts(t, 2)
+		h1 := hosts[0]
+		h2 := hosts[1]
 
-	mrt := &mockRemoteTracer{}
-	h1.SetStreamHandler(RemoteTracerProtoID, mrt.handleStream)
+		mrt := &mockRemoteTracer{}
+		h1.SetStreamHandler(RemoteTracerProtoID, mrt.handleStream)
 
-	tracer, err := NewRemoteTracer(ctx, h2, peer.AddrInfo{ID: h1.ID(), Addrs: h1.Addrs()}, slog.Default())
-	if err != nil {
-		t.Fatal(err)
-	}
+		tracer, err := NewRemoteTracer(ctx, h2, peer.AddrInfo{ID: h1.ID(), Addrs: h1.Addrs()}, slog.Default())
+		if err != nil {
+			t.Fatal(err)
+		}
 
-	testWithTracer(t, tracer)
-	time.Sleep(time.Second)
-	tracer.Close()
+		testWithTracer(t, tracer)
+		time.Sleep(time.Second)
+		tracer.Close()
+		// Allow the doWrite goroutine to complete its sleep loop and exit
+		time.Sleep(2 * time.Second)
 
-	mrt.check(t)
+		mrt.check(t)
+	})
 }
