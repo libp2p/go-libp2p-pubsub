@@ -1081,3 +1081,192 @@ func TestWithLocalPublication(t *testing.T) {
 		t.Fatal("wrong message")
 	}
 }
+
+func TestWithMessageFilter(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	const numHosts = 3
+	topicID := "msg-filter-test"
+	hosts := getDefaultHosts(t, numHosts)
+
+	psubs := getPubsubs(ctx, hosts)
+	connectAll(t, hosts)
+
+	topic0, err := psubs[0].Join(topicID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	topic1, err := psubs[1].Join(topicID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	topic2, err := psubs[2].Join(topicID)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Subscribe on host 0 with a filter that only accepts messages from host 1.
+	host1ID := hosts[1].ID()
+	subFiltered, err := topic0.Subscribe(WithMessageFilter(func(msg *Message) bool {
+		return msg.ReceivedFrom == host1ID
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Subscribe on host 0 with no filter (receives everything).
+	subAll, err := topic0.Subscribe()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Subscribe on remaining hosts so the mesh forms.
+	_, err = topic1.Subscribe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = topic2.Subscribe()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Wait for mesh to form.
+	time.Sleep(time.Second)
+
+	// Publish from host 1 — filtered subscription should receive it.
+	msg1 := []byte("from host 1")
+	if err := topic1.Publish(ctx, msg1); err != nil {
+		t.Fatal(err)
+	}
+
+	m, err := subFiltered.Next(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(m.Data, msg1) {
+		t.Fatal("expected to receive message from host 1 on filtered subscription")
+	}
+
+	// Also arrives on unfiltered subscription.
+	m, err = subAll.Next(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(m.Data, msg1) {
+		t.Fatal("expected to receive message from host 1 on unfiltered subscription")
+	}
+
+	// Publish from host 2 — filtered subscription should NOT receive it.
+	msg2 := []byte("from host 2")
+	if err := topic2.Publish(ctx, msg2); err != nil {
+		t.Fatal(err)
+	}
+
+	// Unfiltered subscription gets it.
+	m, err = subAll.Next(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(m.Data, msg2) {
+		t.Fatal("expected to receive message from host 2 on unfiltered subscription")
+	}
+
+	// Filtered subscription should timeout — message from host 2 was dropped.
+	noMsgCtx, noMsgCancel := context.WithTimeout(ctx, time.Second)
+	defer noMsgCancel()
+	_, err = subFiltered.Next(noMsgCtx)
+	if err == nil {
+		t.Fatal("expected no message from host 2 on filtered subscription, but got one")
+	}
+}
+
+func TestSelfMessageFilter(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	const numHosts = 2
+	topicID := "self-filter-test"
+	hosts := getDefaultHosts(t, numHosts)
+
+	psubs := getPubsubs(ctx, hosts)
+	connectAll(t, hosts)
+
+	topic0, err := psubs[0].Join(topicID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	topic1, err := psubs[1].Join(topicID)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Subscribe on host 0 with self-published messages filtered out.
+	selfID := hosts[0].ID()
+	subNoSelf, err := topic0.Subscribe(WithMessageFilter(func(msg *Message) bool {
+		return msg.ReceivedFrom != selfID
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Subscribe on host 0 with default behavior (receives all messages).
+	subWithSelf, err := topic0.Subscribe()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Subscribe on host 1 to receive messages from host 0.
+	subRemote, err := topic1.Subscribe()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Wait for mesh to form.
+	time.Sleep(time.Second)
+
+	msg := []byte("hello from host 0")
+	if err := topic0.Publish(ctx, msg); err != nil {
+		t.Fatal(err)
+	}
+
+	// The default subscription on host 0 should receive the message.
+	m, err := subWithSelf.Next(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(m.Data, msg) {
+		t.Fatal("expected to receive own message on default subscription")
+	}
+
+	// The remote subscription on host 1 should receive the message.
+	m, err = subRemote.Next(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(m.Data, msg) {
+		t.Fatal("expected to receive message on remote subscription")
+	}
+
+	// The filtered subscription should NOT receive the self-published message.
+	noMsgCtx, noMsgCancel := context.WithTimeout(ctx, time.Second)
+	defer noMsgCancel()
+	_, err = subNoSelf.Next(noMsgCtx)
+	if err == nil {
+		t.Fatal("expected no message on self-filtered subscription, but got one")
+	}
+
+	// Publish from host 1 — the filtered subscription should still receive remote messages.
+	remoteMsg := []byte("hello from host 1")
+	if err := topic1.Publish(ctx, remoteMsg); err != nil {
+		t.Fatal(err)
+	}
+
+	m, err = subNoSelf.Next(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(m.Data, remoteMsg) {
+		t.Fatal("expected to receive remote message on filtered subscription")
+	}
+}

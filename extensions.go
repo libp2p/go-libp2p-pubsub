@@ -103,7 +103,7 @@ func newExtensionsState(myExtensions PeerExtensions, reportMisbehavior func(peer
 	}
 }
 
-func (es *extensionsState) HandleRPC(rpc *RPC) {
+func (es *extensionsState) HandleRPC(rpc *RPC) error {
 	if _, ok := es.peerExtensions[rpc.from]; !ok {
 		// We know this is the first message because we didn't have extensions
 		// for this peer, and we always set extensions on the first rpc.
@@ -122,7 +122,7 @@ func (es *extensionsState) HandleRPC(rpc *RPC) {
 		}
 	}
 
-	es.extensionsHandleRPC(rpc)
+	return es.extensionsHandleRPC(rpc)
 }
 
 func (es *extensionsState) AddPeer(id peer.ID, helloPacket *RPC) *RPC {
@@ -170,14 +170,19 @@ func (es *extensionsState) extensionsRemovePeer(id peer.ID) {
 	}
 }
 
-func (es *extensionsState) extensionsHandleRPC(rpc *RPC) {
+func (es *extensionsState) extensionsHandleRPC(rpc *RPC) error {
 	if es.myExtensions.TestExtension && es.peerExtensions[rpc.from].TestExtension {
 		es.testExtension.HandleRPC(rpc.from, rpc.TestExtension)
 	}
 
 	if es.myExtensions.PartialMessages && es.peerExtensions[rpc.from].PartialMessages && rpc.Partial != nil {
-		es.partialMessagesExtension.HandleRPC(rpc.from, rpc.Partial)
+		err := es.partialMessagesExtension.HandleRPC(rpc.from, rpc.Partial)
+		if err != nil {
+			return err
+		}
 	}
+
+	return nil
 }
 
 func (es *extensionsState) Heartbeat() {
@@ -246,9 +251,13 @@ type partialMessageRouter struct {
 	gs *GossipSubRouter
 }
 
-// PeerRequestsPartial implements partialmessages.Router.
+// PeerRequestsPartial returns true if a peer requested partial messages on this topic.
+//
+// It does not check if we support partial messages on the topic, because we may
+// not be subscribed to that topic and thus not have that information.
+// Callers should not use this if they don't support partial messages on this topic.
 func (r partialMessageRouter) PeerRequestsPartial(peer peer.ID, topic string) bool {
-	return r.gs.iSupportSendingPartial(topic) && r.gs.peerRequestsPartial(peer, topic)
+	return r.gs.peerRequestsPartial(peer, topic)
 }
 
 // MeshPeers implements partialmessages.Router.

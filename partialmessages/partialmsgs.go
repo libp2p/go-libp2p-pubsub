@@ -4,7 +4,6 @@ import (
 	"errors"
 	"iter"
 	"log/slog"
-	"maps"
 
 	pb "github.com/libp2p/go-libp2p-pubsub/pb"
 	"github.com/libp2p/go-libp2p/core/peer"
@@ -64,10 +63,13 @@ func (s *partialMessageStatePerGroupPerTopic[P]) remotePeerInitiated() bool {
 type PartialMessagesExtension[PeerState any] struct {
 	Logger *slog.Logger
 
-	// GossipActions is called when gossiping to peers on the given topic and
-	// groupID. It should return a PublishActionsFn to be used for sending
+	// OnEmitGossip is called when the application should send gossip to the given
+	// peers. The application SHOULD call PublishPartial to send partial
 	// messages to these peers.
-	GossipActions func(topic string, groupID []byte) PublishActionsFn[PeerState]
+	//
+	// The Application may persist some state in the peerStates map. The peers
+	// to gossip to will have a zero-value PeerState in the map.
+	OnEmitGossip func(topic string, groupID []byte, gossipPeers []peer.ID, peerStates map[peer.ID]PeerState)
 
 	// OnIncomingRPC is called whenever we receive an encoded
 	// partial message from a peer. This function MUST be fast and non-blocking.
@@ -106,12 +108,6 @@ type PartialMessagesExtension[PeerState any] struct {
 	peerInitiatedGroupCounter map[string]*peerInitiatedGroupCounterState
 
 	router Router
-}
-
-type PublishOptions struct {
-	// PublishToPeers limits the publishing to only the specified peers.
-	// If nil, will use the topic's mesh peers.
-	PublishToPeers []peer.ID
 }
 
 type Router interface {
@@ -158,8 +154,8 @@ func (e *PartialMessagesExtension[PeerState]) Init(router Router) error {
 	if e.OnIncomingRPC == nil {
 		return errors.New("field OnIncomingRPC must be set")
 	}
-	if e.GossipActions == nil {
-		return errors.New("field GossipActions must be set")
+	if e.OnEmitGossip == nil {
+		return errors.New("field OnEmitGossip must be set")
 	}
 
 	if e.PeerInitiatedGroupLimitPerTopic == 0 {
@@ -284,30 +280,17 @@ func (e *PartialMessagesExtension[PeerState]) EmitGossip(topic string, peers []p
 		if gState.remotePeerInitiated() {
 			continue
 		}
-		var newGossipPeerCount int
+		untrackedPeers := make([]peer.ID, 0, len(peers))
 		for _, p := range peers {
-			if _, ok := gState.peerState[p]; !ok {
-				newGossipPeerCount++
+			_, ok := gState.peerState[p]
+			if !ok {
+				var newState PeerState
+				gState.peerState[p] = newState
+				untrackedPeers = append(untrackedPeers, p)
 			}
 		}
-		if newGossipPeerCount > 0 {
-			// We only emit gossip for peers not already in our group state.
-			// Peers in the group state are handled the same as mesh peers.
-			peerStates := make(map[peer.ID]PeerState, newGossipPeerCount)
-			for _, p := range peers {
-				var newState PeerState
-				peerStates[p] = newState
-			}
-			publishActions := e.GossipActions(topic, []byte(group))(
-				peerStates,
-				func(p peer.ID) bool {
-					return e.router.PeerRequestsPartial(p, topic)
-				})
-			maps.Copy(gState.peerState, peerStates)
-			err := e.publish(topic, []byte(group), publishActions)
-			if err != nil {
-				e.Logger.Error("Failed to publish gossip message", "topic", topic, "group", group, "error", err)
-			}
+		if len(untrackedPeers) > 0 {
+			e.OnEmitGossip(topic, []byte(group), untrackedPeers, gState.peerState)
 		}
 	}
 }

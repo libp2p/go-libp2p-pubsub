@@ -1100,8 +1100,12 @@ func (p *PubSub) handleRemoveSubscription(sub *Subscription) {
 		// stop announcing only if there are no more subs and relays
 		if p.myRelays[sub.topic] == 0 {
 			p.disc.StopAdvertise(sub.topic)
-			p.announce(sub.topic, false)
-			p.rt.Leave(sub.topic)
+			// skip mesh unsubscription for fanout-only topics since we never joined
+			topic := p.myTopics[sub.topic]
+			if topic == nil || !topic.fanoutOnly {
+				p.announce(sub.topic, false)
+				p.rt.Leave(sub.topic)
+			}
 		}
 	}
 }
@@ -1117,8 +1121,13 @@ func (p *PubSub) handleAddSubscription(req *addSubReq) {
 	// announce we want this topic if neither subs nor relays exist so far
 	if len(subs) == 0 && p.myRelays[sub.topic] == 0 {
 		p.disc.Advertise(sub.topic)
-		p.announce(sub.topic, true)
-		p.rt.Join(sub.topic)
+		// skip mesh subscription for fanout-only topics;
+		// discovery/advertising is still needed to find peers for fanout publishing
+		topic := p.myTopics[sub.topic]
+		if topic == nil || !topic.fanoutOnly {
+			p.announce(sub.topic, true)
+			p.rt.Join(sub.topic)
+		}
 	}
 
 	// make new if not there
@@ -1280,6 +1289,9 @@ func (p *PubSub) notifySubs(msg *Message) {
 	topic := msg.GetTopic()
 	subs := p.mySubs[topic]
 	for f := range subs {
+		if f.filter != nil && !f.filter(msg) {
+			continue
+		}
 		select {
 		case f.ch <- msg:
 		default:
@@ -1598,6 +1610,17 @@ func SupportsPartialMessages() TopicOpt {
 
 type TopicOpt func(t *Topic) error
 
+// FanoutOnly enforces fanout-only mode for the topic. In this mode, the node can publish
+// messages to the topic but will never subscribe to the p2p mesh, even if Topic.Subscribe
+// is called. Subscribers will only receive locally published messages via Topic.Publish.
+// Calling Topic.Relay on a fanout-only topic will return ErrFanoutOnlyTopic.
+func FanoutOnly() TopicOpt {
+	return func(t *Topic) error {
+		t.fanoutOnly = true
+		return nil
+	}
+}
+
 // WithTopicMessageIdFn sets custom MsgIdFunction for a Topic, enabling topics to have own msg id generation rules.
 func WithTopicMessageIdFn(msgId MsgIdFunction) TopicOpt {
 	return func(t *Topic) error {
@@ -1689,6 +1712,18 @@ func (p *PubSub) Subscribe(topic string, opts ...SubOpt) (*Subscription, error) 
 func WithBufferSize(size int) SubOpt {
 	return func(sub *Subscription) error {
 		sub.ch = make(chan *Message, size)
+		return nil
+	}
+}
+
+// WithMessageFilter sets a filter function for the subscription.
+// Messages for which the filter function returns false are dropped
+// before entering the subscription's channel buffer.
+// This filtering happens in notifySubs, so filtered messages never
+// consume buffer capacity.
+func WithMessageFilter(filter func(*Message) bool) SubOpt {
+	return func(sub *Subscription) error {
+		sub.filter = filter
 		return nil
 	}
 }

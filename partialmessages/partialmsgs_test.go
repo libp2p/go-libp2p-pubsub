@@ -241,10 +241,6 @@ func (pm *testPartialMessage) shouldRequest(partsMetadata []byte) bool {
 	return iWant.Cmp(&zero) != 0
 }
 
-func noOpPublishActions(peerStates map[peer.ID]peerState, peerRequestsPartial func(peer.ID) bool) iter.Seq2[peer.ID, PublishAction] {
-	return func(yield func(peer.ID, PublishAction) bool) {}
-}
-
 func (pm *testPartialMessage) publishActions(peerStates map[peer.ID]peerState, peerRequestsPartial func(peer.ID) bool) iter.Seq2[peer.ID, PublishAction] {
 	myPartsMeta := pm.PartsMetadata()
 	return func(yield func(peer.ID, PublishAction) bool) {
@@ -386,12 +382,12 @@ func createPeers(t *testing.T, topic string, n int, nonMesh bool) *testPeers {
 		// Create handler
 		handler = &PartialMessagesExtension[peerState]{
 			Logger: slog.Default().With("id", i),
-			GossipActions: func(topic string, groupID []byte) PublishActionsFn[peerState] {
+			OnEmitGossip: func(topic string, groupID []byte, gossipPeers []peer.ID, peerStates map[peer.ID]peerState) {
 				pm := testPeers.partialMessages[currentPeer][topic][string(groupID)]
 				if pm == nil {
-					return noOpPublishActions
+					return
 				}
-				return pm.publishActions
+				handler.PublishPartial(topic, groupID, pm.publishActions)
 			},
 			OnIncomingRPC: func(from peer.ID, peerStates map[peer.ID]peerState, rpc *pubsub_pb.PartialMessagesExtension) error {
 				// Handle incoming partial message data - use testPeers to track state
@@ -1081,22 +1077,20 @@ func TestGossipDelivery(t *testing.T) {
 		}
 	}
 
-	gossipForPeer := func(selfID peer.ID) func(topic string, groupID []byte) PublishActionsFn[peerState] {
-		return func(topic string, groupID []byte) PublishActionsFn[peerState] {
+	gossipForPeer := func(selfID peer.ID, selfHandler **PartialMessagesExtension[peerState]) func(topic string, groupID []byte, gossipPeers []peer.ID, peerStates map[peer.ID]peerState) {
+		return func(topic string, groupID []byte, gossipPeers []peer.ID, peerStates map[peer.ID]peerState) {
 			pm := partialMessages[selfID][topic][string(groupID)]
 			if pm == nil {
-				return func(peerStates map[peer.ID]peerState, peerRequestsPartial func(peer.ID) bool) iter.Seq2[peer.ID, PublishAction] {
-					return func(yield func(peer.ID, PublishAction) bool) {}
-				}
+				return
 			}
-			return pm.publishActions
+			(*selfHandler).PublishPartial(topic, groupID, pm.publishActions)
 		}
 	}
 
 	// Create h1 handler
 	h1Handler = &PartialMessagesExtension[peerState]{
 		Logger:             slog.Default().With("id", "h1"),
-		GossipActions:      gossipForPeer(h1ID),
+		OnEmitGossip:       gossipForPeer(h1ID, &h1Handler),
 		OnIncomingRPC:      gossipOnIncomingRPC(h1ID, &h1Handler),
 		GroupTTLByHeatbeat: 5,
 	}
@@ -1105,7 +1099,7 @@ func TestGossipDelivery(t *testing.T) {
 	// Create h2 handler
 	h2Handler = &PartialMessagesExtension[peerState]{
 		Logger:             slog.Default().With("id", "h2"),
-		GossipActions:      gossipForPeer(h2ID),
+		OnEmitGossip:       gossipForPeer(h2ID, &h2Handler),
 		OnIncomingRPC:      gossipOnIncomingRPC(h2ID, &h2Handler),
 		GroupTTLByHeatbeat: 5,
 	}
@@ -1192,8 +1186,7 @@ func TestPeerInitiatedCounter(t *testing.T) {
 	}
 	handler := PartialMessagesExtension[peerState]{
 		Logger: slog.Default(),
-		GossipActions: func(topic string, groupID []byte) PublishActionsFn[peerState] {
-			return noOpPublishActions
+		OnEmitGossip: func(topic string, groupID []byte, gossipPeers []peer.ID, peerStates map[peer.ID]peerState) {
 		},
 		OnIncomingRPC: func(from peer.ID, peerStates map[peer.ID]peerState, rpc *pubsub_pb.PartialMessagesExtension) error {
 			if rpc.PartsMetadata != nil {
@@ -1321,8 +1314,7 @@ func FuzzPeerInitiatedCounter(f *testing.F) {
 
 		handler := PartialMessagesExtension[peerState]{
 			Logger: slog.Default(),
-			GossipActions: func(topic string, groupID []byte) PublishActionsFn[peerState] {
-				return noOpPublishActions
+			OnEmitGossip: func(topic string, groupID []byte, gossipPeers []peer.ID, peerStates map[peer.ID]peerState) {
 			},
 			OnIncomingRPC: func(from peer.ID, peerStates map[peer.ID]peerState, rpc *pubsub_pb.PartialMessagesExtension) error {
 				if rpc.PartsMetadata != nil {
