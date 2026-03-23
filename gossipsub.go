@@ -1622,13 +1622,32 @@ func (gs *GossipSubRouter) heartbeatTimer() {
 	}
 }
 
+type debugTiming struct {
+	name     string
+	duration time.Duration
+}
+
+func trackTime(timings *[]debugTiming, name string) func() {
+	start := time.Now()
+	return func() {
+		*timings = append(*timings, debugTiming{name, time.Since(start)})
+	}
+}
+
 func (gs *GossipSubRouter) heartbeat() {
 	start := time.Now()
+	timings := make([]debugTiming, 0, 16)
+	var scoreLatencyCost time.Duration
 	defer func() {
 		if gs.params.SlowHeartbeatWarning > 0 {
 			slowWarning := time.Duration(gs.params.SlowHeartbeatWarning * float64(gs.params.HeartbeatInterval))
 			if dt := time.Since(start); dt > slowWarning {
-				gs.logger.Warn("slow heartbeat", "took", dt)
+				gs.logger.Warn("slow heartbeat", "took", dt, "scoreLatency (included in phase timings)", scoreLatencyCost)
+				for _, timing := range timings {
+					if timing.duration > time.Millisecond {
+						gs.logger.Info("slow heartbeat phase", "phase", timing.name, "duration", timing.duration)
+					}
+				}
 			}
 		}
 	}()
@@ -1640,25 +1659,33 @@ func (gs *GossipSubRouter) heartbeat() {
 	noPX := make(map[peer.ID]bool)
 
 	// clean up expired backoffs
+	done := trackTime(&timings, "heartbeat cleanup")
 	gs.clearBackoff()
-
 	// clean up iasked counters
 	gs.clearIHaveCounters()
-
 	// clean up IDONTWANT counters
 	gs.clearIDontWantCounters()
+	done()
 
 	// apply IWANT request penalties
+	done = trackTime(&timings, "iwant penalties")
 	gs.applyIwantPenalties()
+	done()
 
 	// ensure direct peers are connected
+	done = trackTime(&timings, "direct connect")
 	gs.directConnect()
+	done()
 
 	// cache scores throughout the heartbeat
 	scores := make(map[peer.ID]float64)
 	score := func(p peer.ID) float64 {
 		s, ok := scores[p]
 		if !ok {
+			scoreStart := time.Now()
+			defer func() {
+				scoreLatencyCost += time.Since(scoreStart)
+			}()
 			s = gs.score.Score(p)
 			scores[p] = s
 		}
@@ -1666,6 +1693,7 @@ func (gs *GossipSubRouter) heartbeat() {
 	}
 
 	// maintain the mesh for topics we have joined
+	done = trackTime(&timings, "maintain mesh")
 	for topic, peers := range gs.mesh {
 		prunePeer := func(p peer.ID) {
 			gs.tracer.Prune(p, topic)
@@ -1838,8 +1866,10 @@ func (gs *GossipSubRouter) heartbeat() {
 		// messages to them, so its redundant to gossip IHAVEs.
 		gs.emitGossip(topic, peers)
 	}
+	done()
 
 	// expire fanout for topics we haven't published to in a while
+	done = trackTime(&timings, "expire fanout")
 	now := time.Now().UnixNano()
 	for topic, lastpub := range gs.lastpub {
 		if lastpub+int64(gs.params.FanoutTTL) < now {
@@ -1847,8 +1877,10 @@ func (gs *GossipSubRouter) heartbeat() {
 			delete(gs.lastpub, topic)
 		}
 	}
+	done()
 
 	// maintain our fanout for topics we are publishing but we have not joined
+	done = trackTime(&timings, "maintain fanout")
 	for topic, peers := range gs.fanout {
 		// check whether our peers are still in the topic and have a score above the publish threshold
 		for p := range peers {
@@ -1877,17 +1909,26 @@ func (gs *GossipSubRouter) heartbeat() {
 		// messages to them, so its redundant to gossip IHAVEs.
 		gs.emitGossip(topic, peers)
 	}
+	done()
 
 	// send coalesced GRAFT/PRUNE messages (will piggyback gossip)
+	done = trackTime(&timings, "send graft/prune")
 	gs.sendGraftPrune(tograft, toprune, noPX)
+	done()
 
 	// flush all pending gossip that wasn't piggybacked above
+	done = trackTime(&timings, "flush gossip")
 	gs.flush()
+	done()
 
 	// advance the message history window
+	done = trackTime(&timings, "advance message cache")
 	gs.mcache.Shift()
+	done()
 
+	done = trackTime(&timings, "heartbeat extensions")
 	gs.extensions.Heartbeat()
+	done()
 }
 
 func (gs *GossipSubRouter) clearIHaveCounters() {
