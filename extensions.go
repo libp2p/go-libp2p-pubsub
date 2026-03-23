@@ -85,14 +85,14 @@ type extensionsState struct {
 	myExtensions      PeerExtensions
 	peerExtensions    map[peer.ID]PeerExtensions // peer's extensions
 	sentExtensions    map[peer.ID]struct{}
-	reportMisbehavior func(peer.ID)
+	reportMisbehavior func(reason string, p peer.ID)
 	sendRPC           func(p peer.ID, r *RPC, urgent bool)
 	testExtension     *testExtension
 
 	partialMessagesExtension partialMessageInterface
 }
 
-func newExtensionsState(myExtensions PeerExtensions, reportMisbehavior func(peer.ID), sendRPC func(peer.ID, *RPC, bool)) *extensionsState {
+func newExtensionsState(myExtensions PeerExtensions, reportMisbehavior func(reason string, p peer.ID), sendRPC func(peer.ID, *RPC, bool)) *extensionsState {
 	return &extensionsState{
 		myExtensions:      myExtensions,
 		peerExtensions:    make(map[peer.ID]PeerExtensions),
@@ -118,7 +118,7 @@ func (es *extensionsState) HandleRPC(rpc *RPC) error {
 		// extensions control message, that is a protocol error. We should
 		// down score them because they are misbehaving.
 		if hasPeerExtensions(rpc) {
-			es.reportMisbehavior(rpc.from)
+			es.reportMisbehavior("unexpected duplicate extensions control message", rpc.from)
 		}
 	}
 

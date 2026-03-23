@@ -315,7 +315,10 @@ func DefaultGossipSubRouter(h host.Host) *GossipSubRouter {
 		reducePXRecords: defaultPXRecordReducer,
 	}
 
-	rt.extensions = newExtensionsState(PeerExtensions{}, func(p peer.ID) {
+	rt.extensions = newExtensionsState(PeerExtensions{}, func(reason string, p peer.ID) {
+		if rt.logger != nil {
+			rt.logger.Debug("penalizing peer", "reason", reason, "peer", p)
+		}
 		if rt.score != nil {
 			rt.score.AddPenalty(p, 10)
 		}
