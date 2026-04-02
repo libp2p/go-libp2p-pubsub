@@ -899,8 +899,13 @@ func (gs *GossipSubRouter) Preprocess(from peer.ID, msgs []*Message) {
 
 func (gs *GossipSubRouter) HandleRPC(rpc *RPC) {
 	err := gs.extensions.HandleRPC(rpc)
+	peerProto, ok := gs.peers[rpc.from]
 	if err != nil {
+	if !ok {
 		gs.logger.Warn("error in handling RPC", "from", rpc.from, "err", err)
+		// Happens if the peer is no longer connected but we are processing a stale RPC
+		return
+	}
 	}
 
 	ctl := rpc.GetControl()
