@@ -1369,20 +1369,7 @@ func (gs *GossipSubRouter) rpcs(msg *Message) iter.Seq2[peer.ID, *RPC] {
 			gmap, ok := gs.mesh[topic]
 			if !ok {
 				// we are not in the mesh for topic, use fanout peers
-				gmap, ok = gs.fanout[topic]
-				if !ok || len(gmap) == 0 {
-					// we don't have any, pick some with score above the publish threshold
-					peers := gs.getPeers(topic, gs.params.D, func(p peer.ID) bool {
-						_, direct := gs.direct[p]
-						return !direct && gs.score.Score(p) >= gs.publishThreshold
-					})
-
-					if len(peers) > 0 {
-						gmap = peerListToMap(peers)
-						gs.fanout[topic] = gmap
-					}
-				}
-				gs.lastpub[topic] = time.Now().UnixNano()
+				gmap = gs.getFanoutPeersForPublishing(topic)
 			}
 
 			csum := computeChecksum(gs.p.idGen.ID(msg))
@@ -2198,6 +2185,24 @@ func (gs *GossipSubRouter) makePrune(p peer.ID, topic string, doPX bool, isUnsub
 	}
 
 	return &pb.ControlPrune{TopicID: &topic, Peers: px, Backoff: &backoff}
+}
+
+// getFanoutPeersForPublishing returns fanout peers for a topic, initializing them if needed,
+// and updates lastpub to keep the fanout alive.
+func (gs *GossipSubRouter) getFanoutPeersForPublishing(topic string) map[peer.ID]struct{} {
+	peers := gs.fanout[topic]
+	if len(peers) == 0 {
+		peerSlice := gs.getPeers(topic, gs.params.D, func(p peer.ID) bool {
+			_, direct := gs.direct[p]
+			return !direct && gs.score.Score(p) >= gs.publishThreshold
+		})
+		if len(peerSlice) > 0 {
+			peers = peerListToMap(peerSlice)
+			gs.fanout[topic] = peers
+		}
+	}
+	gs.lastpub[topic] = time.Now().UnixNano()
+	return peers
 }
 
 func (gs *GossipSubRouter) getPeers(topic string, count int, filter func(peer.ID) bool) []peer.ID {
