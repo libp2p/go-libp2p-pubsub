@@ -750,6 +750,14 @@ func (gs *GossipSubRouter) manageAddrBook() {
 	}
 }
 
+func (gs *GossipSubRouter) OnNewIncomingStream(peer.ID, protocol.ID) {}
+
+func (gs *GossipSubRouter) OnClosedIncomingStream(pid peer.ID, proto protocol.ID) {
+	if gs.feature(GossipSubFeatureExtensions, proto) {
+		gs.extensions.OnClosedIncomingStream(pid, proto)
+	}
+}
+
 func (gs *GossipSubRouter) AddPeer(p peer.ID, proto protocol.ID, helloPacket *RPC) *RPC {
 	gs.logger.Debug("PEERUP: Add new peer using protocol", "peer", p, "protocol", proto)
 	gs.tracer.AddPeer(p, proto)

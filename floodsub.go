@@ -41,6 +41,9 @@ func (fs *FloodSubRouter) Attach(p *PubSub) {
 	fs.tracer = p.tracer
 }
 
+func (fs *FloodSubRouter) OnNewIncomingStream(peer.ID, protocol.ID)    {}
+func (fs *FloodSubRouter) OnClosedIncomingStream(peer.ID, protocol.ID) {}
+
 func (fs *FloodSubRouter) AddPeer(p peer.ID, proto protocol.ID, hello *RPC) *RPC {
 	fs.tracer.AddPeer(p, proto)
 	return hello

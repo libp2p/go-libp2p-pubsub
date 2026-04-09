@@ -7,6 +7,7 @@ import (
 	"github.com/libp2p/go-libp2p-pubsub/partialmessages"
 	pubsub_pb "github.com/libp2p/go-libp2p-pubsub/pb"
 	"github.com/libp2p/go-libp2p/core/peer"
+	"github.com/libp2p/go-libp2p/core/protocol"
 )
 
 type PeerExtensions struct {
@@ -125,6 +126,16 @@ func (es *extensionsState) HandleRPC(rpc *RPC) error {
 	return es.extensionsHandleRPC(rpc)
 }
 
+func (es *extensionsState) OnNewIncomingStream(peer.ID, protocol.ID) {
+}
+
+func (es *extensionsState) OnClosedIncomingStream(id peer.ID, _ protocol.ID) {
+	delete(es.peerExtensions, id)
+	if len(es.peerExtensions) == 0 {
+		es.peerExtensions = make(map[peer.ID]PeerExtensions)
+	}
+}
+
 func (es *extensionsState) AddPeer(id peer.ID, helloPacket *RPC) *RPC {
 	// Send our extensions as the first message.
 	helloPacket = es.myExtensions.ExtendRPC(helloPacket)
@@ -144,10 +155,6 @@ func (es *extensionsState) RemovePeer(id peer.ID) {
 	if recvdExt && sentExt {
 		// Add peer was previously called, so we need to call remove peer
 		es.extensionsRemovePeer(id)
-	}
-	delete(es.peerExtensions, id)
-	if len(es.peerExtensions) == 0 {
-		es.peerExtensions = make(map[peer.ID]PeerExtensions)
 	}
 	delete(es.sentExtensions, id)
 	if len(es.sentExtensions) == 0 {

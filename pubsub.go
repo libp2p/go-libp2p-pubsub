@@ -88,7 +88,7 @@ type PubSub struct {
 	peerOutboundQueueSize int
 
 	// incoming messages from other peers
-	incoming chan *RPC
+	incoming chan incomingUnion
 
 	// addSub is a control channel for us to add and remove subscriptions
 	addSub chan *addSubReq
@@ -168,7 +168,7 @@ type PubSub struct {
 	peers map[peer.ID]*rpcQueue
 
 	inboundStreamsMx sync.Mutex
-	inboundStreams   map[peer.ID]network.Stream
+	inboundStreams   map[peer.ID]inboundHandler
 
 	seenMessages    timecache.TimeCache
 	seenMsgTTL      time.Duration
@@ -214,6 +214,8 @@ type PubSubRouter interface {
 	AddPeer(peer.ID, protocol.ID, *RPC) *RPC
 	// RemovePeer notifies the router that a peer has been disconnected.
 	RemovePeer(peer.ID)
+	OnNewIncomingStream(peer.ID, protocol.ID)
+	OnClosedIncomingStream(peer.ID, protocol.ID)
 	// EnoughPeers returns whether the router needs more peers before it's ready to publish new records.
 	// Suggested (if greater than 0) is a suggested number of peers that the router should need.
 	EnoughPeers(topic string, suggested int) bool
@@ -264,6 +266,31 @@ type Message struct {
 
 func (m *Message) GetFrom() peer.ID {
 	return peer.ID(m.Message.GetFrom())
+}
+
+// inboundHandler tracks an active inbound stream handler. The done channel is
+// closed when the handler exits, allowing successive handlers for the same peer
+// to serialize their newStream/closedStream notifications.
+type inboundHandler struct {
+	s    network.Stream
+	done chan struct{}
+}
+
+type incomingKind uint8
+
+const (
+	incomingKindRPC = iota
+	incomingKindNewStream
+	incomingKindClosedStream
+)
+
+// incomingUnion wraps the different messages the incoming stream handler can
+// send. We want these kinds of messages to be serialized.
+type incomingUnion struct {
+	rpc *RPC // only set when kind == RPC
+	// s is only set when kind == NewStream or kind == ClosedStream
+	s    network.Stream
+	kind incomingKind
 }
 
 type RPC struct {
@@ -521,7 +548,7 @@ func NewPubSub(ctx context.Context, h host.Host, rt PubSubRouter, opts ...Option
 		signID:                h.ID(),
 		signKey:               nil,
 		signPolicy:            StrictSign,
-		incoming:              make(chan *RPC, 32),
+		incoming:              make(chan incomingUnion, 32),
 		newPeers:              make(chan struct{}, 1),
 		newPeersPend:          make(map[peer.ID]struct{}),
 		newPeerStream:         make(chan peerOutgoingStream),
@@ -547,7 +574,7 @@ func NewPubSub(ctx context.Context, h host.Host, rt PubSubRouter, opts ...Option
 		myRelays:              make(map[string]int),
 		topics:                make(map[string]map[peer.ID]peerTopicState),
 		peers:                 make(map[peer.ID]*rpcQueue),
-		inboundStreams:        make(map[peer.ID]network.Stream),
+		inboundStreams:        make(map[peer.ID]inboundHandler),
 		blacklist:             NewMapBlacklist(),
 		blacklistPeer:         make(chan peer.ID),
 		seenMsgTTL:            TimeCacheDuration,
@@ -918,9 +945,17 @@ func (p *PubSub) processLoop(ctx context.Context) {
 				peers = append(peers, p)
 			}
 			preq.resp <- peers
-		case rpc := <-p.incoming:
-			p.handleIncomingRPC(rpc)
-
+		case in := <-p.incoming:
+			switch in.kind {
+			case incomingKindRPC:
+				p.handleIncomingRPC(in.rpc)
+			case incomingKindNewStream:
+				p.rt.OnNewIncomingStream(
+					in.s.Conn().RemotePeer(), in.s.Protocol())
+			case incomingKindClosedStream:
+				p.onClosedIncomingStream(
+					in.s.Conn().RemotePeer(), in.s.Protocol())
+			}
 		case msg := <-p.sendMsg:
 			p.publishMessage(msg)
 
@@ -944,12 +979,7 @@ func (p *PubSub) processLoop(ctx context.Context) {
 			if ok {
 				q.Close()
 				delete(p.peers, pid)
-				for t, tmap := range p.topics {
-					if _, ok := tmap[pid]; ok {
-						delete(tmap, pid)
-						p.notifyLeave(t, pid)
-					}
-				}
+				p.clearPeerFromTopicsState(pid)
 				p.rt.RemovePeer(pid)
 			}
 
@@ -995,6 +1025,22 @@ func (p *PubSub) handlePendingPeers() {
 	}
 }
 
+func (p *PubSub) onClosedIncomingStream(pid peer.ID, proto protocol.ID) {
+	// This topic state is made when a peer sends us messages. If they close the
+	// incoming stream, we must clear their state or risk leaking memory.
+	p.clearPeerFromTopicsState(pid)
+	p.rt.OnClosedIncomingStream(pid, proto)
+}
+
+func (p *PubSub) clearPeerFromTopicsState(pid peer.ID) {
+	for t, tmap := range p.topics {
+		if _, ok := tmap[pid]; ok {
+			delete(tmap, pid)
+			p.notifyLeave(t, pid)
+		}
+	}
+}
+
 func (p *PubSub) handleDeadPeers() {
 	p.peerDeadPrioLk.Lock()
 
@@ -1016,13 +1062,7 @@ func (p *PubSub) handleDeadPeers() {
 		q.Close()
 		delete(p.peers, pid)
 
-		for t, tmap := range p.topics {
-			if _, ok := tmap[pid]; ok {
-				delete(tmap, pid)
-				p.notifyLeave(t, pid)
-			}
-		}
-
+		p.clearPeerFromTopicsState(pid)
 		p.rt.RemovePeer(pid)
 
 		if p.host.Network().Connectedness(pid) == network.Connected {

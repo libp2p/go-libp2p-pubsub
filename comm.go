@@ -54,23 +54,49 @@ func (p *PubSub) getHelloPacket() *RPC {
 
 func (p *PubSub) handleNewStream(s network.Stream) {
 	peer := s.Conn().RemotePeer()
-
-	p.inboundStreamsMx.Lock()
-	other, dup := p.inboundStreams[peer]
-	if dup {
-		p.logger.Debug("duplicate inbound stream from; resetting other stream", "peer", peer)
-		other.Reset()
-	}
-	p.inboundStreams[peer] = s
-	p.inboundStreamsMx.Unlock()
+	done := make(chan struct{})
+	sentNewStream := false
 
 	defer func() {
 		p.inboundStreamsMx.Lock()
-		if p.inboundStreams[peer] == s {
+		if p.inboundStreams[peer].s == s {
 			delete(p.inboundStreams, peer)
 		}
 		p.inboundStreamsMx.Unlock()
+
+		if sentNewStream {
+			select {
+			case p.incoming <- incomingUnion{kind: incomingKindClosedStream, s: s}:
+			case <-p.ctx.Done():
+			}
+		}
+
+		close(done)
 	}()
+
+	p.inboundStreamsMx.Lock()
+	prev, hasPrev := p.inboundStreams[peer]
+	p.inboundStreams[peer] = inboundHandler{s: s, done: done}
+	p.inboundStreamsMx.Unlock()
+
+	if hasPrev {
+		p.logger.Debug("duplicate inbound stream; replacing handler", "peer", peer)
+		prev.s.Reset()
+		select {
+		case <-prev.done:
+		case <-p.ctx.Done():
+			return
+		}
+	}
+
+	select {
+	case p.incoming <- incomingUnion{kind: incomingKindNewStream, s: s}:
+		sentNewStream = true
+	case <-p.ctx.Done():
+		// Close is useless because the other side isn't reading.
+		s.Reset()
+		return
+	}
 
 	r := msgio.NewVarintReaderSize(s, p.maxMessageSize)
 	for {
@@ -111,7 +137,10 @@ func (p *PubSub) handleNewStream(s network.Stream) {
 
 		rpc.from = peer
 		select {
-		case p.incoming <- rpc:
+		case p.incoming <- incomingUnion{
+			kind: incomingKindRPC,
+			rpc:  rpc,
+		}:
 		case <-p.ctx.Done():
 			// Close is useless because the other side isn't reading.
 			s.Reset()
