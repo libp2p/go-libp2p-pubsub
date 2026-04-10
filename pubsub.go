@@ -207,13 +207,13 @@ type PubSubRouter interface {
 	// Attach is invoked by the PubSub constructor to attach the router to a
 	// freshly initialized PubSub instance.
 	Attach(*PubSub)
-	// AddPeer notifies the router that a new peer has been connected. It
-	// includes a reference to the initial RPC that will be sent to the peer.
+	// OnNewOutboundStream notifies the router that a new outbound stream has been opened.
+	// It includes a reference to the initial RPC that will be sent to the peer.
 	// Routers may add messages to the RPC to try to have them sent in the
 	// initial packet. This is also referred to as the "hello packet."
-	AddPeer(peer.ID, protocol.ID, *RPC) *RPC
-	// RemovePeer notifies the router that a peer has been disconnected.
-	RemovePeer(peer.ID)
+	OnNewOutboundStream(peer.ID, protocol.ID, *RPC) *RPC
+	// OnClosedOutboundStream notifies the router that an outbound stream has been closed.
+	OnClosedOutboundStream(peer.ID)
 	OnNewIncomingStream(peer.ID, protocol.ID)
 	OnClosedIncomingStream(peer.ID, protocol.ID)
 	// EnoughPeers returns whether the router needs more peers before it's ready to publish new records.
@@ -901,7 +901,7 @@ func (p *PubSub) processLoop(ctx context.Context) {
 			}
 
 			helloPacket := p.getHelloPacket()
-			helloPacket = p.rt.AddPeer(pid, s.Protocol(), helloPacket)
+			helloPacket = p.rt.OnNewOutboundStream(pid, s.Protocol(), helloPacket)
 			s.FirstMessage <- helloPacket
 
 		case pid := <-p.newPeerError:
@@ -980,7 +980,7 @@ func (p *PubSub) processLoop(ctx context.Context) {
 				q.Close()
 				delete(p.peers, pid)
 				p.clearPeerFromTopicsState(pid)
-				p.rt.RemovePeer(pid)
+				p.rt.OnClosedOutboundStream(pid)
 			}
 
 		case <-ctx.Done():
@@ -1063,7 +1063,7 @@ func (p *PubSub) handleDeadPeers() {
 		delete(p.peers, pid)
 
 		p.clearPeerFromTopicsState(pid)
-		p.rt.RemovePeer(pid)
+		p.rt.OnClosedOutboundStream(pid)
 
 		if p.host.Network().Connectedness(pid) == network.Connected {
 			backoffDelay, err := p.deadPeerBackoff.updateAndGet(pid)

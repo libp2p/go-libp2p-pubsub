@@ -134,9 +134,9 @@ func (t *traceStats) process(evt *pb.TraceEvent) {
 		t.duplicate++
 	case pb.TraceEvent_DELIVER_MESSAGE:
 		t.deliver++
-	case pb.TraceEvent_ADD_PEER:
+	case pb.TraceEvent_ON_NEW_OUTBOUND_STREAM:
 		t.add++
-	case pb.TraceEvent_REMOVE_PEER:
+	case pb.TraceEvent_ON_CLOSED_OUTBOUND_STREAM:
 		t.remove++
 	case pb.TraceEvent_RECV_RPC:
 		t.recv++

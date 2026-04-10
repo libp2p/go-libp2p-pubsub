@@ -3102,20 +3102,20 @@ func (m *mockRawTracer) RecvRPC(rpc *RPC) {
 	}
 }
 
-func (m *mockRawTracer) AddPeer(p peer.ID, proto protocol.ID)      {}
-func (m *mockRawTracer) DeliverMessage(msg *Message)               {}
-func (m *mockRawTracer) DropRPC(rpc *RPC, p peer.ID)               {}
-func (m *mockRawTracer) DuplicateMessage(msg *Message)             {}
-func (m *mockRawTracer) Graft(p peer.ID, topic string)             {}
-func (m *mockRawTracer) Join(topic string)                         {}
-func (m *mockRawTracer) Leave(topic string)                        {}
-func (m *mockRawTracer) Prune(p peer.ID, topic string)             {}
-func (m *mockRawTracer) RejectMessage(msg *Message, reason string) {}
-func (m *mockRawTracer) RemovePeer(p peer.ID)                      {}
-func (m *mockRawTracer) SendRPC(rpc *RPC, p peer.ID)               {}
-func (m *mockRawTracer) ThrottlePeer(p peer.ID)                    {}
-func (m *mockRawTracer) UndeliverableMessage(msg *Message)         {}
-func (m *mockRawTracer) ValidateMessage(msg *Message)              {}
+func (m *mockRawTracer) OnNewOutboundStream(p peer.ID, proto protocol.ID) {}
+func (m *mockRawTracer) DeliverMessage(msg *Message)                      {}
+func (m *mockRawTracer) DropRPC(rpc *RPC, p peer.ID)                      {}
+func (m *mockRawTracer) DuplicateMessage(msg *Message)                    {}
+func (m *mockRawTracer) Graft(p peer.ID, topic string)                    {}
+func (m *mockRawTracer) Join(topic string)                                {}
+func (m *mockRawTracer) Leave(topic string)                               {}
+func (m *mockRawTracer) Prune(p peer.ID, topic string)                    {}
+func (m *mockRawTracer) RejectMessage(msg *Message, reason string)        {}
+func (m *mockRawTracer) OnClosedOutboundStream(p peer.ID)                 {}
+func (m *mockRawTracer) SendRPC(rpc *RPC, p peer.ID)                      {}
+func (m *mockRawTracer) ThrottlePeer(p peer.ID)                           {}
+func (m *mockRawTracer) UndeliverableMessage(msg *Message)                {}
+func (m *mockRawTracer) ValidateMessage(msg *Message)                     {}
 
 var _ RawTracer = &mockRawTracer{}
 

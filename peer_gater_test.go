@@ -32,7 +32,7 @@ func TestPeerGater(t *testing.T) {
 		}
 	}
 
-	pg.AddPeer(peerA, "")
+	pg.OnNewOutboundStream(peerA, "")
 
 	status := pg.AcceptFrom(peerA)
 	if status != AcceptAll {
@@ -99,7 +99,7 @@ func TestPeerGater(t *testing.T) {
 		t.Fatal("expected AcceptAll")
 	}
 
-	pg.RemovePeer(peerA)
+	pg.OnClosedOutboundStream(peerA)
 	pg.Lock()
 	_, ok := pg.peerStats[peerA]
 	pg.Unlock()

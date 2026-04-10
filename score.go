@@ -598,7 +598,7 @@ func (ps *peerScore) gcDeliveryRecords() {
 }
 
 // tracer interface
-func (ps *peerScore) AddPeer(p peer.ID, proto protocol.ID) {
+func (ps *peerScore) OnNewOutboundStream(p peer.ID, proto protocol.ID) {
 	ps.Lock()
 	defer ps.Unlock()
 
@@ -614,7 +614,7 @@ func (ps *peerScore) AddPeer(p peer.ID, proto protocol.ID) {
 	pstats.ips = ips
 }
 
-func (ps *peerScore) RemovePeer(p peer.ID) {
+func (ps *peerScore) OnClosedOutboundStream(p peer.ID) {
 	ps.Lock()
 	defer ps.Unlock()
 

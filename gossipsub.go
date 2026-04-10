@@ -758,9 +758,9 @@ func (gs *GossipSubRouter) OnClosedIncomingStream(pid peer.ID, proto protocol.ID
 	}
 }
 
-func (gs *GossipSubRouter) AddPeer(p peer.ID, proto protocol.ID, helloPacket *RPC) *RPC {
+func (gs *GossipSubRouter) OnNewOutboundStream(p peer.ID, proto protocol.ID, helloPacket *RPC) *RPC {
 	gs.logger.Debug("PEERUP: Add new peer using protocol", "peer", p, "protocol", proto)
-	gs.tracer.AddPeer(p, proto)
+	gs.tracer.OnNewOutboundStream(p, proto)
 	gs.peers[p] = proto
 
 	// track the connection direction
@@ -786,16 +786,16 @@ loop:
 	}
 	gs.outbound[p] = outbound
 	if gs.feature(GossipSubFeatureExtensions, proto) {
-		helloPacket = gs.extensions.AddPeer(p, helloPacket)
+		helloPacket = gs.extensions.OnNewOutboundStream(p, helloPacket)
 	}
 	return helloPacket
 }
 
-func (gs *GossipSubRouter) RemovePeer(p peer.ID) {
+func (gs *GossipSubRouter) OnClosedOutboundStream(p peer.ID) {
 	gs.logger.Debug("PEERDOWN: Remove disconnected peer", "peer", p)
-	gs.tracer.RemovePeer(p)
+	gs.tracer.OnClosedOutboundStream(p)
 	if gs.feature(GossipSubFeatureExtensions, gs.peers[p]) {
-		gs.extensions.RemovePeer(p)
+		gs.extensions.OnClosedOutboundStream(p)
 	}
 	delete(gs.peers, p)
 	for _, peers := range gs.mesh {

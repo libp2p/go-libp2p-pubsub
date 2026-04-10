@@ -76,7 +76,7 @@ func (pe *PeerExtensions) ExtendRPC(rpc *RPC) *RPC {
 // Purposely not trying to make a generic extension interface as there is only
 // one real consumer (partial messages). This may change in the future.
 type partialMessageInterface interface {
-	RemovePeer(peer.ID)
+	OnClosedOutboundStream(peer.ID)
 	HandleRPC(from peer.ID, rpc *pubsub_pb.PartialMessagesExtension) error
 	Heartbeat()
 	EmitGossip(topic string, peers []peer.ID)
@@ -112,7 +112,7 @@ func (es *extensionsState) HandleRPC(rpc *RPC) error {
 		if _, ok := es.sentExtensions[rpc.from]; ok {
 			// We just finished both sending and receiving the extensions
 			// control message.
-			es.extensionsAddPeer(rpc.from)
+			es.extensionsOnNewOutboundStream(rpc.from)
 		}
 	} else {
 		// We already have an extension for this peer. If they send us another
@@ -136,7 +136,7 @@ func (es *extensionsState) OnClosedIncomingStream(id peer.ID, _ protocol.ID) {
 	}
 }
 
-func (es *extensionsState) AddPeer(id peer.ID, helloPacket *RPC) *RPC {
+func (es *extensionsState) OnNewOutboundStream(id peer.ID, helloPacket *RPC) *RPC {
 	// Send our extensions as the first message.
 	helloPacket = es.myExtensions.ExtendRPC(helloPacket)
 
@@ -144,17 +144,17 @@ func (es *extensionsState) AddPeer(id peer.ID, helloPacket *RPC) *RPC {
 	if _, ok := es.peerExtensions[id]; ok {
 		// We've just finished sending and receiving the extensions control
 		// message.
-		es.extensionsAddPeer(id)
+		es.extensionsOnNewOutboundStream(id)
 	}
 	return helloPacket
 }
 
-func (es *extensionsState) RemovePeer(id peer.ID) {
+func (es *extensionsState) OnClosedOutboundStream(id peer.ID) {
 	_, recvdExt := es.peerExtensions[id]
 	_, sentExt := es.sentExtensions[id]
 	if recvdExt && sentExt {
 		// Add peer was previously called, so we need to call remove peer
-		es.extensionsRemovePeer(id)
+		es.extensionsOnClosedOutboundStream(id)
 	}
 	delete(es.sentExtensions, id)
 	if len(es.sentExtensions) == 0 {
@@ -162,18 +162,18 @@ func (es *extensionsState) RemovePeer(id peer.ID) {
 	}
 }
 
-// extensionsAddPeer is only called once we've both sent and received the
+// extensionsOnNewOutboundStream is only called once we've both sent and received the
 // extensions control message.
-func (es *extensionsState) extensionsAddPeer(id peer.ID) {
+func (es *extensionsState) extensionsOnNewOutboundStream(id peer.ID) {
 	if es.myExtensions.TestExtension && es.peerExtensions[id].TestExtension {
-		es.testExtension.AddPeer(id)
+		es.testExtension.OnNewOutboundStream(id)
 	}
 }
 
-// extensionsRemovePeer is always called after extensionsAddPeer.
-func (es *extensionsState) extensionsRemovePeer(id peer.ID) {
+// extensionsOnClosedOutboundStream is always called after extensionsOnNewOutboundStream.
+func (es *extensionsState) extensionsOnClosedOutboundStream(id peer.ID) {
 	if es.myExtensions.PartialMessages && es.peerExtensions[id].PartialMessages {
-		es.partialMessagesExtension.RemovePeer(id)
+		es.partialMessagesExtension.OnClosedOutboundStream(id)
 	}
 }
 

@@ -53,9 +53,9 @@ func TestTagTracerDirectPeerTags(t *testing.T) {
 
 	tt.protectDirect(p1)
 
-	tt.AddPeer(p1, GossipSubID_v10)
-	tt.AddPeer(p2, GossipSubID_v10)
-	tt.AddPeer(p3, GossipSubID_v10)
+	tt.OnNewOutboundStream(p1, GossipSubID_v10)
+	tt.OnNewOutboundStream(p2, GossipSubID_v10)
+	tt.OnNewOutboundStream(p3, GossipSubID_v10)
 
 	tag := "pubsub:<direct>"
 	if !cmgr.IsProtected(p1, tag) {

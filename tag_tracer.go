@@ -183,7 +183,7 @@ func (t *tagTracer) unprotectDirect(p peer.ID) {
 // -- RawTracer interface methods
 var _ RawTracer = (*tagTracer)(nil)
 
-func (t *tagTracer) AddPeer(p peer.ID, proto protocol.ID) {
+func (t *tagTracer) OnNewOutboundStream(p peer.ID, proto protocol.ID) {
 	if t.isDirect(p) {
 		t.protectDirect(p)
 	}
@@ -260,7 +260,7 @@ func (t *tagTracer) RejectMessage(msg *Message, reason string) {
 	}
 }
 
-func (t *tagTracer) RemovePeer(peer.ID)                {}
+func (t *tagTracer) OnClosedOutboundStream(peer.ID)    {}
 func (t *tagTracer) ThrottlePeer(p peer.ID)            {}
 func (t *tagTracer) RecvRPC(rpc *RPC)                  {}
 func (t *tagTracer) SendRPC(rpc *RPC, p peer.ID)       {}

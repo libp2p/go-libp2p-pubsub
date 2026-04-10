@@ -70,8 +70,8 @@ func (m *mockNetworkPartialMessages) removePeers() {
 			if a == b {
 				continue
 			}
-			m.handlers[a].RemovePeer(b)
-			m.handlers[b].RemovePeer(a)
+			m.handlers[a].OnClosedOutboundStream(b)
+			m.handlers[b].OnClosedOutboundStream(a)
 		}
 	}
 
@@ -1168,8 +1168,8 @@ func TestGossipDelivery(t *testing.T) {
 	}
 
 	// Cleanup
-	h1Handler.RemovePeer(h2ID)
-	h2Handler.RemovePeer(h1ID)
+	h1Handler.OnClosedOutboundStream(h2ID)
+	h2Handler.OnClosedOutboundStream(h1ID)
 	for range 10 {
 		h1Handler.Heartbeat()
 		h2Handler.Heartbeat()
@@ -1273,10 +1273,10 @@ func TestPeerInitiatedCounter(t *testing.T) {
 	}
 
 	// All peers go away, and the counts should be back to 0
-	handler.RemovePeer("1")
+	handler.OnClosedOutboundStream("1")
 	for id := range 2 {
 		otherPeer := fmt.Sprintf("peer%d", id)
-		handler.RemovePeer(peer.ID(otherPeer))
+		handler.OnClosedOutboundStream(peer.ID(otherPeer))
 	}
 
 	assertCounts(0, map[peer.ID]int{})
@@ -1376,7 +1376,7 @@ func FuzzPeerInitiatedCounter(f *testing.F) {
 					delete(expectedPeercounts, peer.ID(otherPeer))
 				}
 
-				handler.RemovePeer(peer.ID(otherPeer))
+				handler.OnClosedOutboundStream(peer.ID(otherPeer))
 			case 2: // heartbeat until everything is cleared
 				script = script[1:]
 				for range handler.GroupTTLByHeatbeat + 1 {
