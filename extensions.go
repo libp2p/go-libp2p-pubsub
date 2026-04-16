@@ -266,10 +266,7 @@ func (r partialMessageRouter) MeshPeers(topic string) iter.Seq[peer.ID] {
 		peerSet, ok := r.gs.mesh[topic]
 		if !ok {
 			// Possibly a fanout topic
-			peerSet, ok = r.gs.fanout[topic]
-			if !ok {
-				return
-			}
+			peerSet = r.gs.getFanoutPeersForPublishing(topic)
 		}
 
 		for peer := range peerSet {
