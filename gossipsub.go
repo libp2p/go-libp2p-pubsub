@@ -1582,7 +1582,11 @@ func (gs *GossipSubRouter) doSendRPC(rpc *RPC, p peer.ID, q *rpcQueue, urgent bo
 }
 
 func (gs *GossipSubRouter) heartbeatTimer() {
-	time.Sleep(gs.params.HeartbeatInitialDelay)
+	select {
+	case <-time.After(gs.params.HeartbeatInitialDelay):
+	case <-gs.p.ctx.Done():
+		return
+	}
 	select {
 	case gs.p.eval <- gs.heartbeat:
 	case <-gs.p.ctx.Done():
