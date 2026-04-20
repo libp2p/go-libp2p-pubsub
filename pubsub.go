@@ -311,7 +311,7 @@ func (rpc *RPC) LogValue() slog.Value {
 	for _, msg := range rpc.Publish {
 		msgs = append(msgs, slog.Group(
 			"message",
-			slog.Any("topic", msg.Topic),
+			slog.String("topic", msg.GetTopic()),
 			slog.Any("dataPrefix", msg.Data[0:min(len(msg.Data), 32)]),
 			slog.Any("dataLen", len(msg.Data)),
 		))
