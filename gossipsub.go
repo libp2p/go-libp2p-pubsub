@@ -1375,7 +1375,7 @@ func (gs *GossipSubRouter) rpcs(msg *Message) iter.Seq2[peer.ID, *RPC] {
 
 			// gossipsub peers
 			gmap, ok := gs.mesh[topic]
-			if !ok {
+			if !ok || len(gmap) == 0 {
 				// we are not in the mesh for topic, use fanout peers
 				gmap = gs.getFanoutPeersForPublishing(topic)
 			}
@@ -1475,7 +1475,11 @@ func (gs *GossipSubRouter) Join(topic string) {
 			return !direct && !doBackOff && gs.score.Score(p) >= 0
 		})
 		gmap = peerListToMap(peers)
-		gs.mesh[topic] = gmap
+		// It is possible that we do not have any peers subscribed to this topic yet so continue fanout
+		// to ensure that messages we publish in the intermin are not lost
+		if len(gmap) > 0 {
+			gs.mesh[topic] = gmap
+		}
 	}
 
 	for p := range gmap {
