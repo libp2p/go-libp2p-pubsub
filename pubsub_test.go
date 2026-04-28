@@ -2,19 +2,41 @@ package pubsub
 
 import (
 	"context"
+	"os"
 	"testing"
 	"time"
 
 	"github.com/libp2p/go-libp2p"
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/network"
+	libp2ptls "github.com/libp2p/go-libp2p/p2p/security/tls"
+	libp2pquic "github.com/libp2p/go-libp2p/p2p/transport/quic"
 )
+
+func keyLogOption() libp2ptls.IdentityOption {
+	path := os.Getenv("SSLKEYLOGFILE")
+	if path == "" {
+		return func(*libp2ptls.IdentityConfig) {}
+	}
+	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0600)
+	if err != nil {
+		return func(*libp2ptls.IdentityConfig) {}
+	}
+	return libp2ptls.WithKeyLogWriter(f)
+}
 
 func getDefaultHosts(t *testing.T, n int) []host.Host {
 	var out []host.Host
 
 	for i := 0; i < n; i++ {
-		h, err := libp2p.New(libp2p.ResourceManager(&network.NullResourceManager{}))
+		h, err := libp2p.New(
+			libp2p.ResourceManager(&network.NullResourceManager{}),
+			libp2p.Transport(libp2pquic.NewTransport,
+				libp2pquic.WithTLSIdentityOption(
+					keyLogOption(),
+				)),
+			libp2p.ListenAddrStrings("/ip4/127.0.0.1/udp/0/quic-v1"),
+		)
 		if err != nil {
 			t.Fatal(err)
 		}
