@@ -1424,7 +1424,6 @@ func (p *PubSub) handleIncomingRPC(rpc *RPC) {
 			_, seenBefore := tmap[rpc.from]
 			tmap[rpc.from] = pts
 			if !seenBefore {
-				tmap[rpc.from] = pts
 				if topic, ok := p.myTopics[t]; ok {
 					peer := rpc.from
 					topic.sendNotification(PeerEvent{PeerJoin, peer})
@@ -1600,10 +1599,6 @@ type addTopicReq struct {
 type rmTopicReq struct {
 	topic *Topic
 	resp  chan error
-}
-
-type TopicOptions struct {
-	SkipPublishingToPartialMessageCapablePeers bool
 }
 
 // RequestPartialMessages requests that peers, if they support it, send us
