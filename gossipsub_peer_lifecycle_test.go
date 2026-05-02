@@ -159,93 +159,95 @@ type skeletonHost interface {
 //  5. The processLoop picks up the stale RPC and re-adds the disconnected
 //     peer to the topic subscription map — leaked state never cleaned up.
 func TestNoLeakFromDisconnectedPeer(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	synctestTest(t, func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
 
-	hosts := getDefaultHosts(t, 2)
-	localHost := hosts[0]
-	remoteHost := hosts[1]
+		hosts := getDefaultHosts(t, 2)
+		localHost := hosts[0]
+		remoteHost := hosts[1]
 
-	ps := getGossipsub(ctx, localHost, WithMessageSignaturePolicy(StrictNoSign))
-	gs := ps.rt.(*GossipSubRouter)
+		ps := getGossipsub(ctx, localHost, WithMessageSignaturePolicy(StrictNoSign))
+		gs := ps.rt.(*GossipSubRouter)
 
-	skel := newLifecycleSkeletonGossipsub(ctx, remoteHost)
+		skel := newLifecycleSkeletonGossipsub(ctx, remoteHost)
 
-	connect(t, localHost, remoteHost)
-	skel.WaitReady(t)
+		connect(t, localHost, remoteHost)
+		skel.WaitReady(t)
 
-	// Wait for local gossipsub to fully add the remote peer.
-	waitForCond := func(desc string, cond func() bool) {
-		t.Helper()
-		deadline := time.Now().Add(5 * time.Second)
-		for {
-			ch := make(chan bool, 1)
-			ps.eval <- func() { ch <- cond() }
-			if <-ch {
-				return
+		// Wait for local gossipsub to fully add the remote peer.
+		waitForCond := func(desc string, cond func() bool) {
+			t.Helper()
+			deadline := time.Now().Add(5 * time.Second)
+			for {
+				ch := make(chan bool, 1)
+				ps.eval <- func() { ch <- cond() }
+				if <-ch {
+					return
+				}
+				if time.Now().After(deadline) {
+					t.Fatalf("timed out: %s", desc)
+				}
+				time.Sleep(10 * time.Millisecond)
 			}
-			if time.Now().After(deadline) {
-				t.Fatalf("timed out: %s", desc)
-			}
-			time.Sleep(10 * time.Millisecond)
 		}
-	}
-	waitForCond("peer added", func() bool {
-		_, inPeers := ps.peers[remoteHost.ID()]
-		_, inRouter := gs.peers[remoteHost.ID()]
-		return inPeers && inRouter
-	})
+		waitForCond("peer added", func() bool {
+			_, inPeers := ps.peers[remoteHost.ID()]
+			_, inRouter := gs.peers[remoteHost.ID()]
+			return inPeers && inRouter
+		})
 
-	topic := "test-topic"
+		topic := "test-topic"
 
-	// --- Step 1: Remote resets stream A and blocks reconnection. ---
-	skel.CloseInbound()
+		// --- Step 1: Remote resets stream A and blocks reconnection. ---
+		skel.CloseInbound()
 
-	// Wait for the local to fully remove the peer. handleDeadPeers removes
-	// it, tries to reconnect (fails because handler is gone), and newPeerError
-	// cleans up ps.peers.
-	waitForCond("peer removed", func() bool {
-		_, inPeers := ps.peers[remoteHost.ID()]
-		_, inGossipsub := gs.peers[remoteHost.ID()]
-		return !inPeers && !inGossipsub
-	})
+		// Wait for the local to fully remove the peer. handleDeadPeers removes
+		// it, tries to reconnect (fails because handler is gone), and newPeerError
+		// cleans up ps.peers.
+		waitForCond("peer removed", func() bool {
+			_, inPeers := ps.peers[remoteHost.ID()]
+			_, inGossipsub := gs.peers[remoteHost.ID()]
+			return !inPeers && !inGossipsub
+		})
 
-	// --- Step 2: Remote sends a subscription RPC on stream B. ---
-	skel.inRPC <- &pb.RPC{
-		Subscriptions: []*pb.RPC_SubOpts{
-			{
-				Topicid:   proto.String(topic),
-				Subscribe: proto.Bool(true),
+		// --- Step 2: Remote sends a subscription RPC on stream B. ---
+		skel.inRPC <- &pb.RPC{
+			Subscriptions: []*pb.RPC_SubOpts{
+				{
+					Topicid:   proto.String(topic),
+					Subscribe: proto.Bool(true),
+				},
 			},
-		},
-	}
-
-	// Give time for the RPC to be read by handleNewStream and processed.
-	time.Sleep(500 * time.Millisecond)
-
-	// --- Step 3: Remote disconnects. ---
-	remoteHost.Network().ClosePeer(localHost.ID())
-
-	// Wait for the disconnect to fully propagate through the local's
-	// processLoop. Any dead-peer handling from the closed connection will
-	// have completed by then.
-	time.Sleep(time.Second)
-
-	// --- Step 4: Observe leaked state. ---
-	// The peer is not in ps.peers (it was removed and the reconnect failed),
-	// but the stale RPC re-added it to ps.topics. Since the peer is not in
-	// ps.peers, handleDeadPeers will never clean it up — it checks ps.peers
-	// first and skips unknown peers. This is permanently leaked state.
-	checkDone := make(chan struct{})
-	ps.eval <- func() {
-		defer close(checkDone)
-
-		_, inPeers := ps.peers[remoteHost.ID()]
-		_, inTopics := ps.topics[topic][remoteHost.ID()]
-
-		if inPeers || inTopics {
-			t.Error("BUG: disconnected peer has leaked topic subscription state that will never be cleaned up")
 		}
-	}
-	<-checkDone
+
+		// Give time for the RPC to be read by handleNewStream and processed.
+		time.Sleep(500 * time.Millisecond)
+
+		// --- Step 3: Remote disconnects. ---
+		remoteHost.Network().ClosePeer(localHost.ID())
+
+		// Wait for the disconnect to fully propagate through the local's
+		// processLoop. Any dead-peer handling from the closed connection will
+		// have completed by then.
+		time.Sleep(time.Second)
+
+		// --- Step 4: Observe leaked state. ---
+		// The peer is not in ps.peers (it was removed and the reconnect failed),
+		// but the stale RPC re-added it to ps.topics. Since the peer is not in
+		// ps.peers, handleDeadPeers will never clean it up — it checks ps.peers
+		// first and skips unknown peers. This is permanently leaked state.
+		checkDone := make(chan struct{})
+		ps.eval <- func() {
+			defer close(checkDone)
+
+			_, inPeers := ps.peers[remoteHost.ID()]
+			_, inTopics := ps.topics[topic][remoteHost.ID()]
+
+			if inPeers || inTopics {
+				t.Error("BUG: disconnected peer has leaked topic subscription state that will never be cleaned up")
+			}
+		}
+		<-checkDone
+	})
 }

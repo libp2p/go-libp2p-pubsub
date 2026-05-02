@@ -37,156 +37,164 @@ func tryReceive(sub *Subscription) *Message {
 }
 
 func TestRandomsubSmall(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	synctestTest(t, func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
 
-	hosts := getDefaultHosts(t, 10)
-	psubs := getRandomsubs(ctx, hosts, 10)
+		hosts := getDefaultHosts(t, 10)
+		psubs := getRandomsubs(ctx, hosts, 10)
 
-	connectAll(t, hosts)
+		connectAll(t, hosts)
 
-	var subs []*Subscription
-	for _, ps := range psubs {
-		sub, err := ps.Subscribe("test")
-		if err != nil {
-			t.Fatal(err)
+		var subs []*Subscription
+		for _, ps := range psubs {
+			sub, err := ps.Subscribe("test")
+			if err != nil {
+				t.Fatal(err)
+			}
+			subs = append(subs, sub)
 		}
-		subs = append(subs, sub)
-	}
 
-	time.Sleep(time.Second)
+		time.Sleep(time.Second)
 
-	count := 0
-	for i := 0; i < 10; i++ {
-		msg := []byte(fmt.Sprintf("message %d", i))
-		psubs[i].Publish("test", msg)
+		count := 0
+		for i := 0; i < 10; i++ {
+			msg := []byte(fmt.Sprintf("message %d", i))
+			psubs[i].Publish("test", msg)
 
-		for _, sub := range subs {
-			if tryReceive(sub) != nil {
-				count++
+			for _, sub := range subs {
+				if tryReceive(sub) != nil {
+					count++
+				}
 			}
 		}
-	}
 
-	if count < 7*len(hosts) {
-		t.Fatalf("received too few messages; expected at least %d but got %d", 9*len(hosts), count)
-	}
+		if count < 7*len(hosts) {
+			t.Fatalf("received too few messages; expected at least %d but got %d", 9*len(hosts), count)
+		}
+	})
 }
 
 func TestRandomsubBig(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	synctestTest(t, func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
 
-	hosts := getDefaultHosts(t, 50)
-	psubs := getRandomsubs(ctx, hosts, 50)
+		hosts := getDefaultHosts(t, 50)
+		psubs := getRandomsubs(ctx, hosts, 50)
 
-	connectSome(t, hosts, 12)
+		connectSome(t, hosts, 12)
 
-	var subs []*Subscription
-	for _, ps := range psubs {
-		sub, err := ps.Subscribe("test")
-		if err != nil {
-			t.Fatal(err)
+		var subs []*Subscription
+		for _, ps := range psubs {
+			sub, err := ps.Subscribe("test")
+			if err != nil {
+				t.Fatal(err)
+			}
+			subs = append(subs, sub)
 		}
-		subs = append(subs, sub)
-	}
 
-	time.Sleep(time.Second)
+		time.Sleep(time.Second)
 
-	count := 0
-	for i := 0; i < 10; i++ {
-		msg := []byte(fmt.Sprintf("message %d", i))
-		psubs[i].Publish("test", msg)
+		count := 0
+		for i := 0; i < 10; i++ {
+			msg := []byte(fmt.Sprintf("message %d", i))
+			psubs[i].Publish("test", msg)
 
-		for _, sub := range subs {
-			if tryReceive(sub) != nil {
-				count++
+			for _, sub := range subs {
+				if tryReceive(sub) != nil {
+					count++
+				}
 			}
 		}
-	}
 
-	if count < 7*len(hosts) {
-		t.Fatalf("received too few messages; expected at least %d but got %d", 9*len(hosts), count)
-	}
+		if count < 7*len(hosts) {
+			t.Fatalf("received too few messages; expected at least %d but got %d", 9*len(hosts), count)
+		}
+	})
 }
 
 func TestRandomsubMixed(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	synctestTest(t, func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
 
-	hosts := getDefaultHosts(t, 40)
-	fsubs := getPubsubs(ctx, hosts[:10])
-	rsubs := getRandomsubs(ctx, hosts[10:], 30)
-	psubs := append(fsubs, rsubs...)
+		hosts := getDefaultHosts(t, 40)
+		fsubs := getPubsubs(ctx, hosts[:10])
+		rsubs := getRandomsubs(ctx, hosts[10:], 30)
+		psubs := append(fsubs, rsubs...)
 
-	connectSome(t, hosts, 12)
+		connectSome(t, hosts, 12)
 
-	var subs []*Subscription
-	for _, ps := range psubs {
-		sub, err := ps.Subscribe("test")
-		if err != nil {
-			t.Fatal(err)
+		var subs []*Subscription
+		for _, ps := range psubs {
+			sub, err := ps.Subscribe("test")
+			if err != nil {
+				t.Fatal(err)
+			}
+			subs = append(subs, sub)
 		}
-		subs = append(subs, sub)
-	}
 
-	time.Sleep(time.Second)
+		time.Sleep(time.Second)
 
-	count := 0
-	for i := 0; i < 10; i++ {
-		msg := []byte(fmt.Sprintf("message %d", i))
-		psubs[i].Publish("test", msg)
+		count := 0
+		for i := 0; i < 10; i++ {
+			msg := []byte(fmt.Sprintf("message %d", i))
+			psubs[i].Publish("test", msg)
 
-		for _, sub := range subs {
-			if tryReceive(sub) != nil {
-				count++
+			for _, sub := range subs {
+				if tryReceive(sub) != nil {
+					count++
+				}
 			}
 		}
-	}
 
-	if count < 7*len(hosts) {
-		t.Fatalf("received too few messages; expected at least %d but got %d", 9*len(hosts), count)
-	}
+		if count < 7*len(hosts) {
+			t.Fatalf("received too few messages; expected at least %d but got %d", 9*len(hosts), count)
+		}
+	})
 }
 
 func TestRandomsubEnoughPeers(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	synctestTest(t, func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
 
-	hosts := getDefaultHosts(t, 40)
-	fsubs := getPubsubs(ctx, hosts[:10])
-	rsubs := getRandomsubs(ctx, hosts[10:], 30)
-	psubs := append(fsubs, rsubs...)
+		hosts := getDefaultHosts(t, 40)
+		fsubs := getPubsubs(ctx, hosts[:10])
+		rsubs := getRandomsubs(ctx, hosts[10:], 30)
+		psubs := append(fsubs, rsubs...)
 
-	connectSome(t, hosts, 12)
+		connectSome(t, hosts, 12)
 
-	for _, ps := range psubs {
-		_, err := ps.Subscribe("test")
-		if err != nil {
-			t.Fatal(err)
+		for _, ps := range psubs {
+			_, err := ps.Subscribe("test")
+			if err != nil {
+				t.Fatal(err)
+			}
 		}
-	}
 
-	time.Sleep(time.Second)
+		time.Sleep(time.Second)
 
-	res := make(chan bool, 1)
-	rsubs[0].eval <- func() {
-		rs := rsubs[0].rt.(*RandomSubRouter)
-		res <- rs.EnoughPeers("test", 0)
-	}
+		res := make(chan bool, 1)
+		rsubs[0].eval <- func() {
+			rs := rsubs[0].rt.(*RandomSubRouter)
+			res <- rs.EnoughPeers("test", 0)
+		}
 
-	enough := <-res
-	if !enough {
-		t.Fatal("expected enough peers")
-	}
+		enough := <-res
+		if !enough {
+			t.Fatal("expected enough peers")
+		}
 
-	rsubs[0].eval <- func() {
-		rs := rsubs[0].rt.(*RandomSubRouter)
-		res <- rs.EnoughPeers("test", 100)
-	}
+		rsubs[0].eval <- func() {
+			rs := rsubs[0].rt.(*RandomSubRouter)
+			res <- rs.EnoughPeers("test", 100)
+		}
 
-	enough = <-res
-	if !enough {
-		t.Fatal("expected enough peers")
-	}
+		enough = <-res
+		if !enough {
+			t.Fatal("expected enough peers")
+		}
+	})
 }
