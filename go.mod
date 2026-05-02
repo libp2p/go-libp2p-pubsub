@@ -8,7 +8,7 @@ require (
 	github.com/libp2p/go-libp2p v0.47.0
 	github.com/libp2p/go-libp2p-testing v0.12.0
 	github.com/libp2p/go-msgio v0.3.0
-	github.com/marcopolo/simnet v0.0.4
+	github.com/marcopolo/simnet v0.0.7
 	github.com/multiformats/go-multiaddr v0.16.0
 	github.com/multiformats/go-varint v0.0.7
 )
