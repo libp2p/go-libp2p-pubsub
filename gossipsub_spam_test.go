@@ -960,6 +960,50 @@ func TestGossipsubHandleIDontwantSpam(t *testing.T) {
 	})
 }
 
+func TestGossipsubIDontWantUnwantedCleanup(t *testing.T) {
+	synctestTest(t, func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+
+		hosts := getDefaultHosts(t, 1)
+		ps := getGossipsub(ctx, hosts[0])
+		gs := ps.rt.(*GossipSubRouter)
+		p := peer.ID("idontwant-peer")
+
+		gs.handleIDontWant(p, &pb.ControlMessage{})
+		if _, ok := gs.unwanted[p]; ok {
+			t.Fatal("empty control message should not create unwanted state")
+		}
+
+		gs.handleIDontWant(p, &pb.ControlMessage{Idontwant: []*pb.ControlIDontWant{{}}})
+		if _, ok := gs.unwanted[p]; ok {
+			t.Fatal("empty IDONTWANT should not create unwanted state")
+		}
+
+		mid := "idontwant-cleanup"
+		gs.handleIDontWant(p, &pb.ControlMessage{Idontwant: []*pb.ControlIDontWant{{MessageIDs: []string{mid}}}})
+		if _, ok := gs.unwanted[p][computeChecksum(mid)]; !ok {
+			t.Fatal("expected unwanted message id to be tracked")
+		}
+
+		for range gs.params.IDontWantMessageTTL {
+			gs.clearIDontWantCounters()
+		}
+		if _, ok := gs.unwanted[p]; ok {
+			t.Fatal("expired unwanted state should remove the peer entry")
+		}
+
+		gs.handleIDontWant(p, &pb.ControlMessage{Idontwant: []*pb.ControlIDontWant{{MessageIDs: []string{mid}}}})
+		if _, ok := gs.unwanted[p]; !ok {
+			t.Fatal("expected unwanted peer entry before outbound close")
+		}
+		gs.OnClosedOutboundStream(p)
+		if _, ok := gs.unwanted[p]; ok {
+			t.Fatal("outbound close should remove unwanted peer entry")
+		}
+	})
+}
+
 type mockGSOnRead func(writeMsg func(*pb.RPC), irpc *pb.RPC)
 
 func newMockGS(ctx context.Context, t *testing.T, attacker host.Host, onReadMsg mockGSOnRead) {

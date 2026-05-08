@@ -807,6 +807,7 @@ func (gs *GossipSubRouter) OnClosedOutboundStream(p peer.ID) {
 	delete(gs.gossip, p)
 	delete(gs.control, p)
 	delete(gs.outbound, p)
+	delete(gs.unwanted, p)
 }
 
 func (gs *GossipSubRouter) EnoughPeers(topic string, suggested int) bool {
@@ -1185,8 +1186,9 @@ func (gs *GossipSubRouter) handlePrune(p peer.ID, ctl *pb.ControlMessage) {
 }
 
 func (gs *GossipSubRouter) handleIDontWant(p peer.ID, ctl *pb.ControlMessage) {
-	if gs.unwanted[p] == nil {
-		gs.unwanted[p] = make(map[checksum]int)
+	idontwants := ctl.GetIdontwant()
+	if len(idontwants) == 0 {
+		return
 	}
 
 	// IDONTWANT flood protection
@@ -1198,8 +1200,9 @@ func (gs *GossipSubRouter) handleIDontWant(p peer.ID, ctl *pb.ControlMessage) {
 
 	totalUnwantedIds := 0
 	// Remember all the unwanted message ids
+	var unwanted map[checksum]int
 mainIDWLoop:
-	for _, idontwant := range ctl.GetIdontwant() {
+	for _, idontwant := range idontwants {
 		for _, mid := range idontwant.GetMessageIDs() {
 			// IDONTWANT flood protection
 			if totalUnwantedIds >= gs.params.MaxIDontWantLength {
@@ -1208,7 +1211,14 @@ mainIDWLoop:
 			}
 
 			totalUnwantedIds++
-			gs.unwanted[p][computeChecksum(mid)] = gs.params.IDontWantMessageTTL
+			if unwanted == nil {
+				unwanted = gs.unwanted[p]
+				if unwanted == nil {
+					unwanted = make(map[checksum]int)
+					gs.unwanted[p] = unwanted
+				}
+			}
+			unwanted[computeChecksum(mid)] = gs.params.IDontWantMessageTTL
 		}
 	}
 }
@@ -1905,12 +1915,15 @@ func (gs *GossipSubRouter) clearIDontWantCounters() {
 	}
 
 	// decrement TTLs of all the IDONTWANTs and delete it from the cache when it reaches zero
-	for _, mids := range gs.unwanted {
+	for p, mids := range gs.unwanted {
 		for mid := range mids {
 			mids[mid]--
-			if mids[mid] == 0 {
+			if mids[mid] <= 0 {
 				delete(mids, mid)
 			}
+		}
+		if len(mids) == 0 {
+			delete(gs.unwanted, p)
 		}
 	}
 }
