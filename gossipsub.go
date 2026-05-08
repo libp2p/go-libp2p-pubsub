@@ -753,6 +753,9 @@ func (gs *GossipSubRouter) manageAddrBook() {
 func (gs *GossipSubRouter) OnNewIncomingStream(peer.ID, protocol.ID) {}
 
 func (gs *GossipSubRouter) OnClosedIncomingStream(pid peer.ID, proto protocol.ID) {
+	if gs.gate != nil {
+		gs.gate.OnClosedIncomingStream(pid, proto)
+	}
 	if gs.feature(GossipSubFeatureExtensions, proto) {
 		gs.extensions.OnClosedIncomingStream(pid, proto)
 	}

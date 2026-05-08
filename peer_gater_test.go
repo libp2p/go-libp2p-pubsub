@@ -129,3 +129,113 @@ func TestPeerGater(t *testing.T) {
 		}
 	})
 }
+
+func TestPeerGaterRemovesInboundOnlyPeerStats(t *testing.T) {
+	synctestTest(t, func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+
+		peerA := peer.ID("A")
+		peerAip := "1.2.3.4"
+
+		params := NewPeerGaterParams(.1, .9, .999)
+		pg := newPeerGater(ctx, nil, params, slog.Default())
+		pg.getIP = func(p peer.ID) string {
+			if p == peerA {
+				return peerAip
+			}
+			return "<unknown>"
+		}
+
+		msg := &Message{ReceivedFrom: peerA}
+		pg.RejectMessage(msg, RejectValidationFailed)
+
+		pg.Lock()
+		_, ok := pg.peerStats[peerA]
+		pg.Unlock()
+		if !ok {
+			t.Fatal("expected peer stats after validation event")
+		}
+
+		pg.OnClosedIncomingStream(peerA, "")
+
+		pg.Lock()
+		_, peerStatsOK := pg.peerStats[peerA]
+		ipStats, ipStatsOK := pg.ipStats[peerAip]
+		connected := 0
+		expireIsZero := true
+		if ipStatsOK {
+			connected = ipStats.connected
+			expireIsZero = ipStats.expire.IsZero()
+		}
+		pg.Unlock()
+		if peerStatsOK {
+			t.Fatal("inbound close should remove peer stats")
+		}
+		if !ipStatsOK {
+			t.Fatal("expected retained ip stats")
+		}
+		if connected != 0 {
+			t.Fatalf("expected no connected streams, got %d", connected)
+		}
+		if expireIsZero {
+			t.Fatal("expected retained ip stats to have an expiration")
+		}
+
+		pg.OnClosedIncomingStream(peerA, "")
+		pg.Lock()
+		_, peerStatsOK = pg.peerStats[peerA]
+		pg.Unlock()
+		if peerStatsOK {
+			t.Fatal("duplicate inbound close should not recreate peer stats")
+		}
+	})
+}
+
+func TestPeerGaterInboundCloseDoesNotBypassOutboundCleanup(t *testing.T) {
+	synctestTest(t, func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+
+		peerA := peer.ID("A")
+		peerAip := "1.2.3.4"
+
+		params := NewPeerGaterParams(.1, .9, .999)
+		pg := newPeerGater(ctx, nil, params, slog.Default())
+		pg.getIP = func(p peer.ID) string {
+			if p == peerA {
+				return peerAip
+			}
+			return "<unknown>"
+		}
+
+		msg := &Message{ReceivedFrom: peerA}
+		pg.OnNewOutboundStream(peerA, "")
+		pg.RejectMessage(msg, RejectValidationFailed)
+		pg.OnClosedIncomingStream(peerA, "")
+
+		pg.Lock()
+		_, peerStatsOK := pg.peerStats[peerA]
+		connected := pg.ipStats[peerAip].connected
+		pg.Unlock()
+		if !peerStatsOK {
+			t.Fatal("inbound close should not remove stats while outbound stream is active")
+		}
+		if connected != 1 {
+			t.Fatalf("expected one connected outbound stream, got %d", connected)
+		}
+
+		pg.OnClosedOutboundStream(peerA)
+
+		pg.Lock()
+		_, peerStatsOK = pg.peerStats[peerA]
+		connected = pg.ipStats[peerAip].connected
+		pg.Unlock()
+		if peerStatsOK {
+			t.Fatal("outbound close should remove peer stats")
+		}
+		if connected != 0 {
+			t.Fatalf("expected no connected streams after outbound close, got %d", connected)
+		}
+	})
+}
