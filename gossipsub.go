@@ -2024,18 +2024,6 @@ func (gs *GossipSubRouter) sendGraftPrune(tograft, toprune map[peer.ID][]string,
 // of this topic.
 func (gs *GossipSubRouter) emitGossip(topic string, exclude map[peer.ID]struct{}) {
 	mids := gs.mcache.GetGossipIDs(topic)
-	if len(mids) == 0 {
-		return
-	}
-
-	// shuffle to emit in random order
-	shuffleStrings(mids)
-
-	// if we are emitting more than GossipSubMaxIHaveLength mids, truncate the list
-	if len(mids) > gs.params.MaxIHaveLength {
-		// we do the truncation (with shuffling) per peer below
-		gs.logger.Debug("too many messages for gossip; will truncate IHAVE list", "messageCount", len(mids))
-	}
 
 	// Send gossip to GossipFactor peers above threshold, with a minimum of D_lazy.
 	// First we collect the peers above gossipThreshold that are not in the exclude set
@@ -2064,28 +2052,40 @@ func (gs *GossipSubRouter) emitGossip(topic string, exclude map[peer.ID]struct{}
 	}
 	peers = peers[:target]
 
-	// avoid a reallocation to collect peers that requested partial messages.
-	partialMessagePeers := peers[:0]
+	nextPartial := 0
+	iSupportPartial := gs.iSupportSendingPartial(topic)
+	// split peers inplace into partial and non partial.
+	for i, p := range peers {
+		if iSupportPartial && gs.peerRequestsPartial(p, topic) {
+			peers[i], peers[nextPartial] = peers[nextPartial], peers[i]
+			nextPartial++
+		}
+	}
+	partialMessagePeers := peers[:nextPartial]
+	peers = peers[nextPartial:]
 
 	// Emit the IHAVE gossip to the selected peers.
-	for _, p := range peers {
-		peerMids := mids
+	if len(peers) > 0 && len(mids) > 0 {
+		// shuffle to emit in random order
+		shuffleStrings(mids)
+
+		// truncation is done after shuffling per peer below
 		if len(mids) > gs.params.MaxIHaveLength {
-			// we do this per peer so that we emit a different set for each peer.
-			// we have enough redundancy in the system that this will significantly increase the message
-			// coverage when we do truncate.
-			peerMids = make([]string, gs.params.MaxIHaveLength)
-			shuffleStrings(mids)
-			copy(peerMids, mids)
+			gs.logger.Debug("too many messages for gossip; will truncate IHAVE list", "messageCount", len(mids))
 		}
 
-		if gs.iSupportSendingPartial(topic) && gs.peerRequestsPartial(p, topic) {
-			partialMessagePeers = append(partialMessagePeers, p)
-			// We should send the peer partial messages for gossip instead
-			continue
+		for _, p := range peers {
+			peerMids := mids
+			if len(mids) > gs.params.MaxIHaveLength {
+				// we do this per peer so that we emit a different set for each peer.
+				// we have enough redundancy in the system that this will significantly increase the message
+				// coverage when we do truncate.
+				peerMids = make([]string, gs.params.MaxIHaveLength)
+				shuffleStrings(mids)
+				copy(peerMids, mids)
+			}
+			gs.enqueueGossip(p, &pb.ControlIHave{TopicID: &topic, MessageIDs: peerMids})
 		}
-
-		gs.enqueueGossip(p, &pb.ControlIHave{TopicID: &topic, MessageIDs: peerMids})
 	}
 
 	if len(partialMessagePeers) > 0 {
