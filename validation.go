@@ -366,8 +366,10 @@ loop:
 		select {
 		case v.validateThrottle <- struct{}{}:
 			go func() {
+				defer func() {
+					<-v.validateThrottle
+				}()
 				v.doValidateTopic(async, src, msg, result, onValid)
-				<-v.validateThrottle
 			}()
 		default:
 			v.p.logger.Debug("message validation throttled; dropping message from peer", "peer", src)
@@ -440,8 +442,10 @@ func (v *validation) validateTopic(vals []*validatorImpl, src peer.ID, msg *Mess
 		select {
 		case val.validateThrottle <- struct{}{}:
 			go func(val *validatorImpl) {
+				defer func() {
+					<-val.validateThrottle
+				}()
 				rch <- val.validateMsg(ctx, src, msg)
-				<-val.validateThrottle
 			}(val)
 
 		default:
@@ -476,8 +480,10 @@ loop:
 func (v *validation) validateSingleTopic(val *validatorImpl, src peer.ID, msg *Message) ValidationResult {
 	select {
 	case val.validateThrottle <- struct{}{}:
+		defer func() {
+			<-val.validateThrottle
+		}()
 		res := val.validateMsg(v.p.ctx, src, msg)
-		<-val.validateThrottle
 		return res
 
 	default:
@@ -486,10 +492,16 @@ func (v *validation) validateSingleTopic(val *validatorImpl, src peer.ID, msg *M
 	}
 }
 
-func (val *validatorImpl) validateMsg(ctx context.Context, src peer.ID, msg *Message) ValidationResult {
+func (val *validatorImpl) validateMsg(ctx context.Context, src peer.ID, msg *Message) (res ValidationResult) {
 	start := time.Now()
 	defer func() {
 		val.logger.Debug("validation done", "duration", time.Since(start))
+	}()
+	defer func() {
+		if r := recover(); r != nil {
+			val.logger.Error("panic in message validator", "peer", src, "topic", val.topic, "panic", r)
+			res = ValidationReject
+		}
 	}()
 
 	if val.validateTimeout > 0 {

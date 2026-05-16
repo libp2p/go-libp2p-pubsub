@@ -167,6 +167,113 @@ func TestValidate2(t *testing.T) {
 	})
 }
 
+func TestValidatePanicRecovery(t *testing.T) {
+	synctestTest(t, func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+
+		hosts := getDefaultHosts(t, 2)
+		sender, err := NewGossipSub(ctx, hosts[0])
+		if err != nil {
+			t.Fatal(err)
+		}
+		receiver, err := NewGossipSub(ctx, hosts[1])
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		connect(t, hosts[0], hosts[1])
+		topic := "panic-validator-single"
+
+		err = receiver.RegisterTopicValidator(topic,
+			func(ctx context.Context, from peer.ID, msg *Message) bool {
+				if bytes.Equal(msg.Data, []byte("panic")) {
+					panic("validator panic")
+				}
+				return true
+			},
+			WithValidatorConcurrency(1))
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		sub, err := receiver.Subscribe(topic)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		time.Sleep(50 * time.Millisecond)
+
+		if err := sender.Publish(topic, []byte("panic")); err != nil {
+			t.Fatal(err)
+		}
+
+		assertNeverReceives(t, sub, 200*time.Millisecond)
+
+		if err := sender.Publish(topic, []byte("ok")); err != nil {
+			t.Fatal(err)
+		}
+
+		assertReceive(t, sub, []byte("ok"))
+	})
+}
+
+func TestValidatePanicRecoveryMulti(t *testing.T) {
+	synctestTest(t, func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+
+		topic := "panic-validator-multi"
+		hosts := getDefaultHosts(t, 2)
+		sender, err := NewGossipSub(ctx, hosts[0])
+		if err != nil {
+			t.Fatal(err)
+		}
+		receiver, err := NewGossipSub(ctx, hosts[1],
+			WithDefaultValidator(
+				func(ctx context.Context, from peer.ID, msg *Message) bool {
+					if bytes.Equal(msg.Data, []byte("panic")) {
+						panic("default validator panic")
+					}
+					return true
+				},
+				WithValidatorConcurrency(1)))
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		connect(t, hosts[0], hosts[1])
+
+		err = receiver.RegisterTopicValidator(topic,
+			func(ctx context.Context, from peer.ID, msg *Message) bool {
+				return true
+			},
+			WithValidatorConcurrency(1))
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		sub, err := receiver.Subscribe(topic)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		time.Sleep(50 * time.Millisecond)
+
+		if err := sender.Publish(topic, []byte("panic")); err != nil {
+			t.Fatal(err)
+		}
+
+		assertNeverReceives(t, sub, 200*time.Millisecond)
+
+		if err := sender.Publish(topic, []byte("ok")); err != nil {
+			t.Fatal(err)
+		}
+
+		assertReceive(t, sub, []byte("ok"))
+	})
+}
+
 func TestValidateOverload(t *testing.T) {
 	type msg struct {
 		msg       []byte
