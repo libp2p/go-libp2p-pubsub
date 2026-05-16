@@ -1806,7 +1806,7 @@ func (p *PubSub) PeerFeedback(topic string, peer peer.ID, kind PeerFeedbackKind)
 	if !ok {
 		return errors.New("peer feedback is only supported by GossipSub")
 	}
-	p.eval <- func() {
+	feedback := func() {
 		if gs.score == nil {
 			return
 		}
@@ -1818,6 +1818,11 @@ func (p *PubSub) PeerFeedback(topic string, peer peer.ID, kind PeerFeedbackKind)
 		case PeerFeedbackInvalidMessage:
 			gs.score.markInvalidMessageDelivery(peer, topic)
 		}
+	}
+	select {
+	case p.eval <- feedback:
+	case <-p.ctx.Done():
+		return p.ctx.Err()
 	}
 	return nil
 }
