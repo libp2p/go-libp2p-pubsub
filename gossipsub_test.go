@@ -2395,6 +2395,41 @@ func TestGossipsubPeerFeedback(t *testing.T) {
 	})
 }
 
+func TestGossipsubPeerFeedbackCancelled(t *testing.T) {
+	synctestTest(t, func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+
+		hosts := getDefaultHosts(t, 1)
+		psub := getGossipsub(ctx, hosts[0])
+
+		entered := make(chan struct{})
+		release := make(chan struct{})
+		defer close(release)
+
+		psub.eval <- func() {
+			close(entered)
+			<-release
+		}
+		<-entered
+		cancel()
+
+		errCh := make(chan error, 1)
+		go func() {
+			errCh <- psub.PeerFeedback("test", hosts[0].ID(), PeerFeedbackUsefulMessage)
+		}()
+
+		select {
+		case err := <-errCh:
+			if !errors.Is(err, context.Canceled) {
+				t.Fatalf("expected context canceled error, got %v", err)
+			}
+		case <-time.After(time.Second):
+			t.Fatal("PeerFeedback blocked after pubsub context cancellation")
+		}
+	})
+}
+
 func TestGossipsubPeerScoreResetTopicParams(t *testing.T) {
 	// this test exercises the code path sof peer score inspection
 	synctestTest(t, func(t *testing.T) {
