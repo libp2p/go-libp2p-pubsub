@@ -112,6 +112,10 @@ type PeerScoreParams struct {
 
 	// time to remember a message delivery for. Default to global TimeCacheDuration if 0.
 	SeenMsgTTL time.Duration
+
+	// DeliveryRecordCap is the maximum number of message delivery records to
+	// retain. If 0, DefaultDeliveryRecordCap is used.
+	DeliveryRecordCap int
 }
 
 type TopicScoreParams struct {
@@ -183,6 +187,10 @@ func (p *PeerScoreParams) validate() error {
 		if p.TopicScoreCap < 0 || isInvalidNumber(p.TopicScoreCap) {
 			return fmt.Errorf("invalid topic score cap; must be positive (or 0 for no cap) and a valid number")
 		}
+	}
+
+	if p.DeliveryRecordCap < 0 {
+		return fmt.Errorf("invalid delivery record cap; must be >= 0")
 	}
 
 	// check that we have an app specific score; the weight can be anything (but expected positive)

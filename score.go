@@ -15,6 +15,10 @@ import (
 	manet "github.com/multiformats/go-multiaddr/net"
 )
 
+// DefaultDeliveryRecordCap is the default maximum number of message delivery
+// records retained by peer scoring.
+const DefaultDeliveryRecordCap = 1 << 20
+
 type peerStats struct {
 	// true if the peer is currently connected
 	connected bool
@@ -94,6 +98,7 @@ var _ RawTracer = (*peerScore)(nil)
 
 type messageDeliveries struct {
 	seenMsgTTL time.Duration
+	recordCap  int
 
 	records map[string]*deliveryRecord
 
@@ -190,11 +195,15 @@ func newPeerScore(params *PeerScoreParams, logger *slog.Logger) *peerScore {
 	if seenMsgTTL == 0 {
 		seenMsgTTL = TimeCacheDuration
 	}
+	recordCap := params.DeliveryRecordCap
+	if recordCap == 0 {
+		recordCap = DefaultDeliveryRecordCap
+	}
 	return &peerScore{
 		params:     params,
 		peerStats:  make(map[peer.ID]*peerStats),
 		peerIPs:    make(map[string]map[peer.ID]struct{}),
-		deliveries: &messageDeliveries{seenMsgTTL: seenMsgTTL, records: make(map[string]*deliveryRecord)},
+		deliveries: &messageDeliveries{seenMsgTTL: seenMsgTTL, recordCap: recordCap, records: make(map[string]*deliveryRecord)},
 		idGen:      newMsgIdGenerator(),
 		logger:     logger,
 	}
@@ -712,6 +721,9 @@ func (ps *peerScore) DeliverMessage(msg *Message) {
 	ps.markFirstMessageDelivery(msg.ReceivedFrom, msg.GetTopic())
 
 	drec := ps.deliveries.getRecord(ps.idGen.ID(msg))
+	if drec == nil {
+		return
+	}
 
 	// defensive check that this is the first delivery trace -- delivery status should be unknown
 	if drec.status != deliveryUnknown {
@@ -763,6 +775,17 @@ func (ps *peerScore) RejectMessage(msg *Message, reason string) {
 	}
 
 	drec := ps.deliveries.getRecord(ps.idGen.ID(msg))
+	if drec == nil {
+		switch reason {
+		case RejectValidationThrottled:
+			fallthrough
+		case RejectValidationIgnored:
+			return
+		default:
+			ps.markInvalidMessageDelivery(msg.ReceivedFrom, msg.GetTopic())
+			return
+		}
+	}
 
 	// defensive check that this is the first rejection trace -- delivery status should be unknown
 	if drec.status != deliveryUnknown {
@@ -803,6 +826,9 @@ func (ps *peerScore) DuplicateMessage(msg *Message) {
 	defer ps.Unlock()
 
 	drec := ps.deliveries.getRecord(ps.idGen.ID(msg))
+	if drec == nil {
+		return
+	}
 
 	_, ok := drec.peers[msg.ReceivedFrom]
 	if ok {
@@ -842,11 +868,19 @@ func (ps *peerScore) DropRPC(rpc *RPC, p peer.ID) {}
 
 func (ps *peerScore) UndeliverableMessage(msg *Message) {}
 
-// message delivery records
+// getRecord returns the delivery record for id. It returns nil when creating a
+// new record would exceed the configured delivery record cap.
 func (d *messageDeliveries) getRecord(id string) *deliveryRecord {
 	rec, ok := d.records[id]
 	if ok {
 		return rec
+	}
+
+	if d.recordCap > 0 && len(d.records) >= d.recordCap {
+		d.gc()
+		if len(d.records) >= d.recordCap {
+			return nil
+		}
 	}
 
 	now := time.Now()

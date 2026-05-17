@@ -705,6 +705,68 @@ func TestScoreRejectMessageDeliveries(t *testing.T) {
 	})
 }
 
+func TestScoreDeliveryRecordCap(t *testing.T) {
+	synctestTest(t, func(t *testing.T) {
+		topic := "mytopic"
+		peerA := peer.ID("A")
+		params := &PeerScoreParams{
+			AppSpecificScore:  func(peer.ID) float64 { return 0 },
+			Topics:            make(map[string]*TopicScoreParams),
+			DeliveryRecordCap: 3,
+			SeenMsgTTL:        time.Minute,
+		}
+		params.Topics[topic] = &TopicScoreParams{
+			TopicWeight:                    1,
+			TimeInMeshQuantum:              time.Second,
+			InvalidMessageDeliveriesWeight: -1,
+			InvalidMessageDeliveriesDecay:  1,
+		}
+
+		ps := newPeerScore(params, slog.Default())
+		ps.OnNewOutboundStream(peerA, "myproto")
+
+		for i := range 10 {
+			pbMsg := makeTestMessage(i)
+			pbMsg.Topic = &topic
+			msg := Message{ReceivedFrom: peerA, Message: pbMsg}
+			ps.ValidateMessage(&msg)
+		}
+
+		if len(ps.deliveries.records) != params.DeliveryRecordCap {
+			t.Fatalf("expected %d delivery records, got %d", params.DeliveryRecordCap, len(ps.deliveries.records))
+		}
+
+		pbMsg := makeTestMessage(10)
+		pbMsg.Topic = &topic
+		msg := Message{ReceivedFrom: peerA, Message: pbMsg}
+		ps.RejectMessage(&msg, RejectValidationFailed)
+
+		if score := ps.Score(peerA); score != -1 {
+			t.Fatalf("expected invalid delivery score after cap is reached, got %f", score)
+		}
+		if len(ps.deliveries.records) != params.DeliveryRecordCap {
+			t.Fatalf("expected %d delivery records after capped reject, got %d", params.DeliveryRecordCap, len(ps.deliveries.records))
+		}
+
+		for entry := ps.deliveries.head; entry != nil; entry = entry.next {
+			entry.expire = time.Now().Add(-time.Second)
+		}
+		ps.deliveries.gc()
+		if len(ps.deliveries.records) != 0 {
+			t.Fatalf("expected delivery records to expire, got %d", len(ps.deliveries.records))
+		}
+
+		pbMsg = makeTestMessage(11)
+		pbMsg.Topic = &topic
+		msg = Message{ReceivedFrom: peerA, Message: pbMsg}
+		ps.ValidateMessage(&msg)
+
+		if len(ps.deliveries.records) != 1 {
+			t.Fatalf("expected delivery record after capacity is available, got %d", len(ps.deliveries.records))
+		}
+	})
+}
+
 func TestScoreApplicationScore(t *testing.T) {
 	// Create parameters with reasonable default values
 	synctestTest(t, func(t *testing.T) {

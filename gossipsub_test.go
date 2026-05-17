@@ -2395,6 +2395,57 @@ func TestGossipsubPeerFeedback(t *testing.T) {
 	})
 }
 
+func TestGossipsubScoreDeliveryRecordCap(t *testing.T) {
+	synctestTest(t, func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+
+		const topic = "delivery-record-cap"
+		const recordCap = 3
+
+		hosts := getDefaultHosts(t, 2)
+		sender := getGossipsub(ctx, hosts[0])
+		receiver := getGossipsub(ctx, hosts[1],
+			WithPeerScore(
+				&PeerScoreParams{
+					AppSpecificScore:  func(peer.ID) float64 { return 0 },
+					DecayInterval:     time.Second,
+					DecayToZero:       0.01,
+					DeliveryRecordCap: recordCap,
+				},
+				&PeerScoreThresholds{
+					GossipThreshold:   -1,
+					PublishThreshold:  -10,
+					GraylistThreshold: -100,
+				}))
+
+		connect(t, hosts[0], hosts[1])
+
+		sub, err := receiver.Subscribe(topic)
+		if err != nil {
+			t.Fatal(err)
+		}
+		time.Sleep(50 * time.Millisecond)
+
+		for i := range 10 {
+			msg := []byte(fmt.Sprintf("message %d", i))
+			if err := sender.Publish(topic, msg); err != nil {
+				t.Fatal(err)
+			}
+			assertReceive(t, sub, msg)
+		}
+
+		score := receiver.rt.(*GossipSubRouter).score
+		score.Lock()
+		recordCount := len(score.deliveries.records)
+		score.Unlock()
+
+		if recordCount != recordCap {
+			t.Fatalf("expected %d delivery records, got %d", recordCap, recordCount)
+		}
+	})
+}
+
 func TestGossipsubPeerScoreResetTopicParams(t *testing.T) {
 	// this test exercises the code path sof peer score inspection
 	synctestTest(t, func(t *testing.T) {
