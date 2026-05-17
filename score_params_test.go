@@ -407,6 +407,16 @@ func testPeerScoreParamsValidationWithInvalidParams(t *testing.T, skipAtomicVali
 		t.Fatal("expected validation error")
 	}
 
+	if (&PeerScoreParams{
+		SkipAtomicValidation: skipAtomicValidation,
+		DeliveryRecordCap:    -1,
+		AppSpecificScore:     appScore,
+		DecayInterval:        time.Second,
+		DecayToZero:          0.01,
+	}).validate() == nil {
+		t.Fatal("expected validation error")
+	}
+
 	if skipAtomicValidation {
 		if (&PeerScoreParams{
 			SkipAtomicValidation: skipAtomicValidation,
@@ -611,6 +621,7 @@ func TestPeerScoreParamsValidation_ValidParams_AtomicValidation(t *testing.T) {
 		AppSpecificScore:            appScore,
 		DecayInterval:               time.Second,
 		DecayToZero:                 0.01,
+		DeliveryRecordCap:           1024,
 		IPColocationFactorWeight:    -1,
 		IPColocationFactorThreshold: 1,
 		BehaviourPenaltyWeight:      -1,
