@@ -17,6 +17,7 @@ import (
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-msgio"
 	"github.com/multiformats/go-varint"
+	"google.golang.org/protobuf/proto"
 
 	pb "github.com/libp2p/go-libp2p-pubsub/pb"
 )
@@ -209,7 +210,7 @@ func (r *replayActor) handleStream(s network.Stream) {
 		}
 
 		rpc := new(pb.RPC)
-		err = rpc.Unmarshal(msgbytes)
+		err = proto.Unmarshal(msgbytes, rpc)
 		rd.ReleaseMsg(msgbytes)
 		if err != nil {
 			s.Reset()
@@ -239,20 +240,20 @@ func (r *replayActor) send(p peer.ID, rpc *pb.RPC) {
 		return
 	}
 
-	size := uint64(rpc.Size())
+	size := uint64(proto.Size(rpc))
 
 	buf := pool.Get(varint.UvarintSize(size) + int(size))
 	defer pool.Put(buf)
 
 	n := binary.PutUvarint(buf, size)
 
-	_, err := rpc.MarshalTo(buf[n:])
+	out, err := proto.MarshalOptions{}.MarshalAppend(buf[:n], rpc)
 	if err != nil {
 		r.t.Logf("replay: error marshalling message: %s", err)
 		return
 	}
 
-	_, err = s.Write(buf)
+	_, err = s.Write(out)
 	if err != nil {
 		r.t.Logf("replay: error sending message: %s", err)
 	}

@@ -17,9 +17,7 @@ import (
 	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/core/peerstore"
-
-	//lint:ignore SA1019 "github.com/libp2p/go-msgio/protoio" is deprecated
-	"github.com/libp2p/go-msgio/protoio"
+	"github.com/libp2p/go-msgio/pbio"
 )
 
 func testWithTracer(t *testing.T, tracer EventTracer) {
@@ -246,7 +244,7 @@ func TestPBTracer(t *testing.T) {
 		}
 		defer f.Close()
 
-		r := protoio.NewDelimitedReader(f, 1<<20)
+		r := pbio.NewDelimitedReader(f, 1<<20)
 		for {
 			evt.Reset()
 			err := r.ReadMsg(&evt)
@@ -274,7 +272,7 @@ func (mrt *mockRemoteTracer) handleStream(s network.Stream) {
 		panic(err)
 	}
 
-	r := protoio.NewDelimitedReader(gzr, 1<<24)
+	r := pbio.NewDelimitedReader(gzr, 1<<24)
 
 	var batch pb.TraceEventBatch
 	for {

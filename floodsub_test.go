@@ -20,9 +20,7 @@ import (
 	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/core/protocol"
-
-	//lint:ignore SA1019 "github.com/libp2p/go-msgio/protoio" is deprecated
-	"github.com/libp2p/go-msgio/protoio"
+	"github.com/libp2p/go-msgio/pbio"
 )
 
 func checkMessageRouting(t *testing.T, topic string, pubs []*PubSub, subs []*Subscription) {
@@ -1124,7 +1122,7 @@ type announceWatcher struct {
 func (aw *announceWatcher) handleStream(s network.Stream) {
 	defer s.Close()
 
-	r := protoio.NewDelimitedReader(s, 1<<20)
+	r := pbio.NewDelimitedReader(s, 1<<20)
 
 	var rpc pb.RPC
 	for {

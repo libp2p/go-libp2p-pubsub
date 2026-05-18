@@ -24,6 +24,7 @@ import (
 	"github.com/libp2p/go-libp2p/p2p/host/peerstore/pstoremem"
 	ma "github.com/multiformats/go-multiaddr"
 	manet "github.com/multiformats/go-multiaddr/net"
+	"google.golang.org/protobuf/proto"
 )
 
 const (
@@ -1562,16 +1563,17 @@ func (gs *GossipSubRouter) sendRPC(p peer.ID, out *RPC, urgent bool) {
 	}
 
 	// If we're below the max message size, go ahead and send
-	if out.Size() < gs.p.maxMessageSize {
+	if proto.Size(&out.RPC) < gs.p.maxMessageSize {
 		gs.doSendRPC(out, p, q, urgent)
 		return
 	}
 
 	// Potentially split the RPC into multiple RPCs that are below the max message size
 	for rpc := range out.split(gs.p.maxMessageSize) {
-		if rpc.Size() > gs.p.maxMessageSize {
+		if proto.Size(&rpc.RPC) > gs.p.maxMessageSize {
 			// This should only happen if a single message/control is above the maxMessageSize.
-			gs.doDropRPC(out, p, fmt.Sprintf("Dropping oversized RPC. Size: %d, limit: %d. (Over by %d bytes)", rpc.Size(), gs.p.maxMessageSize, rpc.Size()-gs.p.maxMessageSize))
+			size := proto.Size(&rpc.RPC)
+			gs.doDropRPC(out, p, fmt.Sprintf("Dropping oversized RPC. Size: %d, limit: %d. (Over by %d bytes)", size, gs.p.maxMessageSize, size-gs.p.maxMessageSize))
 			continue
 		}
 		gs.doSendRPC(&rpc, p, q, urgent)
