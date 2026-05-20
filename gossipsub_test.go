@@ -98,6 +98,26 @@ func getGossipsubsOptFn(ctx context.Context, hs []host.Host, optFn func(int, hos
 	return psubs
 }
 
+func TestConfigurableMaxControlMessageSize(t *testing.T) {
+	synctestTest(t, func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+
+		hosts := getDefaultHosts(t, 2)
+
+		defaultPubsub := getGossipsub(ctx, hosts[0])
+		if defaultPubsub.maxControlMessageSize != DefaultMaxControlMessageSize {
+			t.Fatalf("expected default max control message size %d, got %d", DefaultMaxControlMessageSize, defaultPubsub.maxControlMessageSize)
+		}
+
+		const maxControlMessageSize = 1234
+		configuredPubsub := getGossipsub(ctx, hosts[1], WithMaxControlMessageSize(maxControlMessageSize))
+		if configuredPubsub.maxControlMessageSize != maxControlMessageSize {
+			t.Fatalf("expected configured max control message size %d, got %d", maxControlMessageSize, configuredPubsub.maxControlMessageSize)
+		}
+	})
+}
+
 func TestSparseGossipsub(t *testing.T) {
 	synctestTest(t, func(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
