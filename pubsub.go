@@ -26,8 +26,12 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-// DefaultMaximumMessageSize is 1mb.
-const DefaultMaxMessageSize = 1 << 20
+const (
+	// DefaultMaximumMessageSize is 1MiB.
+	DefaultMaxMessageSize = 1 << 20
+	// DefaultMaxControlMessageSize is 512KiB.
+	DefaultMaxControlMessageSize = 512 << 10
+)
 
 var (
 	// TimeCacheDuration specifies how long a message ID will be remembered as seen.
@@ -84,6 +88,9 @@ type PubSub struct {
 	// maxMessageSize is the maximum message size; it applies globally to all
 	// topics.
 	maxMessageSize int
+
+	// maxControlMessageSize is the maximum size for control messages.
+	maxControlMessageSize int
 
 	// size of the outbound message channel that we maintain for each peer
 	peerOutboundQueueSize int
@@ -551,6 +558,7 @@ func NewPubSub(ctx context.Context, h host.Host, rt PubSubRouter, opts ...Option
 		peerFilter:            DefaultPeerFilter,
 		disc:                  &discover{},
 		maxMessageSize:        DefaultMaxMessageSize,
+		maxControlMessageSize: DefaultMaxControlMessageSize,
 		peerOutboundQueueSize: 32,
 		signID:                h.ID(),
 		signKey:               nil,
@@ -828,6 +836,15 @@ func WithRPCLogger(logger *slog.Logger) Option {
 func WithMaxMessageSize(maxMessageSize int) Option {
 	return func(ps *PubSub) error {
 		ps.maxMessageSize = maxMessageSize
+		return nil
+	}
+}
+
+// WithMaxControlMessageSize sets the maximum size for pubsub control messages.
+// The default value is 512KiB (DefaultMaxControlMessageSize).
+func WithMaxControlMessageSize(maxControlMessageSize int) Option {
+	return func(ps *PubSub) error {
+		ps.maxControlMessageSize = maxControlMessageSize
 		return nil
 	}
 }
