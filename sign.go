@@ -53,10 +53,10 @@ func verifyMessageSignature(m *pb.Message) error {
 		return err
 	}
 
-	xm := *m
+	xm := proto.CloneOf(m)
 	xm.Signature = nil
 	xm.Key = nil
-	bytes, err := proto.Marshal(&xm)
+	bytes, err := proto.Marshal(xm)
 	if err != nil {
 		return err
 	}

@@ -1534,32 +1534,41 @@ func (gs *GossipSubRouter) sendPrune(p peer.ID, topic string, isUnsubscribe bool
 }
 
 func (gs *GossipSubRouter) sendRPC(p peer.ID, out *RPC, urgent bool) {
-	// do we own the RPC?
-	own := false
-
-	// piggyback control message retries
-	ctl, ok := gs.control[p]
-	if ok {
-		out = copyRPC(out)
-		own = true
-		gs.piggybackControl(p, out, ctl)
-		delete(gs.control, p)
+	q, ok := gs.p.peers[p]
+	if !ok {
+		// No queue to send to this peer. Nothing to do.
+		gs.doDropRPC(out, p, "No send queue for peer. Can't send RPC")
+		return
 	}
 
-	// piggyback gossip
+	// Any pending control messages?
+	var controlMessage RPC
+	ctl, ok := gs.control[p]
+	if ok {
+		gs.piggybackControl(p, &controlMessage, ctl)
+		delete(gs.control, p)
+	}
 	ihave, ok := gs.gossip[p]
 	if ok {
-		if !own {
-			out = copyRPC(out)
-			own = true
-		}
-		gs.piggybackGossip(p, out, ihave)
+		gs.piggybackGossip(p, &controlMessage, ihave)
 		delete(gs.gossip, p)
 	}
 
-	q, ok := gs.p.peers[p]
-	if !ok {
-		return
+	controlSize := proto.Size(&controlMessage.RPC)
+	if controlSize > 0 {
+		if controlSize < gs.p.maxMessageSize {
+			gs.doSendRPC(&controlMessage, p, q, urgent)
+		} else {
+			for rpc := range controlMessage.split(gs.p.maxMessageSize) {
+				if proto.Size(&rpc.RPC) > gs.p.maxMessageSize {
+					// This should only happen if a single control is above the max size.
+					size := proto.Size(&rpc.RPC)
+					gs.doDropRPC(rpc, p, fmt.Sprintf("Dropping oversized RPC. Size: %d, limit: %d. (Over by %d bytes)", size, gs.p.maxMessageSize, size-gs.p.maxMessageSize))
+					continue
+				}
+				gs.doSendRPC(rpc, p, q, urgent)
+			}
+		}
 	}
 
 	// If we're below the max message size, go ahead and send
@@ -1573,10 +1582,10 @@ func (gs *GossipSubRouter) sendRPC(p peer.ID, out *RPC, urgent bool) {
 		if proto.Size(&rpc.RPC) > gs.p.maxMessageSize {
 			// This should only happen if a single message/control is above the maxMessageSize.
 			size := proto.Size(&rpc.RPC)
-			gs.doDropRPC(out, p, fmt.Sprintf("Dropping oversized RPC. Size: %d, limit: %d. (Over by %d bytes)", size, gs.p.maxMessageSize, size-gs.p.maxMessageSize))
+			gs.doDropRPC(rpc, p, fmt.Sprintf("Dropping oversized RPC. Size: %d, limit: %d. (Over by %d bytes)", size, gs.p.maxMessageSize, size-gs.p.maxMessageSize))
 			continue
 		}
-		gs.doSendRPC(&rpc, p, q, urgent)
+		gs.doSendRPC(rpc, p, q, urgent)
 	}
 }
 

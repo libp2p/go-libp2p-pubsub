@@ -337,9 +337,9 @@ func (rpc *RPC) LogValue() slog.Value {
 // split splits the given RPC If a sub RPC is too large and can't be split
 // further (e.g. Message data is bigger than the RPC limit), then it will be
 // returned as an oversized RPC. The caller should filter out oversized RPCs.
-func (rpc *RPC) split(limit int) iter.Seq[RPC] {
-	return func(yield func(RPC) bool) {
-		nextRPC := RPC{from: rpc.from}
+func (rpc *RPC) split(limit int) iter.Seq[*RPC] {
+	return func(yield func(*RPC) bool) {
+		nextRPC := &RPC{from: rpc.from}
 
 		{
 			nextRPCSize := 0
@@ -362,7 +362,7 @@ func (rpc *RPC) split(limit int) iter.Seq[RPC] {
 						return
 					}
 
-					nextRPC = RPC{from: rpc.from}
+					nextRPC = &RPC{from: rpc.from}
 					nextRPCSize = 0
 					messagesInNextRPC = 0
 				}
@@ -378,22 +378,28 @@ func (rpc *RPC) split(limit int) iter.Seq[RPC] {
 				if !yield(nextRPC) {
 					return
 				}
-				nextRPC = RPC{from: rpc.from}
+				nextRPC = &RPC{from: rpc.from}
 			}
 		}
 
 		// Fast path check. It's possible the original RPC is now small enough
 		// without the messages to publish
-		nextRPC = *rpc
-		nextRPC.Publish = nil
-		if s := proto.Size(&nextRPC.RPC); s < limit {
+		nextRPC = &RPC{from: rpc.from}
+		originalPublishSlice := rpc.Publish
+		rpc.Publish = nil
+		defer func() {
+			// Restore the original message before returning
+			rpc.Publish = originalPublishSlice
+		}()
+		if s := proto.Size(&rpc.RPC); s < limit {
 			if s != 0 {
+				proto.Merge(&nextRPC.RPC, &rpc.RPC)
 				yield(nextRPC)
 			}
 			return
 		}
+
 		// We have to split the RPC into multiple parts
-		nextRPC = RPC{from: rpc.from}
 
 		// Merge/Append Subscriptions
 		for _, sub := range rpc.Subscriptions {
@@ -403,7 +409,7 @@ func (rpc *RPC) split(limit int) iter.Seq[RPC] {
 					return
 				}
 
-				nextRPC = RPC{from: rpc.from}
+				nextRPC = &RPC{from: rpc.from}
 				nextRPC.Subscriptions = append(nextRPC.Subscriptions, sub)
 			}
 		}
@@ -417,7 +423,7 @@ func (rpc *RPC) split(limit int) iter.Seq[RPC] {
 					if !yield(nextRPC) {
 						return
 					}
-					nextRPC = RPC{RPC: pb.RPC{Control: &pb.ControlMessage{}}, from: rpc.from}
+					nextRPC = &RPC{RPC: pb.RPC{Control: &pb.ControlMessage{}}, from: rpc.from}
 				}
 			}
 
@@ -427,7 +433,7 @@ func (rpc *RPC) split(limit int) iter.Seq[RPC] {
 					if !yield(nextRPC) {
 						return
 					}
-					nextRPC = RPC{RPC: pb.RPC{Control: &pb.ControlMessage{}}, from: rpc.from}
+					nextRPC = &RPC{RPC: pb.RPC{Control: &pb.ControlMessage{}}, from: rpc.from}
 					nextRPC.Control.Graft = append(nextRPC.Control.Graft, graft)
 				}
 			}
@@ -438,7 +444,7 @@ func (rpc *RPC) split(limit int) iter.Seq[RPC] {
 					if !yield(nextRPC) {
 						return
 					}
-					nextRPC = RPC{RPC: pb.RPC{Control: &pb.ControlMessage{}}, from: rpc.from}
+					nextRPC = &RPC{RPC: pb.RPC{Control: &pb.ControlMessage{}}, from: rpc.from}
 					nextRPC.Control.Prune = append(nextRPC.Control.Prune, prune)
 				}
 			}
@@ -454,7 +460,7 @@ func (rpc *RPC) split(limit int) iter.Seq[RPC] {
 						if !yield(nextRPC) {
 							return
 						}
-						nextRPC = RPC{RPC: pb.RPC{Control: &pb.ControlMessage{
+						nextRPC = &RPC{RPC: pb.RPC{Control: &pb.ControlMessage{
 							Iwant: []*pb.ControlIWant{newIWant},
 						}}, from: rpc.from}
 					}
@@ -465,7 +471,7 @@ func (rpc *RPC) split(limit int) iter.Seq[RPC] {
 						if !yield(nextRPC) {
 							return
 						}
-						nextRPC = RPC{RPC: pb.RPC{Control: &pb.ControlMessage{
+						nextRPC = &RPC{RPC: pb.RPC{Control: &pb.ControlMessage{
 							Iwant: []*pb.ControlIWant{{MessageIDs: []string{msgID}}},
 						}}, from: rpc.from}
 					}
@@ -482,7 +488,7 @@ func (rpc *RPC) split(limit int) iter.Seq[RPC] {
 						if !yield(nextRPC) {
 							return
 						}
-						nextRPC = RPC{RPC: pb.RPC{Control: &pb.ControlMessage{
+						nextRPC = &RPC{RPC: pb.RPC{Control: &pb.ControlMessage{
 							Ihave: []*pb.ControlIHave{newIhave},
 						}}, from: rpc.from}
 					}
@@ -494,7 +500,7 @@ func (rpc *RPC) split(limit int) iter.Seq[RPC] {
 						if !yield(nextRPC) {
 							return
 						}
-						nextRPC = RPC{RPC: pb.RPC{Control: &pb.ControlMessage{
+						nextRPC = &RPC{RPC: pb.RPC{Control: &pb.ControlMessage{
 							Ihave: []*pb.ControlIHave{{TopicID: ihave.TopicID, MessageIDs: []string{msgID}}},
 						}}, from: rpc.from}
 					}
