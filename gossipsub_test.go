@@ -4887,6 +4887,138 @@ func TestPartialMessages(t *testing.T) {
 	})
 }
 
+// TestPartialMessagesEmitGossipWhenAllPeersPartial verifies that emitGossip
+// still drives the partial messages extension's EmitGossip when all gossip
+// candidates are partial-message peers and the regular mcache for the topic is
+// empty. Previously, emitGossip returned early on an empty mcache, so the
+// partial-message gossip path was never exercised in that case.
+func TestPartialMessagesEmitGossipWhenAllPeersPartial(t *testing.T) {
+	synctestTest(t, func(t *testing.T) {
+		topic := "test-topic"
+		// Use enough hosts that, after mesh formation, every peer still has
+		// non-mesh peers in its gossip candidate set. emitGossip excludes mesh
+		// peers, so with too few hosts the loop has nothing to gossip to.
+		const hostCount = 30
+		hosts := getDefaultHosts(t, hostCount)
+		psubs := make([]*PubSub, 0, len(hosts))
+
+		gossipsubCtx, closeGossipsub := context.WithCancel(context.Background())
+		go func() {
+			<-gossipsubCtx.Done()
+			for _, h := range hosts {
+				h.Close()
+			}
+		}()
+
+		partialExt := make([]*partialmessages.PartialMessagesExtension[peerState], hostCount)
+		logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelDebug}))
+
+		partialMessageStore := make([]map[string]*minimalTestPartialMessage, hostCount)
+		for i := range hostCount {
+			partialMessageStore[i] = make(map[string]*minimalTestPartialMessage)
+		}
+
+		// Counts per-host OnEmitGossip invocations. emitGossip runs on the
+		// gossipsub goroutine inside the synctest bubble, so atomic ops are used
+		// for safety even though the bubble serializes.
+		var emitGossipCalls [hostCount]atomic.Int64
+
+		for i := range partialExt {
+			partialExt[i] = &partialmessages.PartialMessagesExtension[peerState]{
+				Logger: logger.With("id", i),
+				OnEmitGossip: func(topic string, groupID []byte, gossipPeers []peer.ID, peerStates map[peer.ID]peerState) {
+					emitGossipCalls[i].Add(1)
+					pm := partialMessageStore[i][topic+string(groupID)]
+					if pm == nil {
+						return
+					}
+					partialExt[i].PublishPartial(topic, groupID, pm.publishActions)
+				},
+				OnIncomingRPC: func(from peer.ID, peerStates map[peer.ID]peerState, rpc *pb.PartialMessagesExtension) error {
+					peerState := peerStates[from]
+					groupID := rpc.GroupID
+					pm, ok := partialMessageStore[i][topic+string(groupID)]
+					if !ok {
+						pm = &minimalTestPartialMessage{
+							Group: groupID,
+						}
+						partialMessageStore[i][topic+string(groupID)] = pm
+					}
+					if rpc.PartsMetadata != nil {
+						peerState.recvd = bitmap.Merge(peerState.recvd, rpc.PartsMetadata)
+					}
+					prevMeta := slices.Clone(pm.PartsMetadata())
+					shouldRepublish := pm.onIncomingRPC(from, rpc)
+					if !bytes.Equal(prevMeta, pm.PartsMetadata()) {
+						peerState.sent = bitmap.Merge(peerState.sent, pm.PartsMetadata())
+					}
+					peerStates[from] = peerState
+					if shouldRepublish {
+						go PublishPartial(psubs[i], topic, pm.GroupID(), pm.publishActions)
+					}
+					return nil
+				},
+			}
+		}
+
+		for i, h := range hosts {
+			psub := getGossipsub(gossipsubCtx, h, WithPartialMessagesExtension(partialExt[i]))
+			topic, err := psub.Join(topic, RequestPartialMessages())
+			if err != nil {
+				t.Fatal(err)
+			}
+			_, err = topic.Subscribe()
+			if err != nil {
+				t.Fatal(err)
+			}
+			psubs = append(psubs, psub)
+		}
+
+		denseConnect(t, hosts)
+		time.Sleep(2 * time.Second)
+
+		group := []byte("test-group")
+		msg1 := &minimalTestPartialMessage{
+			Group: group,
+			Parts: [2][]byte{
+				[]byte("Hello"),
+				[]byte("World"),
+			},
+		}
+		partialMessageStore[0][topic+string(group)] = msg1
+		err := PublishPartial(psubs[0], topic, msg1.GroupID(), msg1.publishActions)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		// Allow several heartbeats to fire so emitGossip runs on every host.
+		// The regular mcache stays empty (we never call pubsub.Publish for this
+		// topic), so the partial-message gossip path is the only way
+		// OnEmitGossip can fire.
+		time.Sleep(5 * time.Second)
+
+		closeGossipsub()
+		time.Sleep(1 * time.Second)
+
+		for i, msgStore := range partialMessageStore {
+			if len(msgStore) == 0 {
+				t.Errorf("Host %d is missing the partial message", i)
+			}
+			for _, partialMessage := range msgStore {
+				if !partialMessage.complete() {
+					t.Errorf("expected complete message, but %v is incomplete", partialMessage)
+				}
+			}
+		}
+
+		for i := range hostCount {
+			if got := emitGossipCalls[i].Load(); got == 0 {
+				t.Errorf("host %d: expected OnEmitGossip to be called at least once when all peers are partial-message capable, got 0", i)
+			}
+		}
+	})
+}
+
 func TestPeerSupportsPartialMessages(t *testing.T) {
 	// N peers connected in a ring:
 	// peer 0 requests partial messages
