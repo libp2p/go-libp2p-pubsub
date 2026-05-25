@@ -8,6 +8,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"io"
+	"log/slog"
 	mrand "math/rand"
 	"sort"
 	"sync"
@@ -1114,6 +1115,65 @@ func TestAnnounceRetry(t *testing.T) {
 			t.Fatalf("expected 2 subscription messages, but got %d", count)
 		}
 	})
+}
+
+func TestAnnounceRetryStopsAfterLimit(t *testing.T) {
+	synctestTest(t, func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+
+		pid := peer.ID("test-peer")
+		topic := "test"
+		queue := newRpcQueue(1)
+		if err := queue.Push(rpcWithSubs(&pb.RPC_SubOpts{}), false); err != nil {
+			t.Fatal(err)
+		}
+
+		ps := &PubSub{
+			ctx:    ctx,
+			eval:   make(chan func()),
+			peers:  map[peer.ID]*rpcQueue{pid: queue},
+			mySubs: map[string]map[*Subscription]struct{}{topic: nil},
+			logger: slog.Default(),
+		}
+
+		done := make(chan struct{})
+		go func() {
+			defer close(done)
+			for {
+				select {
+				case thunk := <-ps.eval:
+					thunk()
+				case <-ctx.Done():
+					return
+				}
+			}
+		}()
+
+		go ps.announceRetryWithLimit(pid, topic, true, 1)
+
+		time.Sleep(1100 * time.Millisecond)
+		if got := rpcQueueLen(queue); got != 1 {
+			t.Fatalf("expected full queue after exhausted retry, got %d", got)
+		}
+
+		if _, err := queue.Pop(ctx); err != nil {
+			t.Fatal(err)
+		}
+		time.Sleep(1100 * time.Millisecond)
+		if got := rpcQueueLen(queue); got != 0 {
+			t.Fatalf("expected no late announce after retry limit, got queue length %d", got)
+		}
+
+		cancel()
+		<-done
+	})
+}
+
+func rpcQueueLen(q *rpcQueue) int {
+	q.queueMu.Lock()
+	defer q.queueMu.Unlock()
+	return q.queue.Len()
 }
 
 type announceWatcher struct {

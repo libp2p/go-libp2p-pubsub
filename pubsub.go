@@ -28,6 +28,8 @@ import (
 // DefaultMaximumMessageSize is 1mb.
 const DefaultMaxMessageSize = 1 << 20
 
+const announceRetryMaxAttempts = 3
+
 var (
 	// TimeCacheDuration specifies how long a message ID will be remembered as seen.
 	// Use WithSeenMessagesTTL to configure this per pubsub instance, instead of overriding the global default.
@@ -1275,6 +1277,10 @@ func (p *PubSub) announce(topic string, sub bool) {
 }
 
 func (p *PubSub) announceRetry(pid peer.ID, topic string, sub bool) {
+	p.announceRetryWithLimit(pid, topic, sub, announceRetryMaxAttempts)
+}
+
+func (p *PubSub) announceRetryWithLimit(pid peer.ID, topic string, sub bool, attemptsLeft int) {
 	time.Sleep(time.Duration(1+rand.Intn(1000)) * time.Millisecond)
 
 	retry := func() {
@@ -1284,7 +1290,7 @@ func (p *PubSub) announceRetry(pid peer.ID, topic string, sub bool) {
 		ok := okSubs || okRelays
 
 		if (ok && sub) || (!ok && !sub) {
-			p.doAnnounceRetry(pid, topic, sub)
+			p.doAnnounceRetry(pid, topic, sub, attemptsLeft)
 		}
 	}
 
@@ -1294,7 +1300,7 @@ func (p *PubSub) announceRetry(pid peer.ID, topic string, sub bool) {
 	}
 }
 
-func (p *PubSub) doAnnounceRetry(pid peer.ID, topic string, sub bool) {
+func (p *PubSub) doAnnounceRetry(pid peer.ID, topic string, sub bool, attemptsLeft int) {
 	peer, ok := p.peers[pid]
 	if !ok {
 		return
@@ -1318,9 +1324,13 @@ func (p *PubSub) doAnnounceRetry(pid peer.ID, topic string, sub bool) {
 	out := rpcWithSubs(subopt)
 	err := peer.Push(out, false)
 	if err != nil {
-		p.logger.Info("Can't send announce message to peer: queue full; scheduling retry", "peer", pid)
 		p.tracer.DropRPC(out, pid)
-		go p.announceRetry(pid, topic, sub)
+		if attemptsLeft <= 1 {
+			p.logger.Info("Can't send announce message to peer: queue full; dropping retry", "peer", pid)
+			return
+		}
+		p.logger.Info("Can't send announce message to peer: queue full; scheduling retry", "peer", pid)
+		go p.announceRetryWithLimit(pid, topic, sub, attemptsLeft-1)
 		return
 	}
 	p.tracer.SendRPC(out, pid)
