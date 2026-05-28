@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"math/rand"
+	"slices"
 	"sync"
 	"testing"
 	"time"
@@ -1312,5 +1313,87 @@ func TestSelfMessageFilter(t *testing.T) {
 	}
 	if !bytes.Equal(m.Data, remoteMsg) {
 		t.Fatal("expected to receive remote message on filtered subscription")
+	}
+}
+
+// Host 1 connects to both topics and Host 2 connects to one of them.
+// Later Host 1 disconnects from both.
+func TestTopicDeleteEmptyTopicList(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	const numHosts = 2
+	topicIDs := [2]string{"foobarA", "foobarB"}
+	hosts := getDefaultHosts(t, numHosts)
+
+	ps := getPubsubs(ctx, hosts)
+
+	topicAHost0, err := ps[0].Join(topicIDs[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	topicBHost0, err := ps[0].Join(topicIDs[1])
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	topicAHost1, err := ps[1].Join(topicIDs[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	topicBHost1, err := ps[1].Join(topicIDs[1])
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	connectAll(t, hosts)
+	time.Sleep(time.Millisecond * 100)
+
+	subAHost0, err := topicAHost0.Subscribe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := topicBHost0.Subscribe(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := topicAHost1.Subscribe(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := topicBHost1.Subscribe(); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(time.Millisecond * 100)
+
+	verifyTopicPeers := func(actual map[peer.ID]peerTopicState, expected []string) {
+		list := make([]string, 0, len(actual))
+
+		for k := range actual {
+			list = append(list, k.String())
+		}
+
+		slices.Sort(list)
+		slices.Sort(expected)
+
+		if !slices.Equal(list, expected) {
+			t.Fatalf("Expected %v Actual %v", expected, list)
+		}
+	}
+
+	verifyTopicPeers(ps[0].topics[topicIDs[0]], []string{hosts[1].ID().String()})
+	verifyTopicPeers(ps[0].topics[topicIDs[1]], []string{hosts[1].ID().String()})
+
+	verifyTopicPeers(ps[1].topics[topicIDs[0]], []string{hosts[0].ID().String()})
+	verifyTopicPeers(ps[1].topics[topicIDs[1]], []string{hosts[0].ID().String()})
+
+	subAHost0.Cancel()
+	if err := topicAHost0.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	time.Sleep(time.Millisecond * 100)
+
+	verifyTopicPeers(ps[1].topics[topicIDs[1]], []string{hosts[0].ID().String()})
+	if _, ok := ps[1].topics[topicIDs[0]]; ok {
+		t.Fatalf("Topic %s still present and length: %d\n", topicIDs[0], len(ps[1].topics[topicIDs[0]]))
 	}
 }

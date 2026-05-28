@@ -1036,6 +1036,9 @@ func (p *PubSub) clearPeerFromTopicsState(pid peer.ID) {
 	for t, tmap := range p.topics {
 		if _, ok := tmap[pid]; ok {
 			delete(tmap, pid)
+			if len(tmap) == 0 {
+				delete(p.topics, t)
+			}
 			p.notifyLeave(t, pid)
 		}
 	}
