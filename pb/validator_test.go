@@ -82,8 +82,47 @@ func TestValidateRawRPCControlMessageSizeAllowsOversizedPublishAndPartialFields(
 		},
 	})
 
-	if err := ValidateRawRPCControlMessageSize(msg, 8); err != nil {
+	if err := ValidateRawRPCControlMessageSize(msg, 38); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestValidateRawRPCControlMessageSizeRejectsPublishWithLargeTopicOverhead(t *testing.T) {
+	payload := []byte(strings.Repeat("x", 1024))
+	shortTopicPublish := &Message{Topic: proto.String("x"), Data: payload}
+	largeTopicPublish := &Message{Topic: proto.String(strings.Repeat("x", 64)), Data: payload}
+	limit := encodedRawRPCPublishOverhead(t, shortTopicPublish)
+
+	shortTopicMsg := marshalTestMessage(t, &RPC{Publish: []*Message{shortTopicPublish}})
+	if err := ValidateRawRPCControlMessageSize(shortTopicMsg, limit); err != nil {
+		t.Fatal(err)
+	}
+
+	largeTopicMsg := marshalTestMessage(t, &RPC{Publish: []*Message{largeTopicPublish}})
+	if err := ValidateRawRPCControlMessageSize(largeTopicMsg, limit); err == nil {
+		t.Fatal("expected large publish topic overhead to exceed control size limit")
+	}
+}
+
+func TestValidateRawRPCControlMessageSizeRejectsCumulativePublishOverhead(t *testing.T) {
+	payload := []byte(strings.Repeat("x", 32))
+	publish := &Message{Topic: proto.String("a"), Data: payload}
+	limit := encodedRawRPCPublishOverhead(t, publish)
+
+	singlePublishMsg := marshalTestMessage(t, &RPC{Publish: []*Message{publish}})
+	if err := ValidateRawRPCControlMessageSize(singlePublishMsg, limit); err != nil {
+		t.Fatal(err)
+	}
+
+	multiplePublishMsg := marshalTestMessage(t, &RPC{
+		Publish: []*Message{
+			{Topic: proto.String("a"), Data: payload},
+			{Topic: proto.String("b"), Data: payload},
+			{Topic: proto.String("c"), Data: payload},
+		},
+	})
+	if err := ValidateRawRPCControlMessageSize(multiplePublishMsg, limit); err == nil {
+		t.Fatal("expected cumulative publish overhead to exceed control size limit")
 	}
 }
 
@@ -122,4 +161,15 @@ func appendRawRPCSubscriptionField(msg []byte, subscription []byte) []byte {
 
 func encodedRawRPCFieldSize(field protowire.Number, msg []byte) int {
 	return protowire.SizeTag(field) + protowire.SizeBytes(len(msg))
+}
+
+func encodedRawRPCPublishOverhead(t *testing.T, publish *Message) int {
+	t.Helper()
+
+	rawPublish := marshalTestMessage(t, publish)
+	dataLen := 0
+	if publish.Data != nil {
+		dataLen = protowire.SizeBytes(len(publish.Data))
+	}
+	return encodedRawRPCFieldSize(rpcPublishFieldNumber, rawPublish) - dataLen
 }
