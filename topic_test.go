@@ -1318,7 +1318,7 @@ func TestSelfMessageFilter(t *testing.T) {
 
 // Checking if topic is removed from topics map
 // https://github.com/libp2p/go-libp2p-pubsub/issues/705
-func TestTopicDeleteEmptyTopicList(t *testing.T) {
+func TestTopicDeleteEmptyTopicMap(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
