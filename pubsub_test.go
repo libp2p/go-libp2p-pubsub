@@ -7,7 +7,9 @@ import (
 	"testing/synctest"
 	"time"
 
+	pb "github.com/libp2p/go-libp2p-pubsub/pb"
 	"github.com/libp2p/go-libp2p/core/host"
+	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/x/simlibp2p"
 	"github.com/marcopolo/simnet"
 )
@@ -21,6 +23,88 @@ func synctestTest(t *testing.T, f func(t *testing.T)) {
 		t.Cleanup(func() { runtime.GOMAXPROCS(prev) })
 	}
 	synctest.Test(t, f)
+}
+
+func TestClearPeerFromTopicsStateRemovesEmptyTopicMap(t *testing.T) {
+	pid := peer.ID("peer-a")
+	other := peer.ID("peer-b")
+
+	ps := &PubSub{
+		topics: map[string]map[peer.ID]peerTopicState{
+			"only-peer": {
+				pid: {},
+			},
+			"shared": {
+				pid:   {},
+				other: {},
+			},
+			"other-only": {
+				other: {},
+			},
+		},
+	}
+
+	ps.clearPeerFromTopicsState(pid)
+
+	if _, ok := ps.topics["only-peer"]; ok {
+		t.Fatal("expected topic map to be removed after clearing its last peer")
+	}
+	if _, ok := ps.topics["shared"][pid]; ok {
+		t.Fatal("expected cleared peer to be removed from non-empty topic map")
+	}
+	if _, ok := ps.topics["shared"][other]; !ok {
+		t.Fatal("expected other peer to remain in non-empty topic map")
+	}
+	if _, ok := ps.topics["other-only"][other]; !ok {
+		t.Fatal("expected unrelated topic map to remain unchanged")
+	}
+}
+
+func TestHandleIncomingRPCUnsubscribeRemovesEmptyTopicMap(t *testing.T) {
+	pid := peer.ID("peer-a")
+	other := peer.ID("peer-b")
+	onlyPeerTopic := "only-peer"
+	sharedTopic := "shared"
+	unsubscribe := false
+
+	ps := &PubSub{
+		rt: &FloodSubRouter{},
+		topics: map[string]map[peer.ID]peerTopicState{
+			onlyPeerTopic: {
+				pid: {},
+			},
+			sharedTopic: {
+				pid:   {},
+				other: {},
+			},
+		},
+	}
+
+	ps.handleIncomingRPC(&RPC{
+		RPC: pb.RPC{
+			Subscriptions: []*pb.RPC_SubOpts{
+				{
+					Topicid:   &onlyPeerTopic,
+					Subscribe: &unsubscribe,
+				},
+				{
+					Topicid:   &sharedTopic,
+					Subscribe: &unsubscribe,
+				},
+			},
+		},
+		from: pid,
+	})
+
+	if _, ok := ps.topics[onlyPeerTopic]; ok {
+		t.Fatal("expected topic map to be removed after unsubscribe clears its last peer")
+	}
+	if _, ok := ps.topics[sharedTopic][pid]; ok {
+		t.Fatal("expected unsubscribed peer to be removed from non-empty topic map")
+	}
+	if _, ok := ps.topics[sharedTopic][other]; !ok {
+		t.Fatal("expected other peer to remain in non-empty topic map")
+	}
 }
 
 func getDefaultHosts(t *testing.T, n int) []host.Host {
