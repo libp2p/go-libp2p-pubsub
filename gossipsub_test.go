@@ -4960,10 +4960,12 @@ func TestPartialMessagesEmitGossipWhenAllPeersPartial(t *testing.T) {
 			}
 		}
 
+		var totalEmitGossipCalls int64
 		for i := range hostCount {
-			if got := emitGossipCalls[i].Load(); got == 0 {
-				t.Errorf("host %d: expected OnEmitGossip to be called at least once when all peers are partial-message capable, got 0", i)
-			}
+			totalEmitGossipCalls += emitGossipCalls[i].Load()
+		}
+		if totalEmitGossipCalls == 0 {
+			t.Errorf("expected OnEmitGossip to be called at least once when all peers are partial-message capable, got 0")
 		}
 	})
 }

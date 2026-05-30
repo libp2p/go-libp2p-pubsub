@@ -100,11 +100,6 @@ func TestGossipsubConnTagMessageDeliveries(t *testing.T) {
 			honestPeers[h.ID()] = struct{}{}
 		}
 
-		// use flood publishing, so non-mesh peers will still be delivering messages
-		// to everyone
-		psubs := getGossipsubs(ctx, honestHosts,
-			WithFloodPublish(true))
-
 		// sybil squatters to be connected later
 		for _, h := range sybilHosts {
 			squatter := &sybilSquatter{h: h, ignoreErrors: true}
@@ -119,6 +114,11 @@ func TestGossipsubConnTagMessageDeliveries(t *testing.T) {
 				t.Errorf("expected to have conns to all honest peers, have %d", len(h.Network().Conns()))
 			}
 		}
+
+		// use flood publishing, so non-mesh peers will still be delivering messages
+		// to everyone
+		psubs := getGossipsubs(ctx, honestHosts,
+			WithFloodPublish(true))
 
 		// subscribe everyone to the topic
 		topic := "test"
