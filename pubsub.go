@@ -1811,7 +1811,7 @@ func (p *PubSub) PeerFeedback(topic string, peer peer.ID, kind PeerFeedbackKind)
 	if !ok {
 		return errors.New("peer feedback is only supported by GossipSub")
 	}
-	p.eval <- func() {
+	return p.syncEval(func() {
 		if gs.score == nil {
 			return
 		}
@@ -1823,8 +1823,7 @@ func (p *PubSub) PeerFeedback(topic string, peer peer.ID, kind PeerFeedbackKind)
 		case PeerFeedbackInvalidMessage:
 			gs.score.markInvalidMessageDelivery(peer, topic)
 		}
-	}
-	return nil
+	})
 }
 
 // PublishBatch publishes a batch of messages. This only works for routers that
