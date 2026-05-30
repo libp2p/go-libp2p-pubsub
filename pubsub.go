@@ -26,8 +26,12 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-// DefaultMaximumMessageSize is 1mb.
-const DefaultMaxMessageSize = 1 << 20
+const (
+	// DefaultMaximumMessageSize is 1MiB.
+	DefaultMaxMessageSize = 1 << 20
+	// DefaultMaxControlMessageSize is 512KiB.
+	DefaultMaxControlMessageSize = 512 << 10
+)
 
 var (
 	// TimeCacheDuration specifies how long a message ID will be remembered as seen.
@@ -84,6 +88,9 @@ type PubSub struct {
 	// maxMessageSize is the maximum message size; it applies globally to all
 	// topics.
 	maxMessageSize int
+
+	// maxControlMessageSize is the maximum size for control messages.
+	maxControlMessageSize int
 
 	// size of the outbound message channel that we maintain for each peer
 	peerOutboundQueueSize int
@@ -334,10 +341,12 @@ func (rpc *RPC) LogValue() slog.Value {
 	return slog.GroupValue(fields...)
 }
 
-// split splits the given RPC If a sub RPC is too large and can't be split
-// further (e.g. Message data is bigger than the RPC limit), then it will be
-// returned as an oversized RPC. The caller should filter out oversized RPCs.
-func (rpc *RPC) split(limit int) iter.Seq[*RPC] {
+// split splits the given RPC. If a sub RPC is too large and can't be split
+// further (e.g. Message data is bigger than the RPC limit, or a single
+// non-publish/non-partial message entry is bigger than the control limit), then
+// it will be returned as an oversized RPC. The caller should filter out
+// oversized RPCs.
+func (rpc *RPC) split(limit, controlLimit int) iter.Seq[*RPC] {
 	return func(yield func(*RPC) bool) {
 		nextRPC := &RPC{from: rpc.from}
 
@@ -391,7 +400,7 @@ func (rpc *RPC) split(limit int) iter.Seq[*RPC] {
 			// Restore the original message before returning
 			rpc.Publish = originalPublishSlice
 		}()
-		if s := proto.Size(&rpc.RPC); s < limit {
+		if s := proto.Size(&rpc.RPC); s <= limit && controlRPCSize(rpc) <= controlLimit {
 			if s != 0 {
 				proto.Merge(&nextRPC.RPC, &rpc.RPC)
 				yield(nextRPC)
@@ -403,7 +412,7 @@ func (rpc *RPC) split(limit int) iter.Seq[*RPC] {
 
 		// Merge/Append Subscriptions
 		for _, sub := range rpc.Subscriptions {
-			if nextRPC.Subscriptions = append(nextRPC.Subscriptions, sub); proto.Size(&nextRPC.RPC) > limit {
+			if nextRPC.Subscriptions = append(nextRPC.Subscriptions, sub); nextRPC.exceedsSizeLimits(limit, controlLimit) {
 				nextRPC.Subscriptions = nextRPC.Subscriptions[:len(nextRPC.Subscriptions)-1]
 				if !yield(nextRPC) {
 					return
@@ -418,7 +427,7 @@ func (rpc *RPC) split(limit int) iter.Seq[*RPC] {
 		if ctl := rpc.Control; ctl != nil {
 			if nextRPC.Control == nil {
 				nextRPC.Control = &pb.ControlMessage{}
-				if proto.Size(&nextRPC.RPC) > limit {
+				if nextRPC.exceedsSizeLimits(limit, controlLimit) {
 					nextRPC.Control = nil
 					if !yield(nextRPC) {
 						return
@@ -427,8 +436,21 @@ func (rpc *RPC) split(limit int) iter.Seq[*RPC] {
 				}
 			}
 
+			if extensions := ctl.GetExtensions(); extensions != nil {
+				if nextRPC.Control.Extensions = extensions; nextRPC.exceedsSizeLimits(limit, controlLimit) {
+					nextRPC.Control.Extensions = nil
+					if !yield(nextRPC) {
+						return
+					}
+
+					nextRPC = &RPC{RPC: pb.RPC{Control: &pb.ControlMessage{
+						Extensions: extensions,
+					}}, from: rpc.from}
+				}
+			}
+
 			for _, graft := range ctl.GetGraft() {
-				if nextRPC.Control.Graft = append(nextRPC.Control.Graft, graft); proto.Size(&nextRPC.RPC) > limit {
+				if nextRPC.Control.Graft = append(nextRPC.Control.Graft, graft); nextRPC.exceedsSizeLimits(limit, controlLimit) {
 					nextRPC.Control.Graft = nextRPC.Control.Graft[:len(nextRPC.Control.Graft)-1]
 					if !yield(nextRPC) {
 						return
@@ -439,7 +461,7 @@ func (rpc *RPC) split(limit int) iter.Seq[*RPC] {
 			}
 
 			for _, prune := range ctl.GetPrune() {
-				if nextRPC.Control.Prune = append(nextRPC.Control.Prune, prune); proto.Size(&nextRPC.RPC) > limit {
+				if nextRPC.Control.Prune = append(nextRPC.Control.Prune, prune); nextRPC.exceedsSizeLimits(limit, controlLimit) {
 					nextRPC.Control.Prune = nextRPC.Control.Prune[:len(nextRPC.Control.Prune)-1]
 					if !yield(nextRPC) {
 						return
@@ -455,7 +477,7 @@ func (rpc *RPC) split(limit int) iter.Seq[*RPC] {
 					// For IWANTs we don't need more than a single one,
 					// since there are no topic IDs here.
 					newIWant := &pb.ControlIWant{}
-					if nextRPC.Control.Iwant = append(nextRPC.Control.Iwant, newIWant); proto.Size(&nextRPC.RPC) > limit {
+					if nextRPC.Control.Iwant = append(nextRPC.Control.Iwant, newIWant); nextRPC.exceedsSizeLimits(limit, controlLimit) {
 						nextRPC.Control.Iwant = nextRPC.Control.Iwant[:len(nextRPC.Control.Iwant)-1]
 						if !yield(nextRPC) {
 							return
@@ -466,7 +488,7 @@ func (rpc *RPC) split(limit int) iter.Seq[*RPC] {
 					}
 				}
 				for _, msgID := range iwant.GetMessageIDs() {
-					if nextRPC.Control.Iwant[0].MessageIDs = append(nextRPC.Control.Iwant[0].MessageIDs, msgID); proto.Size(&nextRPC.RPC) > limit {
+					if nextRPC.Control.Iwant[0].MessageIDs = append(nextRPC.Control.Iwant[0].MessageIDs, msgID); nextRPC.exceedsSizeLimits(limit, controlLimit) {
 						nextRPC.Control.Iwant[0].MessageIDs = nextRPC.Control.Iwant[0].MessageIDs[:len(nextRPC.Control.Iwant[0].MessageIDs)-1]
 						if !yield(nextRPC) {
 							return
@@ -478,12 +500,38 @@ func (rpc *RPC) split(limit int) iter.Seq[*RPC] {
 				}
 			}
 
+			for _, idontwant := range ctl.GetIdontwant() {
+				if len(nextRPC.Control.Idontwant) == 0 {
+					newIDontWant := &pb.ControlIDontWant{}
+					if nextRPC.Control.Idontwant = append(nextRPC.Control.Idontwant, newIDontWant); nextRPC.exceedsSizeLimits(limit, controlLimit) {
+						nextRPC.Control.Idontwant = nextRPC.Control.Idontwant[:len(nextRPC.Control.Idontwant)-1]
+						if !yield(nextRPC) {
+							return
+						}
+						nextRPC = &RPC{RPC: pb.RPC{Control: &pb.ControlMessage{
+							Idontwant: []*pb.ControlIDontWant{newIDontWant},
+						}}, from: rpc.from}
+					}
+				}
+				for _, msgID := range idontwant.GetMessageIDs() {
+					if nextRPC.Control.Idontwant[0].MessageIDs = append(nextRPC.Control.Idontwant[0].MessageIDs, msgID); nextRPC.exceedsSizeLimits(limit, controlLimit) {
+						nextRPC.Control.Idontwant[0].MessageIDs = nextRPC.Control.Idontwant[0].MessageIDs[:len(nextRPC.Control.Idontwant[0].MessageIDs)-1]
+						if !yield(nextRPC) {
+							return
+						}
+						nextRPC = &RPC{RPC: pb.RPC{Control: &pb.ControlMessage{
+							Idontwant: []*pb.ControlIDontWant{{MessageIDs: []string{msgID}}},
+						}}, from: rpc.from}
+					}
+				}
+			}
+
 			for _, ihave := range ctl.GetIhave() {
 				if len(nextRPC.Control.Ihave) == 0 ||
 					nextRPC.Control.Ihave[len(nextRPC.Control.Ihave)-1].TopicID != ihave.TopicID {
 					// Start a new IHAVE if we are referencing a new topic ID
 					newIhave := &pb.ControlIHave{TopicID: ihave.TopicID}
-					if nextRPC.Control.Ihave = append(nextRPC.Control.Ihave, newIhave); proto.Size(&nextRPC.RPC) > limit {
+					if nextRPC.Control.Ihave = append(nextRPC.Control.Ihave, newIhave); nextRPC.exceedsSizeLimits(limit, controlLimit) {
 						nextRPC.Control.Ihave = nextRPC.Control.Ihave[:len(nextRPC.Control.Ihave)-1]
 						if !yield(nextRPC) {
 							return
@@ -495,7 +543,7 @@ func (rpc *RPC) split(limit int) iter.Seq[*RPC] {
 				}
 				for _, msgID := range ihave.GetMessageIDs() {
 					lastIHave := nextRPC.Control.Ihave[len(nextRPC.Control.Ihave)-1]
-					if lastIHave.MessageIDs = append(lastIHave.MessageIDs, msgID); proto.Size(&nextRPC.RPC) > limit {
+					if lastIHave.MessageIDs = append(lastIHave.MessageIDs, msgID); nextRPC.exceedsSizeLimits(limit, controlLimit) {
 						lastIHave.MessageIDs = lastIHave.MessageIDs[:len(lastIHave.MessageIDs)-1]
 						if !yield(nextRPC) {
 							return
@@ -514,6 +562,20 @@ func (rpc *RPC) split(limit int) iter.Seq[*RPC] {
 			}
 		}
 	}
+}
+
+func (rpc *RPC) exceedsSizeLimits(limit, controlLimit int) bool {
+	return proto.Size(&rpc.RPC) > limit || controlRPCSize(rpc) > controlLimit
+}
+
+func controlRPCSize(rpc *RPC) int {
+	if rpc == nil {
+		return 0
+	}
+	return proto.Size(&pb.RPC{
+		Subscriptions: rpc.Subscriptions,
+		Control:       rpc.Control,
+	})
 }
 
 // pbFieldNumberLT15Size is the number of bytes required to encode a protobuf
@@ -551,6 +613,7 @@ func NewPubSub(ctx context.Context, h host.Host, rt PubSubRouter, opts ...Option
 		peerFilter:            DefaultPeerFilter,
 		disc:                  &discover{},
 		maxMessageSize:        DefaultMaxMessageSize,
+		maxControlMessageSize: DefaultMaxControlMessageSize,
 		peerOutboundQueueSize: 32,
 		signID:                h.ID(),
 		signKey:               nil,
@@ -828,6 +891,15 @@ func WithRPCLogger(logger *slog.Logger) Option {
 func WithMaxMessageSize(maxMessageSize int) Option {
 	return func(ps *PubSub) error {
 		ps.maxMessageSize = maxMessageSize
+		return nil
+	}
+}
+
+// WithMaxControlMessageSize sets the maximum size for pubsub control messages.
+// The default value is 512KiB (DefaultMaxControlMessageSize).
+func WithMaxControlMessageSize(maxControlMessageSize int) Option {
+	return func(ps *PubSub) error {
+		ps.maxControlMessageSize = maxControlMessageSize
 		return nil
 	}
 }

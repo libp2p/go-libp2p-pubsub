@@ -98,6 +98,26 @@ func getGossipsubsOptFn(ctx context.Context, hs []host.Host, optFn func(int, hos
 	return psubs
 }
 
+func TestConfigurableMaxControlMessageSize(t *testing.T) {
+	synctestTest(t, func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+
+		hosts := getDefaultHosts(t, 2)
+
+		defaultPubsub := getGossipsub(ctx, hosts[0])
+		if defaultPubsub.maxControlMessageSize != DefaultMaxControlMessageSize {
+			t.Fatalf("expected default max control message size %d, got %d", DefaultMaxControlMessageSize, defaultPubsub.maxControlMessageSize)
+		}
+
+		const maxControlMessageSize = 1234
+		configuredPubsub := getGossipsub(ctx, hosts[1], WithMaxControlMessageSize(maxControlMessageSize))
+		if configuredPubsub.maxControlMessageSize != maxControlMessageSize {
+			t.Fatalf("expected configured max control message size %d, got %d", maxControlMessageSize, configuredPubsub.maxControlMessageSize)
+		}
+	})
+}
+
 func TestSparseGossipsub(t *testing.T) {
 	synctestTest(t, func(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
@@ -2620,7 +2640,7 @@ func validRPCSizes(slice []*RPC, limit int) bool {
 func TestFragmentRPCFunction(t *testing.T) {
 	synctestTest(t, func(t *testing.T) {
 		fragmentRPC := func(rpc *RPC, limit int) ([]*RPC, error) {
-			rpcs := slices.Collect(rpc.split(limit))
+			rpcs := slices.Collect(rpc.split(limit, limit))
 			if allValid := validRPCSizes(rpcs, limit); !allValid {
 				return rpcs, fmt.Errorf("RPC size exceeds limit")
 			}
@@ -2766,6 +2786,83 @@ func TestFragmentRPCFunction(t *testing.T) {
 			t.Fatalf("expected at least %d total RPCs (at least %d with control messages), got %d total", expectedRPCs, expectedCtrl, len(results))
 		}
 
+		// Control messages should split on the control limit even if the
+		// full RPC would fit within the RPC size limit.
+		rpc.Reset()
+		controlLimit := 256
+		maxRPCSize := limit * 8
+		messageIds := make([]string, 64)
+		for i := range messageIds {
+			mid := make([]byte, 16)
+			crand.Read(mid)
+			messageIds[i] = string(mid)
+		}
+		rpc.Control = &pb.ControlMessage{
+			Iwant:     []*pb.ControlIWant{{MessageIDs: messageIds}},
+			Idontwant: []*pb.ControlIDontWant{{MessageIDs: messageIds}},
+		}
+		results = slices.Collect(rpc.split(maxRPCSize, controlLimit))
+		if len(results) < 2 {
+			t.Fatalf("expected control message to be split by control limit, got %d RPCs", len(results))
+		}
+		var fragmentedMessageIds []string
+		var fragmentedIDontWantMessageIds []string
+		for _, r := range results {
+			if size := proto.Size(&r.RPC); size > maxRPCSize {
+				t.Fatalf("expected fragmented RPC to be below %d bytes, was %d", maxRPCSize, size)
+			}
+			if size := controlRPCSize(r); size > controlLimit {
+				t.Fatalf("expected fragmented control message to be below %d bytes, was %d", controlLimit, size)
+			}
+			for _, iwant := range r.Control.GetIwant() {
+				fragmentedMessageIds = append(fragmentedMessageIds, iwant.MessageIDs...)
+			}
+			for _, idontwant := range r.Control.GetIdontwant() {
+				fragmentedIDontWantMessageIds = append(fragmentedIDontWantMessageIds, idontwant.MessageIDs...)
+			}
+		}
+		if !slices.Equal(messageIds, fragmentedMessageIds) {
+			t.Fatal("expected fragmented IWANT control messages to contain the same message IDs as input")
+		}
+		if !slices.Equal(messageIds, fragmentedIDontWantMessageIds) {
+			t.Fatal("expected fragmented IDONTWANT control messages to contain the same message IDs as input")
+		}
+
+		rpc.Reset()
+		rpc.Subscriptions = make([]*pb.RPC_SubOpts, 32)
+		for i := range rpc.Subscriptions {
+			topic := fmt.Sprintf("subscription-topic-%d", i)
+			rpc.Subscriptions[i] = &pb.RPC_SubOpts{Topicid: &topic}
+		}
+		results = slices.Collect(rpc.split(maxRPCSize, controlLimit))
+		if len(results) < 2 {
+			t.Fatalf("expected subscriptions to be split by control limit, got %d RPCs", len(results))
+		}
+		var nSubscriptionsFragmented int
+		for _, r := range results {
+			if size := controlRPCSize(r); size > controlLimit {
+				t.Fatalf("expected fragmented subscriptions to be below %d bytes, was %d", controlLimit, size)
+			}
+			nSubscriptionsFragmented += len(r.Subscriptions)
+		}
+		if nSubscriptionsFragmented != len(rpc.Subscriptions) {
+			t.Fatalf("expected fragmented RPCs to contain same number of subscriptions as input, got %d / %d",
+				nSubscriptionsFragmented, len(rpc.Subscriptions))
+		}
+
+		rpc.Reset()
+		rpc.Partial = &pb.PartialMessagesExtension{PartialMessage: make([]byte, controlLimit*2)}
+		results = slices.Collect(rpc.split(maxRPCSize, controlLimit))
+		if len(results) != 1 {
+			t.Fatalf("expected partial message extension to be excluded from control limit, got %d RPCs", len(results))
+		}
+		if results[0].Partial == nil {
+			t.Fatal("expected partial message extension to be preserved")
+		}
+		if size := controlRPCSize(results[0]); size != 0 {
+			t.Fatalf("expected partial-only RPC control size to be 0, got %d", size)
+		}
+
 		// Test the pathological case where a single gossip message ID exceeds the limit.
 		// It should not be present in the fragmented messages, but smaller IDs should be
 		rpc.Reset()
@@ -2824,7 +2921,7 @@ func FuzzRPCSplit(f *testing.F) {
 		originalControl.append(&rpc.RPC)
 		mergedControl := compressedRPC{ihave: make(map[string][]string)}
 
-		for rpc := range rpc.split(maxSize) {
+		for rpc := range rpc.split(maxSize, maxSize) {
 			if proto.Size(&rpc.RPC) > maxSize {
 				t.Fatalf("invalid RPC size %v %d (max=%d)", rpc, proto.Size(&rpc.RPC), maxSize)
 			}
@@ -4108,7 +4205,7 @@ func BenchmarkSplitRPC(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		rpc := rpcs[i%len(rpcs)]
-		rpc.split(maxSize)
+		rpc.split(maxSize, maxSize)
 	}
 }
 
@@ -4135,7 +4232,7 @@ func BenchmarkSplitRPCLargeMessages(b *testing.B) {
 
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
-			for range rpc.split(DefaultMaxMessageSize) {
+			for range rpc.split(DefaultMaxMessageSize, DefaultMaxControlMessageSize) {
 
 			}
 		}
@@ -4152,7 +4249,7 @@ func BenchmarkSplitRPCLargeMessages(b *testing.B) {
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
 			count := 0
-			for range rpc.split(DefaultMaxMessageSize) {
+			for range rpc.split(DefaultMaxMessageSize, DefaultMaxControlMessageSize) {
 				count++
 			}
 			if count != 2 {

@@ -122,6 +122,15 @@ func (p *PubSub) handleNewStream(s network.Stream) {
 			continue
 		}
 
+		err = pb.ValidateRawRPCControlMessageSize(msgbytes, p.maxControlMessageSize)
+		if err != nil {
+			r.ReleaseMsg(msgbytes)
+			s.Reset()
+
+			p.rpcLogger.Warn("RPC's control message is too large. Disconnecting. If this is a mistake, you should increase `WithMaxControlMessageSize`", "peer", s.Conn().RemotePeer(), "err", err)
+			return
+		}
+
 		rpc := new(RPC)
 		err = proto.Unmarshal(msgbytes, &rpc.RPC)
 		r.ReleaseMsg(msgbytes)
