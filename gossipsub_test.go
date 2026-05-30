@@ -22,6 +22,7 @@ import (
 	"sync/atomic"
 	"testing"
 	"testing/quick"
+	"testing/synctest"
 	"time"
 
 	"github.com/libp2p/go-libp2p-pubsub/internal/gologshim"
@@ -2391,6 +2392,61 @@ func TestGossipsubPeerFeedback(t *testing.T) {
 		score2 := inspector.score(hosts[1].ID())
 		if score2 < 9 {
 			t.Fatalf("expected score to be at least 9, instead got %f", score2)
+		}
+	})
+}
+
+func TestSyncEvalAmidstCancellation(t *testing.T) {
+	t.Run("After Cancellation", func(t *testing.T) {
+		synctestTest(t, func(t *testing.T) {
+			ctx, cancel := context.WithCancel(context.Background())
+
+			hosts := getDefaultHosts(t, 1)
+			psub := getGossipsub(ctx, hosts[0])
+
+			cancel()
+			synctest.Wait()
+
+			if err := psub.syncEval(func() {}); !errors.Is(err, context.Canceled) {
+				t.Fatalf("expected context.Canceled, got %v", err)
+			}
+		})
+	})
+
+	t.Run("During Cancellation", func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+
+		hosts := getDefaultHosts(t, 1)
+		psub := getGossipsub(ctx, hosts[0])
+
+		evalStarted := make(chan struct{})
+		unblockEval := make(chan struct{})
+		defer close(unblockEval)
+
+		errCh := make(chan error, 1)
+		go func() {
+			errCh <- psub.syncEval(func() {
+				close(evalStarted)
+				<-unblockEval
+			})
+		}()
+
+		select {
+		case <-evalStarted:
+		case <-time.After(time.Second):
+			t.Fatal("timed out waiting for pubsub eval loop")
+		}
+
+		// Cancel the pubsub's context while the evaluation function is running.
+		cancel()
+
+		select {
+		case err := <-errCh:
+			if !errors.Is(err, context.Canceled) {
+				t.Fatalf("expected context.Canceled, got %v", err)
+			}
+		case <-time.After(time.Second):
+			t.Fatal("PeerFeedback blocked after pubsub shutdown")
 		}
 	})
 }
