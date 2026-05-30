@@ -25,7 +25,7 @@ func (ps *PubSub) watchForNewPeers(ctx context.Context) {
 	ps.newPeersPrioLk.RLock()
 	ps.newPeersMx.Lock()
 	for _, pid := range ps.host.Network().Peers() {
-		if ps.host.Network().Connectedness(pid) != network.Connected {
+		if c := ps.host.Network().Connectedness(pid); c != network.Connected && c != network.Limited {
 			continue
 		}
 		ps.newPeersPend[pid] = struct{}{}
