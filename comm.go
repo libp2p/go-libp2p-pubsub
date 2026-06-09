@@ -163,7 +163,7 @@ func (p *PubSub) notifyPeerDead(pid peer.ID) {
 }
 
 func (p *PubSub) handleNewPeer(ctx context.Context, pid peer.ID, outgoing *rpcQueue) {
-	s, err := p.host.NewStream(ctx, pid, p.rt.Protocols()...)
+	s, err := p.host.NewStream(network.WithAllowLimitedConn(ctx, "pubsub"), pid, p.rt.Protocols()...)
 	if err != nil {
 		p.logger.Debug("error opening new stream to peer", "err", err, "peer", pid)
 

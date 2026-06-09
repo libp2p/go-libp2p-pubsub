@@ -1005,7 +1005,7 @@ func (p *PubSub) handlePendingPeers() {
 	for pid := range newPeers {
 		// Make sure we have a non-limited connection. We do this late because we may have
 		// disconnected in the meantime.
-		if p.host.Network().Connectedness(pid) != network.Connected {
+		if c := p.host.Network().Connectedness(pid); c != network.Connected && c != network.Limited {
 			continue
 		}
 
