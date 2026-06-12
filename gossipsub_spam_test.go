@@ -16,9 +16,7 @@ import (
 	"github.com/libp2p/go-libp2p/core/protocol"
 
 	pb "github.com/libp2p/go-libp2p-pubsub/pb"
-
-	//lint:ignore SA1019 "github.com/libp2p/go-msgio/protoio" is deprecated
-	"github.com/libp2p/go-msgio/protoio"
+	"github.com/libp2p/go-msgio/pbio"
 )
 
 // Test that when Gossipsub receives too many IWANT messages from a peer
@@ -1021,8 +1019,8 @@ func newMockGSWithVersion(ctx context.Context, t *testing.T, attacker host.Host,
 			t.Fatal(err)
 		}
 
-		r := protoio.NewDelimitedReader(stream, maxMessageSize)
-		w := protoio.NewDelimitedWriter(ostream)
+		r := pbio.NewDelimitedReader(stream, maxMessageSize)
+		w := pbio.NewDelimitedWriter(ostream)
 
 		var irpc pb.RPC
 

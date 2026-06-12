@@ -19,6 +19,7 @@ import (
 	"github.com/libp2p/go-libp2p-pubsub/partialmessages/bitmap"
 	pubsub_pb "github.com/libp2p/go-libp2p-pubsub/pb"
 	"github.com/libp2p/go-libp2p/core/peer"
+	"google.golang.org/protobuf/proto"
 )
 
 // testRouter implements the Router interface for testing
@@ -507,7 +508,7 @@ func (tp *testPeers) cleanup(t *testing.T) {
 	// Assert no empty RPCs
 	for _, msgs := range tp.network.allSentMsgs {
 		for _, msg := range msgs {
-			if msg.rpc.Size() == 0 {
+			if proto.Size(msg.rpc) == 0 {
 				t.Fatal("empty message")
 			}
 		}

@@ -39,10 +39,9 @@ import (
 	"github.com/libp2p/go-libp2p/core/protocol"
 	"github.com/libp2p/go-libp2p/core/record"
 
+	"github.com/libp2p/go-msgio/pbio"
 	ma "github.com/multiformats/go-multiaddr"
-
-	//lint:ignore SA1019 "github.com/libp2p/go-msgio/protoio" is deprecated
-	"github.com/libp2p/go-msgio/protoio"
+	"google.golang.org/protobuf/proto"
 )
 
 func getGossipsub(ctx context.Context, h host.Host, opts ...Option) *PubSub {
@@ -2253,8 +2252,8 @@ func (sq *sybilSquatter) handleStream(s network.Stream) {
 
 	// send a subscription for test in the output stream to become candidate for GRAFT
 	// and then just read and ignore the incoming RPCs
-	r := protoio.NewDelimitedReader(s, 1<<20)
-	w := protoio.NewDelimitedWriter(os)
+	r := pbio.NewDelimitedReader(s, 1<<20)
+	w := pbio.NewDelimitedWriter(os)
 	truth := true
 	topic := "test"
 	err = w.WriteMsg(&pb.RPC{Subscriptions: []*pb.RPC_SubOpts{{Subscribe: &truth, Topicid: &topic}}})
@@ -2604,8 +2603,8 @@ func (iwe *iwantEverything) handleStream(s network.Stream) {
 	gossipMsgIdsReceived := make(map[string]struct{})
 
 	// send a subscription for test in the output stream to become candidate for gossip
-	r := protoio.NewDelimitedReader(s, 1<<20)
-	w := protoio.NewDelimitedWriter(os)
+	r := pbio.NewDelimitedReader(s, 1<<20)
+	w := pbio.NewDelimitedWriter(os)
 	truth := true
 	topic := "test"
 	err = w.WriteMsg(&pb.RPC{Subscriptions: []*pb.RPC_SubOpts{{Subscribe: &truth, Topicid: &topic}}})
@@ -2665,9 +2664,9 @@ func (iwe *iwantEverything) handleStream(s network.Stream) {
 	}
 }
 
-func validRPCSizes(slice []RPC, limit int) bool {
+func validRPCSizes(slice []*RPC, limit int) bool {
 	for _, rpc := range slice {
-		if rpc.Size() > limit {
+		if proto.Size(&rpc.RPC) > limit {
 			return false
 		}
 	}
@@ -2676,7 +2675,7 @@ func validRPCSizes(slice []RPC, limit int) bool {
 
 func TestFragmentRPCFunction(t *testing.T) {
 	synctestTest(t, func(t *testing.T) {
-		fragmentRPC := func(rpc *RPC, limit int) ([]RPC, error) {
+		fragmentRPC := func(rpc *RPC, limit int) ([]*RPC, error) {
 			rpcs := slices.Collect(rpc.split(limit))
 			if allValid := validRPCSizes(rpcs, limit); !allValid {
 				return rpcs, fmt.Errorf("RPC size exceeds limit")
@@ -2691,15 +2690,15 @@ func TestFragmentRPCFunction(t *testing.T) {
 
 		mkMsg := func(size int) *pb.Message {
 			msg := &pb.Message{}
-			msg.Data = make([]byte, size-4) // subtract the protobuf overhead, so msg.Size() returns requested size
+			msg.Data = make([]byte, size-4) // subtract the protobuf overhead, so proto.Size(msg) returns requested size
 			crand.Read(msg.Data)
 			return msg
 		}
 
-		ensureBelowLimit := func(rpcs []RPC) {
+		ensureBelowLimit := func(rpcs []*RPC) {
 			for _, r := range rpcs {
-				if r.Size() > limit {
-					t.Fatalf("expected fragmented RPC to be below %d bytes, was %d", limit, r.Size())
+				if proto.Size(&r.RPC) > limit {
+					t.Fatalf("expected fragmented RPC to be below %d bytes, was %d", limit, proto.Size(&r.RPC))
 				}
 			}
 		}
@@ -2784,11 +2783,11 @@ func TestFragmentRPCFunction(t *testing.T) {
 			t.Fatal("expected final fragmented RPC to contain control messages, but .Control was nil")
 		}
 		// since it was not altered, the original control message should be identical to the output control message
-		originalBytes, err := rpc.Control.Marshal()
+		originalBytes, err := proto.Marshal(rpc.Control)
 		if err != nil {
 			t.Fatal(err)
 		}
-		receivedBytes, err := ctl.Marshal()
+		receivedBytes, err := proto.Marshal(ctl)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -2817,7 +2816,7 @@ func TestFragmentRPCFunction(t *testing.T) {
 			t.Fatal(err)
 		}
 		ensureBelowLimit(results)
-		minExpectedCtl := rpc.Control.Size() / limit
+		minExpectedCtl := proto.Size(rpc.Control) / limit
 		minExpectedRPCs := (nMessages / msgsPerRPC) + minExpectedCtl
 		if len(results) < minExpectedRPCs {
 			t.Fatalf("expected at least %d total RPCs (at least %d with control messages), got %d total", expectedRPCs, expectedCtrl, len(results))
@@ -2839,9 +2838,9 @@ func TestFragmentRPCFunction(t *testing.T) {
 		// Now we return a the giant ID in a RPC by itself so that it can be
 		// dropped before actually sending the RPC. This lets us log the anamoly.
 		// To keep this test useful, we implement the old behavior here.
-		filtered := make([]RPC, 0, len(results))
+		filtered := make([]*RPC, 0, len(results))
 		for _, r := range results {
-			if r.Size() < limit {
+			if proto.Size(&r.RPC) < limit {
 				filtered = append(filtered, r)
 			}
 		}
@@ -2882,8 +2881,8 @@ func FuzzRPCSplit(f *testing.F) {
 		mergedControl := compressedRPC{ihave: make(map[string][]string)}
 
 		for rpc := range rpc.split(maxSize) {
-			if rpc.Size() > maxSize {
-				t.Fatalf("invalid RPC size %v %d (max=%d)", rpc, rpc.Size(), maxSize)
+			if proto.Size(&rpc.RPC) > maxSize {
+				t.Fatalf("invalid RPC size %v %d (max=%d)", rpc, proto.Size(&rpc.RPC), maxSize)
 			}
 			mergedControl.append(&rpc.RPC)
 		}
@@ -2936,7 +2935,7 @@ func (c *compressedRPC) equal(o *compressedRPC) bool {
 
 func (c *compressedRPC) append(rpc *pb.RPC) {
 	for _, m := range rpc.Publish {
-		d, err := m.Marshal()
+		d, err := proto.Marshal(m)
 		if err != nil {
 			panic(err)
 		}
@@ -2960,7 +2959,7 @@ func (c *compressedRPC) append(rpc *pb.RPC) {
 		c.idontwant = slices.DeleteFunc(c.idontwant, func(e string) bool { return len(e) == 0 })
 	}
 	for _, prune := range ctrl.Prune {
-		d, err := prune.Marshal()
+		d, err := proto.Marshal(prune)
 		if err != nil {
 			panic(err)
 		}
@@ -4506,7 +4505,7 @@ func newSkeletonGossipsub(ctx context.Context, h host.Host) *skeletonGossipsub {
 				case <-ctx.Done():
 					return
 				case r := <-sendRPC:
-					b, err := r.Marshal()
+					b, err := proto.Marshal(r)
 					if err != nil {
 						panic(err)
 					}
@@ -4539,7 +4538,7 @@ func newSkeletonGossipsub(ctx context.Context, h host.Host) *skeletonGossipsub {
 			}
 
 			rpc := new(pb.RPC)
-			err = rpc.Unmarshal(msgbytes)
+			err = proto.Unmarshal(msgbytes, rpc)
 			r.ReleaseMsg(msgbytes)
 			if err != nil {
 				s.Reset()
@@ -5582,21 +5581,22 @@ func TestNoIDONTWANTWithPartialMessage(t *testing.T) {
 		defer cancel()
 
 		type rpcWithMeta struct {
-			from, to peer.ID
-			rpc      *RPC
+			from, to   peer.ID
+			idontwants []*pb.ControlIDontWant
 		}
 
-		receivedRPCs := make(chan *rpcWithMeta, 20)
+		receivedIDONTWANTs := make(chan *rpcWithMeta, 20)
 
 		pubsubs := getGossipsubsOptFn(ctx, hs,
 			func(i int, h host.Host) []Option {
 				tracer := &mockRawTracer{
 					onRecvRPC: func(r *RPC) {
-						copy := *r
-						receivedRPCs <- &rpcWithMeta{
-							from: r.from,
-							to:   h.ID(),
-							rpc:  &copy,
+						if r.Control != nil {
+							receivedIDONTWANTs <- &rpcWithMeta{
+								from:       r.from,
+								to:         h.ID(),
+								idontwants: r.Control.Idontwant,
+							}
 						}
 					},
 				}
@@ -5674,16 +5674,16 @@ func TestNoIDONTWANTWithPartialMessage(t *testing.T) {
 	outer:
 		for {
 			select {
-			case rpc := <-receivedRPCs:
+			case rpc := <-receivedIDONTWANTs:
 				// Peer 1 shouldn't send any IDONTWANTS.
 				// because:
 				//   - Peer 2 send the message, so shouldn't receive an IDONTWANT.
 				//   - Peer 0 supports partial messages and peer 1 requested partial
 				//   messages. It will not receive a full message from peer 1.
-				if rpc.from == hs[1].ID() && len(rpc.rpc.Control.GetIdontwant()) > 0 {
+				if rpc.from == hs[1].ID() && len(rpc.idontwants) > 0 {
 					t.Fatalf("Received unexpected IDONTWANT from %s", rpc.from)
 				}
-				t.Logf("Received RPC: %s->%s %+v\n", rpc.from, rpc.to, rpc.rpc)
+				t.Logf("Received RPC: %s->%s %+v\n", rpc.from, rpc.to, rpc.idontwants)
 			case <-time.After(2 * time.Second):
 				break outer
 			}

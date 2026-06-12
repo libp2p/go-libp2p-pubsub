@@ -24,6 +24,7 @@ import (
 	"github.com/libp2p/go-libp2p/p2p/host/peerstore/pstoremem"
 	ma "github.com/multiformats/go-multiaddr"
 	manet "github.com/multiformats/go-multiaddr/net"
+	"google.golang.org/protobuf/proto"
 )
 
 const (
@@ -1533,48 +1534,58 @@ func (gs *GossipSubRouter) sendPrune(p peer.ID, topic string, isUnsubscribe bool
 }
 
 func (gs *GossipSubRouter) sendRPC(p peer.ID, out *RPC, urgent bool) {
-	// do we own the RPC?
-	own := false
-
-	// piggyback control message retries
-	ctl, ok := gs.control[p]
-	if ok {
-		out = copyRPC(out)
-		own = true
-		gs.piggybackControl(p, out, ctl)
-		delete(gs.control, p)
-	}
-
-	// piggyback gossip
-	ihave, ok := gs.gossip[p]
-	if ok {
-		if !own {
-			out = copyRPC(out)
-			own = true
-		}
-		gs.piggybackGossip(p, out, ihave)
-		delete(gs.gossip, p)
-	}
-
 	q, ok := gs.p.peers[p]
 	if !ok {
+		// No queue to send to this peer. Nothing to do.
+		gs.doDropRPC(out, p, "No send queue for peer. Can't send RPC")
 		return
 	}
 
+	// Any pending control messages?
+	var controlMessage RPC
+	ctl, ok := gs.control[p]
+	if ok {
+		gs.piggybackControl(p, &controlMessage, ctl)
+		delete(gs.control, p)
+	}
+	ihave, ok := gs.gossip[p]
+	if ok {
+		gs.piggybackGossip(p, &controlMessage, ihave)
+		delete(gs.gossip, p)
+	}
+
+	controlSize := proto.Size(&controlMessage.RPC)
+	if controlSize > 0 {
+		if controlSize < gs.p.maxMessageSize {
+			gs.doSendRPC(&controlMessage, p, q, urgent)
+		} else {
+			for rpc := range controlMessage.split(gs.p.maxMessageSize) {
+				if proto.Size(&rpc.RPC) > gs.p.maxMessageSize {
+					// This should only happen if a single control is above the max size.
+					size := proto.Size(&rpc.RPC)
+					gs.doDropRPC(rpc, p, fmt.Sprintf("Dropping oversized RPC. Size: %d, limit: %d. (Over by %d bytes)", size, gs.p.maxMessageSize, size-gs.p.maxMessageSize))
+					continue
+				}
+				gs.doSendRPC(rpc, p, q, urgent)
+			}
+		}
+	}
+
 	// If we're below the max message size, go ahead and send
-	if out.Size() < gs.p.maxMessageSize {
+	if proto.Size(&out.RPC) < gs.p.maxMessageSize {
 		gs.doSendRPC(out, p, q, urgent)
 		return
 	}
 
 	// Potentially split the RPC into multiple RPCs that are below the max message size
 	for rpc := range out.split(gs.p.maxMessageSize) {
-		if rpc.Size() > gs.p.maxMessageSize {
+		if proto.Size(&rpc.RPC) > gs.p.maxMessageSize {
 			// This should only happen if a single message/control is above the maxMessageSize.
-			gs.doDropRPC(out, p, fmt.Sprintf("Dropping oversized RPC. Size: %d, limit: %d. (Over by %d bytes)", rpc.Size(), gs.p.maxMessageSize, rpc.Size()-gs.p.maxMessageSize))
+			size := proto.Size(&rpc.RPC)
+			gs.doDropRPC(rpc, p, fmt.Sprintf("Dropping oversized RPC. Size: %d, limit: %d. (Over by %d bytes)", size, gs.p.maxMessageSize, size-gs.p.maxMessageSize))
 			continue
 		}
-		gs.doSendRPC(&rpc, p, q, urgent)
+		gs.doSendRPC(rpc, p, q, urgent)
 	}
 }
 
