@@ -112,7 +112,7 @@ type validatorImpl struct {
 // async request to add a topic validators
 type addValReq struct {
 	topic    string
-	validate interface{}
+	validate any
 	timeout  time.Duration
 	throttle int
 	inline   bool
@@ -517,7 +517,7 @@ func (val *validatorImpl) validateMsg(ctx context.Context, src peer.ID, msg *Mes
 // WithDefaultValidator adds a validator that applies to all topics by default; it can be used
 // more than once and add multiple validators. Having a defult validator does not inhibit registering
 // a per topic validator.
-func WithDefaultValidator(val interface{}, opts ...ValidatorOpt) Option {
+func WithDefaultValidator(val any, opts ...ValidatorOpt) Option {
 	return func(ps *PubSub) error {
 		addVal := &addValReq{
 			validate: val,

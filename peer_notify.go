@@ -12,7 +12,7 @@ import (
 func (ps *PubSub) watchForNewPeers(ctx context.Context) {
 	// We don't bother subscribing to "connectivity" events because we always run identify after
 	// every new connection.
-	sub, err := ps.host.EventBus().Subscribe([]interface{}{
+	sub, err := ps.host.EventBus().Subscribe([]any{
 		&event.EvtPeerIdentificationCompleted{},
 		&event.EvtPeerProtocolsUpdated{},
 	})
