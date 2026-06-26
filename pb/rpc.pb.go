@@ -31,7 +31,7 @@ type RPC struct {
 	// must use field numbers larger than 0x200000 to be encoded with at least 4
 	// bytes
 	TestExtension *TestExtension `protobuf:"bytes,6492434,opt,name=testExtension" json:"testExtension,omitempty"`
-	// Per-RPC experimental extension: mark publishes in this RPC as SPREAD
+	// SPREAD extension: advertises that a peer supports SPREAD propagation
 	Spread               *SpreadExtension `protobuf:"bytes,6492435,opt,name=spread" json:"spread,omitempty"`
 	XXX_NoUnkeyedLiteral struct{}         `json:"-"`
 	XXX_unrecognized     []byte           `json:"-"`
@@ -632,8 +632,7 @@ type ControlExtensions struct {
 	PartialMessages *bool `protobuf:"varint,10,opt,name=partialMessages" json:"partialMessages,omitempty"`
 	// Experimental extensions must use field numbers larger than 0x200000 to be
 	// encoded with 4 bytes
-	TestExtension *bool `protobuf:"varint,6492434,opt,name=testExtension" json:"testExtension,omitempty"`
-	// SPREAD extension: advertises that a peer supports SPREAD propagation
+	TestExtension        *bool    `protobuf:"varint,6492434,opt,name=testExtension" json:"testExtension,omitempty"`
 	Spread               *bool    `protobuf:"varint,6492435,opt,name=spread" json:"spread,omitempty"`
 	XXX_NoUnkeyedLiteral struct{} `json:"-"`
 	XXX_unrecognized     []byte   `json:"-"`
@@ -861,8 +860,10 @@ func (m *PartialMessagesExtension) GetPartsMetadata() []byte {
 	return nil
 }
 
-// TODO: check if we need to define any extra data. Maybe Vivaldi?
 type SpreadExtension struct {
+	// Set when a SPREAD node forwards a SPREAD-marked message, so the receiving
+	// peer knows the message is being disseminated via SPREAD and should keep
+	// propagating it using SPREAD selection.
 	SourceIsSpreadNode   *bool    `protobuf:"varint,1,opt,name=sourceIsSpreadNode" json:"sourceIsSpreadNode,omitempty"`
 	XXX_NoUnkeyedLiteral struct{} `json:"-"`
 	XXX_unrecognized     []byte   `json:"-"`

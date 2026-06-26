@@ -108,5 +108,9 @@ message PartialMessagesExtension {
   optional bytes partsMetadata = 4;
 }
 
-// TODO: check if we need to define any extra data. Maybe "source is spread node" or Vivaldi data?
-message SpreadExtension {}
+message SpreadExtension {
+  // Set when a SPREAD node forwards a SPREAD-marked message, so the receiving
+  // peer knows the message is being disseminated via SPREAD and should keep
+  // propagating it using SPREAD selection.
+  optional bool sourceIsSpreadNode = 1;
+}
