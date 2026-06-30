@@ -178,18 +178,31 @@ func (m *mockPeerMetadataStore) Put(ctx context.Context, p peer.ID, v []byte) er
 	return nil
 }
 
+// chanMutex is a channel-based mutual exclusion lock that is compatible with
+// testing/synctest. Unlike sync.Mutex, a goroutine blocked while acquiring it is
+// durably blocked, so the synctest fake clock can keep advancing while another
+// goroutine holds the lock across a clock-driven blocking call (e.g. a stream
+// write). With sync.Mutex the contended acquire is not a durable block, which
+// freezes the bubble's clock and can deadlock the test.
+type chanMutex chan struct{}
+
+func newChanMutex() chanMutex { return make(chanMutex, 1) }
+
+func (m chanMutex) Lock()   { m <- struct{}{} }
+func (m chanMutex) Unlock() { <-m }
+
 type replayActor struct {
 	t *testing.T
 
 	ctx context.Context
 	h   host.Host
 
-	mx  sync.Mutex
+	mx  chanMutex
 	out map[peer.ID]network.Stream
 }
 
 func newReplayActor(t *testing.T, ctx context.Context, h host.Host) *replayActor {
-	replay := &replayActor{t: t, ctx: ctx, h: h, out: make(map[peer.ID]network.Stream)}
+	replay := &replayActor{t: t, ctx: ctx, h: h, mx: newChanMutex(), out: make(map[peer.ID]network.Stream)}
 	h.SetStreamHandler(FloodSubID, replay.handleStream)
 	h.Network().Notify(&network.NotifyBundle{ConnectedF: replay.connected})
 	return replay
