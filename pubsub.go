@@ -175,6 +175,11 @@ type PubSub struct {
 	seenMsgTTL      time.Duration
 	seenMsgStrategy timecache.Strategy
 
+	// deliveredMessages tracks messages delivered to subscribers and routed to peers.
+	// It deduplicates publishes of already-delivered messages, while still allowing
+	// republishes of messages that were only seen (e.g. ValidationIgnore).
+	deliveredMessages timecache.TimeCache
+
 	// generator used to compute the ID for a message
 	idGen *msgIDGenerator
 
@@ -612,6 +617,7 @@ func NewPubSub(ctx context.Context, h host.Host, rt PubSubRouter, opts ...Option
 	}
 
 	ps.seenMessages = timecache.NewTimeCacheWithStrategy(ps.seenMsgStrategy, ps.seenMsgTTL)
+	ps.deliveredMessages = timecache.NewTimeCacheWithStrategy(ps.seenMsgStrategy, ps.seenMsgTTL)
 
 	if err := ps.disc.Start(ps); err != nil {
 		return nil, err
@@ -880,6 +886,7 @@ func (p *PubSub) processLoop(ctx context.Context) {
 		p.peers = nil
 		p.topics = nil
 		p.seenMessages.Done()
+		p.deliveredMessages.Done()
 	}()
 
 	for {
@@ -1336,6 +1343,8 @@ func (p *PubSub) doAnnounceRetry(pid peer.ID, topic string, sub bool) {
 // notifySubs sends a given message to all corresponding subscribers.
 // Only called from processLoop.
 func (p *PubSub) notifySubs(msg *Message) {
+	p.tracer.DeliverMessage(msg)
+
 	topic := msg.GetTopic()
 	subs := p.mySubs[topic]
 	for f := range subs {
@@ -1360,6 +1369,12 @@ func (p *PubSub) seenMessage(id string) bool {
 // returns true if the message was freshly marked
 func (p *PubSub) markSeen(id string) bool {
 	return p.seenMessages.Add(id)
+}
+
+// markDelivered marks a message as delivered to subscribers and routed to peers.
+// returns true if the message was freshly marked
+func (p *PubSub) markDelivered(id string) bool {
+	return p.deliveredMessages.Add(id)
 }
 
 // subscribedToMessage returns whether we are subscribed to one of the topics
@@ -1587,7 +1602,9 @@ func (p *PubSub) checkSigningPolicy(msg *Message) error {
 }
 
 func (p *PubSub) publishMessage(msg *Message) {
-	p.tracer.DeliverMessage(msg)
+	if !p.markDelivered(p.idGen.ID(msg)) {
+		return
+	}
 	p.notifySubs(msg)
 	if !msg.Local {
 		p.rt.Publish(msg)
@@ -1595,12 +1612,16 @@ func (p *PubSub) publishMessage(msg *Message) {
 }
 
 func (p *PubSub) publishMessageBatch(batchAndOpts messageBatchAndPublishOptions) {
+	msgs := make([]*Message, 0, len(batchAndOpts.messages))
 	for _, msg := range batchAndOpts.messages {
-		p.tracer.DeliverMessage(msg)
+		if !p.markDelivered(p.idGen.ID(msg)) {
+			continue
+		}
 		p.notifySubs(msg)
+		msgs = append(msgs, msg)
 	}
 	// We type checked when pushing the batch to the channel
-	p.rt.(BatchPublisher).PublishBatch(batchAndOpts.messages, batchAndOpts.opts)
+	p.rt.(BatchPublisher).PublishBatch(msgs, batchAndOpts.opts)
 }
 
 type addTopicReq struct {
