@@ -23,6 +23,7 @@ import (
 	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/core/protocol"
+	"google.golang.org/protobuf/proto"
 )
 
 // DefaultMaximumMessageSize is 1mb.
@@ -336,9 +337,9 @@ func (rpc *RPC) LogValue() slog.Value {
 // split splits the given RPC If a sub RPC is too large and can't be split
 // further (e.g. Message data is bigger than the RPC limit), then it will be
 // returned as an oversized RPC. The caller should filter out oversized RPCs.
-func (rpc *RPC) split(limit int) iter.Seq[RPC] {
-	return func(yield func(RPC) bool) {
-		nextRPC := RPC{from: rpc.from}
+func (rpc *RPC) split(limit int) iter.Seq[*RPC] {
+	return func(yield func(*RPC) bool) {
+		nextRPC := &RPC{from: rpc.from}
 
 		{
 			nextRPCSize := 0
@@ -351,7 +352,7 @@ func (rpc *RPC) split(limit int) iter.Seq[RPC] {
 			// splitting a message.
 			for _, msg := range rpc.Publish {
 				// We know the message field number is <15 so this is safe.
-				incrementalSize := pbFieldNumberLT15Size + sizeOfEmbeddedMsg(msg.Size())
+				incrementalSize := pbFieldNumberLT15Size + sizeOfEmbeddedMsg(proto.Size(msg))
 				if nextRPCSize+incrementalSize > limit {
 					// The message doesn't fit. Let's set the messages that did fit
 					// into this RPC, yield it, then make a new one
@@ -361,7 +362,7 @@ func (rpc *RPC) split(limit int) iter.Seq[RPC] {
 						return
 					}
 
-					nextRPC = RPC{from: rpc.from}
+					nextRPC = &RPC{from: rpc.from}
 					nextRPCSize = 0
 					messagesInNextRPC = 0
 				}
@@ -371,38 +372,44 @@ func (rpc *RPC) split(limit int) iter.Seq[RPC] {
 
 			if nextRPCSize > 0 {
 				// yield the message here for simplicity. We aren't optimally
-				// packing this RPC, but we avoid successively calling .Size()
+				// packing this RPC, but we avoid successively calling proto.Size
 				// on the messages for the next parts.
 				nextRPC.Publish = messageSlice[:messagesInNextRPC]
 				if !yield(nextRPC) {
 					return
 				}
-				nextRPC = RPC{from: rpc.from}
+				nextRPC = &RPC{from: rpc.from}
 			}
 		}
 
 		// Fast path check. It's possible the original RPC is now small enough
 		// without the messages to publish
-		nextRPC = *rpc
-		nextRPC.Publish = nil
-		if s := nextRPC.Size(); s < limit {
+		nextRPC = &RPC{from: rpc.from}
+		originalPublishSlice := rpc.Publish
+		rpc.Publish = nil
+		defer func() {
+			// Restore the original message before returning
+			rpc.Publish = originalPublishSlice
+		}()
+		if s := proto.Size(&rpc.RPC); s < limit {
 			if s != 0 {
+				proto.Merge(&nextRPC.RPC, &rpc.RPC)
 				yield(nextRPC)
 			}
 			return
 		}
+
 		// We have to split the RPC into multiple parts
-		nextRPC = RPC{from: rpc.from}
 
 		// Merge/Append Subscriptions
 		for _, sub := range rpc.Subscriptions {
-			if nextRPC.Subscriptions = append(nextRPC.Subscriptions, sub); nextRPC.Size() > limit {
+			if nextRPC.Subscriptions = append(nextRPC.Subscriptions, sub); proto.Size(&nextRPC.RPC) > limit {
 				nextRPC.Subscriptions = nextRPC.Subscriptions[:len(nextRPC.Subscriptions)-1]
 				if !yield(nextRPC) {
 					return
 				}
 
-				nextRPC = RPC{from: rpc.from}
+				nextRPC = &RPC{from: rpc.from}
 				nextRPC.Subscriptions = append(nextRPC.Subscriptions, sub)
 			}
 		}
@@ -411,33 +418,33 @@ func (rpc *RPC) split(limit int) iter.Seq[RPC] {
 		if ctl := rpc.Control; ctl != nil {
 			if nextRPC.Control == nil {
 				nextRPC.Control = &pb.ControlMessage{}
-				if nextRPC.Size() > limit {
+				if proto.Size(&nextRPC.RPC) > limit {
 					nextRPC.Control = nil
 					if !yield(nextRPC) {
 						return
 					}
-					nextRPC = RPC{RPC: pb.RPC{Control: &pb.ControlMessage{}}, from: rpc.from}
+					nextRPC = &RPC{RPC: pb.RPC{Control: &pb.ControlMessage{}}, from: rpc.from}
 				}
 			}
 
 			for _, graft := range ctl.GetGraft() {
-				if nextRPC.Control.Graft = append(nextRPC.Control.Graft, graft); nextRPC.Size() > limit {
+				if nextRPC.Control.Graft = append(nextRPC.Control.Graft, graft); proto.Size(&nextRPC.RPC) > limit {
 					nextRPC.Control.Graft = nextRPC.Control.Graft[:len(nextRPC.Control.Graft)-1]
 					if !yield(nextRPC) {
 						return
 					}
-					nextRPC = RPC{RPC: pb.RPC{Control: &pb.ControlMessage{}}, from: rpc.from}
+					nextRPC = &RPC{RPC: pb.RPC{Control: &pb.ControlMessage{}}, from: rpc.from}
 					nextRPC.Control.Graft = append(nextRPC.Control.Graft, graft)
 				}
 			}
 
 			for _, prune := range ctl.GetPrune() {
-				if nextRPC.Control.Prune = append(nextRPC.Control.Prune, prune); nextRPC.Size() > limit {
+				if nextRPC.Control.Prune = append(nextRPC.Control.Prune, prune); proto.Size(&nextRPC.RPC) > limit {
 					nextRPC.Control.Prune = nextRPC.Control.Prune[:len(nextRPC.Control.Prune)-1]
 					if !yield(nextRPC) {
 						return
 					}
-					nextRPC = RPC{RPC: pb.RPC{Control: &pb.ControlMessage{}}, from: rpc.from}
+					nextRPC = &RPC{RPC: pb.RPC{Control: &pb.ControlMessage{}}, from: rpc.from}
 					nextRPC.Control.Prune = append(nextRPC.Control.Prune, prune)
 				}
 			}
@@ -448,23 +455,23 @@ func (rpc *RPC) split(limit int) iter.Seq[RPC] {
 					// For IWANTs we don't need more than a single one,
 					// since there are no topic IDs here.
 					newIWant := &pb.ControlIWant{}
-					if nextRPC.Control.Iwant = append(nextRPC.Control.Iwant, newIWant); nextRPC.Size() > limit {
+					if nextRPC.Control.Iwant = append(nextRPC.Control.Iwant, newIWant); proto.Size(&nextRPC.RPC) > limit {
 						nextRPC.Control.Iwant = nextRPC.Control.Iwant[:len(nextRPC.Control.Iwant)-1]
 						if !yield(nextRPC) {
 							return
 						}
-						nextRPC = RPC{RPC: pb.RPC{Control: &pb.ControlMessage{
+						nextRPC = &RPC{RPC: pb.RPC{Control: &pb.ControlMessage{
 							Iwant: []*pb.ControlIWant{newIWant},
 						}}, from: rpc.from}
 					}
 				}
 				for _, msgID := range iwant.GetMessageIDs() {
-					if nextRPC.Control.Iwant[0].MessageIDs = append(nextRPC.Control.Iwant[0].MessageIDs, msgID); nextRPC.Size() > limit {
+					if nextRPC.Control.Iwant[0].MessageIDs = append(nextRPC.Control.Iwant[0].MessageIDs, msgID); proto.Size(&nextRPC.RPC) > limit {
 						nextRPC.Control.Iwant[0].MessageIDs = nextRPC.Control.Iwant[0].MessageIDs[:len(nextRPC.Control.Iwant[0].MessageIDs)-1]
 						if !yield(nextRPC) {
 							return
 						}
-						nextRPC = RPC{RPC: pb.RPC{Control: &pb.ControlMessage{
+						nextRPC = &RPC{RPC: pb.RPC{Control: &pb.ControlMessage{
 							Iwant: []*pb.ControlIWant{{MessageIDs: []string{msgID}}},
 						}}, from: rpc.from}
 					}
@@ -476,24 +483,24 @@ func (rpc *RPC) split(limit int) iter.Seq[RPC] {
 					nextRPC.Control.Ihave[len(nextRPC.Control.Ihave)-1].TopicID != ihave.TopicID {
 					// Start a new IHAVE if we are referencing a new topic ID
 					newIhave := &pb.ControlIHave{TopicID: ihave.TopicID}
-					if nextRPC.Control.Ihave = append(nextRPC.Control.Ihave, newIhave); nextRPC.Size() > limit {
+					if nextRPC.Control.Ihave = append(nextRPC.Control.Ihave, newIhave); proto.Size(&nextRPC.RPC) > limit {
 						nextRPC.Control.Ihave = nextRPC.Control.Ihave[:len(nextRPC.Control.Ihave)-1]
 						if !yield(nextRPC) {
 							return
 						}
-						nextRPC = RPC{RPC: pb.RPC{Control: &pb.ControlMessage{
+						nextRPC = &RPC{RPC: pb.RPC{Control: &pb.ControlMessage{
 							Ihave: []*pb.ControlIHave{newIhave},
 						}}, from: rpc.from}
 					}
 				}
 				for _, msgID := range ihave.GetMessageIDs() {
 					lastIHave := nextRPC.Control.Ihave[len(nextRPC.Control.Ihave)-1]
-					if lastIHave.MessageIDs = append(lastIHave.MessageIDs, msgID); nextRPC.Size() > limit {
+					if lastIHave.MessageIDs = append(lastIHave.MessageIDs, msgID); proto.Size(&nextRPC.RPC) > limit {
 						lastIHave.MessageIDs = lastIHave.MessageIDs[:len(lastIHave.MessageIDs)-1]
 						if !yield(nextRPC) {
 							return
 						}
-						nextRPC = RPC{RPC: pb.RPC{Control: &pb.ControlMessage{
+						nextRPC = &RPC{RPC: pb.RPC{Control: &pb.ControlMessage{
 							Ihave: []*pb.ControlIHave{{TopicID: ihave.TopicID, MessageIDs: []string{msgID}}},
 						}}, from: rpc.from}
 					}
@@ -501,7 +508,7 @@ func (rpc *RPC) split(limit int) iter.Seq[RPC] {
 			}
 		}
 
-		if nextRPC.Size() > 0 {
+		if proto.Size(&nextRPC.RPC) > 0 {
 			if !yield(nextRPC) {
 				return
 			}
@@ -515,7 +522,7 @@ func (rpc *RPC) split(limit int) iter.Seq[RPC] {
 // fieldNumber << 3 | wireType
 // Refer to https://protobuf.dev/programming-guides/encoding/#structure
 // for more details on the encoding of messages. You may also reference the
-// concrete implementation of pb.RPC.Size()
+// concrete implementation of proto.Size(&pb.RPC{})
 const pbFieldNumberLT15Size = 1
 
 func sovRpc(x uint64) (n int) {
