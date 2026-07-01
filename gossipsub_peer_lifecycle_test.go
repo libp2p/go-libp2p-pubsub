@@ -6,12 +6,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gogo/protobuf/proto"
 	pb "github.com/libp2p/go-libp2p-pubsub/pb"
 	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/core/protocol"
 	"github.com/libp2p/go-msgio"
+	"google.golang.org/protobuf/proto"
 )
 
 // lifecycleSkeletonGossipsub is a minimal gossipsub peer for testing peer
@@ -71,7 +71,7 @@ func newLifecycleSkeletonGossipsub(ctx context.Context, h skeletonHost) *lifecyc
 					case <-writeCtx.Done():
 						return
 					case r := <-sendRPC:
-						b, err := r.Marshal()
+						b, err := proto.Marshal(r)
 						if err != nil {
 							panic(err)
 						}
@@ -108,7 +108,7 @@ func newLifecycleSkeletonGossipsub(ctx context.Context, h skeletonHost) *lifecyc
 				continue
 			}
 			rpc := new(pb.RPC)
-			err = rpc.Unmarshal(msgbytes)
+			err = proto.Unmarshal(msgbytes, rpc)
 			r.ReleaseMsg(msgbytes)
 			if err != nil {
 				return
