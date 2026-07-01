@@ -387,13 +387,11 @@ func (rpc *RPC) split(limit, controlLimit int) iter.Seq[*RPC] {
 				if !yield(nextRPC) {
 					return
 				}
-				nextRPC = &RPC{from: rpc.from}
 			}
 		}
 
 		// Fast path check. It's possible the original RPC is now small enough
 		// without the messages to publish
-		nextRPC = &RPC{from: rpc.from}
 		originalPublishSlice := rpc.Publish
 		rpc.Publish = nil
 		defer func() {
@@ -402,6 +400,7 @@ func (rpc *RPC) split(limit, controlLimit int) iter.Seq[*RPC] {
 		}()
 		if s := proto.Size(&rpc.RPC); s <= limit && controlRPCSize(rpc) <= controlLimit {
 			if s != 0 {
+				nextRPC = &RPC{from: rpc.from}
 				proto.Merge(&nextRPC.RPC, &rpc.RPC)
 				yield(nextRPC)
 			}
@@ -409,6 +408,7 @@ func (rpc *RPC) split(limit, controlLimit int) iter.Seq[*RPC] {
 		}
 
 		// We have to split the RPC into multiple parts
+		nextRPC = &RPC{from: rpc.from}
 
 		// Merge/Append Subscriptions
 		for _, sub := range rpc.Subscriptions {
