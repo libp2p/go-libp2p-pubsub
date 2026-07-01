@@ -572,10 +572,20 @@ func controlRPCSize(rpc *RPC) int {
 	if rpc == nil {
 		return 0
 	}
-	return proto.Size(&pb.RPC{
-		Subscriptions: rpc.Subscriptions,
-		Control:       rpc.Control,
-	})
+	// Compute the encoded size of an RPC containing only the Subscriptions and
+	// Control fields, without allocating a temporary pb.RPC. Calling proto.Size
+	// on the existing sub-message pointers doesn't allocate, whereas building a
+	// throwaway pb.RPC{Subscriptions, Control} escapes to the heap.
+	var size int
+	// Subscriptions are field 1 in pb.RPC (field number < 16).
+	for _, sub := range rpc.Subscriptions {
+		size += pbFieldNumberLT15Size + sizeOfEmbeddedMsg(proto.Size(sub))
+	}
+	// Control is field 3 in pb.RPC (field number < 16).
+	if rpc.Control != nil {
+		size += pbFieldNumberLT15Size + sizeOfEmbeddedMsg(proto.Size(rpc.Control))
+	}
+	return size
 }
 
 // pbFieldNumberLT15Size is the number of bytes required to encode a protobuf
