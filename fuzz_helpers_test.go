@@ -4,6 +4,7 @@ import (
 	"encoding/binary"
 
 	pb "github.com/libp2p/go-libp2p-pubsub/pb"
+	"google.golang.org/protobuf/proto"
 )
 
 func generateU16(data *[]byte) uint16 {
@@ -55,7 +56,7 @@ func generateControl(data []byte, limit int) *pb.ControlMessage {
 			ctl.Iwant[i].MessageIDs = append(ctl.Iwant[i].MessageIDs, string(make([]byte, msgSize)))
 		}
 	}
-	if ctl.Size() > limit {
+	if proto.Size(ctl) > limit {
 		return &pb.ControlMessage{}
 	}
 
@@ -72,7 +73,7 @@ func generateControl(data []byte, limit int) *pb.ControlMessage {
 			ctl.Ihave[i].MessageIDs = append(ctl.Ihave[i].MessageIDs, string(make([]byte, msgSize)))
 		}
 	}
-	if ctl.Size() > limit {
+	if proto.Size(ctl) > limit {
 		return &pb.ControlMessage{}
 	}
 
@@ -83,7 +84,7 @@ func generateControl(data []byte, limit int) *pb.ControlMessage {
 		topic := string(make([]byte, topicSize))
 		ctl.Graft = append(ctl.Graft, &pb.ControlGraft{TopicID: &topic})
 	}
-	if ctl.Size() > limit {
+	if proto.Size(ctl) > limit {
 		return &pb.ControlMessage{}
 	}
 
@@ -94,7 +95,7 @@ func generateControl(data []byte, limit int) *pb.ControlMessage {
 		topic := string(make([]byte, topicSize))
 		ctl.Prune = append(ctl.Prune, &pb.ControlPrune{TopicID: &topic})
 	}
-	if ctl.Size() > limit {
+	if proto.Size(ctl) > limit {
 		return &pb.ControlMessage{}
 	}
 
@@ -111,7 +112,7 @@ func generateRPC(data []byte, limit int) *RPC {
 		msg := generateMessage(data, limit)
 
 		sizeTester.Publish = []*pb.Message{msg}
-		size := sizeTester.Size()
+		size := proto.Size(&sizeTester.RPC)
 		sizeTester.Publish = nil
 		if size > limit {
 			continue
@@ -126,7 +127,7 @@ func generateRPC(data []byte, limit int) *RPC {
 		sub := generateSub(data, limit)
 
 		sizeTester.Subscriptions = []*pb.RPC_SubOpts{sub}
-		size := sizeTester.Size()
+		size := proto.Size(&sizeTester.RPC)
 		sizeTester.Subscriptions = nil
 		if size > limit {
 			continue
@@ -138,7 +139,7 @@ func generateRPC(data []byte, limit int) *RPC {
 	ctl := generateControl(data, limit)
 
 	sizeTester.Control = ctl
-	size := sizeTester.Size()
+	size := proto.Size(&sizeTester.RPC)
 	sizeTester.Control = nil
 	if size <= limit {
 		rpc.Control = ctl
