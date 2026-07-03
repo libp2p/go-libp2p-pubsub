@@ -4261,7 +4261,8 @@ func BenchmarkSplitRPC(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		rpc := rpcs[i%len(rpcs)]
-		rpc.split(maxSize, maxSize)
+		for range rpc.split(maxSize, maxSize) {
+		}
 	}
 }
 
