@@ -82,8 +82,8 @@ func testBasicSeqnoValidator(t *testing.T, ttl time.Duration) {
 
 	time.Sleep(time.Millisecond * 100)
 
-	for i := 0; i < 100; i++ {
-		msg := []byte(fmt.Sprintf("%d the flooooooood %d", i, i))
+	for i := range 100 {
+		msg := fmt.Appendf(nil, "%d the flooooooood %d", i, i)
 
 		owner := rng.Intn(len(psubs))
 
@@ -131,8 +131,8 @@ func TestBasicSeqnoValidatorReplay(t *testing.T) {
 
 		time.Sleep(time.Millisecond * 100)
 
-		for i := 0; i < 10; i++ {
-			msg := []byte(fmt.Sprintf("%d the flooooooood %d", i, i))
+		for i := range 10 {
+			msg := fmt.Appendf(nil, "%d the flooooooood %d", i, i)
 
 			owner := rng.Intn(len(psubs))
 
@@ -274,7 +274,7 @@ func (r *replayActor) send(p peer.ID, rpc *pb.RPC) {
 
 func (r *replayActor) replay(msg *pb.Message) {
 	// replay the message 10 times to a random subset of peers
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		delay := time.Duration(1+rng.Intn(20)) * time.Millisecond
 		time.Sleep(delay)
 

@@ -310,7 +310,7 @@ func TestSubscriptionJoinNotification(t *testing.T) {
 		}
 
 		wg := sync.WaitGroup{}
-		for i := 0; i < numHosts; i++ {
+		for i := range numHosts {
 			peersFound := make(map[peer.ID]struct{})
 			topicPeersFound[i] = peersFound
 			evt := evts[i]
@@ -367,7 +367,7 @@ func TestSubscriptionLeaveNotification(t *testing.T) {
 		time.Sleep(time.Millisecond * 100)
 
 		wg := sync.WaitGroup{}
-		for i := 0; i < numHosts; i++ {
+		for i := range numHosts {
 			peersFound := make(map[peer.ID]struct{})
 			topicPeersFound[i] = peersFound
 			evt := evts[i]
@@ -591,7 +591,7 @@ func TestTopicRelay(t *testing.T) {
 
 		time.Sleep(time.Millisecond * 100)
 
-		for i := 0; i < 100; i++ {
+		for range 100 {
 			msg := []byte("message")
 
 			owner := rand.Intn(len(topics))
@@ -1050,7 +1050,7 @@ func TestTopicRelayPublishWithKey(t *testing.T) {
 
 		time.Sleep(time.Second)
 
-		for i := 0; i < 100; i++ {
+		for range 100 {
 			msg := []byte("message")
 
 			owner := rand.Intn(len(topics))

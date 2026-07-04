@@ -54,10 +54,7 @@ func (s *mockDiscoveryServer) FindPeers(ns string, limit int) (<-chan peer.AddrI
 		return emptyCh, nil
 	}
 
-	count := len(peers)
-	if count > limit {
-		count = limit
-	}
+	count := min(len(peers), limit)
 	ch := make(chan peer.AddrInfo, count)
 	numSent := 0
 	for _, reg := range peers {
@@ -201,8 +198,8 @@ func TestSimpleDiscovery(t *testing.T) {
 		}
 
 		// Try random peers sending messages and make sure they are received
-		for i := 0; i < 100; i++ {
-			msg := []byte(fmt.Sprintf("%d the flooooooood %d", i, i))
+		for i := range 100 {
+			msg := fmt.Appendf(nil, "%d the flooooooood %d", i, i)
 
 			owner := rand.Intn(len(psubs))
 
@@ -269,7 +266,7 @@ func TestGossipSubDiscoveryAfterBootstrap(t *testing.T) {
 			waitUntilGossipsubMeshCount(ps, topic, partitionSize-1)
 		}
 
-		for i := 0; i < partitionSize; i++ {
+		for i := range partitionSize {
 			if _, err := server1.Advertise("floodsub:"+topic, *host.InfoFromHost(hosts[i+partitionSize]), ttl); err != nil {
 				t.Fatal(err)
 			}
@@ -279,8 +276,8 @@ func TestGossipSubDiscoveryAfterBootstrap(t *testing.T) {
 		time.Sleep(5 * time.Second)
 
 		// test the mesh
-		for i := 0; i < 100; i++ {
-			msg := []byte(fmt.Sprintf("%d it's not a floooooood %d", i, i))
+		for i := range 100 {
+			msg := fmt.Appendf(nil, "%d it's not a floooooood %d", i, i)
 
 			owner := rand.Intn(numHosts)
 

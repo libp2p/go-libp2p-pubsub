@@ -268,7 +268,7 @@ type Message struct {
 	*pb.Message
 	ID            string
 	ReceivedFrom  peer.ID
-	ValidatorData interface{}
+	ValidatorData any
 	Local         bool
 }
 
@@ -1984,7 +1984,7 @@ func (p *PubSub) BlacklistPeer(pid peer.ID) {
 // By default validators are asynchronous, which means they will run in a separate goroutine.
 // The number of active goroutines is controlled by global and per topic validator
 // throttles; if it exceeds the throttle threshold, messages will be dropped.
-func (p *PubSub) RegisterTopicValidator(topic string, val interface{}, opts ...ValidatorOpt) error {
+func (p *PubSub) RegisterTopicValidator(topic string, val any, opts ...ValidatorOpt) error {
 	addVal := &addValReq{
 		topic:    topic,
 		validate: val,
