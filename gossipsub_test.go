@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	crand "crypto/rand"
+	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -5910,6 +5911,167 @@ func TestGossipsubFanoutOnlyRelay(t *testing.T) {
 		_, err = topic.Relay()
 		if !errors.Is(err, ErrFanoutOnlyTopic) {
 			t.Fatalf("expected ErrFanoutOnlyTopic, got: %v", err)
+		}
+	})
+}
+
+func TestGossipsubDuplicatePublishError(t *testing.T) {
+	// republishing a rejected message must rerun validation and return the
+	// rejection error again, not report success as a duplicate
+	synctestTest(t, func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+
+		hosts := getDefaultHosts(t, 1)
+		psubs := getGossipsubs(ctx, hosts)
+
+		allReject := func(ctx context.Context, p peer.ID, msg *Message) ValidationResult {
+			return ValidationReject
+		}
+		err := psubs[0].RegisterTopicValidator("test", allReject)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		topic, err := psubs[0].Join("test", WithTopicMessageIdFn(func(pmsg *pb.Message) string {
+			return "message-1"
+		}))
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if err := topic.Publish(ctx, []byte("hello")); err == nil {
+			t.Fatal("expected rejection error on publish")
+		}
+
+		if err := topic.Publish(ctx, []byte("hello")); err == nil {
+			t.Fatal("expected rejection error on republish")
+		}
+	})
+}
+
+func TestGossipsubForwardAfterIgnore(t *testing.T) {
+	// uses a linear chain 0-1-2-3-4 where node k=2 ignores relayed messages, so the
+	// message stops at k until k republishes it locally and it reaches the rest
+	synctestTest(t, func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+
+		const N = 5
+		hosts := getDefaultHosts(t, N)
+		psubs := getGossipsubs(ctx, hosts)
+		for i := range N - 1 {
+			connect(t, hosts[i], hosts[i+1])
+		}
+		var topics []*Topic
+		for i := range N {
+			topic, err := psubs[i].Join("test", WithTopicMessageIdFn(func(pmsg *pb.Message) string {
+				hash := sha256.Sum256(pmsg.Data)
+				return string(hash[:])
+			}))
+			if err != nil {
+				t.Fatal(err)
+			}
+			topics = append(topics, topic)
+		}
+
+		var subs []*Subscription
+		for i := range N {
+			sub, err := topics[i].Subscribe()
+			if err != nil {
+				t.Fatal(err)
+			}
+			subs = append(subs, sub)
+		}
+
+		time.Sleep(2 * time.Second)
+
+		// node k ignores the message and republishes it later
+		const k = 2
+		ignoreAllNonLocal := func(ctx context.Context, p peer.ID, msg *Message) ValidationResult {
+			// only accept locally published messages
+			if p == hosts[k].ID() {
+				return ValidationAccept
+			}
+			return ValidationIgnore
+		}
+		err := psubs[k].RegisterTopicValidator("test", ignoreAllNonLocal)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		publishedMessage := []byte("hello")
+		if err := topics[0].Publish(ctx, publishedMessage); err != nil {
+			t.Fatal(err)
+		}
+
+		for i := range k {
+			assertReceive(t, subs[i], publishedMessage)
+		}
+		for i := k; i < N; i++ {
+			assertNeverReceives(t, subs[i], time.Second)
+		}
+
+		if err := topics[k].Publish(ctx, publishedMessage); err != nil {
+			t.Fatal(err)
+		}
+
+		for i := k; i < N; i++ {
+			assertReceive(t, subs[i], publishedMessage)
+		}
+		// nodes before k must not receive the republished message again
+		for i := range k {
+			assertNeverReceives(t, subs[i], time.Second)
+		}
+	})
+}
+
+func TestGossipsubDuplicatePublishDeliveredOnce(t *testing.T) {
+	// republishing an already-delivered message must not deliver it to local
+	// subscribers or the network a second time
+	synctestTest(t, func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+
+		hosts := getDefaultHosts(t, 2)
+		psubs := getGossipsubs(ctx, hosts)
+		connect(t, hosts[0], hosts[1])
+
+		var topics []*Topic
+		var subs []*Subscription
+		for i := range 2 {
+			topic, err := psubs[i].Join("test", WithTopicMessageIdFn(func(pmsg *pb.Message) string {
+				hash := sha256.Sum256(pmsg.Data)
+				return string(hash[:])
+			}))
+			if err != nil {
+				t.Fatal(err)
+			}
+			topics = append(topics, topic)
+
+			sub, err := topic.Subscribe()
+			if err != nil {
+				t.Fatal(err)
+			}
+			subs = append(subs, sub)
+		}
+
+		time.Sleep(2 * time.Second)
+
+		publishedMessage := []byte("hello")
+		if err := topics[0].Publish(ctx, publishedMessage); err != nil {
+			t.Fatal(err)
+		}
+		for i := range 2 {
+			assertReceive(t, subs[i], publishedMessage)
+		}
+
+		// republishing a delivered message is a no-op reported as success
+		if err := topics[0].Publish(ctx, publishedMessage); err != nil {
+			t.Fatal(err)
+		}
+		for i := range 2 {
+			assertNeverReceives(t, subs[i], time.Second)
 		}
 	})
 }
