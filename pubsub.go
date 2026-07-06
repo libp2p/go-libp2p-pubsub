@@ -1612,7 +1612,7 @@ func (p *PubSub) publishMessage(msg *Message) {
 }
 
 func (p *PubSub) publishMessageBatch(batchAndOpts messageBatchAndPublishOptions) {
-	msgs := make([]*Message, 0, len(batchAndOpts.messages))
+	msgs := batchAndOpts.messages[:0]
 	for _, msg := range batchAndOpts.messages {
 		if !p.markDelivered(p.idGen.ID(msg)) {
 			continue
@@ -1620,6 +1620,7 @@ func (p *PubSub) publishMessageBatch(batchAndOpts messageBatchAndPublishOptions)
 		p.notifySubs(msg)
 		msgs = append(msgs, msg)
 	}
+
 	// We type checked when pushing the batch to the channel
 	p.rt.(BatchPublisher).PublishBatch(msgs, batchAndOpts.opts)
 }
