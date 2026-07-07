@@ -725,7 +725,7 @@ func TestGossipsubAttackInvalidMessageSpam(t *testing.T) {
 
 						// Send a bunch of messages with no signature (these will
 						// fail validation and reduce the attacker's score)
-						for i := 0; i < 100; i++ {
+						for i := range 100 {
 							msg := &pb.Message{
 								Data:  []byte("some data" + strconv.Itoa(i)),
 								Topic: &mytopic,
@@ -935,7 +935,7 @@ func TestGossipsubHandleIDontwantSpam(t *testing.T) {
 		}
 		exceededIDWLength := GossipSubMaxIDontWantLength + 1
 		var idwIds []string
-		for i := 0; i < exceededIDWLength; i++ {
+		for i := range exceededIDWLength {
 			idwIds = append(idwIds, fmt.Sprintf("idontwant-%d", i))
 		}
 		rPid := hosts[1].ID()

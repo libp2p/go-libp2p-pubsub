@@ -100,6 +100,26 @@ func getGossipsubsOptFn(ctx context.Context, hs []host.Host, optFn func(int, hos
 	return psubs
 }
 
+func TestConfigurableMaxControlMessageSize(t *testing.T) {
+	synctestTest(t, func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+
+		hosts := getDefaultHosts(t, 2)
+
+		defaultPubsub := getGossipsub(ctx, hosts[0])
+		if defaultPubsub.maxControlMessageSize != DefaultMaxControlMessageSize {
+			t.Fatalf("expected default max control message size %d, got %d", DefaultMaxControlMessageSize, defaultPubsub.maxControlMessageSize)
+		}
+
+		const maxControlMessageSize = 1234
+		configuredPubsub := getGossipsub(ctx, hosts[1], WithMaxControlMessageSize(maxControlMessageSize))
+		if configuredPubsub.maxControlMessageSize != maxControlMessageSize {
+			t.Fatalf("expected configured max control message size %d, got %d", maxControlMessageSize, configuredPubsub.maxControlMessageSize)
+		}
+	})
+}
+
 func TestSparseGossipsub(t *testing.T) {
 	synctestTest(t, func(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
@@ -129,8 +149,8 @@ func TestSparseGossipsub(t *testing.T) {
 		// wait for heartbeats to build mesh
 		time.Sleep(time.Second * 2)
 
-		for i := 0; i < 100; i++ {
-			msg := []byte(fmt.Sprintf("%d it's not a floooooood %d", i, i))
+		for i := range 100 {
+			msg := fmt.Appendf(nil, "%d it's not a floooooood %d", i, i)
 
 			owner := mrand.Intn(len(psubs))
 
@@ -172,8 +192,8 @@ func TestDenseGossipsub(t *testing.T) {
 		// wait for heartbeats to build mesh
 		time.Sleep(time.Second * 2)
 
-		for i := 0; i < 100; i++ {
-			msg := []byte(fmt.Sprintf("%d it's not a floooooood %d", i, i))
+		for i := range 100 {
+			msg := fmt.Appendf(nil, "%d it's not a floooooood %d", i, i)
 
 			owner := mrand.Intn(len(psubs))
 
@@ -215,8 +235,8 @@ func TestGossipsubFanout(t *testing.T) {
 		// wait for heartbeats to build mesh
 		time.Sleep(time.Second * 2)
 
-		for i := 0; i < 100; i++ {
-			msg := []byte(fmt.Sprintf("%d it's not a floooooood %d", i, i))
+		for i := range 100 {
+			msg := fmt.Appendf(nil, "%d it's not a floooooood %d", i, i)
 
 			owner := 0
 
@@ -243,8 +263,8 @@ func TestGossipsubFanout(t *testing.T) {
 		// wait for a heartbeat
 		time.Sleep(time.Second * 1)
 
-		for i := 0; i < 100; i++ {
-			msg := []byte(fmt.Sprintf("%d it's not a floooooood %d", i, i))
+		for i := range 100 {
+			msg := fmt.Appendf(nil, "%d it's not a floooooood %d", i, i)
 
 			owner := 0
 
@@ -286,8 +306,8 @@ func TestGossipsubFanoutMaintenance(t *testing.T) {
 		// wait for heartbeats to build mesh
 		time.Sleep(time.Second * 2)
 
-		for i := 0; i < 100; i++ {
-			msg := []byte(fmt.Sprintf("%d it's not a floooooood %d", i, i))
+		for i := range 100 {
+			msg := fmt.Appendf(nil, "%d it's not a floooooood %d", i, i)
 
 			owner := 0
 
@@ -325,8 +345,8 @@ func TestGossipsubFanoutMaintenance(t *testing.T) {
 
 		time.Sleep(time.Second * 2)
 
-		for i := 0; i < 100; i++ {
-			msg := []byte(fmt.Sprintf("%d it's not a floooooood %d", i, i))
+		for i := range 100 {
+			msg := fmt.Appendf(nil, "%d it's not a floooooood %d", i, i)
 
 			owner := 0
 
@@ -373,8 +393,8 @@ func TestGossipsubFanoutExpiry(t *testing.T) {
 		// wait for heartbeats to build mesh
 		time.Sleep(time.Second * 2)
 
-		for i := 0; i < 5; i++ {
-			msg := []byte(fmt.Sprintf("%d it's not a floooooood %d", i, i))
+		for i := range 5 {
+			msg := fmt.Appendf(nil, "%d it's not a floooooood %d", i, i)
 
 			owner := 0
 
@@ -434,8 +454,8 @@ func TestGossipsubGossip(t *testing.T) {
 		// wait for heartbeats to build mesh
 		time.Sleep(time.Second * 2)
 
-		for i := 0; i < 100; i++ {
-			msg := []byte(fmt.Sprintf("%d it's not a floooooood %d", i, i))
+		for i := range 100 {
+			msg := fmt.Appendf(nil, "%d it's not a floooooood %d", i, i)
 
 			owner := mrand.Intn(len(psubs))
 
@@ -494,8 +514,8 @@ func TestGossipsubGossipPiggyback(t *testing.T) {
 		// wait for heartbeats to build mesh
 		time.Sleep(time.Second * 2)
 
-		for i := 0; i < 100; i++ {
-			msg := []byte(fmt.Sprintf("%d it's not a floooooood %d", i, i))
+		for i := range 100 {
+			msg := fmt.Appendf(nil, "%d it's not a floooooood %d", i, i)
 
 			owner := mrand.Intn(len(psubs))
 
@@ -557,8 +577,8 @@ func TestGossipsubGossipPropagation(t *testing.T) {
 
 		time.Sleep(time.Second * 1)
 
-		for i := 0; i < 10; i++ {
-			msg := []byte(fmt.Sprintf("%d it's not a floooooood %d", i, i))
+		for i := range 10 {
+			msg := fmt.Appendf(nil, "%d it's not a floooooood %d", i, i)
 
 			owner := 0
 
@@ -588,7 +608,7 @@ func TestGossipsubGossipPropagation(t *testing.T) {
 		}
 
 		var collect [][]byte
-		for i := 0; i < 10; i++ {
+		for range 10 {
 			for _, sub := range msgs2 {
 				got, err := sub.Next(ctx)
 				if err != nil {
@@ -598,8 +618,8 @@ func TestGossipsubGossipPropagation(t *testing.T) {
 			}
 		}
 
-		for i := 0; i < 10; i++ {
-			msg := []byte(fmt.Sprintf("%d it's not a floooooood %d", i, i))
+		for i := range 10 {
+			msg := fmt.Appendf(nil, "%d it's not a floooooood %d", i, i)
 			gotit := false
 			for j := 0; j < len(collect); j++ {
 				if bytes.Equal(msg, collect[j]) {
@@ -645,8 +665,8 @@ func TestGossipsubPrune(t *testing.T) {
 		// wait a bit to take effect
 		time.Sleep(time.Millisecond * 100)
 
-		for i := 0; i < 10; i++ {
-			msg := []byte(fmt.Sprintf("%d it's not a floooooood %d", i, i))
+		for i := range 10 {
+			msg := fmt.Appendf(nil, "%d it's not a floooooood %d", i, i)
 
 			owner := mrand.Intn(len(psubs))
 
@@ -744,8 +764,8 @@ func TestGossipsubPruneBackoffTime(t *testing.T) {
 			t.Errorf("missing too many backoffs: %v", missingBackoffs)
 		}
 
-		for i := 0; i < 10; i++ {
-			msg := []byte(fmt.Sprintf("%d it's not a floooooood %d", i, i))
+		for i := range 10 {
+			msg := fmt.Appendf(nil, "%d it's not a floooooood %d", i, i)
 
 			// Don't publish from host 0, since everyone should have pruned it.
 			owner := mrand.Intn(len(psubs)-1) + 1
@@ -792,8 +812,8 @@ func TestGossipsubGraft(t *testing.T) {
 
 		time.Sleep(time.Second * 1)
 
-		for i := 0; i < 100; i++ {
-			msg := []byte(fmt.Sprintf("%d it's not a floooooood %d", i, i))
+		for i := range 100 {
+			msg := fmt.Appendf(nil, "%d it's not a floooooood %d", i, i)
 
 			owner := mrand.Intn(len(psubs))
 
@@ -843,8 +863,8 @@ func TestGossipsubRemovePeer(t *testing.T) {
 		// wait a heartbeat
 		time.Sleep(time.Second * 1)
 
-		for i := 0; i < 10; i++ {
-			msg := []byte(fmt.Sprintf("%d it's not a floooooood %d", i, i))
+		for i := range 10 {
+			msg := fmt.Appendf(nil, "%d it's not a floooooood %d", i, i)
 
 			owner := 5 + mrand.Intn(len(psubs)-5)
 
@@ -874,7 +894,7 @@ func TestGossipsubGraftPruneRetry(t *testing.T) {
 
 		var topics []string
 		var msgs [][]*Subscription
-		for i := 0; i < 35; i++ {
+		for i := range 35 {
 			topic := fmt.Sprintf("topic%d", i)
 			topics = append(topics, topic)
 
@@ -894,7 +914,7 @@ func TestGossipsubGraftPruneRetry(t *testing.T) {
 		time.Sleep(time.Second * 5)
 
 		for i, topic := range topics {
-			msg := []byte(fmt.Sprintf("%d it's not a floooooood %d", i, i))
+			msg := fmt.Appendf(nil, "%d it's not a floooooood %d", i, i)
 
 			owner := mrand.Intn(len(psubs))
 
@@ -943,7 +963,7 @@ func TestGossipsubControlPiggyback(t *testing.T) {
 		done := make(chan struct{})
 		go func() {
 			owner := mrand.Intn(len(psubs))
-			for i := 0; i < 10000; i++ {
+			for range 10000 {
 				msg := []byte("background flooooood")
 				psubs[owner].Publish("flood", msg)
 			}
@@ -955,7 +975,7 @@ func TestGossipsubControlPiggyback(t *testing.T) {
 		// in the background flood
 		var topics []string
 		var msgs [][]*Subscription
-		for i := 0; i < 5; i++ {
+		for i := range 5 {
 			topic := fmt.Sprintf("topic%d", i)
 			topics = append(topics, topic)
 
@@ -979,7 +999,7 @@ func TestGossipsubControlPiggyback(t *testing.T) {
 
 		// and test that we have functional overlays
 		for i, topic := range topics {
-			msg := []byte(fmt.Sprintf("%d it's not a floooooood %d", i, i))
+			msg := fmt.Appendf(nil, "%d it's not a floooooood %d", i, i)
 
 			owner := mrand.Intn(len(psubs))
 
@@ -1023,8 +1043,8 @@ func TestMixedGossipsub(t *testing.T) {
 		// wait for heartbeats to build mesh
 		time.Sleep(time.Second * 2)
 
-		for i := 0; i < 100; i++ {
-			msg := []byte(fmt.Sprintf("%d it's not a floooooood %d", i, i))
+		for i := range 100 {
+			msg := fmt.Appendf(nil, "%d it's not a floooooood %d", i, i)
 
 			owner := mrand.Intn(len(psubs))
 
@@ -1211,8 +1231,8 @@ func TestGossipsubStarTopology(t *testing.T) {
 		}
 
 		// send a message from each peer and assert it was propagated
-		for i := 0; i < 20; i++ {
-			msg := []byte(fmt.Sprintf("message %d", i))
+		for i := range 20 {
+			msg := fmt.Appendf(nil, "message %d", i)
 			psubs[i].Publish("test", msg)
 
 			for _, sub := range subs {
@@ -1309,8 +1329,8 @@ func TestGossipsubStarTopologyWithSignedPeerRecords(t *testing.T) {
 		}
 
 		// send a message from each peer and assert it was propagated
-		for i := 0; i < 20; i++ {
-			msg := []byte(fmt.Sprintf("message %d", i))
+		for i := range 20 {
+			msg := fmt.Appendf(nil, "message %d", i)
 			psubs[i].Publish("test", msg)
 
 			for _, sub := range subs {
@@ -1354,8 +1374,8 @@ func TestGossipsubDirectPeers(t *testing.T) {
 		time.Sleep(time.Second)
 
 		// publish some messages
-		for i := 0; i < 3; i++ {
-			msg := []byte(fmt.Sprintf("message %d", i))
+		for i := range 3 {
+			msg := fmt.Appendf(nil, "message %d", i)
 			psubs[i].Publish("test", msg)
 
 			for _, sub := range subs {
@@ -1375,8 +1395,8 @@ func TestGossipsubDirectPeers(t *testing.T) {
 		}
 
 		// publish some messages
-		for i := 0; i < 3; i++ {
-			msg := []byte(fmt.Sprintf("message %d", i))
+		for i := range 3 {
+			msg := fmt.Appendf(nil, "message %d", i)
 			psubs[i].Publish("test", msg)
 
 			for _, sub := range subs {
@@ -1505,8 +1525,8 @@ func TestGossipsubDirectPeersFanout(t *testing.T) {
 		time.Sleep(time.Second)
 
 		// h2 publishes some messages to build a fanout
-		for i := 0; i < 3; i++ {
-			msg := []byte(fmt.Sprintf("message %d", i))
+		for i := range 3 {
+			msg := fmt.Appendf(nil, "message %d", i)
 			psubs[2].Publish("test", msg)
 
 			for _, sub := range subs {
@@ -1593,8 +1613,8 @@ func TestGossipsubFloodPublish(t *testing.T) {
 		time.Sleep(time.Second)
 
 		// send a message from the star and assert it was received
-		for i := 0; i < 20; i++ {
-			msg := []byte(fmt.Sprintf("message %d", i))
+		for i := range 20 {
+			msg := fmt.Appendf(nil, "message %d", i)
 			psubs[0].Publish("test", msg)
 
 			for _, sub := range subs {
@@ -1727,8 +1747,8 @@ func TestGossipsubNegativeScore(t *testing.T) {
 
 		time.Sleep(3 * time.Second)
 
-		for i := 0; i < 20; i++ {
-			msg := []byte(fmt.Sprintf("message %d", i))
+		for i := range 20 {
+			msg := fmt.Appendf(nil, "message %d", i)
 			psubs[i%20].Publish("test", msg)
 			time.Sleep(20 * time.Millisecond)
 		}
@@ -2064,8 +2084,8 @@ func TestGossipsubOpportunisticGrafting(t *testing.T) {
 		}
 
 		// publish a bunch of messages from the real hosts
-		for i := 0; i < 1000; i++ {
-			msg := []byte(fmt.Sprintf("message %d", i))
+		for i := range 1000 {
+			msg := fmt.Appendf(nil, "message %d", i)
 			psubs[i%10].Publish("test", msg)
 			time.Sleep(20 * time.Millisecond)
 		}
@@ -2326,8 +2346,8 @@ func TestGossipsubPeerScoreInspect(t *testing.T) {
 
 		time.Sleep(time.Second)
 
-		for i := 0; i < 20; i++ {
-			msg := []byte(fmt.Sprintf("message %d", i))
+		for i := range 20 {
+			msg := fmt.Appendf(nil, "message %d", i)
 			psubs[i%2].Publish("test", msg)
 			time.Sleep(20 * time.Millisecond)
 		}
@@ -2548,7 +2568,7 @@ func TestGossipsubRPCFragmentation(t *testing.T) {
 		// publish a bunch of fairly large messages from the real host
 		nMessages := 1000
 		msgSize := 20000
-		for i := 0; i < nMessages; i++ {
+		for range nMessages {
 			msg := make([]byte, msgSize)
 			crand.Read(msg)
 			ps.Publish("test", msg)
@@ -2677,7 +2697,7 @@ func validRPCSizes(slice []*RPC, limit int) bool {
 func TestFragmentRPCFunction(t *testing.T) {
 	synctestTest(t, func(t *testing.T) {
 		fragmentRPC := func(rpc *RPC, limit int) ([]*RPC, error) {
-			rpcs := slices.Collect(rpc.split(limit))
+			rpcs := slices.Collect(rpc.split(limit, limit))
 			if allValid := validRPCSizes(rpcs, limit); !allValid {
 				return rpcs, fmt.Errorf("RPC size exceeds limit")
 			}
@@ -2733,7 +2753,7 @@ func TestFragmentRPCFunction(t *testing.T) {
 			},
 		}
 		rpc.Publish = make([]*pb.Message, nMessages)
-		for i := 0; i < nMessages; i++ {
+		for i := range nMessages {
 			rpc.Publish[i] = mkMsg(msgSize)
 		}
 		results, err = fragmentRPC(rpc, limit)
@@ -2802,9 +2822,9 @@ func TestFragmentRPCFunction(t *testing.T) {
 		msgsPerTopic := 100 // enough that a single IHAVE or IWANT will exceed the limit
 		rpc.Control.Ihave = make([]*pb.ControlIHave, nTopics)
 		rpc.Control.Iwant = make([]*pb.ControlIWant, nTopics)
-		for i := 0; i < nTopics; i++ {
+		for i := range nTopics {
 			messageIds := make([]string, msgsPerTopic)
-			for m := 0; m < msgsPerTopic; m++ {
+			for m := range msgsPerTopic {
 				mid := make([]byte, messageIdSize)
 				crand.Read(mid)
 				messageIds[m] = string(mid)
@@ -2821,6 +2841,83 @@ func TestFragmentRPCFunction(t *testing.T) {
 		minExpectedRPCs := (nMessages / msgsPerRPC) + minExpectedCtl
 		if len(results) < minExpectedRPCs {
 			t.Fatalf("expected at least %d total RPCs (at least %d with control messages), got %d total", expectedRPCs, expectedCtrl, len(results))
+		}
+
+		// Control messages should split on the control limit even if the
+		// full RPC would fit within the RPC size limit.
+		rpc.Reset()
+		controlLimit := 256
+		maxRPCSize := limit * 8
+		messageIds := make([]string, 64)
+		for i := range messageIds {
+			mid := make([]byte, 16)
+			crand.Read(mid)
+			messageIds[i] = string(mid)
+		}
+		rpc.Control = &pb.ControlMessage{
+			Iwant:     []*pb.ControlIWant{{MessageIDs: messageIds}},
+			Idontwant: []*pb.ControlIDontWant{{MessageIDs: messageIds}},
+		}
+		results = slices.Collect(rpc.split(maxRPCSize, controlLimit))
+		if len(results) < 2 {
+			t.Fatalf("expected control message to be split by control limit, got %d RPCs", len(results))
+		}
+		var fragmentedMessageIds []string
+		var fragmentedIDontWantMessageIds []string
+		for _, r := range results {
+			if size := proto.Size(&r.RPC); size > maxRPCSize {
+				t.Fatalf("expected fragmented RPC to be below %d bytes, was %d", maxRPCSize, size)
+			}
+			if size := controlRPCSize(r); size > controlLimit {
+				t.Fatalf("expected fragmented control message to be below %d bytes, was %d", controlLimit, size)
+			}
+			for _, iwant := range r.Control.GetIwant() {
+				fragmentedMessageIds = append(fragmentedMessageIds, iwant.MessageIDs...)
+			}
+			for _, idontwant := range r.Control.GetIdontwant() {
+				fragmentedIDontWantMessageIds = append(fragmentedIDontWantMessageIds, idontwant.MessageIDs...)
+			}
+		}
+		if !slices.Equal(messageIds, fragmentedMessageIds) {
+			t.Fatal("expected fragmented IWANT control messages to contain the same message IDs as input")
+		}
+		if !slices.Equal(messageIds, fragmentedIDontWantMessageIds) {
+			t.Fatal("expected fragmented IDONTWANT control messages to contain the same message IDs as input")
+		}
+
+		rpc.Reset()
+		rpc.Subscriptions = make([]*pb.RPC_SubOpts, 32)
+		for i := range rpc.Subscriptions {
+			topic := fmt.Sprintf("subscription-topic-%d", i)
+			rpc.Subscriptions[i] = &pb.RPC_SubOpts{Topicid: &topic}
+		}
+		results = slices.Collect(rpc.split(maxRPCSize, controlLimit))
+		if len(results) < 2 {
+			t.Fatalf("expected subscriptions to be split by control limit, got %d RPCs", len(results))
+		}
+		var nSubscriptionsFragmented int
+		for _, r := range results {
+			if size := controlRPCSize(r); size > controlLimit {
+				t.Fatalf("expected fragmented subscriptions to be below %d bytes, was %d", controlLimit, size)
+			}
+			nSubscriptionsFragmented += len(r.Subscriptions)
+		}
+		if nSubscriptionsFragmented != len(rpc.Subscriptions) {
+			t.Fatalf("expected fragmented RPCs to contain same number of subscriptions as input, got %d / %d",
+				nSubscriptionsFragmented, len(rpc.Subscriptions))
+		}
+
+		rpc.Reset()
+		rpc.Partial = &pb.PartialMessagesExtension{PartialMessage: make([]byte, controlLimit*2)}
+		results = slices.Collect(rpc.split(maxRPCSize, controlLimit))
+		if len(results) != 1 {
+			t.Fatalf("expected partial message extension to be excluded from control limit, got %d RPCs", len(results))
+		}
+		if results[0].Partial == nil {
+			t.Fatal("expected partial message extension to be preserved")
+		}
+		if size := controlRPCSize(results[0]); size != 0 {
+			t.Fatalf("expected partial-only RPC control size to be 0, got %d", size)
 		}
 
 		// Test the pathological case where a single gossip message ID exceeds the limit.
@@ -2871,17 +2968,14 @@ func FuzzRPCSplit(f *testing.F) {
 	minMaxMsgSize := 100
 	maxMaxMsgSize := 2048
 	f.Fuzz(func(t *testing.T, data []byte) {
-		maxSize := int(generateU16(&data)) % maxMaxMsgSize
-		if maxSize < minMaxMsgSize {
-			maxSize = minMaxMsgSize
-		}
+		maxSize := max(int(generateU16(&data))%maxMaxMsgSize, minMaxMsgSize)
 		rpc := generateRPC(data, maxSize)
 
 		originalControl := compressedRPC{ihave: make(map[string][]string)}
 		originalControl.append(&rpc.RPC)
 		mergedControl := compressedRPC{ihave: make(map[string][]string)}
 
-		for rpc := range rpc.split(maxSize) {
+		for rpc := range rpc.split(maxSize, maxSize) {
 			if proto.Size(&rpc.RPC) > maxSize {
 				t.Fatalf("invalid RPC size %v %d (max=%d)", rpc, proto.Size(&rpc.RPC), maxSize)
 			}
@@ -3118,7 +3212,7 @@ func TestGossipsubIdontwantSend(t *testing.T) {
 						time.Sleep(100 * time.Millisecond)
 
 						// Publish messages from the first peer
-						for i := 0; i < 10; i++ {
+						for range 10 {
 							publishMsg()
 						}
 					}()
@@ -3644,7 +3738,7 @@ func TestGossipsubIdontwantNonMesh(t *testing.T) {
 						time.Sleep(100 * time.Millisecond)
 
 						// Publish messages from the first peer
-						for i := 0; i < 10; i++ {
+						for range 10 {
 							publishMsg()
 						}
 					}()
@@ -3734,7 +3828,7 @@ func TestGossipsubIdontwantIncompat(t *testing.T) {
 						time.Sleep(100 * time.Millisecond)
 
 						// Publish messages from the first peer
-						for i := 0; i < 10; i++ {
+						for range 10 {
 							publishMsg()
 						}
 					}()
@@ -3824,7 +3918,7 @@ func TestGossipsubIdontwantSmallMessage(t *testing.T) {
 						time.Sleep(100 * time.Millisecond)
 
 						// Publish messages from the first peer
-						for i := 0; i < 10; i++ {
+						for range 10 {
 							publishMsg()
 						}
 					}()
@@ -4064,7 +4158,7 @@ func TestGossipsubPruneMeshCorrectly(t *testing.T) {
 		params.Dhi = 8
 
 		psubs := make([]*PubSub, 9)
-		for i := 0; i < 9; i++ {
+		for i := range 9 {
 			psubs[i] = getGossipsub(ctx, hosts[i],
 				WithGossipSubParams(params),
 				WithMessageIdFn(msgID))
@@ -4136,7 +4230,7 @@ func TestRoundRobinMessageIDScheduler(t *testing.T) {
 						RPC: pb.RPC{
 							Publish: []*pb.Message{
 								{
-									Data: []byte(fmt.Sprintf("msg%d", i)),
+									Data: fmt.Appendf(nil, "msg%d", i),
 								},
 							},
 						},
@@ -4272,18 +4366,16 @@ func TestMessageBatchPublish(t *testing.T) {
 
 				var batch MessageBatch
 				var wg sync.WaitGroup
-				for i := 0; i < numMessages; i++ {
-					msg := []byte(fmt.Sprintf("%d it's not a floooooood %d", i, i))
+				for i := range numMessages {
+					msg := fmt.Appendf(nil, "%d it's not a floooooood %d", i, i)
 					if concurrentAdd {
-						wg.Add(1)
-						go func() {
-							defer wg.Done()
+						wg.Go(func() {
 							err := topics[0].AddToBatch(ctx, &batch, msg)
 							if err != nil {
 								t.Log(err)
 								t.Fail()
 							}
-						}()
+						})
 					} else {
 						err := topics[0].AddToBatch(ctx, &batch, msg)
 						if err != nil {
@@ -4304,7 +4396,7 @@ func TestMessageBatchPublish(t *testing.T) {
 							t.Fatal(err)
 						}
 						id := msgIDFn(got.Message)
-						expected := []byte(fmt.Sprintf("%s it's not a floooooood %s", id, id))
+						expected := fmt.Appendf(nil, "%s it's not a floooooood %s", id, id)
 						if !bytes.Equal(expected, got.Data) {
 							t.Fatal("got wrong message!")
 						}
@@ -4360,7 +4452,8 @@ func BenchmarkSplitRPC(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		rpc := rpcs[i%len(rpcs)]
-		rpc.split(maxSize)
+		for range rpc.split(maxSize, maxSize) {
+		}
 	}
 }
 
@@ -4381,13 +4474,13 @@ func BenchmarkSplitRPCLargeMessages(b *testing.B) {
 		const numRPCs = 30
 		const msgSize = 50 * 1024
 		rpc := &RPC{}
-		for i := 0; i < numRPCs; i++ {
+		for range numRPCs {
 			addToRPC(rpc, 20, msgSize+r.Intn(100))
 		}
 
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
-			for range rpc.split(DefaultMaxMessageSize) {
+			for range rpc.split(DefaultMaxMessageSize, DefaultMaxControlMessageSize) {
 
 			}
 		}
@@ -4397,14 +4490,14 @@ func BenchmarkSplitRPCLargeMessages(b *testing.B) {
 		const numRPCs = 2
 		const msgSize = DefaultMaxMessageSize - 100
 		rpc := &RPC{}
-		for i := 0; i < numRPCs; i++ {
+		for range numRPCs {
 			addToRPC(rpc, 1, msgSize)
 		}
 
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
 			count := 0
-			for range rpc.split(DefaultMaxMessageSize) {
+			for range rpc.split(DefaultMaxMessageSize, DefaultMaxControlMessageSize) {
 				count++
 			}
 			if count != 2 {
@@ -6013,6 +6106,167 @@ func TestGossipsubFanoutOnlyRelay(t *testing.T) {
 		_, err = topic.Relay()
 		if !errors.Is(err, ErrFanoutOnlyTopic) {
 			t.Fatalf("expected ErrFanoutOnlyTopic, got: %v", err)
+		}
+	})
+}
+
+func TestGossipsubDuplicatePublishError(t *testing.T) {
+	// republishing a rejected message must rerun validation and return the
+	// rejection error again, not report success as a duplicate
+	synctestTest(t, func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+
+		hosts := getDefaultHosts(t, 1)
+		psubs := getGossipsubs(ctx, hosts)
+
+		allReject := func(ctx context.Context, p peer.ID, msg *Message) ValidationResult {
+			return ValidationReject
+		}
+		err := psubs[0].RegisterTopicValidator("test", allReject)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		topic, err := psubs[0].Join("test", WithTopicMessageIdFn(func(pmsg *pb.Message) string {
+			return "message-1"
+		}))
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if err := topic.Publish(ctx, []byte("hello")); err == nil {
+			t.Fatal("expected rejection error on publish")
+		}
+
+		if err := topic.Publish(ctx, []byte("hello")); err == nil {
+			t.Fatal("expected rejection error on republish")
+		}
+	})
+}
+
+func TestGossipsubForwardAfterIgnore(t *testing.T) {
+	// uses a linear chain 0-1-2-3-4 where node k=2 ignores relayed messages, so the
+	// message stops at k until k republishes it locally and it reaches the rest
+	synctestTest(t, func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+
+		const N = 5
+		hosts := getDefaultHosts(t, N)
+		psubs := getGossipsubs(ctx, hosts)
+		for i := range N - 1 {
+			connect(t, hosts[i], hosts[i+1])
+		}
+		var topics []*Topic
+		for i := range N {
+			topic, err := psubs[i].Join("test", WithTopicMessageIdFn(func(pmsg *pb.Message) string {
+				hash := sha256.Sum256(pmsg.Data)
+				return string(hash[:])
+			}))
+			if err != nil {
+				t.Fatal(err)
+			}
+			topics = append(topics, topic)
+		}
+
+		var subs []*Subscription
+		for i := range N {
+			sub, err := topics[i].Subscribe()
+			if err != nil {
+				t.Fatal(err)
+			}
+			subs = append(subs, sub)
+		}
+
+		time.Sleep(2 * time.Second)
+
+		// node k ignores the message and republishes it later
+		const k = 2
+		ignoreAllNonLocal := func(ctx context.Context, p peer.ID, msg *Message) ValidationResult {
+			// only accept locally published messages
+			if p == hosts[k].ID() {
+				return ValidationAccept
+			}
+			return ValidationIgnore
+		}
+		err := psubs[k].RegisterTopicValidator("test", ignoreAllNonLocal)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		publishedMessage := []byte("hello")
+		if err := topics[0].Publish(ctx, publishedMessage); err != nil {
+			t.Fatal(err)
+		}
+
+		for i := range k {
+			assertReceive(t, subs[i], publishedMessage)
+		}
+		for i := k; i < N; i++ {
+			assertNeverReceives(t, subs[i], time.Second)
+		}
+
+		if err := topics[k].Publish(ctx, publishedMessage); err != nil {
+			t.Fatal(err)
+		}
+
+		for i := k; i < N; i++ {
+			assertReceive(t, subs[i], publishedMessage)
+		}
+		// nodes before k must not receive the republished message again
+		for i := range k {
+			assertNeverReceives(t, subs[i], time.Second)
+		}
+	})
+}
+
+func TestGossipsubDuplicatePublishDeliveredOnce(t *testing.T) {
+	// republishing an already-delivered message must not deliver it to local
+	// subscribers or the network a second time
+	synctestTest(t, func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+
+		hosts := getDefaultHosts(t, 2)
+		psubs := getGossipsubs(ctx, hosts)
+		connect(t, hosts[0], hosts[1])
+
+		var topics []*Topic
+		var subs []*Subscription
+		for i := range 2 {
+			topic, err := psubs[i].Join("test", WithTopicMessageIdFn(func(pmsg *pb.Message) string {
+				hash := sha256.Sum256(pmsg.Data)
+				return string(hash[:])
+			}))
+			if err != nil {
+				t.Fatal(err)
+			}
+			topics = append(topics, topic)
+
+			sub, err := topic.Subscribe()
+			if err != nil {
+				t.Fatal(err)
+			}
+			subs = append(subs, sub)
+		}
+
+		time.Sleep(2 * time.Second)
+
+		publishedMessage := []byte("hello")
+		if err := topics[0].Publish(ctx, publishedMessage); err != nil {
+			t.Fatal(err)
+		}
+		for i := range 2 {
+			assertReceive(t, subs[i], publishedMessage)
+		}
+
+		// republishing a delivered message is a no-op reported as success
+		if err := topics[0].Publish(ctx, publishedMessage); err != nil {
+			t.Fatal(err)
+		}
+		for i := range 2 {
+			assertNeverReceives(t, subs[i], time.Second)
 		}
 	})
 }
