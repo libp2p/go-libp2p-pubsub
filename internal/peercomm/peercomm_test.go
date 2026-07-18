@@ -202,10 +202,20 @@ type streamRead struct {
 
 type testConn struct {
 	network.Conn
-	remote peer.ID
+	remote    peer.ID
+	mu        sync.Mutex
+	closeCode network.ConnErrorCode
+	closed    int
 }
 
 func (c *testConn) RemotePeer() peer.ID { return c.remote }
+func (c *testConn) CloseWithError(code network.ConnErrorCode) error {
+	c.mu.Lock()
+	c.closeCode = code
+	c.closed++
+	c.mu.Unlock()
+	return nil
+}
 
 type testStream struct {
 	network.Stream
@@ -325,6 +335,7 @@ func (s *testStream) Reset() error {
 }
 
 func (s *testStream) SetWriteDeadline(time.Time) error { return nil }
+func (s *testStream) SetReadDeadline(time.Time) error  { return nil }
 
 func (s *testStream) counts() (closed, reset int) {
 	s.mu.Lock()

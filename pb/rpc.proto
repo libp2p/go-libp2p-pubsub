@@ -85,6 +85,7 @@ message ControlExtensions {
   // Experimental extensions must use field numbers larger than 0x200000 to be
   // encoded with 4 bytes
   optional bool testExtension = 6492434;
+  optional bool topicStreams = 6492435;
 }
 
 message PeerInfo {
@@ -103,4 +104,16 @@ message PartialMessagesExtension {
 
   // An encoded representation of the parts a peer has and wants.
   optional bytes partsMetadata = 4;
+}
+
+
+message TopicRPCHeader {
+  optional string topic = 1;
+}
+
+message TopicRPC {
+  oneof payload {
+    Message publish = 1;
+    PartialMessagesExtension partial = 2;
+  }
 }
