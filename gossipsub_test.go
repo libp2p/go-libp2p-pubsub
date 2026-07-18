@@ -1610,7 +1610,12 @@ func TestGossipsubFloodPublish(t *testing.T) {
 			subs = append(subs, sub)
 		}
 
-		time.Sleep(time.Second)
+		// Flood publish only sends to peers currently in the topic map. With
+		// simlibp2p latency, a fixed sleep can resume before subscription
+		// RPCs are applied, so wait until the hub sees every leaf.
+		for len(psubs[0].ListPeers("test")) < len(hosts)-1 {
+			time.Sleep(10 * time.Millisecond)
+		}
 
 		// send a message from the star and assert it was received
 		for i := range 20 {
