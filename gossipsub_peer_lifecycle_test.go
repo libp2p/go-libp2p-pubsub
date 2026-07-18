@@ -2,17 +2,215 @@ package pubsub
 
 import (
 	"context"
+	"errors"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	pb "github.com/libp2p/go-libp2p-pubsub/pb"
+	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/core/protocol"
 	"github.com/libp2p/go-msgio"
 	"google.golang.org/protobuf/proto"
 )
+
+type outboundOpenFailureHost struct {
+	host.Host
+
+	started chan struct{}
+	release chan struct{}
+	err     error
+	once    sync.Once
+	calls   atomic.Int32
+}
+
+func (h *outboundOpenFailureHost) NewStream(ctx context.Context, p peer.ID, pids ...protocol.ID) (network.Stream, error) {
+	h.calls.Add(1)
+	h.once.Do(func() { close(h.started) })
+	select {
+	case <-h.release:
+		return nil, h.err
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
+}
+
+type outboundCloseCountingTracer struct {
+	mockRawTracer
+	closed atomic.Int32
+}
+
+func (t *outboundCloseCountingTracer) OnClosedOutboundStream(peer.ID) {
+	t.closed.Add(1)
+}
+
+func waitForLifecycleCondition(t *testing.T, ps *PubSub, desc string, condition func() bool) {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		result := make(chan bool, 1)
+		ps.eval <- func() { result <- condition() }
+		if <-result {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("timed out waiting for %s", desc)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+}
+
+func writeLifecycleSubscription(t *testing.T, stream network.Stream, topic string) {
+	t.Helper()
+	rpc := &pb.RPC{Subscriptions: []*pb.RPC_SubOpts{{
+		Topicid:   proto.String(topic),
+		Subscribe: proto.Bool(true),
+	}}}
+	b, err := proto.Marshal(rpc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := msgio.NewVarintWriter(stream).WriteMsg(b); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func newOutboundOpenFailureTest(t *testing.T, ctx context.Context) (*PubSub, *outboundOpenFailureHost, host.Host, *outboundCloseCountingTracer) {
+	t.Helper()
+	hosts := getDefaultHosts(t, 2)
+	local := &outboundOpenFailureHost{
+		Host:    hosts[0],
+		started: make(chan struct{}),
+		release: make(chan struct{}),
+		err:     errors.New("controlled outbound open failure"),
+	}
+	tracer := &outboundCloseCountingTracer{}
+	ps := getGossipsub(ctx, local, WithRawTracer(tracer), WithMessageSignaturePolicy(StrictNoSign))
+	hosts[1].SetStreamHandler(GossipSubID_v13, func(s network.Stream) { _ = s.Reset() })
+	connect(t, hosts[1], local)
+	select {
+	case <-local.started:
+	case <-time.After(5 * time.Second):
+		t.Fatal("timed out waiting for initial outbound open")
+	}
+	return ps, local, hosts[1], tracer
+}
+
+func TestInitialOutboundOpenFailureRetiresInboundPeer(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	ps, local, remote, tracer := newOutboundOpenFailureTest(t, ctx)
+	const topicID = "outbound-open-failure"
+	topic, err := ps.Join(topicID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	events, err := topic.EventHandler()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer events.Cancel()
+
+	inbound, err := remote.NewStream(ctx, local.ID(), GossipSubID_v13)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer inbound.Close()
+	writeLifecycleSubscription(t, inbound, topicID)
+
+	eventCtx, eventCancel := context.WithTimeout(ctx, 5*time.Second)
+	join, err := events.NextPeerEvent(eventCtx)
+	eventCancel()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if join.Type != PeerJoin || join.Peer != remote.ID() {
+		t.Fatalf("first event = %+v, want PeerJoin for %s", join, remote.ID())
+	}
+
+	reset := make(chan error, 1)
+	go func() {
+		var b [1]byte
+		_, err := inbound.Read(b[:])
+		reset <- err
+	}()
+	close(local.release)
+
+	waitForLifecycleCondition(t, ps, "peer retirement and topic cleanup", func() bool {
+		_, inRegistry := ps.peerComm.Lookup(remote.ID())
+		_, inTopic := ps.topics[topicID][remote.ID()]
+		return !inRegistry && !inTopic
+	})
+	select {
+	case err := <-reset:
+		if !errors.Is(err, network.ErrReset) {
+			t.Fatalf("inbound read error = %v, want stream reset", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("timed out waiting for inbound stream reset")
+	}
+
+	eventCtx, eventCancel = context.WithTimeout(ctx, 5*time.Second)
+	leave, err := events.NextPeerEvent(eventCtx)
+	eventCancel()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if leave.Type != PeerLeave || leave.Peer != join.Peer {
+		t.Fatalf("second event = %+v, want matching PeerLeave for %s", leave, join.Peer)
+	}
+	eventCtx, eventCancel = context.WithTimeout(ctx, 100*time.Millisecond)
+	_, err = events.NextPeerEvent(eventCtx)
+	eventCancel()
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("unexpected additional peer event: %v", err)
+	}
+
+	if got := tracer.closed.Load(); got != 0 {
+		t.Fatalf("OnClosedOutboundStream calls = %d, want 0", got)
+	}
+	if got := local.calls.Load(); got != 1 {
+		t.Fatalf("outbound open attempts = %d, want 1", got)
+	}
+	if connected := local.Network().Connectedness(remote.ID()); connected != network.Connected {
+		t.Fatalf("host connectedness = %s, want connected", connected)
+	}
+}
+
+func TestInitialOutboundOpenFailureWithoutInboundSubscriptionEmitsNoPeerLeave(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	ps, local, remote, _ := newOutboundOpenFailureTest(t, ctx)
+	topic, err := ps.Join("outbound-open-failure-no-subscription")
+	if err != nil {
+		t.Fatal(err)
+	}
+	events, err := topic.EventHandler()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer events.Cancel()
+
+	close(local.release)
+	waitForLifecycleCondition(t, ps, "peer retirement", func() bool {
+		_, inRegistry := ps.peerComm.Lookup(remote.ID())
+		return !inRegistry
+	})
+	if got := local.calls.Load(); got != 1 {
+		t.Fatalf("outbound open attempts = %d, want 1", got)
+	}
+
+	eventCtx, eventCancel := context.WithTimeout(ctx, 100*time.Millisecond)
+	defer eventCancel()
+	if event, err := events.NextPeerEvent(eventCtx); !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("unexpected peer event %+v: %v", event, err)
+	}
+}
 
 // lifecycleSkeletonGossipsub is a minimal gossipsub peer for testing peer
 // lifecycle edge cases. It manages two streams:
@@ -192,7 +390,7 @@ func TestNoLeakFromDisconnectedPeer(t *testing.T) {
 			}
 		}
 		waitForCond("peer added", func() bool {
-			_, inPeers := ps.peers[remoteHost.ID()]
+			_, inPeers := ps.peerComm.Lookup(remoteHost.ID())
 			_, inRouter := gs.peers[remoteHost.ID()]
 			return inPeers && inRouter
 		})
@@ -204,9 +402,9 @@ func TestNoLeakFromDisconnectedPeer(t *testing.T) {
 
 		// Wait for the local to fully remove the peer. handleDeadPeers removes
 		// it, tries to reconnect (fails because handler is gone), and newPeerError
-		// cleans up ps.peers.
+		// cleans up the peer registry.
 		waitForCond("peer removed", func() bool {
-			_, inPeers := ps.peers[remoteHost.ID()]
+			_, inPeers := ps.peerComm.Lookup(remoteHost.ID())
 			_, inGossipsub := gs.peers[remoteHost.ID()]
 			return !inPeers && !inGossipsub
 		})
@@ -233,15 +431,15 @@ func TestNoLeakFromDisconnectedPeer(t *testing.T) {
 		time.Sleep(time.Second)
 
 		// --- Step 4: Observe leaked state. ---
-		// The peer is not in ps.peers (it was removed and the reconnect failed),
+		// The peer is not in the registry (it was removed and the reconnect failed),
 		// but the stale RPC re-added it to ps.topics. Since the peer is not in
-		// ps.peers, handleDeadPeers will never clean it up — it checks ps.peers
+		// the registry, handleDeadPeers will never clean it up — it checks registry membership
 		// first and skips unknown peers. This is permanently leaked state.
 		checkDone := make(chan struct{})
 		ps.eval <- func() {
 			defer close(checkDone)
 
-			_, inPeers := ps.peers[remoteHost.ID()]
+			_, inPeers := ps.peerComm.Lookup(remoteHost.ID())
 			_, inTopics := ps.topics[topic][remoteHost.ID()]
 
 			if inPeers || inTopics {

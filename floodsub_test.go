@@ -1284,6 +1284,13 @@ func TestDedupInboundStreams(t *testing.T) {
 		h1 := hosts[0]
 		h2 := hosts[1]
 
+		// Keep h1's outbound stream open so this test only exercises inbound
+		// stream replacement, not initial outbound-open failure retirement.
+		h2.SetStreamHandler(FloodSubID, func(s network.Stream) {
+			<-ctx.Done()
+			_ = s.Reset()
+		})
+
 		_, err := NewFloodSub(ctx, h1)
 		if err != nil {
 			t.Fatal(err)
