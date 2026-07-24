@@ -11,11 +11,11 @@ import (
 )
 
 type lifecyclePartialMessages struct {
-	closed []peer.ID
+	unavailable []peer.ID
 }
 
-func (m *lifecyclePartialMessages) OnClosedOutboundStream(id peer.ID) {
-	m.closed = append(m.closed, id)
+func (m *lifecyclePartialMessages) OnPeerUnavailable(id peer.ID) {
+	m.unavailable = append(m.unavailable, id)
 }
 
 func (*lifecyclePartialMessages) HandleRPC(peer.ID, *pubsub_pb.PartialMessagesExtension) error {
@@ -66,18 +66,21 @@ func TestExtensionsDeactivateOnEitherHalfClosing(t *testing.T) {
 			es := newPartialLifecycleState(cleanup)
 			id := peer.ID("peer")
 			activatePartialExtensions(t, es, id)
+			if len(cleanup.unavailable) != 0 {
+				t.Fatalf("activation unexpectedly performed partial-message lifecycle work: %v", cleanup.unavailable)
+			}
 
 			test.close(es, id)
 			if es.activePeerExtensions(id).PartialMessages {
 				t.Fatal("extension remained active after stream closure")
 			}
-			if len(cleanup.closed) != 1 || cleanup.closed[0] != id {
-				t.Fatalf("expected one cleanup for %q, got %v", id, cleanup.closed)
+			if len(cleanup.unavailable) != 1 || cleanup.unavailable[0] != id {
+				t.Fatalf("expected one cleanup for %q, got %v", id, cleanup.unavailable)
 			}
 
 			test.close(es, id)
-			if len(cleanup.closed) != 1 {
-				t.Fatalf("duplicate closure triggered %d cleanups", len(cleanup.closed))
+			if len(cleanup.unavailable) != 1 {
+				t.Fatalf("duplicate closure triggered %d cleanups", len(cleanup.unavailable))
 			}
 		})
 	}
@@ -119,8 +122,8 @@ func TestExtensionsReplacementHalfReactivates(t *testing.T) {
 			if !es.activePeerExtensions(id).PartialMessages {
 				t.Fatal("replacement half did not reactivate extension")
 			}
-			if len(cleanup.closed) != 1 {
-				t.Fatalf("expected one cleanup before reactivation, got %d", len(cleanup.closed))
+			if len(cleanup.unavailable) != 1 || cleanup.unavailable[0] != id {
+				t.Fatalf("replacement lifecycle cleanup = %v; want one cleanup for %q", cleanup.unavailable, id)
 			}
 		})
 	}
@@ -136,8 +139,8 @@ func TestExtensionsPartialCleanupUsesActiveSnapshot(t *testing.T) {
 	es.myExtensions.PartialMessages = false
 	es.OnClosedOutboundStream(id)
 
-	if len(cleanup.closed) != 1 || cleanup.closed[0] != id {
-		t.Fatalf("expected cleanup from negotiated snapshot, got %v", cleanup.closed)
+	if len(cleanup.unavailable) != 1 || cleanup.unavailable[0] != id {
+		t.Fatalf("expected cleanup from negotiated snapshot, got %v", cleanup.unavailable)
 	}
 }
 
@@ -325,8 +328,8 @@ func TestPeerExtensionsIncomingLifecycle(t *testing.T) {
 	if es.peers[peerID] != nil && es.peers[peerID].active {
 		t.Fatal("incoming close left extensions active")
 	}
-	if disabled != 1 || partial.closed != 1 {
-		t.Fatalf("deactivation counts = topic %d, partial %d; want 1, 1", disabled, partial.closed)
+	if disabled != 1 || partial.unavailable != 1 {
+		t.Fatalf("deactivation counts = topic %d, partial %d; want 1, 1", disabled, partial.unavailable)
 	}
 	if es.Preprocess(&RPC{from: peerID, transport: peercomm.TransportTopic}) {
 		t.Fatal("accepted topic RPC while extensions were inactive")
@@ -343,11 +346,11 @@ func TestPeerExtensionsIncomingLifecycle(t *testing.T) {
 	}
 
 	es.OnClosedOutboundStream(peerID)
-	if disabled != 2 || partial.closed != 1 {
-		t.Fatalf("final deactivation counts = topic %d, partial %d; want 2, 1", disabled, partial.closed)
+	if disabled != 2 || partial.unavailable != 1 {
+		t.Fatalf("final deactivation counts = topic %d, partial %d; want 2, 1", disabled, partial.unavailable)
 	}
 	es.OnClosedOutboundStream(peerID)
-	if disabled != 2 || partial.closed != 1 {
+	if disabled != 2 || partial.unavailable != 1 {
 		t.Fatal("repeated outbound close deactivated extensions twice")
 	}
 }
@@ -408,11 +411,11 @@ func extensionHello(from peer.ID, topicStreams, partialMessages bool) *RPC {
 }
 
 type recordingPartialMessageExtension struct {
-	closed int
+	unavailable int
 }
 
-func (m *recordingPartialMessageExtension) OnClosedOutboundStream(peer.ID) {
-	m.closed++
+func (m *recordingPartialMessageExtension) OnPeerUnavailable(peer.ID) {
+	m.unavailable++
 }
 
 func (*recordingPartialMessageExtension) HandleRPC(peer.ID, *pubsub_pb.PartialMessagesExtension) error {

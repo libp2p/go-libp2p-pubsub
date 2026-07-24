@@ -90,7 +90,7 @@ func (pe *PeerExtensions) ExtendRPC(rpc *RPC) *RPC {
 // Purposely not trying to make a generic extension interface as there is only
 // one real consumer (partial messages). This may change in the future.
 type partialMessageInterface interface {
-	OnClosedOutboundStream(peer.ID)
+	OnPeerUnavailable(peer.ID)
 	HandleRPC(from peer.ID, rpc *pubsub_pb.PartialMessagesExtension) error
 	Heartbeat()
 	EmitGossip(topic string, peers []peer.ID)
@@ -224,7 +224,7 @@ func (es *extensionsState) reconcilePeerExtensions(id peer.ID, state *peerExtens
 			es.disableTopicStreams(id)
 		}
 		if active.PartialMessages && es.partialMessagesExtension != nil {
-			es.partialMessagesExtension.OnClosedOutboundStream(id)
+			es.partialMessagesExtension.OnPeerUnavailable(id)
 		}
 	}
 	if !state.active && shouldActivate {
