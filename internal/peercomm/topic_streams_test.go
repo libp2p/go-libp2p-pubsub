@@ -107,43 +107,65 @@ func TestDisableTopicStreamsDoesNotWaitForBlockedOpen(t *testing.T) {
 }
 
 func TestTopicSendSplitsWithoutMutationAndWritesHeaderFirst(t *testing.T) {
-	h := &topicHost{streams: make(chan *testStream, 2)}
-	r, err := NewRegistry(context.Background(), testConfig(h, Hooks{}))
+	gate := make(chan struct{})
+	stream := newTestStream(peer.ID("peer"))
+	stream.writeStarted = make(chan struct{})
+	stream.writeGate = gate
+	r, err := NewRegistry(context.Background(), testConfig(&fixedTopicHost{stream: stream}, Hooks{}))
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer r.Stop()
+	var releaseOnce sync.Once
+	release := func() { releaseOnce.Do(func() { close(gate) }) }
+	defer release()
 	a := r.GetOrCreate(peer.ID("peer"))
 	a.EnableTopicStreams()
 	topic := "alpha"
-	message := &pb.Message{From: []byte("from"), Data: []byte("data"), Topic: &topic}
-	rpc := &pb.RPC{Publish: []*pb.Message{message}, Subscriptions: []*pb.RPC_SubOpts{{Topicid: &topic}}}
-	before := proto.Clone(rpc)
+	extension := &pb.TestExtension{}
+	extension.ProtoReflect().SetUnknown([]byte{0x08, 0x01})
+	rpc := &pb.RPC{
+		Publish:       []*pb.Message{{From: []byte("from"), Data: []byte("data"), Topic: &topic}},
+		Subscriptions: []*pb.RPC_SubOpts{{Subscribe: proto.Bool(true), Topicid: &topic}},
+		Control:       &pb.ControlMessage{Ihave: []*pb.ControlIHave{{TopicID: &topic, MessageIDs: []string{"message"}}}},
+		TestExtension: extension,
+	}
+	before := proto.Clone(rpc).(*pb.RPC)
 	if err := a.Send(rpc, false); err != nil {
 		t.Fatal(err)
 	}
+	if !proto.Equal(rpc, before) {
+		t.Fatal("Send mutated caller RPC")
+	}
+	waitDone(t, stream.writeStarted, "blocked topic header")
+
+	rpc.Subscriptions[0].Topicid = proto.String("mutated")
+	rpc.Control.Ihave[0].MessageIDs[0] = "mutated"
+	rpc.TestExtension.ProtoReflect().SetUnknown([]byte{0x08, 0x02})
+	rpc.Publish[0].Data[0] = 'X'
+
 	control, err := a.queue.pop(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(control.Publish) != 0 || len(control.Subscriptions) != 1 {
-		t.Fatalf("bad control split: %v", control)
+	expectedControl := proto.Clone(before).(*pb.RPC)
+	expectedControl.Publish = nil
+	if !proto.Equal(control, expectedControl) {
+		t.Fatalf("control snapshot = %v, want %v", control, expectedControl)
 	}
-	s := receive(t, h.streams, "topic stream")
-	headerFrame := receive(t, s.writes, "topic header")
+
+	release()
+	headerFrame := receive(t, stream.writes, "topic header")
 	var header pb.TopicRPCHeader
 	decodeFrameInto(t, headerFrame, &header)
 	if header.GetTopic() != topic {
 		t.Fatalf("header topic = %q", header.GetTopic())
 	}
-	payloadFrame := receive(t, s.writes, "topic payload")
+	payloadFrame := receive(t, stream.writes, "topic payload")
 	var payload pb.TopicRPC
 	decodeFrameInto(t, payloadFrame, &payload)
 	if payload.GetPublish() == nil || payload.GetPublish().Topic != nil || string(payload.GetPublish().Data) != "data" {
-		t.Fatalf("bad payload: %v", &payload)
-	}
-	if !proto.Equal(rpc, before) {
-		t.Fatal("Send mutated caller RPC")
+		t.Fatalf("bad payload snapshot: %v", &payload)
 	}
 }
 

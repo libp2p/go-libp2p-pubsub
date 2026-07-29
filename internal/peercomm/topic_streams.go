@@ -108,6 +108,7 @@ func (a *Actor) splitAndSend(rpc *pb.RPC, urgent bool) error {
 		return a.queue.push(rpc, urgent)
 	}
 
+	rpc = proto.Clone(rpc).(*pb.RPC)
 	control := &pb.RPC{
 		Subscriptions: rpc.Subscriptions,
 		Control:       rpc.Control,
@@ -119,18 +120,16 @@ func (a *Actor) splitAndSend(rpc *pb.RPC, urgent bool) error {
 			return ErrInvalidTopicRPC
 		}
 		topic := message.GetTopic()
-		publish := proto.Clone(message).(*pb.Message)
-		publish.Topic = nil
-		byTopic[topic] = append(byTopic[topic], &pb.TopicRPC{Payload: &pb.TopicRPC_Publish{Publish: publish}})
+		message.Topic = nil
+		byTopic[topic] = append(byTopic[topic], &pb.TopicRPC{Payload: &pb.TopicRPC_Publish{Publish: message}})
 	}
 	if rpc.Partial != nil {
 		if rpc.Partial.GetTopicID() == "" {
 			return ErrInvalidTopicRPC
 		}
-		partial := proto.Clone(rpc.Partial).(*pb.PartialMessagesExtension)
-		topic := partial.GetTopicID()
-		partial.TopicID = nil
-		byTopic[topic] = append(byTopic[topic], &pb.TopicRPC{Payload: &pb.TopicRPC_Partial{Partial: partial}})
+		topic := rpc.Partial.GetTopicID()
+		rpc.Partial.TopicID = nil
+		byTopic[topic] = append(byTopic[topic], &pb.TopicRPC{Payload: &pb.TopicRPC_Partial{Partial: rpc.Partial}})
 	}
 
 	// Reserve every destination before publishing any part of the RPC. This
