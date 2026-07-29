@@ -4,8 +4,10 @@ import (
 	"errors"
 	"iter"
 
+	"github.com/libp2p/go-libp2p-pubsub/internal/peercomm"
 	"github.com/libp2p/go-libp2p-pubsub/partialmessages"
 	pubsub_pb "github.com/libp2p/go-libp2p-pubsub/pb"
+	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/core/protocol"
 )
@@ -13,10 +15,21 @@ import (
 type PeerExtensions struct {
 	TestExtension   bool
 	PartialMessages bool
+	TopicStreams    bool
 }
 
 type TestExtensionConfig struct {
 	OnReceiveTestExtension func(from peer.ID)
+}
+
+// WithTopicStreams advertises support for topic-scoped streams.
+func WithTopicStreams() Option {
+	return func(ps *PubSub) error {
+		if rt, ok := ps.rt.(*GossipSubRouter); ok {
+			rt.extensions.myExtensions.TopicStreams = true
+		}
+		return nil
+	}
 }
 
 func WithTestExtension(c TestExtensionConfig) Option {
@@ -44,28 +57,29 @@ func peerExtensionsFromRPC(rpc *RPC) PeerExtensions {
 	if hasPeerExtensions(rpc) {
 		out.TestExtension = rpc.Control.Extensions.GetTestExtension()
 		out.PartialMessages = rpc.Control.Extensions.GetPartialMessages()
+		out.TopicStreams = rpc.Control.Extensions.GetTopicStreams()
 	}
 	return out
 }
 
 func (pe *PeerExtensions) ExtendRPC(rpc *RPC) *RPC {
+	if !pe.TestExtension && !pe.PartialMessages && !pe.TopicStreams {
+		return rpc
+	}
+	if rpc.Control == nil {
+		rpc.Control = &pubsub_pb.ControlMessage{}
+	}
+	if rpc.Control.Extensions == nil {
+		rpc.Control.Extensions = &pubsub_pb.ControlExtensions{}
+	}
 	if pe.TestExtension {
-		if rpc.Control == nil {
-			rpc.Control = &pubsub_pb.ControlMessage{}
-		}
-		if rpc.Control.Extensions == nil {
-			rpc.Control.Extensions = &pubsub_pb.ControlExtensions{}
-		}
 		rpc.Control.Extensions.TestExtension = &pe.TestExtension
 	}
 	if pe.PartialMessages {
-		if rpc.Control == nil {
-			rpc.Control = &pubsub_pb.ControlMessage{}
-		}
-		if rpc.Control.Extensions == nil {
-			rpc.Control.Extensions = &pubsub_pb.ControlExtensions{}
-		}
 		rpc.Control.Extensions.PartialMessages = &pe.PartialMessages
+	}
+	if pe.TopicStreams {
+		rpc.Control.Extensions.TopicStreams = &pe.TopicStreams
 	}
 	return rpc
 }
@@ -82,24 +96,31 @@ type partialMessageInterface interface {
 	EmitGossip(topic string, peers []peer.ID)
 }
 
+type peerExtensionState struct {
+	received       bool
+	receivedCaps   PeerExtensions
+	sent           bool
+	active         bool
+	activeSnapshot PeerExtensions
+}
+
 type extensionsState struct {
 	myExtensions      PeerExtensions
-	peerExtensions    map[peer.ID]PeerExtensions // peer's extensions
-	sentExtensions    map[peer.ID]struct{}
-	activeExtensions  map[peer.ID]PeerExtensions
+	peers             map[peer.ID]*peerExtensionState
 	reportMisbehavior func(peer.ID)
 	sendRPC           func(p peer.ID, r *RPC, urgent bool)
 	testExtension     *testExtension
 
 	partialMessagesExtension partialMessageInterface
+	enableTopicStreams       func(peer.ID)
+	disableTopicStreams      func(peer.ID)
+	protocolViolation        func(peer.ID, network.Stream)
 }
 
 func newExtensionsState(myExtensions PeerExtensions, reportMisbehavior func(peer.ID), sendRPC func(peer.ID, *RPC, bool)) *extensionsState {
 	return &extensionsState{
 		myExtensions:      myExtensions,
-		peerExtensions:    make(map[peer.ID]PeerExtensions),
-		sentExtensions:    make(map[peer.ID]struct{}),
-		activeExtensions:  make(map[peer.ID]PeerExtensions),
+		peers:             make(map[peer.ID]*peerExtensionState),
 		reportMisbehavior: reportMisbehavior,
 		sendRPC:           sendRPC,
 		testExtension:     nil,
@@ -107,98 +128,134 @@ func newExtensionsState(myExtensions PeerExtensions, reportMisbehavior func(peer
 }
 
 func (es *extensionsState) HandleRPC(rpc *RPC) error {
-	if _, ok := es.peerExtensions[rpc.from]; !ok {
-		// We know this is the first message because we didn't have extensions
-		// for this peer, and we always set extensions on the first rpc.
-		es.peerExtensions[rpc.from] = peerExtensionsFromRPC(rpc)
-		es.activatePeerExtensions(rpc.from)
-	} else {
-		// We already have an extension for this peer. If they send us another
-		// extensions control message, that is a protocol error. We should
-		// down score them because they are misbehaving.
+	state := es.peers[rpc.from]
+	var active PeerExtensions
+	if state != nil && state.active {
+		active = state.activeSnapshot
+	}
+	if active.TestExtension && es.testExtension != nil {
+		es.testExtension.HandleRPC(rpc.from, rpc.TestExtension)
+	}
+	if active.PartialMessages && rpc.Partial != nil && es.partialMessagesExtension != nil {
+		return es.partialMessagesExtension.HandleRPC(rpc.from, rpc.Partial)
+	}
+	return nil
+}
+
+func (es *extensionsState) peerState(id peer.ID) *peerExtensionState {
+	state := es.peers[id]
+	if state == nil {
+		state = new(peerExtensionState)
+		es.peers[id] = state
+	}
+	return state
+}
+
+func (es *extensionsState) observeExtensions(rpc *RPC) {
+	state := es.peerState(rpc.from)
+	if state.received {
 		if hasPeerExtensions(rpc) {
 			es.reportMisbehavior(rpc.from)
 		}
+		return
 	}
-
-	return es.extensionsHandleRPC(rpc)
+	state.received = true
+	state.receivedCaps = peerExtensionsFromRPC(rpc)
+	es.reconcilePeerExtensions(rpc.from, state)
 }
 
-func (es *extensionsState) OnNewIncomingStream(peer.ID, protocol.ID) {
+// Preprocess observes the first control hello and validates that
+// payloads use the transport selected during extension negotiation.
+func (es *extensionsState) Preprocess(rpc *RPC) bool {
+	state := es.peers[rpc.from]
+	if rpc.transport == peercomm.TransportTopic {
+		return state != nil && state.active && state.activeSnapshot.TopicStreams
+	}
+	es.observeExtensions(rpc)
+	state = es.peers[rpc.from]
+	active := state.activeSnapshot
+	if state.active && active.TopicStreams && (len(rpc.Publish) != 0 || (active.PartialMessages && rpc.Partial != nil)) {
+		if es.protocolViolation != nil {
+			es.protocolViolation(rpc.from, rpc.stream)
+		}
+		return false
+	}
+	return true
 }
+
+func (es *extensionsState) OnNewIncomingStream(peer.ID, protocol.ID) {}
 
 func (es *extensionsState) OnClosedIncomingStream(id peer.ID, _ protocol.ID) {
-	es.deactivatePeerExtensions(id)
-	delete(es.peerExtensions, id)
-	if len(es.peerExtensions) == 0 {
-		es.peerExtensions = make(map[peer.ID]PeerExtensions)
+	state := es.peers[id]
+	if state == nil || !state.received {
+		return
 	}
+	state.received = false
+	state.receivedCaps = PeerExtensions{}
+	es.reconcilePeerExtensions(id, state)
+	es.prunePeerState(id, state)
 }
 
 func (es *extensionsState) OnNewOutboundStream(id peer.ID, helloPacket *RPC) *RPC {
-	// Send our extensions as the first message.
 	helloPacket = es.myExtensions.ExtendRPC(helloPacket)
-
-	es.sentExtensions[id] = struct{}{}
-	es.activatePeerExtensions(id)
+	state := es.peerState(id)
+	state.sent = true
+	es.reconcilePeerExtensions(id, state)
 	return helloPacket
 }
 
 func (es *extensionsState) OnClosedOutboundStream(id peer.ID) {
-	es.deactivatePeerExtensions(id)
-	delete(es.sentExtensions, id)
-	if len(es.sentExtensions) == 0 {
-		es.sentExtensions = make(map[peer.ID]struct{})
-	}
-}
-
-func (es *extensionsState) activatePeerExtensions(id peer.ID) {
-	peerExtensions, received := es.peerExtensions[id]
-	_, sent := es.sentExtensions[id]
-	if !received || !sent {
+	state := es.peers[id]
+	if state == nil || !state.sent {
 		return
 	}
-
-	active := PeerExtensions{
-		TestExtension:   es.myExtensions.TestExtension && peerExtensions.TestExtension,
-		PartialMessages: es.myExtensions.PartialMessages && peerExtensions.PartialMessages,
-	}
-	es.activeExtensions[id] = active
-
-	if active.TestExtension && es.testExtension != nil {
-		es.testExtension.OnNewOutboundStream(id)
-	}
+	state.sent = false
+	es.reconcilePeerExtensions(id, state)
+	es.prunePeerState(id, state)
 }
 
-func (es *extensionsState) deactivatePeerExtensions(id peer.ID) {
-	active, ok := es.activeExtensions[id]
-	if !ok {
-		return
-	}
-	delete(es.activeExtensions, id)
-	if len(es.activeExtensions) == 0 {
-		es.activeExtensions = make(map[peer.ID]PeerExtensions)
-	}
-
-	if active.PartialMessages && es.partialMessagesExtension != nil {
-		es.partialMessagesExtension.OnClosedOutboundStream(id)
-	}
-}
-
-func (es *extensionsState) extensionsHandleRPC(rpc *RPC) error {
-	active := es.activeExtensions[rpc.from]
-	if active.TestExtension && es.testExtension != nil {
-		es.testExtension.HandleRPC(rpc.from, rpc.TestExtension)
-	}
-
-	if active.PartialMessages && rpc.Partial != nil && es.partialMessagesExtension != nil {
-		err := es.partialMessagesExtension.HandleRPC(rpc.from, rpc.Partial)
-		if err != nil {
-			return err
+func (es *extensionsState) reconcilePeerExtensions(id peer.ID, state *peerExtensionState) {
+	shouldActivate := state.received && state.sent
+	if state.active && !shouldActivate {
+		active := state.activeSnapshot
+		state.active = false
+		state.activeSnapshot = PeerExtensions{}
+		if active.TopicStreams && es.disableTopicStreams != nil {
+			es.disableTopicStreams(id)
+		}
+		if active.PartialMessages && es.partialMessagesExtension != nil {
+			es.partialMessagesExtension.OnClosedOutboundStream(id)
 		}
 	}
+	if !state.active && shouldActivate {
+		active := PeerExtensions{
+			TestExtension:   es.myExtensions.TestExtension && state.receivedCaps.TestExtension,
+			PartialMessages: es.myExtensions.PartialMessages && state.receivedCaps.PartialMessages,
+			TopicStreams:    es.myExtensions.TopicStreams && state.receivedCaps.TopicStreams,
+		}
+		state.active = true
+		state.activeSnapshot = active
+		if active.TestExtension && es.testExtension != nil {
+			es.testExtension.OnNewOutboundStream(id)
+		}
+		if active.TopicStreams && es.enableTopicStreams != nil {
+			es.enableTopicStreams(id)
+		}
+	}
+}
 
-	return nil
+func (es *extensionsState) prunePeerState(id peer.ID, state *peerExtensionState) {
+	if !state.received && !state.sent && !state.active {
+		delete(es.peers, id)
+	}
+}
+
+func (es *extensionsState) activePeerExtensions(id peer.ID) PeerExtensions {
+	state := es.peers[id]
+	if state == nil || !state.active {
+		return PeerExtensions{}
+	}
+	return state.activeSnapshot
 }
 
 func (es *extensionsState) Heartbeat() {
@@ -286,7 +343,7 @@ func (r partialMessageRouter) MeshPeers(topic string) iter.Seq[peer.ID] {
 		}
 
 		for peer := range peerSet {
-			if r.gs.extensions.activeExtensions[peer].PartialMessages &&
+			if r.gs.extensions.activePeerExtensions(peer).PartialMessages &&
 				((r.gs.iRequestPartial(topic) && r.gs.peerSupportsSendingPartial(peer, topic)) ||
 					(r.gs.iSupportSendingPartial(topic) && r.gs.peerRequestsPartial(peer, topic))) {
 				if !yield(peer) {

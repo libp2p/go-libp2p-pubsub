@@ -1,6 +1,8 @@
 package pubsub
 
 import (
+	"time"
+
 	"github.com/libp2p/go-libp2p/core/network"
 	"google.golang.org/protobuf/proto"
 
@@ -112,4 +114,91 @@ func rpcWithControl(msgs []*pb.Message,
 			},
 		},
 	}
+}
+
+func (p *PubSub) handleTopicStream(s network.Stream) {
+	response := make(chan *peercomm.Actor, 1)
+	select {
+	case p.eval <- func() {
+		pid := s.Conn().RemotePeer()
+		a, ok := p.peerComm.Lookup(pid)
+		if p.blacklist.Contains(pid) || !ok || !a.TopicStreamsEnabled() {
+			response <- nil
+			return
+		}
+		response <- a
+	}:
+	case <-p.ctx.Done():
+		_ = s.Reset()
+		return
+	}
+	select {
+	case a := <-response:
+		if a == nil {
+			_ = s.Conn().CloseWithError(peercomm.TopicStreamsViolation)
+			return
+		}
+		a.HandleTopicInbound(s)
+	case <-p.ctx.Done():
+		_ = s.Reset()
+	}
+}
+
+func (p *PubSub) topicStreamAllowed(a *peercomm.Actor, topic string) bool {
+	response := make(chan bool, 1)
+	select {
+	case p.eval <- func() {
+		if !p.peerComm.IsCurrent(a) {
+			response <- false
+			return
+		}
+		if len(p.mySubs[topic]) != 0 || p.myRelays[topic] != 0 {
+			response <- true
+			return
+		}
+		if p.isRecentlyUnsubscribed(topic, time.Now()) {
+			response <- true
+			return
+		}
+		if gs, ok := p.rt.(*GossipSubRouter); ok {
+			_, fanout := gs.fanout[topic]
+			response <- fanout
+			return
+		}
+		response <- false
+	}:
+	case <-p.ctx.Done():
+		return false
+	}
+	select {
+	case allowed := <-response:
+		return allowed
+	case <-p.ctx.Done():
+		return false
+	}
+}
+
+func (p *PubSub) topicStreamMisbehavior(a *peercomm.Actor) {
+	select {
+	case p.eval <- func() {
+		if p.peerComm.IsCurrent(a) {
+			if gs, ok := p.rt.(*GossipSubRouter); ok {
+				gs.extensions.reportMisbehavior(a.Peer())
+			}
+		}
+	}:
+	case <-p.ctx.Done():
+	}
+}
+
+func (p *PubSub) isRecentlyUnsubscribed(topic string, now time.Time) bool {
+	unsubscribedAt, ok := p.recentUnsubscribed[topic]
+	if !ok {
+		return false
+	}
+	if now.Sub(unsubscribedAt) <= GossipSubUnsubscribeBackoff {
+		return true
+	}
+	delete(p.recentUnsubscribed, topic)
+	return false
 }

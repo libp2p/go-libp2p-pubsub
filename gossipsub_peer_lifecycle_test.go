@@ -63,12 +63,8 @@ func waitForLifecycleCondition(t *testing.T, ps *PubSub, desc string, condition 
 	}
 }
 
-func writeLifecycleSubscription(t *testing.T, stream network.Stream, topic string) {
+func writeLifecycleRPC(t *testing.T, stream network.Stream, rpc *pb.RPC) {
 	t.Helper()
-	rpc := &pb.RPC{Subscriptions: []*pb.RPC_SubOpts{{
-		Topicid:   proto.String(topic),
-		Subscribe: proto.Bool(true),
-	}}}
 	b, err := proto.Marshal(rpc)
 	if err != nil {
 		t.Fatal(err)
@@ -120,7 +116,15 @@ func TestInitialOutboundOpenFailureRetiresInboundPeer(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer inbound.Close()
-	writeLifecycleSubscription(t, inbound, topicID)
+	writeLifecycleRPC(t, inbound, &pb.RPC{
+		Subscriptions: []*pb.RPC_SubOpts{{
+			Topicid:   proto.String(topicID),
+			Subscribe: proto.Bool(true),
+		}},
+		Control: &pb.ControlMessage{Extensions: &pb.ControlExtensions{
+			TopicStreams: proto.Bool(true),
+		}},
+	})
 
 	eventCtx, eventCancel := context.WithTimeout(ctx, 5*time.Second)
 	join, err := events.NextPeerEvent(eventCtx)
@@ -143,7 +147,9 @@ func TestInitialOutboundOpenFailureRetiresInboundPeer(t *testing.T) {
 	waitForLifecycleCondition(t, ps, "peer retirement and topic cleanup", func() bool {
 		_, inRegistry := ps.peerComm.Lookup(remote.ID())
 		_, inTopic := ps.topics[topicID][remote.ID()]
-		return !inRegistry && !inTopic
+		gs := ps.rt.(*GossipSubRouter)
+		_, hasExtensions := gs.extensions.peers[remote.ID()]
+		return !inRegistry && !inTopic && !hasExtensions
 	})
 	select {
 	case err := <-reset:

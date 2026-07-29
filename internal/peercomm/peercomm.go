@@ -53,6 +53,8 @@ type Hooks struct {
 	OutboundSendFailed func(*Actor, network.Stream, *pb.RPC, error)
 	OutboundOpenFailed func(*Actor, error)
 	OutboundDead       func(*Actor, network.Stream, error)
+	TopicAllowed       func(*Actor, string) bool
+	TopicMisbehavior   func(*Actor, string)
 }
 
 // Config configures all actors in a Registry.
@@ -228,6 +230,14 @@ type Actor struct {
 	currentInbound  *inboundRun
 	notifiedInbound *inboundRun
 	retire          sync.Once
+
+	topicMu             sync.Mutex
+	topicEnabled        bool
+	topicWriters        map[string]*topicWriter
+	topicWritersWG      sync.WaitGroup
+	topicInbound        map[string]*topicInboundState
+	topicInboundStreams map[network.Stream]struct{}
+	topicInboundTotal   int
 }
 
 type inboundRun struct {
@@ -242,6 +252,8 @@ func newActor(r *Registry, p peer.ID) *Actor {
 	a := &Actor{
 		registry: r, peer: p, ctx: ctx, cancel: cancel,
 		queue: newRPCQueue(r.config.QueueSize), commands: make(chan command, 16), done: make(chan struct{}),
+		topicWriters: make(map[string]*topicWriter), topicInbound: make(map[string]*topicInboundState),
+		topicInboundStreams: make(map[network.Stream]struct{}),
 	}
 	go a.run()
 	return a
@@ -281,7 +293,7 @@ func (a *Actor) Send(rpc *pb.RPC, urgent bool) error {
 		return ErrActorRetired
 	default:
 	}
-	err := a.queue.push(rpc, urgent)
+	err := a.splitAndSend(rpc, urgent)
 	if errors.Is(err, ErrQueueClosed) {
 		return ErrActorRetired
 	}
@@ -293,6 +305,7 @@ func (a *Actor) Retire() {
 	a.retire.Do(func() {
 		a.cancel()
 		a.queue.close()
+		a.DisableTopicStreams()
 	})
 }
 
@@ -436,7 +449,11 @@ func (a *Actor) claimInboundCloseLocked(run *inboundRun) (protocol.ID, bool) {
 }
 
 func (a *Actor) run() {
-	defer close(a.done)
+	defer func() {
+		a.stopTopicWriters()
+		a.topicWritersWG.Wait()
+		close(a.done)
+	}()
 	var generation uint64
 	var current network.Stream
 	var pending network.Stream
@@ -570,7 +587,7 @@ func (a *Actor) writeLoop(ctx context.Context, generation uint64, s network.Stre
 }
 
 func (a *Actor) writeRPC(s network.Stream, rpc *pb.RPC) error {
-	err := writeRPC(s, rpc)
+	err := writeProto(s, rpc)
 	if err != nil {
 		if h := a.registry.config.Hooks.OutboundSendFailed; h != nil {
 			h(a, s, rpc, err)
@@ -605,12 +622,12 @@ func (a *Actor) closeInbound() {
 	a.inboundMu.Unlock()
 }
 
-func writeRPC(s network.Stream, rpc *pb.RPC) error {
-	size := uint64(proto.Size(rpc))
+func writeProto(s network.Stream, message proto.Message) error {
+	size := uint64(proto.Size(message))
 	buf := pool.Get(varint.UvarintSize(size) + int(size))
 	defer pool.Put(buf)
 	n := binary.PutUvarint(buf, size)
-	out, err := proto.MarshalOptions{}.MarshalAppend(buf[:n], rpc)
+	out, err := proto.MarshalOptions{}.MarshalAppend(buf[:n], message)
 	if err != nil {
 		return err
 	}
