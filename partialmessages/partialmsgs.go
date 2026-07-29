@@ -241,13 +241,13 @@ func (e *PartialMessagesExtension[PeerState]) initPeerState(topic string, gState
 	}
 }
 
-func (e *PartialMessagesExtension[PeerState]) OnClosedOutboundStream(id peer.ID) {
+func (e *PartialMessagesExtension[PeerState]) OnPeerUnavailable(id peer.ID) {
 	for topic, tState := range e.statePerTopicPerGroup {
 		for _, gState := range tState {
 			delete(gState.peerState, id)
 		}
 		if ctr, ok := e.peerInitiatedGroupCounter[topic]; ok {
-			ctr.OnClosedOutboundStream(id)
+			ctr.OnPeerUnavailable(id)
 		}
 	}
 }
@@ -355,7 +355,7 @@ func (ctr *peerInitiatedGroupCounterState) Dec(id peer.ID) {
 	}
 }
 
-func (ctr *peerInitiatedGroupCounterState) OnClosedOutboundStream(id peer.ID) {
+func (ctr *peerInitiatedGroupCounterState) OnPeerUnavailable(id peer.ID) {
 	if n, ok := ctr.perPeer[id]; ok {
 		ctr.total -= n
 		delete(ctr.perPeer, id)
