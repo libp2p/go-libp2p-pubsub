@@ -86,6 +86,7 @@ type extensionsState struct {
 	myExtensions      PeerExtensions
 	peerExtensions    map[peer.ID]PeerExtensions // peer's extensions
 	sentExtensions    map[peer.ID]struct{}
+	activeExtensions  map[peer.ID]PeerExtensions
 	reportMisbehavior func(peer.ID)
 	sendRPC           func(p peer.ID, r *RPC, urgent bool)
 	testExtension     *testExtension
@@ -98,6 +99,7 @@ func newExtensionsState(myExtensions PeerExtensions, reportMisbehavior func(peer
 		myExtensions:      myExtensions,
 		peerExtensions:    make(map[peer.ID]PeerExtensions),
 		sentExtensions:    make(map[peer.ID]struct{}),
+		activeExtensions:  make(map[peer.ID]PeerExtensions),
 		reportMisbehavior: reportMisbehavior,
 		sendRPC:           sendRPC,
 		testExtension:     nil,
@@ -109,11 +111,7 @@ func (es *extensionsState) HandleRPC(rpc *RPC) error {
 		// We know this is the first message because we didn't have extensions
 		// for this peer, and we always set extensions on the first rpc.
 		es.peerExtensions[rpc.from] = peerExtensionsFromRPC(rpc)
-		if _, ok := es.sentExtensions[rpc.from]; ok {
-			// We just finished both sending and receiving the extensions
-			// control message.
-			es.extensionsOnNewOutboundStream(rpc.from)
-		}
+		es.activatePeerExtensions(rpc.from)
 	} else {
 		// We already have an extension for this peer. If they send us another
 		// extensions control message, that is a protocol error. We should
@@ -130,6 +128,7 @@ func (es *extensionsState) OnNewIncomingStream(peer.ID, protocol.ID) {
 }
 
 func (es *extensionsState) OnClosedIncomingStream(id peer.ID, _ protocol.ID) {
+	es.deactivatePeerExtensions(id)
 	delete(es.peerExtensions, id)
 	if len(es.peerExtensions) == 0 {
 		es.peerExtensions = make(map[peer.ID]PeerExtensions)
@@ -141,48 +140,58 @@ func (es *extensionsState) OnNewOutboundStream(id peer.ID, helloPacket *RPC) *RP
 	helloPacket = es.myExtensions.ExtendRPC(helloPacket)
 
 	es.sentExtensions[id] = struct{}{}
-	if _, ok := es.peerExtensions[id]; ok {
-		// We've just finished sending and receiving the extensions control
-		// message.
-		es.extensionsOnNewOutboundStream(id)
-	}
+	es.activatePeerExtensions(id)
 	return helloPacket
 }
 
 func (es *extensionsState) OnClosedOutboundStream(id peer.ID) {
-	_, recvdExt := es.peerExtensions[id]
-	_, sentExt := es.sentExtensions[id]
-	if recvdExt && sentExt {
-		// Add peer was previously called, so we need to call remove peer
-		es.extensionsOnClosedOutboundStream(id)
-	}
+	es.deactivatePeerExtensions(id)
 	delete(es.sentExtensions, id)
 	if len(es.sentExtensions) == 0 {
 		es.sentExtensions = make(map[peer.ID]struct{})
 	}
 }
 
-// extensionsOnNewOutboundStream is only called once we've both sent and received the
-// extensions control message.
-func (es *extensionsState) extensionsOnNewOutboundStream(id peer.ID) {
-	if es.myExtensions.TestExtension && es.peerExtensions[id].TestExtension {
+func (es *extensionsState) activatePeerExtensions(id peer.ID) {
+	peerExtensions, received := es.peerExtensions[id]
+	_, sent := es.sentExtensions[id]
+	if !received || !sent {
+		return
+	}
+
+	active := PeerExtensions{
+		TestExtension:   es.myExtensions.TestExtension && peerExtensions.TestExtension,
+		PartialMessages: es.myExtensions.PartialMessages && peerExtensions.PartialMessages,
+	}
+	es.activeExtensions[id] = active
+
+	if active.TestExtension && es.testExtension != nil {
 		es.testExtension.OnNewOutboundStream(id)
 	}
 }
 
-// extensionsOnClosedOutboundStream is always called after extensionsOnNewOutboundStream.
-func (es *extensionsState) extensionsOnClosedOutboundStream(id peer.ID) {
-	if es.myExtensions.PartialMessages && es.peerExtensions[id].PartialMessages {
+func (es *extensionsState) deactivatePeerExtensions(id peer.ID) {
+	active, ok := es.activeExtensions[id]
+	if !ok {
+		return
+	}
+	delete(es.activeExtensions, id)
+	if len(es.activeExtensions) == 0 {
+		es.activeExtensions = make(map[peer.ID]PeerExtensions)
+	}
+
+	if active.PartialMessages && es.partialMessagesExtension != nil {
 		es.partialMessagesExtension.OnClosedOutboundStream(id)
 	}
 }
 
 func (es *extensionsState) extensionsHandleRPC(rpc *RPC) error {
-	if es.myExtensions.TestExtension && es.peerExtensions[rpc.from].TestExtension {
+	active := es.activeExtensions[rpc.from]
+	if active.TestExtension && es.testExtension != nil {
 		es.testExtension.HandleRPC(rpc.from, rpc.TestExtension)
 	}
 
-	if es.myExtensions.PartialMessages && es.peerExtensions[rpc.from].PartialMessages && rpc.Partial != nil {
+	if active.PartialMessages && rpc.Partial != nil && es.partialMessagesExtension != nil {
 		err := es.partialMessagesExtension.HandleRPC(rpc.from, rpc.Partial)
 		if err != nil {
 			return err
@@ -277,8 +286,9 @@ func (r partialMessageRouter) MeshPeers(topic string) iter.Seq[peer.ID] {
 		}
 
 		for peer := range peerSet {
-			if r.gs.extensions.peerExtensions[peer].PartialMessages &&
-				(r.gs.iRequestPartial(topic) && r.gs.peerSupportsSendingPartial(peer, topic)) || (r.gs.iSupportSendingPartial(topic) && r.gs.peerRequestsPartial(peer, topic)) {
+			if r.gs.extensions.activeExtensions[peer].PartialMessages &&
+				((r.gs.iRequestPartial(topic) && r.gs.peerSupportsSendingPartial(peer, topic)) ||
+					(r.gs.iSupportSendingPartial(topic) && r.gs.peerRequestsPartial(peer, topic))) {
 				if !yield(peer) {
 					return
 				}

@@ -1,19 +1,10 @@
 package pubsub
 
 import (
-	"context"
-	"encoding/binary"
-	"io"
-	"time"
-
-	pool "github.com/libp2p/go-buffer-pool"
-	"github.com/multiformats/go-varint"
+	"github.com/libp2p/go-libp2p/core/network"
 	"google.golang.org/protobuf/proto"
 
-	"github.com/libp2p/go-libp2p/core/network"
-	"github.com/libp2p/go-libp2p/core/peer"
-	"github.com/libp2p/go-msgio"
-
+	"github.com/libp2p/go-libp2p-pubsub/internal/peercomm"
 	pb "github.com/libp2p/go-libp2p-pubsub/pb"
 )
 
@@ -52,226 +43,42 @@ func (p *PubSub) getHelloPacket() *RPC {
 	return &rpc
 }
 
-func (p *PubSub) handleNewStream(s network.Stream) {
-	peer := s.Conn().RemotePeer()
-	done := make(chan struct{})
-	sentNewStream := false
-
-	defer func() {
-		p.inboundStreamsMx.Lock()
-		if p.inboundStreams[peer].s == s {
-			delete(p.inboundStreams, peer)
-		}
-		p.inboundStreamsMx.Unlock()
-
-		if sentNewStream {
-			select {
-			case p.incoming <- incomingUnion{kind: incomingKindClosedStream, s: s}:
-			case <-p.ctx.Done():
-			}
-		}
-
-		close(done)
-	}()
-
-	p.inboundStreamsMx.Lock()
-	prev, hasPrev := p.inboundStreams[peer]
-	p.inboundStreams[peer] = inboundHandler{s: s, done: done}
-	p.inboundStreamsMx.Unlock()
-
-	if hasPrev {
-		p.logger.Debug("duplicate inbound stream; replacing handler", "peer", peer)
-		prev.s.Reset()
-		select {
-		case <-prev.done:
-		case <-p.ctx.Done():
-			return
-		}
-	}
-
+func (p *PubSub) enqueuePeerEvent(event incomingUnion) {
 	select {
-	case p.incoming <- incomingUnion{kind: incomingKindNewStream, s: s}:
-		sentNewStream = true
+	case p.incoming <- event:
 	case <-p.ctx.Done():
-		// Close is useless because the other side isn't reading.
-		s.Reset()
+	}
+}
+
+func (p *PubSub) handleNewStream(s network.Stream) {
+	response := make(chan *peercomm.Actor, 1)
+	select {
+	case p.eval <- func() {
+		pid := s.Conn().RemotePeer()
+		if p.blacklist.Contains(pid) {
+			response <- nil
+			return
+		}
+		a, ok := p.peerComm.Lookup(pid)
+		if !ok {
+			a = p.peerComm.GetOrCreate(pid)
+			_ = a.Start(p.openRequest(0))
+		}
+		response <- a
+	}:
+	case <-p.ctx.Done():
+		_ = s.Reset()
 		return
 	}
-
-	r := msgio.NewVarintReaderSize(s, p.maxMessageSize)
-	for {
-		// Peek at the message length to know when we should mark the start time
-		// for measuring how long it took to receive a message.
-		_, _ = r.NextMsgLen()
-		start := time.Now()
-		msgbytes, err := r.ReadMsg()
-		if err != nil {
-			r.ReleaseMsg(msgbytes)
-			if err != io.EOF {
-				s.Reset()
-				p.rpcLogger.Debug("error reading rpc", "from", s.Conn().RemotePeer(), "err", err)
-			} else {
-				// Just be nice. They probably won't read this
-				// but it doesn't hurt to send it.
-				s.Close()
-			}
-
-			return
-		}
-		if len(msgbytes) == 0 {
-			continue
-		}
-
-		err = pb.ValidateRawRPCControlMessageSize(msgbytes, p.maxControlMessageSize)
-		if err != nil {
-			r.ReleaseMsg(msgbytes)
-			s.Reset()
-
-			p.rpcLogger.Warn("RPC's control message is too large. Disconnecting. If this is a mistake, you should increase `WithMaxControlMessageSize`", "peer", s.Conn().RemotePeer(), "err", err)
-			return
-		}
-
-		rpc := new(RPC)
-		err = proto.Unmarshal(msgbytes, &rpc.RPC)
-		r.ReleaseMsg(msgbytes)
-		if err != nil {
-			s.Reset()
-
-			p.rpcLogger.Warn("bogus rpc from", "peer", s.Conn().RemotePeer(), "err", err)
-			return
-		}
-
-		timeToReceive := time.Since(start)
-		p.rpcLogger.Debug("received", "peer", s.Conn().RemotePeer(), "duration_s", timeToReceive.Seconds(), "rpc", rpc)
-
-		rpc.from = peer
-		select {
-		case p.incoming <- incomingUnion{
-			kind: incomingKindRPC,
-			rpc:  rpc,
-		}:
-		case <-p.ctx.Done():
-			// Close is useless because the other side isn't reading.
-			s.Reset()
-			return
-		}
-	}
-}
-
-func (p *PubSub) notifyPeerDead(pid peer.ID) {
-	p.peerDeadPrioLk.RLock()
-	p.peerDeadMx.Lock()
-	p.peerDeadPend[pid] = struct{}{}
-	p.peerDeadMx.Unlock()
-	p.peerDeadPrioLk.RUnlock()
-
 	select {
-	case p.peerDead <- struct{}{}:
-	default:
-	}
-}
-
-func (p *PubSub) handleNewPeer(ctx context.Context, pid peer.ID, outgoing *rpcQueue) {
-	s, err := p.host.NewStream(ctx, pid, p.rt.Protocols()...)
-	if err != nil {
-		p.logger.Debug("error opening new stream to peer", "err", err, "peer", pid)
-
-		select {
-		case p.newPeerError <- pid:
-		case <-ctx.Done():
-		}
-
-		return
-	}
-
-	firstMessage := make(chan *RPC, 1)
-	sCtx, cancel := context.WithCancel(ctx)
-	go p.handleSendingMessages(sCtx, s, outgoing, firstMessage)
-	go p.handlePeerDead(s)
-	select {
-	case p.newPeerStream <- peerOutgoingStream{Stream: s, FirstMessage: firstMessage, Cancel: cancel}:
-	case <-ctx.Done():
-		cancel()
-	}
-}
-
-func (p *PubSub) handleNewPeerWithBackoff(ctx context.Context, pid peer.ID, backoff time.Duration, outgoing *rpcQueue) {
-	select {
-	case <-time.After(backoff):
-		p.handleNewPeer(ctx, pid, outgoing)
-	case <-ctx.Done():
-		return
-	}
-}
-
-func (p *PubSub) handlePeerDead(s network.Stream) {
-	pid := s.Conn().RemotePeer()
-
-	_, err := s.Read([]byte{0})
-	if err == nil {
-		p.logger.Debug("unexpected message from peer", "peer", pid)
-	}
-
-	s.Reset()
-	p.notifyPeerDead(pid)
-}
-
-func (p *PubSub) handleSendingMessages(ctx context.Context, s network.Stream, outgoing *rpcQueue, firstMessage chan *RPC) {
-	writeRpc := func(rpc *RPC) error {
-		size := uint64(proto.Size(&rpc.RPC))
-
-		buf := pool.Get(varint.UvarintSize(size) + int(size))
-		defer pool.Put(buf)
-
-		n := binary.PutUvarint(buf, size)
-		out, err := proto.MarshalOptions{}.MarshalAppend(buf[:n], &rpc.RPC)
-		if err != nil {
-			return err
-		}
-
-		if err := s.SetWriteDeadline(time.Now().Add(time.Second * 30)); err != nil {
-			p.rpcLogger.Debug("failed to set write deadline", "peer", s.Conn().RemotePeer(), "err", err)
-			return err
-		}
-
-		_, err = s.Write(out)
-		if err != nil {
-			p.rpcLogger.Debug("failed to send message", "peer", s.Conn().RemotePeer(), "rpc", rpc, "err", err)
-			return err
-		}
-		p.rpcLogger.Debug("sent", "peer", s.Conn().RemotePeer(), "rpc", rpc)
-		return nil
-	}
-
-	select {
-	case rpc := <-firstMessage:
-		if proto.Size(&rpc.RPC) > 0 {
-			err := writeRpc(rpc)
-			if err != nil {
-				s.Reset()
-				p.logger.Debug("error writing message to peer", "peer", s.Conn().RemotePeer(), "err", err)
-				return
-			}
-		}
-	case <-ctx.Done():
-		s.Reset()
-		return
-	}
-
-	defer s.Close()
-	for ctx.Err() == nil {
-		rpc, err := outgoing.Pop(ctx)
-		if err != nil {
-			p.logger.Debug("error popping message from the queue to send to peer", "peer", s.Conn().RemotePeer(), "err", err)
+	case a := <-response:
+		if a == nil {
+			_ = s.Reset()
 			return
 		}
-
-		err = writeRpc(rpc)
-		if err != nil {
-			s.Reset()
-			p.logger.Debug("error writing message to peer", "peer", s.Conn().RemotePeer(), "err", err)
-			return
-		}
+		a.HandleInbound(s)
+	case <-p.ctx.Done():
+		_ = s.Reset()
 	}
 }
 
