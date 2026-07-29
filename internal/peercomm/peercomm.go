@@ -268,11 +268,10 @@ func (a *Actor) Activate(s network.Stream, hello *pb.RPC) error {
 }
 
 // Send enqueues an RPC without blocking. Urgent RPCs are drained before normal
-// RPCs while preserving FIFO order within each class. If Send succeeds, rpc and
-// all protobuf data it transitively references must remain immutable until actor
-// and transport processing is complete. The same immutable RPC may be shared
-// across actors. If Send fails, it imposes no asynchronous ownership or lifetime
-// obligation on rpc.
+// RPCs while preserving FIFO order within each class. A successful Send snapshots
+// rpc, so callers may inspect or mutate the original afterward, and actors do not
+// share protobuf runtime state. If Send fails, it imposes no asynchronous ownership
+// or lifetime obligation on rpc.
 func (a *Actor) Send(rpc *pb.RPC, urgent bool) error {
 	if rpc == nil {
 		return errors.New("peercomm: nil rpc")
@@ -649,6 +648,7 @@ func (q *rpcQueue) push(rpc *pb.RPC, urgent bool) error {
 	if len(q.urgent)+len(q.normal) >= q.capacity {
 		return ErrQueueFull
 	}
+	rpc = proto.Clone(rpc).(*pb.RPC)
 	if urgent {
 		q.urgent = append(q.urgent, rpc)
 	} else {

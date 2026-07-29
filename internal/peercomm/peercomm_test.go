@@ -19,9 +19,9 @@ import (
 
 func TestQueuePriorityFullAndClose(t *testing.T) {
 	q := newRPCQueue(3)
-	n1 := &pb.RPC{}
-	u1 := &pb.RPC{}
-	u2 := &pb.RPC{}
+	n1 := &pb.RPC{Publish: []*pb.Message{{Data: []byte("normal-1")}}}
+	u1 := &pb.RPC{Publish: []*pb.Message{{Data: []byte("urgent-1")}}}
+	u2 := &pb.RPC{Publish: []*pb.Message{{Data: []byte("urgent-2")}}}
 	if err := q.push(n1, false); err != nil {
 		t.Fatal(err)
 	}
@@ -41,8 +41,8 @@ func TestQueuePriorityFullAndClose(t *testing.T) {
 		if err != nil {
 			t.Fatalf("pop %d: %v", i, err)
 		}
-		if got != want {
-			t.Fatalf("pop %d returned wrong priority", i)
+		if !proto.Equal(got, want) {
+			t.Fatalf("pop %d returned wrong priority: got %v, want %v", i, got, want)
 		}
 	}
 	q.close()
@@ -63,7 +63,7 @@ func TestQueuePopCancellation(t *testing.T) {
 	}
 }
 
-func TestActorSendEnqueuesSameRPC(t *testing.T) {
+func TestActorSendSnapshotsRPC(t *testing.T) {
 	r, err := NewRegistry(context.Background(), testConfig(&failingHost{}, Hooks{}))
 	if err != nil {
 		t.Fatal(err)
@@ -71,7 +71,7 @@ func TestActorSendEnqueuesSameRPC(t *testing.T) {
 	defer r.Stop()
 
 	a := r.GetOrCreate(peer.ID("peer"))
-	rpc := &pb.RPC{}
+	rpc := &pb.RPC{Publish: []*pb.Message{{Data: []byte("original")}}}
 	if err := a.Send(rpc, false); err != nil {
 		t.Fatal(err)
 	}
@@ -79,8 +79,16 @@ func TestActorSendEnqueuesSameRPC(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got != rpc {
-		t.Fatal("Send did not enqueue the supplied RPC pointer")
+	if got == rpc {
+		t.Fatal("Send enqueued the supplied RPC pointer")
+	}
+	if !proto.Equal(got, rpc) {
+		t.Fatalf("queued RPC differs from original: got %v, want %v", got, rpc)
+	}
+
+	rpc.Publish[0].Data[0] = 'O'
+	if string(got.Publish[0].Data) != "original" {
+		t.Fatalf("queued nested data changed with original: %q", got.Publish[0].Data)
 	}
 }
 
