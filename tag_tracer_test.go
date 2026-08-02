@@ -100,7 +100,7 @@ func TestTagTracerDeliveryTags(t *testing.T) {
 		tt.Join(topic1)
 		tt.Join(topic2)
 
-		for i := 0; i < 20; i++ {
+		for i := range 20 {
 			// deliver only 5 messages to topic 2 (less than the cap)
 			topic := &topic1
 			if i < 5 {
@@ -191,9 +191,9 @@ func TestTagTracerDeliveryTagsNearFirst(t *testing.T) {
 				ReceivedFrom: p,
 				Message: &pb.Message{
 					From:  []byte(p),
-					Data:  []byte(fmt.Sprintf("msg-%d", i)),
+					Data:  fmt.Appendf(nil, "msg-%d", i),
 					Topic: &topic,
-					Seqno: []byte(fmt.Sprintf("%d", i)),
+					Seqno: fmt.Appendf(nil, "%d", i),
 				},
 			}
 

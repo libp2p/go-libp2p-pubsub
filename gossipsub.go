@@ -705,7 +705,7 @@ func (gs *GossipSubRouter) Attach(p *PubSub) {
 }
 
 func (gs *GossipSubRouter) manageAddrBook() {
-	sub, err := gs.p.host.EventBus().Subscribe([]interface{}{
+	sub, err := gs.p.host.EventBus().Subscribe([]any{
 		&event.EvtPeerIdentificationCompleted{},
 		&event.EvtPeerConnectednessChanged{},
 	})
@@ -922,16 +922,16 @@ func (gs *GossipSubRouter) HandleRPC(rpc *RPC) {
 	}
 
 	iwant := gs.handleIHave(rpc.from, ctl)
-	ihave := gs.handleIWant(rpc.from, ctl)
+	iWantResponses := gs.handleIWant(rpc.from, ctl)
 	prune := gs.handleGraft(rpc.from, ctl)
 	gs.handlePrune(rpc.from, ctl)
 	gs.handleIDontWant(rpc.from, ctl)
 
-	if len(iwant) == 0 && len(ihave) == 0 && len(prune) == 0 {
+	if len(iwant) == 0 && len(iWantResponses) == 0 && len(prune) == 0 {
 		return
 	}
 
-	out := rpcWithControl(ihave, nil, iwant, nil, prune, nil)
+	out := rpcWithControl(iWantResponses, nil, iwant, nil, prune, nil)
 	gs.sendRPC(rpc.from, out, false)
 }
 
@@ -1555,15 +1555,21 @@ func (gs *GossipSubRouter) sendRPC(p peer.ID, out *RPC, urgent bool) {
 	}
 
 	controlSize := proto.Size(&controlMessage.RPC)
+	dropIfOversized := func(rpc *RPC) bool {
+		if !rpc.exceedsSizeLimits(gs.p.maxMessageSize, gs.p.maxControlMessageSize) {
+			return false
+		}
+		size := proto.Size(&rpc.RPC)
+		controlSize := controlRPCSize(rpc)
+		gs.doDropRPC(rpc, p, fmt.Sprintf("Dropping oversized RPC. Size: %d, limit: %d. Control size: %d, control limit: %d", size, gs.p.maxMessageSize, controlSize, gs.p.maxControlMessageSize))
+		return true
+	}
 	if controlSize > 0 {
-		if controlSize < gs.p.maxMessageSize {
+		if !controlMessage.exceedsSizeLimits(gs.p.maxMessageSize, gs.p.maxControlMessageSize) {
 			gs.doSendRPC(&controlMessage, p, q, urgent)
 		} else {
-			for rpc := range controlMessage.split(gs.p.maxMessageSize) {
-				if proto.Size(&rpc.RPC) > gs.p.maxMessageSize {
-					// This should only happen if a single control is above the max size.
-					size := proto.Size(&rpc.RPC)
-					gs.doDropRPC(rpc, p, fmt.Sprintf("Dropping oversized RPC. Size: %d, limit: %d. (Over by %d bytes)", size, gs.p.maxMessageSize, size-gs.p.maxMessageSize))
+			for rpc := range controlMessage.split(gs.p.maxMessageSize, gs.p.maxControlMessageSize) {
+				if dropIfOversized(rpc) {
 					continue
 				}
 				gs.doSendRPC(rpc, p, q, urgent)
@@ -1572,17 +1578,14 @@ func (gs *GossipSubRouter) sendRPC(p peer.ID, out *RPC, urgent bool) {
 	}
 
 	// If we're below the max message size, go ahead and send
-	if proto.Size(&out.RPC) < gs.p.maxMessageSize {
+	if !out.exceedsSizeLimits(gs.p.maxMessageSize, gs.p.maxControlMessageSize) {
 		gs.doSendRPC(out, p, q, urgent)
 		return
 	}
 
 	// Potentially split the RPC into multiple RPCs that are below the max message size
-	for rpc := range out.split(gs.p.maxMessageSize) {
-		if proto.Size(&rpc.RPC) > gs.p.maxMessageSize {
-			// This should only happen if a single message/control is above the maxMessageSize.
-			size := proto.Size(&rpc.RPC)
-			gs.doDropRPC(rpc, p, fmt.Sprintf("Dropping oversized RPC. Size: %d, limit: %d. (Over by %d bytes)", size, gs.p.maxMessageSize, size-gs.p.maxMessageSize))
+	for rpc := range out.split(gs.p.maxMessageSize, gs.p.maxControlMessageSize) {
+		if dropIfOversized(rpc) {
 			continue
 		}
 		gs.doSendRPC(rpc, p, q, urgent)

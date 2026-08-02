@@ -243,8 +243,7 @@ func TestValidateOverload(t *testing.T) {
 				p := psubs[0]
 
 				var wg sync.WaitGroup
-				wg.Add(1)
-				go func() {
+				wg.Go(func() {
 					for _, tmsg := range tc.msgs {
 						select {
 						case msg := <-sub.ch:
@@ -258,8 +257,7 @@ func TestValidateOverload(t *testing.T) {
 							}
 						}
 					}
-					wg.Done()
-				}()
+				})
 
 				for _, tmsg := range tc.msgs {
 					err := p.Publish(topic, tmsg.msg)
@@ -330,8 +328,8 @@ func TestValidateAssortedOptions(t *testing.T) {
 
 		time.Sleep(time.Second)
 
-		for i := 0; i < 10; i++ {
-			msg := []byte(fmt.Sprintf("message %d", i))
+		for i := range 10 {
+			msg := fmt.Appendf(nil, "message %d", i)
 
 			psubs[i].Publish("test1", msg)
 			for _, sub := range subs1 {

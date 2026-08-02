@@ -96,11 +96,11 @@ func testWithTracer(t *testing.T, tracer EventTracer) {
 	time.Sleep(5 * time.Second)
 
 	// publish some messages
-	for i := 0; i < 20; i++ {
+	for i := range 20 {
 		if i%7 == 0 {
 			psubs[i].Publish("test", []byte("invalid!"))
 		} else {
-			msg := []byte(fmt.Sprintf("message %d", i))
+			msg := fmt.Appendf(nil, "message %d", i)
 			psubs[i].Publish("test", msg)
 		}
 	}
