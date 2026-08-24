@@ -82,7 +82,7 @@ var (
 	GossipSubIDontWantMessageThreshold        = 1024 // 1KB
 	GossipSubIDontWantMessageTTL              = 3    // 3 heartbeats
 
-	GossipSubMaxIWantsPerMessageIDPerHeartbeat = 10
+	GossipSubMaxIWantsPerMessageID = 10
 )
 
 type checksum struct {
@@ -249,10 +249,13 @@ type GossipSubParams struct {
 	// IDONTWANT is cleared when it's older than the TTL.
 	IDontWantMessageTTL int
 
-	// MaxIWantsPerMessageIDPerHeartbeat is the maximum number of pending IWANT
-	// requests allowed per message ID per heartbeat. This helps limit the
-	// number of duplicates we'll receive from peers.
-	MaxIWantsPerMessageIDPerHeartbeat int
+	// MaxIWantsPerMessageID is the maximum number of IWANT requests allowed
+	// per message ID while requests are outstanding. This helps limit the
+	// number of duplicates we'll receive from peers. The budget for a message
+	// ID refills IWantFollowupTime after its last request, so a request that
+	// went unanswered can be retried without waiting for a heartbeat boundary
+	// and a request in flight is not re-issued at one.
+	MaxIWantsPerMessageID int
 }
 
 func (params *GossipSubParams) validate() error {
@@ -321,10 +324,9 @@ func DefaultGossipSubRouter(h host.Host) *GossipSubRouter {
 		tagTracer:       newTagTracer(h.ConnManager()),
 		params:          params,
 		reducePXRecords: defaultPXRecordReducer,
-		// number of allowed IWANTs per message ID. If the message ID is
-		// missing, it must be initialized to
-		// `MaxIWantsPerMessageIDPerHeartbeat`
-		allowedIWantCount: make(map[string]int),
+		// remaining IWANT budget per message ID. A missing or expired entry
+		// stands for a full budget of `MaxIWantsPerMessageID`.
+		allowedIWantCount: make(map[string]iwantBudget),
 	}
 
 	rt.extensions = newExtensionsState(PeerExtensions{}, func(p peer.ID) {
@@ -373,7 +375,7 @@ func DefaultGossipSubParams() GossipSubParams {
 		IDontWantMessageTTL:       GossipSubIDontWantMessageTTL,
 		SlowHeartbeatWarning:      0.1,
 
-		MaxIWantsPerMessageIDPerHeartbeat: GossipSubMaxIWantsPerMessageIDPerHeartbeat,
+		MaxIWantsPerMessageID: GossipSubMaxIWantsPerMessageID,
 	}
 }
 
@@ -620,9 +622,9 @@ type GossipSubRouter struct {
 	connect      chan connectInfo                 // px connection requests
 	cab          peerstore.AddrBook
 
-	// allowed number of IWANTs per message ID. Must be initialized to
-	// `MaxIWantsPerMessageIDPerHeartbeat` if message id is missing.
-	allowedIWantCount map[string]int
+	// remaining IWANT budget per message ID. A missing or expired entry
+	// stands for a full budget of `MaxIWantsPerMessageID`.
+	allowedIWantCount map[string]iwantBudget
 
 	protos  []protocol.ID
 	feature GossipSubFeatureTest
@@ -997,19 +999,22 @@ func (gs *GossipSubRouter) handleIHave(p peer.ID, ctl *pb.ControlMessage) []*pb.
 				continue
 			}
 
-			allowedIWants, ok := gs.allowedIWantCount[mid]
-			if !ok {
-				allowedIWants = gs.params.MaxIWantsPerMessageIDPerHeartbeat
+			now := time.Now()
+			budget, ok := gs.allowedIWantCount[mid]
+			if !ok || now.After(budget.renewAt) {
+				budget = iwantBudget{remaining: gs.params.MaxIWantsPerMessageID}
 			}
 
 			// Check if we've exceeded the maximum number of pending IWANTs for this message
-			if allowedIWants <= 0 {
+			if budget.remaining <= 0 {
 				gs.logger.Debug("IHAVE: ignoring IHAVE; too many inflight IWANTs", "message", mid, "peer", p)
 				continue
 			}
 
 			iwant[mid] = struct{}{}
-			gs.allowedIWantCount[mid] = allowedIWants - 1
+			budget.remaining--
+			budget.renewAt = now.Add(gs.params.IWantFollowupTime)
+			gs.allowedIWantCount[mid] = budget
 		}
 	}
 
@@ -1694,8 +1699,9 @@ func (gs *GossipSubRouter) heartbeat() {
 	toprune := make(map[peer.ID][]string)
 	noPX := make(map[peer.ID]bool)
 
-	// reset number of allowed IWANT requests
-	gs.resetAllowedIWants()
+	// drop expired IWANT budgets; refill happens per entry, IWantFollowupTime
+	// after the last request, not at the heartbeat
+	gs.pruneAllowedIWants()
 
 	// clean up expired backoffs
 	gs.clearBackoff()
@@ -1948,10 +1954,22 @@ func (gs *GossipSubRouter) heartbeat() {
 	gs.extensions.Heartbeat()
 }
 
-func (gs *GossipSubRouter) resetAllowedIWants() {
-	if len(gs.allowedIWantCount) > 0 {
-		// throw away the old map and make a new one
-		gs.allowedIWantCount = make(map[string]int)
+// iwantBudget tracks how many more IWANTs may be sent for a message ID and
+// when the budget refills. Refilling per entry rather than resetting all
+// entries at the heartbeat avoids re-requesting a message whose IWANT is
+// still in flight when a heartbeat fires, and lets an unanswered request be
+// retried without waiting for the next heartbeat boundary.
+type iwantBudget struct {
+	remaining int
+	renewAt   time.Time
+}
+
+func (gs *GossipSubRouter) pruneAllowedIWants() {
+	now := time.Now()
+	for mid, budget := range gs.allowedIWantCount {
+		if now.After(budget.renewAt) {
+			delete(gs.allowedIWantCount, mid)
+		}
 	}
 }
 

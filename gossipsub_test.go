@@ -6085,10 +6085,12 @@ func TestGossipsubLimitIWANT(t *testing.T) {
 	psubs := make([]*PubSub, 3)
 
 	defaultParams := DefaultGossipSubParams()
-	defaultParams.MaxIWantsPerMessageIDPerHeartbeat = 1
-	// Delay the heartbeat so we don't reset our count of allowed IWANTS for the
-	// first part of the test.
-	defaultParams.HeartbeatInitialDelay = 4 * time.Second
+	defaultParams.MaxIWantsPerMessageID = 1
+	// The budget refills IWantFollowupTime after the last request.
+	defaultParams.IWantFollowupTime = 2 * time.Second
+	// Push the heartbeat far out to show the refill is window-driven, not
+	// heartbeat-driven.
+	defaultParams.HeartbeatInitialDelay = 10 * time.Second
 	defaultParams.HeartbeatInterval = time.Second
 
 	psubs[0] = getGossipsub(ctx, hosts[0], WithGossipSubParams(defaultParams))
@@ -6156,7 +6158,8 @@ func TestGossipsubLimitIWANT(t *testing.T) {
 		t.Fatal("Expected exactly 1 IWANT due to limits")
 	}
 
-	// Wait for heartbeat to reset limit
+	// Wait for the follow-up window to expire and refill the budget; no
+	// heartbeat fires within this test.
 	time.Sleep(2 * time.Second)
 
 	publishIWant()
