@@ -263,6 +263,21 @@ type GossipSubParams struct {
 	// elapses rather than a timer, so it can lag the grace by up to a heartbeat.
 	// Zero (the default) dispatches immediately.
 	IWantDispatchGrace time.Duration
+
+	// IWantAdaptiveHorizon makes an outstanding IWANT expire after a tracked
+	// estimate of the asked peer's response time rather than the fixed
+	// IWantFollowupTime, so a typically-fast peer frees its slot sooner and a
+	// slow one is given longer. Off by default.
+	IWantAdaptiveHorizon bool
+
+	// IWantHorizonQuantile is the quantile of a peer's response-time
+	// distribution tracked as its horizon when IWantAdaptiveHorizon is set.
+	IWantHorizonQuantile float64
+
+	// IWantHorizonFloor and IWantHorizonCeil clamp the adaptive horizon. Ceil
+	// also bounds how long a silent peer holds a slot.
+	IWantHorizonFloor time.Duration
+	IWantHorizonCeil  time.Duration
 }
 
 func (params *GossipSubParams) validate() error {
@@ -284,6 +299,18 @@ func (params *GossipSubParams) validate() error {
 
 	if params.IWantDispatchGrace < 0 {
 		return fmt.Errorf("param IWantDispatchGrace=%s must not be negative", params.IWantDispatchGrace)
+	}
+
+	if params.IWantAdaptiveHorizon {
+		if !(params.IWantHorizonQuantile > 0 && params.IWantHorizonQuantile < 1) {
+			return fmt.Errorf("param IWantHorizonQuantile=%f must be in (0,1)", params.IWantHorizonQuantile)
+		}
+		if params.IWantHorizonFloor <= 0 || params.IWantHorizonCeil <= 0 {
+			return fmt.Errorf("params IWantHorizonFloor=%s and IWantHorizonCeil=%s must be positive", params.IWantHorizonFloor, params.IWantHorizonCeil)
+		}
+		if params.IWantHorizonFloor > params.IWantHorizonCeil {
+			return fmt.Errorf("param IWantHorizonFloor=%s must not exceed IWantHorizonCeil=%s", params.IWantHorizonFloor, params.IWantHorizonCeil)
+		}
 	}
 
 	// Bootstrappers set D=D_lo=D_hi=D_out=0
@@ -394,6 +421,10 @@ func DefaultGossipSubParams() GossipSubParams {
 		SlowHeartbeatWarning:      0.1,
 
 		MaxIWantsPerMessageID: GossipSubMaxIWantsPerMessageID,
+
+		IWantHorizonQuantile: 0.8,
+		IWantHorizonFloor:    200 * time.Millisecond,
+		IWantHorizonCeil:     GossipSubIWantFollowupTime,
 	}
 }
 
@@ -644,6 +675,11 @@ type GossipSubRouter struct {
 	// many distinct peers we ask for a given message at once.
 	outstandingIWants map[string]*iwantState
 
+	// per-peer and global IWANT response-time trackers for the adaptive
+	// horizon. Nil until the first sample when the horizon is enabled.
+	rttPeer   map[peer.ID]*responseQuantile
+	rttGlobal *responseQuantile
+
 	protos  []protocol.ID
 	feature GossipSubFeatureTest
 
@@ -849,6 +885,7 @@ func (gs *GossipSubRouter) OnClosedOutboundStream(p peer.ID) {
 	delete(gs.control, p)
 	delete(gs.outbound, p)
 	delete(gs.unwanted, p)
+	delete(gs.rttPeer, p)
 }
 
 func (gs *GossipSubRouter) EnoughPeers(topic string, suggested int) bool {
@@ -1969,21 +2006,29 @@ func (gs *GossipSubRouter) heartbeat() {
 	gs.extensions.Heartbeat()
 }
 
-// iwantLedger records, per peer, when we sent that peer an IWANT for a message
-// ID. An entry older than IWantFollowupTime has expired: it no longer counts
-// against MaxIWantsPerMessageID and the peer may be asked again.
-type iwantLedger map[peer.ID]time.Time
+// iwantLedger records, per peer, the outstanding IWANT we sent that peer for a
+// message ID. An expired entry no longer counts against MaxIWantsPerMessageID
+// and the peer may be asked again.
+type iwantLedger map[peer.ID]iwantAsk
+
+// iwantAsk is one outstanding IWANT: when it was sent and when it expires. The
+// expiry is snapshotted at send time so a later change to a peer's estimate
+// does not move the deadline of a request already in flight.
+type iwantAsk struct {
+	sentAt    time.Time
+	expiresAt time.Time
+}
 
 // iwantState is the outstanding-request state for a single message ID.
 type iwantState struct {
 	firstIHaveAt time.Time   // when the first IHAVE for this message arrived
-	askedAt      iwantLedger // peers with an outstanding IWANT, and when it was sent
+	askedAt      iwantLedger // peers with an outstanding IWANT
 }
 
-// expireAsks drops asks whose follow-up time has passed, freeing their slots.
+// expireAsks drops asks whose horizon has passed, freeing their slots.
 func (gs *GossipSubRouter) expireAsks(ledger iwantLedger, now time.Time) {
-	for ap, at := range ledger {
-		if now.Sub(at) >= gs.params.IWantFollowupTime {
+	for ap, ask := range ledger {
+		if !now.Before(ask.expiresAt) {
 			delete(ledger, ap)
 		}
 	}
@@ -2014,7 +2059,8 @@ func (gs *GossipSubRouter) canRequestIWant(mid string, p peer.ID, now time.Time)
 	return len(st.askedAt) < gs.params.MaxIWantsPerMessageID
 }
 
-// recordIWant notes that an IWANT for mid was sent to p at now.
+// recordIWant notes that an IWANT for mid was sent to p at now, snapshotting
+// the peer's request horizon as the ask's expiry.
 func (gs *GossipSubRouter) recordIWant(mid string, p peer.ID, now time.Time) {
 	st := gs.outstandingIWants[mid]
 	if st == nil {
@@ -2024,13 +2070,24 @@ func (gs *GossipSubRouter) recordIWant(mid string, p peer.ID, now time.Time) {
 	if st.askedAt == nil {
 		st.askedAt = make(iwantLedger)
 	}
-	st.askedAt[p] = now
+	st.askedAt[p] = iwantAsk{sentAt: now, expiresAt: now.Add(gs.iwantHorizon(p))}
 }
 
 // fulfillIWant clears any outstanding IWANTs for a message once it has been
-// received and validated.
+// received and validated, and feeds the delivering peer's response time into
+// the adaptive-horizon estimate when that is enabled.
 func (gs *GossipSubRouter) fulfillIWant(msg *Message) {
-	delete(gs.outstandingIWants, gs.p.idGen.ID(msg))
+	mid := gs.p.idGen.ID(msg)
+	st := gs.outstandingIWants[mid]
+	if st == nil {
+		return
+	}
+	if gs.params.IWantAdaptiveHorizon {
+		if ask, ok := st.askedAt[msg.ReceivedFrom]; ok {
+			gs.observeIWantRTT(msg.ReceivedFrom, time.Since(ask.sentAt))
+		}
+	}
+	delete(gs.outstandingIWants, mid)
 }
 
 func (gs *GossipSubRouter) pruneOutstandingIWants() {
@@ -2047,6 +2104,88 @@ func (gs *GossipSubRouter) pruneOutstandingIWants() {
 			delete(gs.outstandingIWants, mid)
 		}
 	}
+}
+
+// iwantMinSamples is how many response-time samples a peer must contribute
+// before its own estimate is trusted over the global one.
+const iwantMinSamples = 8
+
+// responseQuantile is a constant-gain online tracker of a quantile of a peer's
+// IWANT response time. Each observation nudges the estimate by a fixed fraction
+// of its current value toward the target quantile; the gain does not diminish
+// with sample count, so it tracks a drifting distribution rather than
+// converging to a fixed value.
+type responseQuantile struct {
+	est time.Duration
+	n   int
+}
+
+func (rq *responseQuantile) observe(sample time.Duration, q float64) {
+	if rq.n == 0 {
+		rq.est, rq.n = sample, 1
+		return
+	}
+	step := time.Duration(float64(rq.est) * 0.10)
+	if step <= 0 {
+		step = time.Millisecond
+	}
+	if sample <= rq.est {
+		rq.est -= time.Duration(float64(step) * (1 - q))
+	} else {
+		rq.est += time.Duration(float64(step) * q)
+	}
+	if rq.est < 0 {
+		rq.est = 0
+	}
+	rq.n++
+}
+
+// observeIWantRTT feeds one IWANT-to-delivery sample into the per-peer and
+// global response-time trackers.
+func (gs *GossipSubRouter) observeIWantRTT(p peer.ID, sample time.Duration) {
+	if sample <= 0 {
+		return
+	}
+	if gs.rttGlobal == nil {
+		gs.rttGlobal = &responseQuantile{est: gs.params.IWantFollowupTime, n: 1}
+	}
+	if gs.rttPeer == nil {
+		gs.rttPeer = make(map[peer.ID]*responseQuantile)
+	}
+	rq := gs.rttPeer[p]
+	if rq == nil {
+		rq = &responseQuantile{}
+		gs.rttPeer[p] = rq
+	}
+	rq.observe(sample, gs.params.IWantHorizonQuantile)
+	gs.rttGlobal.observe(sample, gs.params.IWantHorizonQuantile)
+}
+
+// iwantHorizon is how long an outstanding IWANT to p counts before it expires
+// and frees a slot. With the adaptive horizon off it is the fixed follow-up
+// time. With it on it is the tracked response-time quantile for p (its own once
+// it has enough samples, otherwise the global tracker, otherwise the follow-up
+// time), clamped to [floor, ceil]. A peer that is typically fast therefore gets
+// a shorter horizon — we give up and ask elsewhere sooner — and a slow peer a
+// longer one; ceil bounds how long a silent peer holds a slot.
+func (gs *GossipSubRouter) iwantHorizon(p peer.ID) time.Duration {
+	if !gs.params.IWantAdaptiveHorizon {
+		return gs.params.IWantFollowupTime
+	}
+	est := gs.params.IWantFollowupTime
+	if gs.rttGlobal != nil {
+		est = gs.rttGlobal.est
+	}
+	if rq, ok := gs.rttPeer[p]; ok && rq.n >= iwantMinSamples {
+		est = rq.est
+	}
+	if est < gs.params.IWantHorizonFloor {
+		est = gs.params.IWantHorizonFloor
+	}
+	if est > gs.params.IWantHorizonCeil {
+		est = gs.params.IWantHorizonCeil
+	}
+	return est
 }
 
 func (gs *GossipSubRouter) clearIHaveCounters() {

@@ -6291,3 +6291,85 @@ func TestIWantDispatchGrace(t *testing.T) {
 		t.Fatal("with zero grace the first IHAVE should dispatch immediately")
 	}
 }
+
+func TestResponseQuantileTracks(t *testing.T) {
+	// Constant-gain tracker: it should settle near a regime and then follow a
+	// drift upward, not converge to a fixed point.
+	rq := &responseQuantile{}
+	for i := 0; i < 400; i++ {
+		rq.observe(50*time.Millisecond, 0.8)
+	}
+	low := rq.est
+	if low < 30*time.Millisecond || low > 80*time.Millisecond {
+		t.Fatalf("estimate did not settle near the low regime: %v", low)
+	}
+	for i := 0; i < 400; i++ {
+		rq.observe(500*time.Millisecond, 0.8)
+	}
+	if rq.est <= low*3 {
+		t.Fatalf("estimate did not track the upward drift: %v (was %v)", rq.est, low)
+	}
+}
+
+func TestIWantHorizonFallback(t *testing.T) {
+	gs := &GossipSubRouter{params: DefaultGossipSubParams()}
+
+	// Off: always the fixed follow-up time.
+	if got := gs.iwantHorizon(peer.ID("a")); got != gs.params.IWantFollowupTime {
+		t.Fatalf("horizon with adaptive off = %v, want %v", got, gs.params.IWantFollowupTime)
+	}
+
+	gs.params.IWantAdaptiveHorizon = true
+	gs.params.IWantHorizonFloor = 200 * time.Millisecond
+	gs.params.IWantHorizonCeil = 2 * time.Second
+
+	// Cold: no global, no peer -> follow-up time clamped to the ceiling.
+	if got := gs.iwantHorizon(peer.ID("cold")); got != gs.params.IWantHorizonCeil {
+		t.Fatalf("cold horizon = %v, want ceil %v", got, gs.params.IWantHorizonCeil)
+	}
+
+	// Global warm; a peer below the sample threshold uses the global estimate.
+	gs.rttGlobal = &responseQuantile{est: 800 * time.Millisecond, n: 50}
+	gs.rttPeer = map[peer.ID]*responseQuantile{
+		"few": {est: 1500 * time.Millisecond, n: iwantMinSamples - 1},
+	}
+	if got := gs.iwantHorizon("few"); got != 800*time.Millisecond {
+		t.Fatalf("below-threshold peer horizon = %v, want global 800ms", got)
+	}
+	// At the threshold the peer's own estimate wins.
+	gs.rttPeer["enough"] = &responseQuantile{est: 1500 * time.Millisecond, n: iwantMinSamples}
+	if got := gs.iwantHorizon("enough"); got != 1500*time.Millisecond {
+		t.Fatalf("at-threshold peer horizon = %v, want its own 1500ms", got)
+	}
+	// Clamp: a very fast peer is floored.
+	gs.rttPeer["fast"] = &responseQuantile{est: 10 * time.Millisecond, n: iwantMinSamples}
+	if got := gs.iwantHorizon("fast"); got != gs.params.IWantHorizonFloor {
+		t.Fatalf("fast peer horizon = %v, want floor %v", got, gs.params.IWantHorizonFloor)
+	}
+}
+
+func TestIWantHorizonSnapshot(t *testing.T) {
+	gs := &GossipSubRouter{
+		params:            DefaultGossipSubParams(),
+		outstandingIWants: make(map[string]*iwantState),
+	}
+	gs.params.IWantAdaptiveHorizon = true
+	gs.params.IWantHorizonFloor = 100 * time.Millisecond
+	gs.params.IWantHorizonCeil = 5 * time.Second
+	gs.rttGlobal = &responseQuantile{est: time.Second, n: 50}
+
+	now := time.Now()
+	mid, p := "m", peer.ID("a")
+	gs.recordIWant(mid, p, now)
+	want := gs.outstandingIWants[mid].askedAt[p].expiresAt
+
+	// Snapshotted from the horizon at record time (~1s from now).
+	if d := want.Sub(now); d < 900*time.Millisecond || d > 1100*time.Millisecond {
+		t.Fatalf("snapshot horizon = %v, want ~1s", d)
+	}
+	// Changing the estimate afterwards must not move an ask already in flight.
+	gs.rttGlobal.est = 5 * time.Second
+	if got := gs.outstandingIWants[mid].askedAt[p].expiresAt; !got.Equal(want) {
+		t.Fatalf("recorded ask expiry moved: got %v want %v", got, want)
+	}
+}
