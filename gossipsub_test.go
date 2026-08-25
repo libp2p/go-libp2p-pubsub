@@ -6173,7 +6173,7 @@ func TestGossipsubLimitIWANT(t *testing.T) {
 func TestIWantPerPeerLimit(t *testing.T) {
 	gs := &GossipSubRouter{
 		params:            DefaultGossipSubParams(),
-		outstandingIWants: make(map[string]iwantLedger),
+		outstandingIWants: make(map[string]*iwantState),
 	}
 	gs.params.MaxIWantsPerMessageID = 2
 	gs.params.IWantFollowupTime = time.Second
@@ -6210,7 +6210,7 @@ func TestIWantPerPeerLimit(t *testing.T) {
 		t.Fatal("p3 should be admitted once p1's expired ask frees a slot")
 	}
 	gs.recordIWant(mid, p3, after)
-	if _, ok := gs.outstandingIWants[mid][p2]; !ok {
+	if _, ok := gs.outstandingIWants[mid].askedAt[p2]; !ok {
 		t.Fatal("p2's later ask should still be live, not expired")
 	}
 	if gs.canRequestIWant(mid, p2, after) {
@@ -6219,11 +6219,12 @@ func TestIWantPerPeerLimit(t *testing.T) {
 }
 
 func TestIWantNoPhantomOnTruncation(t *testing.T) {
-	// canRequestIWant must not record; only recordIWant does. A candidate that
-	// passes the check but is dropped by truncation must leave no ledger entry.
+	// canRequestIWant must not record an ask; only recordIWant does. A candidate
+	// that passes the check but is dropped by truncation must leave no phantom
+	// ask (it may leave grace-tracking state, but with no recorded peer).
 	gs := &GossipSubRouter{
 		params:            DefaultGossipSubParams(),
-		outstandingIWants: make(map[string]iwantLedger),
+		outstandingIWants: make(map[string]*iwantState),
 	}
 	gs.params.MaxIWantsPerMessageID = 1
 	now := time.Now()
@@ -6232,12 +6233,61 @@ func TestIWantNoPhantomOnTruncation(t *testing.T) {
 	if !gs.canRequestIWant(mid, p, now) {
 		t.Fatal("first check should pass")
 	}
-	// Not selected (truncated away): no recordIWant call.
-	if _, ok := gs.outstandingIWants[mid]; ok {
-		t.Fatal("a checked-but-unsent request must not appear in the ledger")
+	// Not selected (truncated away): no recordIWant call, so no ask recorded.
+	if st := gs.outstandingIWants[mid]; st != nil && len(st.askedAt) != 0 {
+		t.Fatal("a checked-but-unsent request must not record a phantom ask")
 	}
 	// A different peer can still be asked, since nothing was recorded.
 	if !gs.canRequestIWant(mid, peer.ID("b"), now) {
 		t.Fatal("another peer should still be admissible after an unrecorded check")
+	}
+}
+
+func TestIWantDispatchGrace(t *testing.T) {
+	newRouter := func(grace time.Duration) *GossipSubRouter {
+		gs := &GossipSubRouter{
+			params:            DefaultGossipSubParams(),
+			outstandingIWants: make(map[string]*iwantState),
+		}
+		gs.params.IWantDispatchGrace = grace
+		gs.params.IWantFollowupTime = time.Second
+		return gs
+	}
+	mid, p := "m", peer.ID("a")
+
+	// The first IHAVE within the grace window is held; a later one dispatches.
+	gs := newRouter(100 * time.Millisecond)
+	base := time.Now()
+	if gs.canRequestIWant(mid, p, base) {
+		t.Fatal("first IHAVE within grace should be held")
+	}
+	if gs.canRequestIWant(mid, p, base.Add(50*time.Millisecond)) {
+		t.Fatal("still within grace, should be held")
+	}
+	if !gs.canRequestIWant(mid, p, base.Add(150*time.Millisecond)) {
+		t.Fatal("after grace the deferred request should dispatch")
+	}
+
+	// Pruning must not drop or reset a freshly-graced, un-asked state, else
+	// grace would restart every heartbeat and never complete.
+	gs = newRouter(100 * time.Millisecond)
+	gs.canRequestIWant(mid, p, time.Now())
+	first := gs.outstandingIWants[mid].firstIHaveAt
+	gs.pruneOutstandingIWants()
+	st, ok := gs.outstandingIWants[mid]
+	if !ok || !st.firstIHaveAt.Equal(first) {
+		t.Fatal("prune must not drop or reset a state still within its window")
+	}
+	// Once stale (older than the follow-up time) with no live ask, prune drops it.
+	st.firstIHaveAt = time.Now().Add(-2 * time.Second)
+	gs.pruneOutstandingIWants()
+	if _, ok := gs.outstandingIWants[mid]; ok {
+		t.Fatal("prune should drop a stale, un-asked state")
+	}
+
+	// With zero grace the first IHAVE dispatches immediately.
+	gs = newRouter(0)
+	if !gs.canRequestIWant(mid, p, time.Now()) {
+		t.Fatal("with zero grace the first IHAVE should dispatch immediately")
 	}
 }

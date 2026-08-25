@@ -256,6 +256,13 @@ type GossipSubParams struct {
 	// expires IWantFollowupTime after it was sent, which frees a slot and lets
 	// the message be requested again without waiting for a heartbeat boundary.
 	MaxIWantsPerMessageID int
+
+	// IWantDispatchGrace delays the first IWANT for a message by this much after
+	// its first IHAVE, giving an in-flight push a chance to arrive before we
+	// pull. The deferred pull is driven by the next IHAVE after the grace
+	// elapses rather than a timer, so it can lag the grace by up to a heartbeat.
+	// Zero (the default) dispatches immediately.
+	IWantDispatchGrace time.Duration
 }
 
 func (params *GossipSubParams) validate() error {
@@ -273,6 +280,10 @@ func (params *GossipSubParams) validate() error {
 
 	if params.IWantFollowupTime <= 0 {
 		return fmt.Errorf("param IWantFollowupTime=%s must be positive", params.IWantFollowupTime)
+	}
+
+	if params.IWantDispatchGrace < 0 {
+		return fmt.Errorf("param IWantDispatchGrace=%s must not be negative", params.IWantDispatchGrace)
 	}
 
 	// Bootstrappers set D=D_lo=D_hi=D_out=0
@@ -333,7 +344,7 @@ func DefaultGossipSubRouter(h host.Host) *GossipSubRouter {
 		params:          params,
 		reducePXRecords: defaultPXRecordReducer,
 		// outstanding IWANTs per message ID, by peer and send time.
-		outstandingIWants: make(map[string]iwantLedger),
+		outstandingIWants: make(map[string]*iwantState),
 	}
 
 	rt.extensions = newExtensionsState(PeerExtensions{}, func(p peer.ID) {
@@ -631,7 +642,7 @@ type GossipSubRouter struct {
 
 	// outstanding IWANTs per message ID, by peer and send time. Bounds how
 	// many distinct peers we ask for a given message at once.
-	outstandingIWants map[string]iwantLedger
+	outstandingIWants map[string]*iwantState
 
 	protos  []protocol.ID
 	feature GossipSubFeatureTest
@@ -1963,6 +1974,12 @@ func (gs *GossipSubRouter) heartbeat() {
 // against MaxIWantsPerMessageID and the peer may be asked again.
 type iwantLedger map[peer.ID]time.Time
 
+// iwantState is the outstanding-request state for a single message ID.
+type iwantState struct {
+	firstIHaveAt time.Time   // when the first IHAVE for this message arrived
+	askedAt      iwantLedger // peers with an outstanding IWANT, and when it was sent
+}
+
 // expireAsks drops asks whose follow-up time has passed, freeing their slots.
 func (gs *GossipSubRouter) expireAsks(ledger iwantLedger, now time.Time) {
 	for ap, at := range ledger {
@@ -1976,26 +1993,38 @@ func (gs *GossipSubRouter) expireAsks(ledger iwantLedger, now time.Time) {
 // stale asks first. It does not record the request; recordIWant does that once
 // the message survives per-peer truncation, so a request dropped by truncation
 // leaves no phantom entry in the ledger.
+//
+// On the first IHAVE for a message it starts the grace clock. If a dispatch
+// grace is configured the first request is held, so an in-flight push can
+// arrive before we pull; the deferred pull happens on the next IHAVE once the
+// grace has elapsed (IHAVEs re-gossip each heartbeat), not from a timer.
 func (gs *GossipSubRouter) canRequestIWant(mid string, p peer.ID, now time.Time) bool {
-	ledger := gs.outstandingIWants[mid]
-	if ledger == nil {
-		return true
+	st := gs.outstandingIWants[mid]
+	if st == nil {
+		gs.outstandingIWants[mid] = &iwantState{firstIHaveAt: now}
+		return gs.params.IWantDispatchGrace <= 0
 	}
-	gs.expireAsks(ledger, now)
-	if _, asked := ledger[p]; asked {
+	if now.Sub(st.firstIHaveAt) < gs.params.IWantDispatchGrace {
 		return false
 	}
-	return len(ledger) < gs.params.MaxIWantsPerMessageID
+	gs.expireAsks(st.askedAt, now)
+	if _, asked := st.askedAt[p]; asked {
+		return false
+	}
+	return len(st.askedAt) < gs.params.MaxIWantsPerMessageID
 }
 
 // recordIWant notes that an IWANT for mid was sent to p at now.
 func (gs *GossipSubRouter) recordIWant(mid string, p peer.ID, now time.Time) {
-	ledger := gs.outstandingIWants[mid]
-	if ledger == nil {
-		ledger = make(iwantLedger)
-		gs.outstandingIWants[mid] = ledger
+	st := gs.outstandingIWants[mid]
+	if st == nil {
+		st = &iwantState{firstIHaveAt: now}
+		gs.outstandingIWants[mid] = st
 	}
-	ledger[p] = now
+	if st.askedAt == nil {
+		st.askedAt = make(iwantLedger)
+	}
+	st.askedAt[p] = now
 }
 
 // fulfillIWant clears any outstanding IWANTs for a message once it has been
@@ -2006,9 +2035,15 @@ func (gs *GossipSubRouter) fulfillIWant(msg *Message) {
 
 func (gs *GossipSubRouter) pruneOutstandingIWants() {
 	now := time.Now()
-	for mid, ledger := range gs.outstandingIWants {
-		gs.expireAsks(ledger, now)
-		if len(ledger) == 0 {
+	// Keep state through the grace-and-follow-up window even with no live ask,
+	// so grace does not restart each heartbeat before the deferred pull fires.
+	staleAfter := gs.params.IWantFollowupTime
+	if gs.params.IWantDispatchGrace > staleAfter {
+		staleAfter = gs.params.IWantDispatchGrace
+	}
+	for mid, st := range gs.outstandingIWants {
+		gs.expireAsks(st.askedAt, now)
+		if len(st.askedAt) == 0 && now.Sub(st.firstIHaveAt) >= staleAfter {
 			delete(gs.outstandingIWants, mid)
 		}
 	}
