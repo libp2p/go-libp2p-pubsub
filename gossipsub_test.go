@@ -6080,3 +6080,301 @@ func TestGossipsubDuplicatePublishDeliveredOnce(t *testing.T) {
 		}
 	})
 }
+
+func TestGossipsubLimitIWANT(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	hosts := getDefaultHosts(t, 3)
+	denseConnect(t, hosts)
+
+	psubs := make([]*PubSub, 3)
+
+	defaultParams := DefaultGossipSubParams()
+	defaultParams.MaxIWantsPerMessageID = 1
+	// The budget refills IWantFollowupTime after the last request.
+	defaultParams.IWantFollowupTime = 2 * time.Second
+	// Push the heartbeat far out to show the refill is window-driven, not
+	// heartbeat-driven.
+	defaultParams.HeartbeatInitialDelay = 10 * time.Second
+	defaultParams.HeartbeatInterval = time.Second
+
+	psubs[0] = getGossipsub(ctx, hosts[0], WithGossipSubParams(defaultParams))
+
+	var iwantsRecvd atomic.Int32
+
+	copy(psubs[1:], getGossipsubs(ctx, hosts[1:], WithRawTracer(&mockRawTracer{
+		onRecvRPC: func(rpc *RPC) {
+			if len(rpc.GetControl().GetIwant()) > 0 {
+				iwantsRecvd.Add(1)
+			}
+		},
+	})))
+
+	topicString := "foobar"
+	for _, ps := range psubs {
+		topic, err := ps.Join(topicString)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		_, err = topic.Subscribe()
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	time.Sleep(2 * time.Second)
+
+	publishIWant := func() {
+		psubs[1].eval <- func() {
+			psubs[1].rt.(*GossipSubRouter).sendRPC(hosts[0].ID(), &RPC{
+				RPC: pb.RPC{
+					Control: &pb.ControlMessage{
+						Ihave: []*pb.ControlIHave{
+							{
+								TopicID:    &topicString,
+								MessageIDs: []string{"1"},
+							},
+						},
+					},
+				},
+			}, false)
+		}
+
+		psubs[2].eval <- func() {
+			psubs[2].rt.(*GossipSubRouter).sendRPC(hosts[0].ID(), &RPC{
+				RPC: pb.RPC{
+					Control: &pb.ControlMessage{
+						Ihave: []*pb.ControlIHave{
+							{
+								TopicID:    &topicString,
+								MessageIDs: []string{"1"},
+							},
+						},
+					},
+				},
+			}, false)
+		}
+	}
+
+	publishIWant()
+	time.Sleep(time.Second)
+
+	if iwantsRecvd.Swap(0) != 1 {
+		t.Fatal("Expected exactly 1 IWANT due to limits")
+	}
+
+	// Wait for the follow-up window to expire and refill the budget; no
+	// heartbeat fires within this test.
+	time.Sleep(2 * time.Second)
+
+	publishIWant()
+	time.Sleep(time.Second)
+
+	if iwantsRecvd.Swap(0) != 1 {
+		t.Fatal("Expected exactly 1 IWANT due to limits")
+	}
+}
+
+func TestIWantPerPeerLimit(t *testing.T) {
+	gs := &GossipSubRouter{
+		params:            DefaultGossipSubParams(),
+		outstandingIWants: make(map[string]*iwantState),
+	}
+	gs.params.MaxIWantsPerMessageID = 2
+	gs.params.IWantFollowupTime = time.Second
+
+	base := time.Now()
+	mid := "m"
+	p1, p2, p3 := peer.ID("a"), peer.ID("b"), peer.ID("c")
+
+	// Two distinct peers admitted and recorded, at different times.
+	if !gs.canRequestIWant(mid, p1, base) {
+		t.Fatal("p1 should be admitted")
+	}
+	gs.recordIWant(mid, p1, base)
+	half := base.Add(500 * time.Millisecond)
+	if !gs.canRequestIWant(mid, p2, half) {
+		t.Fatal("p2 should be admitted")
+	}
+	gs.recordIWant(mid, p2, half)
+
+	// A third distinct peer is over the limit.
+	if gs.canRequestIWant(mid, p3, half) {
+		t.Fatal("p3 should be refused at the limit")
+	}
+	// A peer with a live ask is not asked again.
+	if gs.canRequestIWant(mid, p1, half) {
+		t.Fatal("p1 should not be re-asked while its ask is live")
+	}
+
+	// At base+followup, p1's ask has expired but p2's (sent later) has not, so
+	// exactly one slot frees: p3 is admitted, and re-asking p1 is now allowed
+	// but p2 is still blocked as live.
+	after := base.Add(gs.params.IWantFollowupTime + time.Millisecond)
+	if !gs.canRequestIWant(mid, p3, after) {
+		t.Fatal("p3 should be admitted once p1's expired ask frees a slot")
+	}
+	gs.recordIWant(mid, p3, after)
+	if _, ok := gs.outstandingIWants[mid].askedAt[p2]; !ok {
+		t.Fatal("p2's later ask should still be live, not expired")
+	}
+	if gs.canRequestIWant(mid, p2, after) {
+		t.Fatal("p2 should still be blocked as live while p3 holds the other slot")
+	}
+}
+
+func TestIWantNoPhantomOnTruncation(t *testing.T) {
+	// canRequestIWant must not record an ask; only recordIWant does. A candidate
+	// that passes the check but is dropped by truncation must leave no phantom
+	// ask (it may leave grace-tracking state, but with no recorded peer).
+	gs := &GossipSubRouter{
+		params:            DefaultGossipSubParams(),
+		outstandingIWants: make(map[string]*iwantState),
+	}
+	gs.params.MaxIWantsPerMessageID = 1
+	now := time.Now()
+	mid, p := "m", peer.ID("a")
+
+	if !gs.canRequestIWant(mid, p, now) {
+		t.Fatal("first check should pass")
+	}
+	// Not selected (truncated away): no recordIWant call, so no ask recorded.
+	if st := gs.outstandingIWants[mid]; st != nil && len(st.askedAt) != 0 {
+		t.Fatal("a checked-but-unsent request must not record a phantom ask")
+	}
+	// A different peer can still be asked, since nothing was recorded.
+	if !gs.canRequestIWant(mid, peer.ID("b"), now) {
+		t.Fatal("another peer should still be admissible after an unrecorded check")
+	}
+}
+
+func TestIWantDispatchGrace(t *testing.T) {
+	newRouter := func(grace time.Duration) *GossipSubRouter {
+		gs := &GossipSubRouter{
+			params:            DefaultGossipSubParams(),
+			outstandingIWants: make(map[string]*iwantState),
+		}
+		gs.params.IWantDispatchGrace = grace
+		gs.params.IWantFollowupTime = time.Second
+		return gs
+	}
+	mid, p := "m", peer.ID("a")
+
+	// The first IHAVE within the grace window is held; a later one dispatches.
+	gs := newRouter(100 * time.Millisecond)
+	base := time.Now()
+	if gs.canRequestIWant(mid, p, base) {
+		t.Fatal("first IHAVE within grace should be held")
+	}
+	if gs.canRequestIWant(mid, p, base.Add(50*time.Millisecond)) {
+		t.Fatal("still within grace, should be held")
+	}
+	if !gs.canRequestIWant(mid, p, base.Add(150*time.Millisecond)) {
+		t.Fatal("after grace the deferred request should dispatch")
+	}
+
+	// Pruning must not drop or reset a freshly-graced, un-asked state, else
+	// grace would restart every heartbeat and never complete.
+	gs = newRouter(100 * time.Millisecond)
+	gs.canRequestIWant(mid, p, time.Now())
+	first := gs.outstandingIWants[mid].firstIHaveAt
+	gs.pruneOutstandingIWants()
+	st, ok := gs.outstandingIWants[mid]
+	if !ok || !st.firstIHaveAt.Equal(first) {
+		t.Fatal("prune must not drop or reset a state still within its window")
+	}
+	// Once stale (older than the follow-up time) with no live ask, prune drops it.
+	st.firstIHaveAt = time.Now().Add(-2 * time.Second)
+	gs.pruneOutstandingIWants()
+	if _, ok := gs.outstandingIWants[mid]; ok {
+		t.Fatal("prune should drop a stale, un-asked state")
+	}
+
+	// With zero grace the first IHAVE dispatches immediately.
+	gs = newRouter(0)
+	if !gs.canRequestIWant(mid, p, time.Now()) {
+		t.Fatal("with zero grace the first IHAVE should dispatch immediately")
+	}
+}
+
+func TestResponseQuantileTracks(t *testing.T) {
+	// Constant-gain tracker: it should settle near a regime and then follow a
+	// drift upward, not converge to a fixed point.
+	rq := &responseQuantile{}
+	for i := 0; i < 400; i++ {
+		rq.observe(50*time.Millisecond, 0.8)
+	}
+	low := rq.est
+	if low < 30*time.Millisecond || low > 80*time.Millisecond {
+		t.Fatalf("estimate did not settle near the low regime: %v", low)
+	}
+	for i := 0; i < 400; i++ {
+		rq.observe(500*time.Millisecond, 0.8)
+	}
+	if rq.est <= low*3 {
+		t.Fatalf("estimate did not track the upward drift: %v (was %v)", rq.est, low)
+	}
+}
+
+func TestIWantHorizonFallback(t *testing.T) {
+	gs := &GossipSubRouter{params: DefaultGossipSubParams()}
+
+	// Off: always the fixed follow-up time.
+	if got := gs.iwantHorizon(peer.ID("a")); got != gs.params.IWantFollowupTime {
+		t.Fatalf("horizon with adaptive off = %v, want %v", got, gs.params.IWantFollowupTime)
+	}
+
+	gs.params.IWantAdaptiveHorizon = true
+	gs.params.IWantHorizonFloor = 200 * time.Millisecond
+	gs.params.IWantHorizonCeil = 2 * time.Second
+
+	// Cold: no global, no peer -> follow-up time clamped to the ceiling.
+	if got := gs.iwantHorizon(peer.ID("cold")); got != gs.params.IWantHorizonCeil {
+		t.Fatalf("cold horizon = %v, want ceil %v", got, gs.params.IWantHorizonCeil)
+	}
+
+	// Global warm; a peer below the sample threshold uses the global estimate.
+	gs.rttGlobal = &responseQuantile{est: 800 * time.Millisecond, n: 50}
+	gs.rttPeer = map[peer.ID]*responseQuantile{
+		"few": {est: 1500 * time.Millisecond, n: iwantMinSamples - 1},
+	}
+	if got := gs.iwantHorizon("few"); got != 800*time.Millisecond {
+		t.Fatalf("below-threshold peer horizon = %v, want global 800ms", got)
+	}
+	// At the threshold the peer's own estimate wins.
+	gs.rttPeer["enough"] = &responseQuantile{est: 1500 * time.Millisecond, n: iwantMinSamples}
+	if got := gs.iwantHorizon("enough"); got != 1500*time.Millisecond {
+		t.Fatalf("at-threshold peer horizon = %v, want its own 1500ms", got)
+	}
+	// Clamp: a very fast peer is floored.
+	gs.rttPeer["fast"] = &responseQuantile{est: 10 * time.Millisecond, n: iwantMinSamples}
+	if got := gs.iwantHorizon("fast"); got != gs.params.IWantHorizonFloor {
+		t.Fatalf("fast peer horizon = %v, want floor %v", got, gs.params.IWantHorizonFloor)
+	}
+}
+
+func TestIWantHorizonSnapshot(t *testing.T) {
+	gs := &GossipSubRouter{
+		params:            DefaultGossipSubParams(),
+		outstandingIWants: make(map[string]*iwantState),
+	}
+	gs.params.IWantAdaptiveHorizon = true
+	gs.params.IWantHorizonFloor = 100 * time.Millisecond
+	gs.params.IWantHorizonCeil = 5 * time.Second
+	gs.rttGlobal = &responseQuantile{est: time.Second, n: 50}
+
+	now := time.Now()
+	mid, p := "m", peer.ID("a")
+	gs.recordIWant(mid, p, now)
+	want := gs.outstandingIWants[mid].askedAt[p].expiresAt
+
+	// Snapshotted from the horizon at record time (~1s from now).
+	if d := want.Sub(now); d < 900*time.Millisecond || d > 1100*time.Millisecond {
+		t.Fatalf("snapshot horizon = %v, want ~1s", d)
+	}
+	// Changing the estimate afterwards must not move an ask already in flight.
+	gs.rttGlobal.est = 5 * time.Second
+	if got := gs.outstandingIWants[mid].askedAt[p].expiresAt; !got.Equal(want) {
+		t.Fatalf("recorded ask expiry moved: got %v want %v", got, want)
+	}
+}
