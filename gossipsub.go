@@ -1524,11 +1524,12 @@ func (gs *GossipSubRouter) rpcs(msg *Message) iter.Seq2[peer.ID, *RPC] {
 		}
 
 		out := rpcWithMessages(msg.Message)
-		// Set RPC-level spread extension if both the router is configured to use
-		// SPREAD by default and the message explicitly requests spread.
+		// Mark the message as a SPREAD message if the router is configured to use
+		// SPREAD and the message explicitly requests it. The marker names the
+		// entries of out.Publish it applies to, which here is the single message
+		// this RPC carries.
 		if gs.gossipProtocolChoice == SPREAD && msg.Spread {
-			v := true
-			out.Spread = &pb.SpreadExtension{SourceIsSpreadNode: &v}
+			out.Spread = &pb.SpreadExtension{PublishIndices: []uint32{0}}
 		}
 		for pid := range tosend {
 			if pid == from || pid == peer.ID(msg.GetFrom()) {

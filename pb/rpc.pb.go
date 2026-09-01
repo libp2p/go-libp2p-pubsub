@@ -749,12 +749,13 @@ func (x *PartialMessagesExtension) GetPartsMetadata() []byte {
 
 type SpreadExtension struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Set when a SPREAD node forwards a SPREAD-marked message, so the receiving
-	// peer knows the message is being disseminated via SPREAD and should keep
-	// propagating it using SPREAD selection.
-	SourceIsSpreadNode *bool `protobuf:"varint,1,opt,name=sourceIsSpreadNode" json:"sourceIsSpreadNode,omitempty"`
-	unknownFields      protoimpl.UnknownFields
-	sizeCache          protoimpl.SizeCache
+	// Zero-based indices into RPC.publish identifying the messages in this RPC
+	// that are being disseminated via SPREAD. A receiving peer applies SPREAD
+	// selection when propagating those messages further. Absent or empty means
+	// no message in this RPC is a SPREAD message.
+	PublishIndices []uint32 `protobuf:"varint,1,rep,name=publishIndices" json:"publishIndices,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *SpreadExtension) Reset() {
@@ -787,11 +788,11 @@ func (*SpreadExtension) Descriptor() ([]byte, []int) {
 	return file_rpc_proto_rawDescGZIP(), []int{12}
 }
 
-func (x *SpreadExtension) GetSourceIsSpreadNode() bool {
-	if x != nil && x.SourceIsSpreadNode != nil {
-		return *x.SourceIsSpreadNode
+func (x *SpreadExtension) GetPublishIndices() []uint32 {
+	if x != nil {
+		return x.PublishIndices
 	}
-	return false
+	return nil
 }
 
 type RPC_SubOpts struct {
@@ -933,9 +934,9 @@ const file_rpc_proto_rawDesc = "" +
 	"\atopicID\x18\x01 \x01(\tR\atopicID\x12\x18\n" +
 	"\agroupID\x18\x02 \x01(\fR\agroupID\x12&\n" +
 	"\x0epartialMessage\x18\x03 \x01(\fR\x0epartialMessage\x12$\n" +
-	"\rpartsMetadata\x18\x04 \x01(\fR\rpartsMetadata\"A\n" +
-	"\x0fSpreadExtension\x12.\n" +
-	"\x12sourceIsSpreadNode\x18\x01 \x01(\bR\x12sourceIsSpreadNodeB1Z/github.com/libp2p/go-libp2p-pubsub/pb;pubsub_pb"
+	"\rpartsMetadata\x18\x04 \x01(\fR\rpartsMetadata\"9\n" +
+	"\x0fSpreadExtension\x12&\n" +
+	"\x0epublishIndices\x18\x01 \x03(\rR\x0epublishIndicesB1Z/github.com/libp2p/go-libp2p-pubsub/pb;pubsub_pb"
 
 var (
 	file_rpc_proto_rawDescOnce sync.Once

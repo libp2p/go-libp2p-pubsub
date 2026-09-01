@@ -347,6 +347,44 @@ func (rpc *RPC) LogValue() slog.Value {
 	return slog.GroupValue(fields...)
 }
 
+// spreadIndexSet returns the set of RPC.publish indices that the SPREAD
+// extension marks, discarding out-of-range and duplicate indices.
+func spreadIndexSet(ext *pb.SpreadExtension, publishCount int) map[int]struct{} {
+	if ext == nil || len(ext.GetPublishIndices()) == 0 {
+		return nil
+	}
+	set := make(map[int]struct{}, len(ext.GetPublishIndices()))
+	for _, idx := range ext.GetPublishIndices() {
+		if int(idx) < publishCount {
+			set[int(idx)] = struct{}{}
+		}
+	}
+	if len(set) == 0 {
+		return nil
+	}
+	return set
+}
+
+// spreadForPublishRange rebases a SPREAD marker onto a slice of the original
+// publish list, so that a split RPC keeps marking the same messages. It returns
+// nil when no marked message falls in [offset, offset+count).
+func spreadForPublishRange(ext *pb.SpreadExtension, offset, count int) *pb.SpreadExtension {
+	if ext == nil || count <= 0 {
+		return nil
+	}
+	var indices []uint32
+	for _, idx := range ext.GetPublishIndices() {
+		i := int(idx)
+		if i >= offset && i < offset+count {
+			indices = append(indices, uint32(i-offset))
+		}
+	}
+	if len(indices) == 0 {
+		return nil
+	}
+	return &pb.SpreadExtension{PublishIndices: indices}
+}
+
 // split splits the given RPC. If a sub RPC is too large and can't be split
 // further (e.g. Message data is bigger than the RPC limit, or a single
 // non-publish/non-partial message entry is bigger than the control limit), then
@@ -361,6 +399,9 @@ func (rpc *RPC) split(limit, controlLimit int) iter.Seq[*RPC] {
 
 			messagesInNextRPC := 0
 			messageSlice := rpc.Publish
+			// Index into rpc.Publish of messageSlice[0], so that a SPREAD marker
+			// can be rebased onto each piece.
+			publishOffset := 0
 
 			// Merge/Append publish messages. This pattern is optimized compared the
 			// the patterns for other fields because this is the common cause for
@@ -372,7 +413,9 @@ func (rpc *RPC) split(limit, controlLimit int) iter.Seq[*RPC] {
 					// The message doesn't fit. Let's set the messages that did fit
 					// into this RPC, yield it, then make a new one
 					nextRPC.Publish = messageSlice[:messagesInNextRPC]
+					nextRPC.Spread = spreadForPublishRange(rpc.Spread, publishOffset, messagesInNextRPC)
 					messageSlice = messageSlice[messagesInNextRPC:]
+					publishOffset += messagesInNextRPC
 					if !yield(nextRPC) {
 						return
 					}
@@ -390,6 +433,7 @@ func (rpc *RPC) split(limit, controlLimit int) iter.Seq[*RPC] {
 				// packing this RPC, but we avoid successively calling proto.Size
 				// on the messages for the next parts.
 				nextRPC.Publish = messageSlice[:messagesInNextRPC]
+				nextRPC.Spread = spreadForPublishRange(rpc.Spread, publishOffset, messagesInNextRPC)
 				if !yield(nextRPC) {
 					return
 				}
@@ -399,10 +443,15 @@ func (rpc *RPC) split(limit, controlLimit int) iter.Seq[*RPC] {
 		// Fast path check. It's possible the original RPC is now small enough
 		// without the messages to publish
 		originalPublishSlice := rpc.Publish
+		originalSpread := rpc.Spread
 		rpc.Publish = nil
+		// The SPREAD marker indexes into Publish, so it is meaningless on the
+		// pieces that carry the remaining fields.
+		rpc.Spread = nil
 		defer func() {
 			// Restore the original message before returning
 			rpc.Publish = originalPublishSlice
+			rpc.Spread = originalSpread
 		}()
 		if s := proto.Size(&rpc.RPC); s <= limit && controlRPCSize(rpc) <= controlLimit {
 			if s != 0 {
@@ -1569,16 +1618,18 @@ func (p *PubSub) handleIncomingRPC(rpc *RPC) {
 
 	case AcceptAll:
 		var toPush []*Message
-		for _, pmsg := range rpc.GetPublish() {
+		spreadIdx := spreadIndexSet(rpc.GetSpread(), len(rpc.GetPublish()))
+		for i, pmsg := range rpc.GetPublish() {
 			if !(p.subscribedToMsg(pmsg) || p.canRelayMsg(pmsg)) {
 				p.logger.Debug("received message in topic we didn't subscribe to; ignoring message")
 				continue
 			}
 
 			msg := &Message{Message: pmsg, ID: "", ReceivedFrom: rpc.from, ValidatorData: nil, Local: false, Spread: false}
-			// If the enclosing RPC marks the publish as SPREAD, forward that marker to the internal message
-			if rpc.GetSpread() != nil {
-				msg.Spread = rpc.GetSpread().GetSourceIsSpreadNode()
+			// The enclosing RPC names which of its publish entries are SPREAD
+			// messages; forward that marker to the internal message.
+			if _, ok := spreadIdx[i]; ok {
+				msg.Spread = true
 			}
 			if p.shouldPush(msg) {
 				toPush = append(toPush, msg)

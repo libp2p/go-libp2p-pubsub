@@ -7,6 +7,7 @@ This document describes how the current SPREAD implementation derives a peer's "
 - Clustering state and computation: `spread_state.go` (`SpreadState.GetPropagationPeers`)
 - Propagation peer selection (fanout/probabilities): `spread_propagation.go` (`SpreadPropagation.GetPeersForPropagation`)
 - Publish hook (switches from gossipsub -> SPREAD when enabled): `gossipsub.go` (`GossipSubRouter.rpcs`)
+- Wire marker: `pb/rpc.proto` (`SpreadExtension`), read back in `pubsub.go` (`handleIncomingRPC`), rebased on split in `pubsub.go` (`RPC.split`)
 - Config options:
   - `WithSpreadClusteringConfig` in `extensions.go`
   - `WithSpreadPropagationConfig` in `gossipsub.go`
@@ -33,6 +34,32 @@ flowchart TD
   F -- yes --> G[Override tosend with SPREAD selection]
   F -- no --> C
 ```
+
+## Wire Marker
+
+`msg.Spread` is local state. On the wire, a SPREAD message is a normal gossipsub
+message in a normal RPC, and the RPC names which of its `publish` entries are
+being disseminated via SPREAD:
+
+```protobuf
+message SpreadExtension {
+  repeated uint32 publishIndices = 1;
+}
+```
+
+- Indices are zero-based into `RPC.publish` of the same RPC, so a single RPC may
+  carry both SPREAD and non-SPREAD messages. An absent or empty
+  `SpreadExtension` means none of them is a SPREAD message.
+- The receiver (`spreadIndexSet`) ignores out-of-range and duplicate indices, and
+  sets `msg.Spread` only on the entries that were named.
+- A peer that did not advertise the `spread` extension ignores the field, which is
+  the default behavior of protobuf parsers, and forwards using standard gossipsub.
+- `RPC.split` re-slices `publish`, so the marker is **rebased** per piece
+  (`spreadForPublishRange`) rather than copied: each piece marks the same messages
+  under its own local numbering, and a piece holding no marked message carries no
+  marker. Copying it verbatim would mark the wrong messages; dropping it, as an
+  earlier version did, silently disseminated an oversized SPREAD message as plain
+  gossipsub.
 
 ## Basic Concepts
 

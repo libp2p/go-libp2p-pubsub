@@ -111,8 +111,9 @@ message PartialMessagesExtension {
 }
 
 message SpreadExtension {
-  // Set when a SPREAD node forwards a SPREAD-marked message, so the receiving
-  // peer knows the message is being disseminated via SPREAD and should keep
-  // propagating it using SPREAD selection.
-  optional bool sourceIsSpreadNode = 1;
+  // Zero-based indices into RPC.publish identifying the messages in this RPC
+  // that are being disseminated via SPREAD. A receiving peer applies SPREAD
+  // selection when propagating those messages further. Absent or empty means
+  // no message in this RPC is a SPREAD message.
+  repeated uint32 publishIndices = 1;
 }
