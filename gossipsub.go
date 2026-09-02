@@ -894,6 +894,9 @@ func (gs *GossipSubRouter) Preprocess(from peer.ID, msgs []*Message) {
 	tmids := make(map[string][]string)
 	for _, msg := range msgs {
 		mid := gs.p.idGen.ID(msg)
+		// There's a small race between removing from this map here
+		// and the mark as seen in the validator goroutine. At most it leads
+		// to some extra IWants.
 		delete(gs.allowedIWantCount, mid)
 		if len(msg.GetData()) < gs.params.IDontWantMessageThreshold {
 			continue
@@ -1009,7 +1012,6 @@ func (gs *GossipSubRouter) handleIHave(p peer.ID, ctl *pb.ControlMessage) []*pb.
 			}
 
 			iwant[mid] = struct{}{}
-			gs.allowedIWantCount[mid] = allowedIWants - 1
 		}
 	}
 
@@ -1034,6 +1036,13 @@ func (gs *GossipSubRouter) handleIHave(p peer.ID, ctl *pb.ControlMessage) []*pb.
 
 	// truncate to the messages we are actually asking for and update the iasked counter
 	iwantlst = iwantlst[:iask]
+	for _, mid := range iwantlst {
+		allowedIWants, ok := gs.allowedIWantCount[mid]
+		if !ok {
+			allowedIWants = gs.params.MaxIWantsPerMessageIDPerHeartbeat
+		}
+		gs.allowedIWantCount[mid] = allowedIWants - 1
+	}
 	gs.iasked[p] += iask
 
 	gs.gossipTracer.AddPromise(p, iwantlst)
