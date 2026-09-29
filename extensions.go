@@ -267,9 +267,8 @@ func (r partialMessageRouter) PeerRequestsPartial(peer peer.ID, topic string) bo
 	return r.gs.peerRequestsPartial(peer, topic)
 }
 
-// PartialMessagesEnabledForTopic returns true only for topics we joined with `RequestPartialMessages` or
-// `SupportsPartialMessages`, which bounds the set of topics the extension keeps
-// state for to topics we chose, rather than ones a peer names in an RPC.
+// PartialMessagesEnabledForTopic returns true for topics on which we support receiving 
+// or sending partial messages.
 func (r partialMessageRouter) PartialMessagesEnabledForTopic(topic string) bool {
 	return r.gs.iRequestPartial(topic) || r.gs.iSupportSendingPartial(topic)
 }
