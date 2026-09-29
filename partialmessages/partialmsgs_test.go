@@ -1429,9 +1429,6 @@ func FuzzPeerInitiatedCounter(f *testing.F) {
 	})
 }
 
-// assertNoRetainedTopicState fails if any per-topic bookkeeping survives. Topic
-// strings come from remote peers, so a leftover key in either map is retained
-// attacker-chosen memory.
 func assertNoRetainedTopicState(t *testing.T, e *PartialMessagesExtension[peerState]) {
 	t.Helper()
 	for topic := range e.statePerTopicPerGroup {
@@ -1442,8 +1439,6 @@ func assertNoRetainedTopicState(t *testing.T, e *PartialMessagesExtension[peerSt
 	}
 }
 
-// newTestExtension builds an extension whose callback records parts metadata,
-// and which takes part in partial messages only on enabledTopic.
 func newTestExtension(t *testing.T, enabledTopic string, onIncoming func(from peer.ID, peerStates map[peer.ID]peerState, rpc *pubsub_pb.PartialMessagesExtension) error) *PartialMessagesExtension[peerState] {
 	t.Helper()
 	e := &PartialMessagesExtension[peerState]{
@@ -1469,8 +1464,6 @@ func recordParts(from peer.ID, peerStates map[peer.ID]peerState, rpc *pubsub_pb.
 	return nil
 }
 
-// A peer must not be able to make us allocate state keyed by a topic we take no
-// part in, however many distinct topics it names.
 func TestHandleRPCRejectsTopicsWeDoNotParticipateIn(t *testing.T) {
 	e := newTestExtension(t, "enabled-topic", recordParts)
 
@@ -1489,8 +1482,6 @@ func TestHandleRPCRejectsTopicsWeDoNotParticipateIn(t *testing.T) {
 	assertNoRetainedTopicState(t, e)
 }
 
-// Groups for rpcs the application ignores hold no peer state, so the next
-// heartbeat reaps them and gives the peer its group budget back.
 func TestHeartbeatReclaimsGroupsTheApplicationIgnores(t *testing.T) {
 	topic := "enabled-topic"
 	e := newTestExtension(t, topic, func(peer.ID, map[peer.ID]peerState, *pubsub_pb.PartialMessagesExtension) error {
@@ -1518,8 +1509,6 @@ func TestHeartbeatReclaimsGroupsTheApplicationIgnores(t *testing.T) {
 	}
 }
 
-// An rpc rejected by the per-peer limit must not create a group or move the
-// counter.
 func TestGroupStateLimitRejectionCreatesNoGroup(t *testing.T) {
 	topic := "enabled-topic"
 	e := newTestExtension(t, topic, recordParts)
@@ -1544,9 +1533,6 @@ func TestGroupStateLimitRejectionCreatesNoGroup(t *testing.T) {
 	}
 }
 
-// Accepted state must drain fully: heartbeat reaps the group and releases the
-// topic from both maps, and a later disconnect neither panics nor resurrects a
-// topic key.
 func TestTopicStateIsReleasedByHeartbeatAndDisconnect(t *testing.T) {
 	topic := "enabled-topic"
 	e := newTestExtension(t, topic, recordParts)
@@ -1570,8 +1556,6 @@ func TestTopicStateIsReleasedByHeartbeatAndDisconnect(t *testing.T) {
 	}
 	assertNoRetainedTopicState(t, e)
 
-	// The counter for this topic is gone, so disconnect cleanup can no longer
-	// reach it through statePerTopicPerGroup. It must still be a no-op.
 	e.OnClosedOutboundStream("1")
 	assertNoRetainedTopicState(t, e)
 }
