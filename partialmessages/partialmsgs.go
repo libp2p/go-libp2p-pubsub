@@ -114,6 +114,7 @@ type Router interface {
 	SendRPC(p peer.ID, r *pb.PartialMessagesExtension, urgent bool)
 	MeshPeers(topic string) iter.Seq[peer.ID]
 	PeerRequestsPartial(peer peer.ID, topic string) bool
+	PartialMessagesEnabledForTopic(topic string) bool
 }
 
 func (e *PartialMessagesExtension[PeerState]) groupState(topic string, groupID []byte, peerInitiated bool, from peer.ID) (*partialMessageStatePerGroupPerTopic[PeerState], error) {
@@ -144,6 +145,14 @@ func (e *PartialMessagesExtension[PeerState]) groupState(topic string, groupID [
 		gState.initiatedBy = ""
 	}
 	return gState, nil
+}
+
+func (e *PartialMessagesExtension[PeerState]) releaseTopicIfEmpty(topic string) {
+	if len(e.statePerTopicPerGroup[topic]) > 0 {
+		return
+	}
+	delete(e.statePerTopicPerGroup, topic)
+	delete(e.peerInitiatedGroupCounter, topic)
 }
 
 func (e *PartialMessagesExtension[PeerState]) Init(router Router) error {
@@ -242,13 +251,17 @@ func (e *PartialMessagesExtension[PeerState]) initPeerState(topic string, gState
 }
 
 func (e *PartialMessagesExtension[PeerState]) OnClosedOutboundStream(id peer.ID) {
-	for topic, tState := range e.statePerTopicPerGroup {
+	for _, tState := range e.statePerTopicPerGroup {
 		for _, gState := range tState {
 			delete(gState.peerState, id)
 		}
-		if ctr, ok := e.peerInitiatedGroupCounter[topic]; ok {
-			ctr.OnClosedOutboundStream(id)
-		}
+	}
+	// Walk the counters directly rather than through statePerTopicPerGroup: a
+	// topic whose group state has already been reaped is no longer reachable
+	// from there, and its counter would never be cleaned up.
+	for topic, ctr := range e.peerInitiatedGroupCounter {
+		ctr.OnClosedOutboundStream(id)
+		e.releaseTopicIfEmpty(topic)
 	}
 }
 
@@ -257,16 +270,16 @@ func (e *PartialMessagesExtension[PeerState]) Heartbeat() {
 		for group, gState := range tState {
 			if gState.groupTTL == 0 || len(gState.peerState) == 0 {
 				delete(tState, group)
-				if len(tState) == 0 {
-					delete(e.statePerTopicPerGroup, topic)
-				}
 				if gState.remotePeerInitiated() {
-					e.peerInitiatedGroupCounter[topic].Dec(gState.initiatedBy)
+					if ctr, ok := e.peerInitiatedGroupCounter[topic]; ok {
+						ctr.Dec(gState.initiatedBy)
+					}
 				}
 			} else {
 				gState.groupTTL--
 			}
 		}
+		e.releaseTopicIfEmpty(topic)
 	}
 }
 
@@ -299,6 +312,8 @@ func (e *PartialMessagesExtension[PeerState]) sendRPC(to peer.ID, rpc *pb.Partia
 	e.router.SendRPC(to, rpc, false)
 }
 
+var errPartialMessagesNotEnabledForTopic = errors.New("partial messages are not enabled for this topic")
+
 func (e *PartialMessagesExtension[PeerState]) HandleRPC(from peer.ID, rpc *pb.PartialMessagesExtension) error {
 	if rpc == nil {
 		return nil
@@ -306,6 +321,10 @@ func (e *PartialMessagesExtension[PeerState]) HandleRPC(from peer.ID, rpc *pb.Pa
 
 	topic := rpc.GetTopicID()
 	groupID := rpc.GroupID
+
+	if !e.router.PartialMessagesEnabledForTopic(topic) {
+		return errPartialMessagesNotEnabledForTopic
+	}
 
 	state, err := e.groupState(topic, groupID, true, from)
 	if err != nil {

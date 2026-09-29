@@ -267,6 +267,13 @@ func (r partialMessageRouter) PeerRequestsPartial(peer peer.ID, topic string) bo
 	return r.gs.peerRequestsPartial(peer, topic)
 }
 
+// PartialMessagesEnabledForTopic returns true only for topics we joined with `RequestPartialMessages` or
+// `SupportsPartialMessages`, which bounds the set of topics the extension keeps
+// state for to topics we chose, rather than ones a peer names in an RPC.
+func (r partialMessageRouter) PartialMessagesEnabledForTopic(topic string) bool {
+	return r.gs.iRequestPartial(topic) || r.gs.iSupportSendingPartial(topic)
+}
+
 // MeshPeers implements partialmessages.Router.
 func (r partialMessageRouter) MeshPeers(topic string) iter.Seq[peer.ID] {
 	return func(yield func(peer.ID) bool) {
