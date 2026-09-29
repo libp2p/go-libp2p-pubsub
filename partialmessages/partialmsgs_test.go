@@ -26,11 +26,21 @@ import (
 type testRouter struct {
 	sendRPC   func(p peer.ID, r *pubsub_pb.PartialMessagesExtension, urgent bool)
 	meshPeers func(topic string) iter.Seq[peer.ID]
+	// partialMessagesEnabledForTopic defaults to accepting every topic when nil.
+	partialMessagesEnabledForTopic func(topic string) bool
 }
 
 // PeerRequestsPartial implements Router.
 func (r *testRouter) PeerRequestsPartial(peer peer.ID, topic string) bool {
 	return true
+}
+
+// PartialMessagesEnabledForTopic implements Router.
+func (r *testRouter) PartialMessagesEnabledForTopic(topic string) bool {
+	if r.partialMessagesEnabledForTopic == nil {
+		return true
+	}
+	return r.partialMessagesEnabledForTopic(topic)
 }
 
 func (r *testRouter) SendRPC(p peer.ID, rpc *pubsub_pb.PartialMessagesExtension, urgent bool) {
@@ -1217,11 +1227,20 @@ func TestPeerInitiatedCounter(t *testing.T) {
 
 	assertCounts := func(expectedTotal int, expectedMap map[peer.ID]int) {
 		t.Helper()
-		if handler.peerInitiatedGroupCounter[topic].total != expectedTotal {
-			t.Fatal()
+		ctr, ok := handler.peerInitiatedGroupCounter[topic]
+		if !ok {
+			// The counter is dropped once the topic holds no groups, so an
+			// absent entry is the zero state.
+			if expectedTotal != 0 || len(expectedMap) != 0 {
+				t.Fatalf("counter for %q was dropped, expected total %d and %v", topic, expectedTotal, expectedMap)
+			}
+			return
 		}
-		if !reflect.DeepEqual(handler.peerInitiatedGroupCounter[topic].perPeer, expectedMap) {
-			t.Fatal()
+		if ctr.total != expectedTotal {
+			t.Fatalf("expected total %d, got %d", expectedTotal, ctr.total)
+		}
+		if !reflect.DeepEqual(ctr.perPeer, expectedMap) {
+			t.Fatalf("expected peer counts %v, got %v", expectedMap, ctr.perPeer)
 		}
 	}
 
@@ -1409,4 +1428,135 @@ func FuzzPeerInitiatedCounter(f *testing.F) {
 			}
 		}
 	})
+}
+
+func assertNoRetainedTopicState(t *testing.T, e *PartialMessagesExtension[peerState]) {
+	t.Helper()
+	for topic := range e.statePerTopicPerGroup {
+		t.Fatalf("statePerTopicPerGroup retained %d topic(s), e.g. %q", len(e.statePerTopicPerGroup), topic)
+	}
+	for topic := range e.peerInitiatedGroupCounter {
+		t.Fatalf("peerInitiatedGroupCounter retained %d topic(s), e.g. %q", len(e.peerInitiatedGroupCounter), topic)
+	}
+}
+
+func newTestExtension(t *testing.T, enabledTopic string, onIncoming func(from peer.ID, peerStates map[peer.ID]peerState, rpc *pubsub_pb.PartialMessagesExtension) error) *PartialMessagesExtension[peerState] {
+	t.Helper()
+	e := &PartialMessagesExtension[peerState]{
+		Logger:        slog.Default(),
+		OnEmitGossip:  func(string, []byte, []peer.ID, map[peer.ID]peerState) {},
+		OnIncomingRPC: onIncoming,
+	}
+	router := &testRouter{
+		sendRPC:                        func(peer.ID, *pubsub_pb.PartialMessagesExtension, bool) {},
+		meshPeers:                      func(string) iter.Seq[peer.ID] { return func(func(peer.ID) bool) {} },
+		partialMessagesEnabledForTopic: func(topic string) bool { return topic == enabledTopic },
+	}
+	if err := e.Init(router); err != nil {
+		t.Fatal(err)
+	}
+	return e
+}
+
+func recordParts(from peer.ID, peerStates map[peer.ID]peerState, rpc *pubsub_pb.PartialMessagesExtension) error {
+	ps := peerStates[from]
+	ps.recvd = bitmap.Merge(ps.recvd, rpc.PartsMetadata)
+	peerStates[from] = ps
+	return nil
+}
+
+func TestHandleRPCRejectsTopicsWeDoNotParticipateIn(t *testing.T) {
+	e := newTestExtension(t, "enabled-topic", recordParts)
+
+	for i := range 1024 {
+		topic := fmt.Sprintf("attacker-chosen-topic-%d", i)
+		err := e.HandleRPC("1", &pubsub_pb.PartialMessagesExtension{
+			TopicID:       &topic,
+			GroupID:       []byte("group"),
+			PartsMetadata: []byte{0, 0, 0, 0},
+		})
+		if err != errPartialMessagesNotEnabledForTopic {
+			t.Fatalf("topic %q: expected it to be rejected, got %v", topic, err)
+		}
+	}
+
+	assertNoRetainedTopicState(t, e)
+}
+
+func TestHeartbeatReclaimsGroupsTheApplicationIgnores(t *testing.T) {
+	topic := "enabled-topic"
+	e := newTestExtension(t, topic, func(peer.ID, map[peer.ID]peerState, *pubsub_pb.PartialMessagesExtension) error {
+		return nil // ignored: peerStates left untouched
+	})
+	send := func(i int) error {
+		return e.HandleRPC("1", &pubsub_pb.PartialMessagesExtension{
+			TopicID:       &topic,
+			GroupID:       fmt.Appendf(nil, "group-%d", i),
+			PartsMetadata: []byte{0, 0, 0, 0},
+		})
+	}
+
+	for round := range 2 {
+		for i := range defaultPeerInitiatedGroupLimitPerTopicPerPeer {
+			if err := send(round*100 + i); err != nil {
+				t.Fatalf("round %d group %d: %v", round, i, err)
+			}
+		}
+		if err := send(round*100 + 99); err != errPeerInitiatedGroupLimitReached {
+			t.Fatalf("round %d: expected the per-peer limit until the heartbeat, got %v", round, err)
+		}
+		e.Heartbeat()
+		assertNoRetainedTopicState(t, e)
+	}
+}
+
+func TestGroupStateLimitRejectionCreatesNoGroup(t *testing.T) {
+	topic := "enabled-topic"
+	e := newTestExtension(t, topic, recordParts)
+	e.PeerInitiatedGroupLimitPerTopic = 2
+	e.PeerInitiatedGroupLimitPerTopicPerPeer = 1
+
+	first := &pubsub_pb.PartialMessagesExtension{TopicID: &topic, GroupID: []byte("g1"), PartsMetadata: []byte{0, 0, 0, 0}}
+	if err := e.HandleRPC("1", first); err != nil {
+		t.Fatal(err)
+	}
+	groupsAfterFirst := len(e.statePerTopicPerGroup[topic])
+
+	second := &pubsub_pb.PartialMessagesExtension{TopicID: &topic, GroupID: []byte("g2"), PartsMetadata: []byte{0, 0, 0, 0}}
+	if err := e.HandleRPC("1", second); err != errPeerInitiatedGroupLimitReached {
+		t.Fatalf("expected the per-peer limit to reject this, got %v", err)
+	}
+	if got := len(e.statePerTopicPerGroup[topic]); got != groupsAfterFirst {
+		t.Fatalf("rejected rpc created group state: %d groups, want %d", got, groupsAfterFirst)
+	}
+	if ctr := e.peerInitiatedGroupCounter[topic]; ctr.total != 1 {
+		t.Fatalf("expected total 1, got %d", ctr.total)
+	}
+}
+
+func TestTopicStateIsReleasedByHeartbeatAndDisconnect(t *testing.T) {
+	topic := "enabled-topic"
+	e := newTestExtension(t, topic, recordParts)
+
+	for i := range 8 {
+		err := e.HandleRPC("1", &pubsub_pb.PartialMessagesExtension{
+			TopicID:       &topic,
+			GroupID:       fmt.Appendf(nil, "group-%d", i),
+			PartsMetadata: []byte{0, 0, 0, 0},
+		})
+		if err != nil {
+			t.Fatalf("group %d: %v", i, err)
+		}
+	}
+	if len(e.statePerTopicPerGroup[topic]) != 8 {
+		t.Fatalf("expected 8 groups, got %d", len(e.statePerTopicPerGroup[topic]))
+	}
+
+	for range minGroupTTL + 1 {
+		e.Heartbeat()
+	}
+	assertNoRetainedTopicState(t, e)
+
+	e.OnClosedOutboundStream("1")
+	assertNoRetainedTopicState(t, e)
 }
