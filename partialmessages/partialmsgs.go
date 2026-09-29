@@ -251,17 +251,13 @@ func (e *PartialMessagesExtension[PeerState]) initPeerState(topic string, gState
 }
 
 func (e *PartialMessagesExtension[PeerState]) OnClosedOutboundStream(id peer.ID) {
-	for _, tState := range e.statePerTopicPerGroup {
+	for topic, tState := range e.statePerTopicPerGroup {
 		for _, gState := range tState {
 			delete(gState.peerState, id)
 		}
-	}
-	// Walk the counters directly rather than through statePerTopicPerGroup: a
-	// topic whose group state has already been reaped is no longer reachable
-	// from there, and its counter would never be cleaned up.
-	for topic, ctr := range e.peerInitiatedGroupCounter {
-		ctr.OnClosedOutboundStream(id)
-		e.releaseTopicIfEmpty(topic)
+		if ctr, ok := e.peerInitiatedGroupCounter[topic]; ok {
+			ctr.OnClosedOutboundStream(id)
+		}
 	}
 }
 
