@@ -20,9 +20,7 @@ import (
 	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/core/protocol"
-
-	//lint:ignore SA1019 "github.com/libp2p/go-msgio/protoio" is deprecated
-	"github.com/libp2p/go-msgio/protoio"
+	"github.com/libp2p/go-msgio/pbio"
 )
 
 func checkMessageRouting(t *testing.T, topic string, pubs []*PubSub, subs []*Subscription) {
@@ -162,8 +160,8 @@ func TestBasicFloodsub(t *testing.T) {
 
 		time.Sleep(time.Millisecond * 100)
 
-		for i := 0; i < 100; i++ {
-			msg := []byte(fmt.Sprintf("%d the flooooooood %d", i, i))
+		for i := range 100 {
+			msg := fmt.Appendf(nil, "%d the flooooooood %d", i, i)
 
 			owner := mrand.Intn(len(psubs))
 
@@ -1004,9 +1002,9 @@ func TestMessageSender(t *testing.T) {
 
 		time.Sleep(time.Millisecond * 100)
 
-		for i := 0; i < 3; i++ {
-			for j := 0; j < 100; j++ {
-				msg := []byte(fmt.Sprintf("%d sent %d", i, j))
+		for i := range 3 {
+			for j := range 100 {
+				msg := fmt.Appendf(nil, "%d sent %d", i, j)
 
 				psubs[i].Publish(topic, msg)
 
@@ -1124,7 +1122,7 @@ type announceWatcher struct {
 func (aw *announceWatcher) handleStream(s network.Stream) {
 	defer s.Close()
 
-	r := protoio.NewDelimitedReader(s, 1<<20)
+	r := pbio.NewDelimitedReader(s, 1<<20)
 
 	var rpc pb.RPC
 	for {
@@ -1185,8 +1183,8 @@ func TestPubsubWithAssortedOptions(t *testing.T) {
 
 		time.Sleep(time.Second)
 
-		for i := 0; i < 2; i++ {
-			msg := []byte(fmt.Sprintf("message %d", i))
+		for i := range 2 {
+			msg := fmt.Appendf(nil, "message %d", i)
 			psubs[i].Publish("test", msg)
 
 			for _, sub := range subs {

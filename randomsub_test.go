@@ -58,8 +58,8 @@ func TestRandomsubSmall(t *testing.T) {
 		time.Sleep(time.Second)
 
 		count := 0
-		for i := 0; i < 10; i++ {
-			msg := []byte(fmt.Sprintf("message %d", i))
+		for i := range 10 {
+			msg := fmt.Appendf(nil, "message %d", i)
 			psubs[i].Publish("test", msg)
 
 			for _, sub := range subs {
@@ -97,8 +97,8 @@ func TestRandomsubBig(t *testing.T) {
 		time.Sleep(time.Second)
 
 		count := 0
-		for i := 0; i < 10; i++ {
-			msg := []byte(fmt.Sprintf("message %d", i))
+		for i := range 10 {
+			msg := fmt.Appendf(nil, "message %d", i)
 			psubs[i].Publish("test", msg)
 
 			for _, sub := range subs {
@@ -138,8 +138,8 @@ func TestRandomsubMixed(t *testing.T) {
 		time.Sleep(time.Second)
 
 		count := 0
-		for i := 0; i < 10; i++ {
-			msg := []byte(fmt.Sprintf("message %d", i))
+		for i := range 10 {
+			msg := fmt.Appendf(nil, "message %d", i)
 			psubs[i].Publish("test", msg)
 
 			for _, sub := range subs {

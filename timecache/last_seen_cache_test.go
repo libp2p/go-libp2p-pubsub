@@ -24,13 +24,13 @@ func TestLastSeenCacheExpire(t *testing.T) {
 		tc := newLastSeenCacheWithSweepInterval(time.Second, time.Second)
 		defer tc.Done()
 
-		for i := 0; i < 11; i++ {
+		for i := range 11 {
 			tc.Add(fmt.Sprint(i))
 			time.Sleep(time.Millisecond * 100)
 		}
 
 		time.Sleep(2 * time.Second)
-		for i := 0; i < 11; i++ {
+		for i := range 11 {
 			if tc.Has(fmt.Sprint(i)) {
 				t.Fatalf("should have dropped this key: %s from the cache already", fmt.Sprint(i))
 			}

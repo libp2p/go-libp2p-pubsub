@@ -41,11 +41,8 @@ func TestBackoff_Update(t *testing.T) {
 				t.Fatalf("unexpected error post update: %s", err)
 			}
 
-			expected := time.Duration(math.Pow(BackoffMultiplier, float64(i)) *
-				float64(MinBackoffDelay+MaxBackoffJitterCoff*time.Millisecond))
-			if expected > MaxBackoffDelay {
-				expected = MaxBackoffDelay
-			}
+			expected := min(time.Duration(math.Pow(BackoffMultiplier, float64(i))*
+				float64(MinBackoffDelay+MaxBackoffJitterCoff*time.Millisecond)), MaxBackoffDelay)
 
 			if expected < got { // considering jitter, expected backoff must always be greater than or equal to actual.
 				t.Fatalf("invalid backoff result, expected: %v, got: %v", expected, got)
@@ -94,7 +91,7 @@ func TestBackoff_Clean(t *testing.T) {
 		maxBackoffAttempts := 100 // setting attempts to a high number hence testing cleanup logic.
 		b := newBackoff(ctx, size, cleanupInterval, maxBackoffAttempts)
 
-		for i := 0; i < size; i++ {
+		for i := range size {
 			id := peer.ID(fmt.Sprintf("peer-%d", i))
 			_, err := b.updateAndGet(id)
 			if err != nil {

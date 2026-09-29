@@ -5,6 +5,7 @@ import (
 
 	compat_pb "github.com/libp2p/go-libp2p-pubsub/compat"
 	pb "github.com/libp2p/go-libp2p-pubsub/pb"
+	"google.golang.org/protobuf/proto"
 )
 
 func TestMultitopicMessageCompatibility(t *testing.T) {
@@ -36,15 +37,15 @@ func TestMultitopicMessageCompatibility(t *testing.T) {
 		Key:       []byte("a-key"),
 	}
 
-	newMessage1b, err := newMessage1.Marshal()
+	newMessage1b, err := proto.Marshal(newMessage1)
 	if err != nil {
 		t.Fatal(err)
 	}
-	oldMessage1b, err := oldMessage1.Marshal()
+	oldMessage1b, err := proto.Marshal(oldMessage1)
 	if err != nil {
 		t.Fatal(err)
 	}
-	oldMessage2b, err := oldMessage2.Marshal()
+	oldMessage2b, err := proto.Marshal(oldMessage2)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -52,7 +53,7 @@ func TestMultitopicMessageCompatibility(t *testing.T) {
 	newMessage := new(pb.Message)
 	oldMessage := new(compat_pb.Message)
 
-	err = newMessage.Unmarshal(oldMessage1b)
+	err = proto.Unmarshal(oldMessage1b, newMessage)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -61,7 +62,7 @@ func TestMultitopicMessageCompatibility(t *testing.T) {
 	}
 
 	newMessage.Reset()
-	err = newMessage.Unmarshal(oldMessage2b)
+	err = proto.Unmarshal(oldMessage2b, newMessage)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -69,7 +70,7 @@ func TestMultitopicMessageCompatibility(t *testing.T) {
 		t.Fatalf("bad topic: expected %s, got %s", topic2, newMessage.GetTopic())
 	}
 
-	err = oldMessage.Unmarshal(newMessage1b)
+	err = proto.Unmarshal(newMessage1b, oldMessage)
 	if err != nil {
 		t.Fatal(err)
 	}

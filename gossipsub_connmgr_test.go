@@ -50,7 +50,7 @@ func TestGossipsubConnTagMessageDeliveries(t *testing.T) {
 		connLimit := 10
 
 		connmgrs := make([]*connmgr.BasicConnMgr, nHonest)
-		for i := 0; i < nHonest; i++ {
+		for i := range nHonest {
 			var err error
 			connmgrs[i], err = connmgr.NewConnManager(nHonest, connLimit,
 				connmgr.WithGracePeriod(0),
@@ -135,7 +135,7 @@ func TestGossipsubConnTagMessageDeliveries(t *testing.T) {
 		// have all the hosts publish enough messages to ensure that they get some delivery credit
 		nMessages := GossipSubConnTagMessageDeliveryCap * 2
 		for _, ps := range psubs {
-			for i := 0; i < nMessages; i++ {
+			for range nMessages {
 				ps.Publish(topic, []byte("hello"))
 			}
 		}

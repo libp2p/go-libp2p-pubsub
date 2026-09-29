@@ -16,9 +16,7 @@ import (
 	"github.com/libp2p/go-libp2p/core/protocol"
 
 	pb "github.com/libp2p/go-libp2p-pubsub/pb"
-
-	//lint:ignore SA1019 "github.com/libp2p/go-msgio/protoio" is deprecated
-	"github.com/libp2p/go-msgio/protoio"
+	"github.com/libp2p/go-msgio/pbio"
 )
 
 // Test that when Gossipsub receives too many IWANT messages from a peer
@@ -727,7 +725,7 @@ func TestGossipsubAttackInvalidMessageSpam(t *testing.T) {
 
 						// Send a bunch of messages with no signature (these will
 						// fail validation and reduce the attacker's score)
-						for i := 0; i < 100; i++ {
+						for i := range 100 {
 							msg := &pb.Message{
 								Data:  []byte("some data" + strconv.Itoa(i)),
 								Topic: &mytopic,
@@ -937,7 +935,7 @@ func TestGossipsubHandleIDontwantSpam(t *testing.T) {
 		}
 		exceededIDWLength := GossipSubMaxIDontWantLength + 1
 		var idwIds []string
-		for i := 0; i < exceededIDWLength; i++ {
+		for i := range exceededIDWLength {
 			idwIds = append(idwIds, fmt.Sprintf("idontwant-%d", i))
 		}
 		rPid := hosts[1].ID()
@@ -1021,8 +1019,8 @@ func newMockGSWithVersion(ctx context.Context, t *testing.T, attacker host.Host,
 			t.Fatal(err)
 		}
 
-		r := protoio.NewDelimitedReader(stream, maxMessageSize)
-		w := protoio.NewDelimitedWriter(ostream)
+		r := pbio.NewDelimitedReader(stream, maxMessageSize)
+		w := pbio.NewDelimitedWriter(ostream)
 
 		var irpc pb.RPC
 

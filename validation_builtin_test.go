@@ -17,6 +17,7 @@ import (
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-msgio"
 	"github.com/multiformats/go-varint"
+	"google.golang.org/protobuf/proto"
 
 	pb "github.com/libp2p/go-libp2p-pubsub/pb"
 )
@@ -81,8 +82,8 @@ func testBasicSeqnoValidator(t *testing.T, ttl time.Duration) {
 
 	time.Sleep(time.Millisecond * 100)
 
-	for i := 0; i < 100; i++ {
-		msg := []byte(fmt.Sprintf("%d the flooooooood %d", i, i))
+	for i := range 100 {
+		msg := fmt.Appendf(nil, "%d the flooooooood %d", i, i)
 
 		owner := rng.Intn(len(psubs))
 
@@ -130,8 +131,8 @@ func TestBasicSeqnoValidatorReplay(t *testing.T) {
 
 		time.Sleep(time.Millisecond * 100)
 
-		for i := 0; i < 10; i++ {
-			msg := []byte(fmt.Sprintf("%d the flooooooood %d", i, i))
+		for i := range 10 {
+			msg := fmt.Appendf(nil, "%d the flooooooood %d", i, i)
 
 			owner := rng.Intn(len(psubs))
 
@@ -177,18 +178,31 @@ func (m *mockPeerMetadataStore) Put(ctx context.Context, p peer.ID, v []byte) er
 	return nil
 }
 
+// chanMutex is a channel-based mutual exclusion lock that is compatible with
+// testing/synctest. Unlike sync.Mutex, a goroutine blocked while acquiring it is
+// durably blocked, so the synctest fake clock can keep advancing while another
+// goroutine holds the lock across a clock-driven blocking call (e.g. a stream
+// write). With sync.Mutex the contended acquire is not a durable block, which
+// freezes the bubble's clock and can deadlock the test.
+type chanMutex chan struct{}
+
+func newChanMutex() chanMutex { return make(chanMutex, 1) }
+
+func (m chanMutex) Lock()   { m <- struct{}{} }
+func (m chanMutex) Unlock() { <-m }
+
 type replayActor struct {
 	t *testing.T
 
 	ctx context.Context
 	h   host.Host
 
-	mx  sync.Mutex
+	mx  chanMutex
 	out map[peer.ID]network.Stream
 }
 
 func newReplayActor(t *testing.T, ctx context.Context, h host.Host) *replayActor {
-	replay := &replayActor{t: t, ctx: ctx, h: h, out: make(map[peer.ID]network.Stream)}
+	replay := &replayActor{t: t, ctx: ctx, h: h, mx: newChanMutex(), out: make(map[peer.ID]network.Stream)}
 	h.SetStreamHandler(FloodSubID, replay.handleStream)
 	h.Network().Notify(&network.NotifyBundle{ConnectedF: replay.connected})
 	return replay
@@ -209,7 +223,7 @@ func (r *replayActor) handleStream(s network.Stream) {
 		}
 
 		rpc := new(pb.RPC)
-		err = rpc.Unmarshal(msgbytes)
+		err = proto.Unmarshal(msgbytes, rpc)
 		rd.ReleaseMsg(msgbytes)
 		if err != nil {
 			s.Reset()
@@ -239,20 +253,20 @@ func (r *replayActor) send(p peer.ID, rpc *pb.RPC) {
 		return
 	}
 
-	size := uint64(rpc.Size())
+	size := uint64(proto.Size(rpc))
 
 	buf := pool.Get(varint.UvarintSize(size) + int(size))
 	defer pool.Put(buf)
 
 	n := binary.PutUvarint(buf, size)
 
-	_, err := rpc.MarshalTo(buf[n:])
+	out, err := proto.MarshalOptions{}.MarshalAppend(buf[:n], rpc)
 	if err != nil {
 		r.t.Logf("replay: error marshalling message: %s", err)
 		return
 	}
 
-	_, err = s.Write(buf)
+	_, err = s.Write(out)
 	if err != nil {
 		r.t.Logf("replay: error sending message: %s", err)
 	}
@@ -260,7 +274,7 @@ func (r *replayActor) send(p peer.ID, rpc *pb.RPC) {
 
 func (r *replayActor) replay(msg *pb.Message) {
 	// replay the message 10 times to a random subset of peers
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		delay := time.Duration(1+rng.Intn(20)) * time.Millisecond
 		time.Sleep(delay)
 

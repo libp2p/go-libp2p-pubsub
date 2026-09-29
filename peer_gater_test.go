@@ -60,7 +60,7 @@ func TestPeerGater(t *testing.T) {
 			t.Fatal("expected AcceptAll")
 		}
 
-		for i := 0; i < 100; i++ {
+		for range 100 {
 			pg.RejectMessage(msg, RejectValidationIgnored)
 			pg.RejectMessage(msg, RejectValidationFailed)
 		}
@@ -76,7 +76,7 @@ func TestPeerGater(t *testing.T) {
 			t.Fatal("expected AcceptControl")
 		}
 
-		for i := 0; i < 100; i++ {
+		for range 100 {
 			pg.DeliverMessage(msg)
 		}
 
@@ -91,7 +91,7 @@ func TestPeerGater(t *testing.T) {
 			t.Fatal("expected to accept at least once")
 		}
 
-		for i := 0; i < 100; i++ {
+		for range 100 {
 			pg.decayStats()
 		}
 

@@ -24,6 +24,7 @@ import (
 	"github.com/libp2p/go-libp2p/p2p/host/peerstore/pstoremem"
 	ma "github.com/multiformats/go-multiaddr"
 	manet "github.com/multiformats/go-multiaddr/net"
+	"google.golang.org/protobuf/proto"
 )
 
 const (
@@ -704,7 +705,7 @@ func (gs *GossipSubRouter) Attach(p *PubSub) {
 }
 
 func (gs *GossipSubRouter) manageAddrBook() {
-	sub, err := gs.p.host.EventBus().Subscribe([]interface{}{
+	sub, err := gs.p.host.EventBus().Subscribe([]any{
 		&event.EvtPeerIdentificationCompleted{},
 		&event.EvtPeerConnectednessChanged{},
 	})
@@ -921,16 +922,16 @@ func (gs *GossipSubRouter) HandleRPC(rpc *RPC) {
 	}
 
 	iwant := gs.handleIHave(rpc.from, ctl)
-	ihave := gs.handleIWant(rpc.from, ctl)
+	iWantResponses := gs.handleIWant(rpc.from, ctl)
 	prune := gs.handleGraft(rpc.from, ctl)
 	gs.handlePrune(rpc.from, ctl)
 	gs.handleIDontWant(rpc.from, ctl)
 
-	if len(iwant) == 0 && len(ihave) == 0 && len(prune) == 0 {
+	if len(iwant) == 0 && len(iWantResponses) == 0 && len(prune) == 0 {
 		return
 	}
 
-	out := rpcWithControl(ihave, nil, iwant, nil, prune, nil)
+	out := rpcWithControl(iWantResponses, nil, iwant, nil, prune, nil)
 	gs.sendRPC(rpc.from, out, false)
 }
 
@@ -1533,48 +1534,61 @@ func (gs *GossipSubRouter) sendPrune(p peer.ID, topic string, isUnsubscribe bool
 }
 
 func (gs *GossipSubRouter) sendRPC(p peer.ID, out *RPC, urgent bool) {
-	// do we own the RPC?
-	own := false
-
-	// piggyback control message retries
-	ctl, ok := gs.control[p]
-	if ok {
-		out = copyRPC(out)
-		own = true
-		gs.piggybackControl(p, out, ctl)
-		delete(gs.control, p)
-	}
-
-	// piggyback gossip
-	ihave, ok := gs.gossip[p]
-	if ok {
-		if !own {
-			out = copyRPC(out)
-			own = true
-		}
-		gs.piggybackGossip(p, out, ihave)
-		delete(gs.gossip, p)
-	}
-
 	q, ok := gs.p.peers[p]
 	if !ok {
+		// No queue to send to this peer. Nothing to do.
+		gs.doDropRPC(out, p, "No send queue for peer. Can't send RPC")
 		return
 	}
 
+	// Any pending control messages?
+	var controlMessage RPC
+	ctl, ok := gs.control[p]
+	if ok {
+		gs.piggybackControl(p, &controlMessage, ctl)
+		delete(gs.control, p)
+	}
+	ihave, ok := gs.gossip[p]
+	if ok {
+		gs.piggybackGossip(p, &controlMessage, ihave)
+		delete(gs.gossip, p)
+	}
+
+	controlSize := proto.Size(&controlMessage.RPC)
+	dropIfOversized := func(rpc *RPC) bool {
+		if !rpc.exceedsSizeLimits(gs.p.maxMessageSize, gs.p.maxControlMessageSize) {
+			return false
+		}
+		size := proto.Size(&rpc.RPC)
+		controlSize := controlRPCSize(rpc)
+		gs.doDropRPC(rpc, p, fmt.Sprintf("Dropping oversized RPC. Size: %d, limit: %d. Control size: %d, control limit: %d", size, gs.p.maxMessageSize, controlSize, gs.p.maxControlMessageSize))
+		return true
+	}
+	if controlSize > 0 {
+		if !controlMessage.exceedsSizeLimits(gs.p.maxMessageSize, gs.p.maxControlMessageSize) {
+			gs.doSendRPC(&controlMessage, p, q, urgent)
+		} else {
+			for rpc := range controlMessage.split(gs.p.maxMessageSize, gs.p.maxControlMessageSize) {
+				if dropIfOversized(rpc) {
+					continue
+				}
+				gs.doSendRPC(rpc, p, q, urgent)
+			}
+		}
+	}
+
 	// If we're below the max message size, go ahead and send
-	if out.Size() < gs.p.maxMessageSize {
+	if !out.exceedsSizeLimits(gs.p.maxMessageSize, gs.p.maxControlMessageSize) {
 		gs.doSendRPC(out, p, q, urgent)
 		return
 	}
 
 	// Potentially split the RPC into multiple RPCs that are below the max message size
-	for rpc := range out.split(gs.p.maxMessageSize) {
-		if rpc.Size() > gs.p.maxMessageSize {
-			// This should only happen if a single message/control is above the maxMessageSize.
-			gs.doDropRPC(out, p, fmt.Sprintf("Dropping oversized RPC. Size: %d, limit: %d. (Over by %d bytes)", rpc.Size(), gs.p.maxMessageSize, rpc.Size()-gs.p.maxMessageSize))
+	for rpc := range out.split(gs.p.maxMessageSize, gs.p.maxControlMessageSize) {
+		if dropIfOversized(rpc) {
 			continue
 		}
-		gs.doSendRPC(&rpc, p, q, urgent)
+		gs.doSendRPC(rpc, p, q, urgent)
 	}
 }
 
