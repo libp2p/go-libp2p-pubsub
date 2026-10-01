@@ -33,6 +33,27 @@ const (
 	DefaultMaxControlMessageSize = 512 << 10
 )
 
+const (
+	// announceRetryInitialBackoff bounds the delay before the first announce
+	// retry. The actual delay is randomised over (0, announceRetryInitialBackoff]
+	// so that retries towards many peers do not synchronise.
+	announceRetryInitialBackoff = time.Second
+
+	// announceRetryMaxBackoff caps the delay between announce retries for a
+	// peer. Retries are never abandoned: subscriptions are propagated as deltas
+	// and the full set is only ever resent in the hello packet of a new
+	// outbound stream, so a peer that misses an announcement would keep a stale
+	// view of our topics for the lifetime of the stream. The backoff therefore
+	// bounds the cost of waiting rather than the number of attempts.
+	announceRetryMaxBackoff = 30 * time.Second
+
+	announceRetryBackoffMultiplier = 2
+
+	// announceRetryBackoffJitter is the reciprocal of the fraction of the
+	// backoff added as jitter, i.e. up to 1/announceRetryBackoffJitter extra.
+	announceRetryBackoffJitter = 10
+)
+
 var (
 	// TimeCacheDuration specifies how long a message ID will be remembered as seen.
 	// Use WithSeenMessagesTTL to configure this per pubsub instance, instead of overriding the global default.
@@ -153,6 +174,20 @@ type PubSub struct {
 
 	// topics tracks which topics each of our peers are subscribed to
 	topics map[string]map[peer.ID]peerTopicState
+
+	// pendingAnnounce holds subscription announcements that could not be pushed
+	// to a peer because its outbound queue was full, keyed by peer and then by
+	// topic, with the value being the subscription state we want that peer to
+	// converge on. A later announcement for the same topic overwrites the
+	// earlier one, so there is at most one entry per topic and it always
+	// describes our latest intent.
+	//
+	// A peer's presence in this map means exactly one announceRetryLoop
+	// goroutine is running for it, which is what bounds retry work by the
+	// number of peers rather than by the number of topic changes.
+	//
+	// Only accessed from processLoop.
+	pendingAnnounce map[peer.ID]map[string]bool
 
 	// sendMsg handles messages that have been validated
 	sendMsg chan *Message
@@ -658,6 +693,7 @@ func NewPubSub(ctx context.Context, h host.Host, rt PubSubRouter, opts ...Option
 		mySubs:                make(map[string]map[*Subscription]struct{}),
 		myRelays:              make(map[string]int),
 		topics:                make(map[string]map[peer.ID]peerTopicState),
+		pendingAnnounce:       make(map[peer.ID]map[string]bool),
 		peers:                 make(map[peer.ID]*rpcQueue),
 		inboundStreams:        make(map[peer.ID]inboundHandler),
 		blacklist:             NewMapBlacklist(),
@@ -1339,9 +1375,9 @@ func (p *PubSub) handleRemoveRelay(topic string) {
 	}
 }
 
-// announce announces whether or not this node is interested in a given topic
+// subOpts describes our current state for a topic to a remote peer.
 // Only called from processLoop.
-func (p *PubSub) announce(topic string, sub bool) {
+func (p *PubSub) subOpts(topic string, sub bool) *pb.RPC_SubOpts {
 	var requestPartialMessages bool
 	var supportsPartialMessages bool
 	if sub {
@@ -1350,76 +1386,146 @@ func (p *PubSub) announce(topic string, sub bool) {
 			supportsPartialMessages = t.supportsPartialMessages
 		}
 	}
-	subopt := &pb.RPC_SubOpts{
+	return &pb.RPC_SubOpts{
 		Topicid:                &topic,
 		Subscribe:              &sub,
 		RequestsPartial:        &requestPartialMessages,
 		SupportsSendingPartial: &supportsPartialMessages,
 	}
+}
 
-	out := rpcWithSubs(subopt)
+// announce announces whether or not this node is interested in a given topic
+// Only called from processLoop.
+func (p *PubSub) announce(topic string, sub bool) {
+	out := rpcWithSubs(p.subOpts(topic, sub))
 	for pid, peer := range p.peers {
 		err := peer.Push(out, false)
 		if err != nil {
-			p.logger.Info("Can't send announce message to peer: queue full; scheduling retry", "peer", pid)
+			p.logger.Info("Can't send announce message to peer: queue full; scheduling retry", "peer", pid, "topic", topic)
 			p.tracer.DropRPC(out, pid)
-			go p.announceRetry(pid, topic, sub)
+			p.scheduleAnnounceRetry(pid, topic, sub)
 			continue
 		}
 		p.tracer.SendRPC(out, pid)
 	}
 }
 
-func (p *PubSub) announceRetry(pid peer.ID, topic string, sub bool) {
-	time.Sleep(time.Duration(1+rand.Intn(1000)) * time.Millisecond)
-
-	retry := func() {
-		_, okSubs := p.mySubs[topic]
-		_, okRelays := p.myRelays[topic]
-
-		ok := okSubs || okRelays
-
-		if (ok && sub) || (!ok && !sub) {
-			p.doAnnounceRetry(pid, topic, sub)
-		}
+// scheduleAnnounceRetry records an announcement that could not be delivered to a
+// peer and makes sure a retry loop is running for that peer. Announcements for
+// the same topic supersede each other, and a single loop serves all of a peer's
+// pending topics, so the outstanding retry work is bounded by the number of
+// peers rather than by the number of subscribe/unsubscribe events.
+// Only called from processLoop.
+func (p *PubSub) scheduleAnnounceRetry(pid peer.ID, topic string, sub bool) {
+	pending, running := p.pendingAnnounce[pid]
+	if !running {
+		pending = make(map[string]bool)
+		p.pendingAnnounce[pid] = pending
 	}
+	pending[topic] = sub
 
-	select {
-	case p.eval <- retry:
-	case <-p.ctx.Done():
+	if !running {
+		go p.announceRetryLoop(pid)
 	}
 }
 
-func (p *PubSub) doAnnounceRetry(pid peer.ID, topic string, sub bool) {
-	peer, ok := p.peers[pid]
-	if !ok {
-		return
-	}
+// announceRetryLoop retries a single peer's pending announcements until they are
+// delivered, the peer goes away, or pubsub shuts down. Exactly one of these runs
+// per peer with pending announcements.
+func (p *PubSub) announceRetryLoop(pid peer.ID) {
+	backoff := time.Duration(1+rand.Int63n(int64(announceRetryInitialBackoff/time.Millisecond))) * time.Millisecond
 
-	var requestPartialMessages bool
-	var supportsPartialMessages bool
-	if sub {
-		if t, ok := p.myTopics[topic]; ok {
-			requestPartialMessages = t.requestPartialMessages
-			supportsPartialMessages = t.supportsPartialMessages
+	for {
+		select {
+		case <-time.After(backoff):
+		case <-p.ctx.Done():
+			return
 		}
+
+		// The flush has to run on processLoop because it reads our subscription
+		// state and the peer table. It reports back whether there is anything
+		// left to retry.
+		done := make(chan bool, 1)
+		select {
+		case p.eval <- func() { done <- p.flushPendingAnnounce(pid) }:
+		case <-p.ctx.Done():
+			return
+		}
+
+		select {
+		case finished := <-done:
+			if finished {
+				return
+			}
+		case <-p.ctx.Done():
+			return
+		}
+
+		backoff = nextAnnounceRetryBackoff(backoff)
 	}
-	subopt := &pb.RPC_SubOpts{
-		Topicid:                &topic,
-		Subscribe:              &sub,
-		RequestsPartial:        &requestPartialMessages,
-		SupportsSendingPartial: &supportsPartialMessages,
+}
+
+func nextAnnounceRetryBackoff(cur time.Duration) time.Duration {
+	next := cur * announceRetryBackoffMultiplier
+	// Jitter so retries towards different peers spread out instead of
+	// converging on the same instants.
+	next += time.Duration(rand.Int63n(int64(next/announceRetryBackoffJitter) + 1))
+	if next > announceRetryMaxBackoff {
+		next = announceRetryMaxBackoff
+	}
+	return next
+}
+
+// flushPendingAnnounce tries to deliver all of a peer's pending announcements in
+// a single RPC. It reports true when the peer has nothing left pending and the
+// retry loop should stop.
+// Only called from processLoop.
+func (p *PubSub) flushPendingAnnounce(pid peer.ID) bool {
+	pending, ok := p.pendingAnnounce[pid]
+	if !ok {
+		return true
 	}
 
-	out := rpcWithSubs(subopt)
-	err := peer.Push(out, false)
-	if err != nil {
-		p.logger.Info("Can't send announce message to peer: queue full; scheduling retry", "peer", pid)
-		p.tracer.DropRPC(out, pid)
-		go p.announceRetry(pid, topic, sub)
-		return
+	q, connected := p.peers[pid]
+	if !connected {
+		// Nothing to converge on: if the peer comes back it is sent our full
+		// subscription set in the hello packet of the new stream.
+		delete(p.pendingAnnounce, pid)
+		return true
 	}
+
+	// Discard announcements that no longer match our local state -- a topic we
+	// have since left needs no subscribe announced, and vice versa. This is the
+	// same staleness check the per-topic retry used to do before sending.
+	subopts := make([]*pb.RPC_SubOpts, 0, len(pending))
+	for topic, sub := range pending {
+		_, okSubs := p.mySubs[topic]
+		_, okRelays := p.myRelays[topic]
+		if interested := okSubs || okRelays; interested != sub {
+			delete(pending, topic)
+			continue
+		}
+		subopts = append(subopts, p.subOpts(topic, sub))
+	}
+
+	if len(subopts) == 0 {
+		delete(p.pendingAnnounce, pid)
+		return true
+	}
+
+	out := rpcWithSubs(subopts...)
+	if err := q.Push(out, false); err != nil {
+		// Keep the pending set and let the caller back off. Dropping it here
+		// would leave the peer with a permanently stale view of our topics.
+		p.tracer.DropRPC(out, pid)
+		p.logger.Debug("Can't send announce message to peer: queue still full; backing off",
+			"peer", pid, "topics", len(subopts))
+		return false
+	}
+
 	p.tracer.SendRPC(out, pid)
+	delete(p.pendingAnnounce, pid)
+	return true
 }
 
 // notifySubs sends a given message to all corresponding subscribers.

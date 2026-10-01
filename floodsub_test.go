@@ -1101,12 +1101,14 @@ func TestAnnounceRetry(t *testing.T) {
 		// connect the watcher to the pubsub
 		connect(t, hosts[0], hosts[1])
 
-		// wait a bit for the first subscription to be emitted and trigger announce retry
+		// wait a bit for the first subscription to be emitted, then queue an
+		// announce retry the way a failed push would
 		time.Sleep(100 * time.Millisecond)
-		go ps.announceRetry(hosts[1].ID(), "test", true)
+		pid := hosts[1].ID()
+		ps.eval <- func() { ps.scheduleAnnounceRetry(pid, "test", true) }
 
-		// wait a bit for the subscription to propagate and ensure it was received twice
-		time.Sleep(time.Second + 100*time.Millisecond)
+		// wait out the initial backoff and ensure the subscription was received twice
+		time.Sleep(announceRetryInitialBackoff + 100*time.Millisecond)
 		count := watcher.countSubs()
 		if count != 2 {
 			t.Fatalf("expected 2 subscription messages, but got %d", count)
