@@ -294,26 +294,28 @@ func NewGossipSubWithRouter(ctx context.Context, h host.Host, rt PubSubRouter, o
 func DefaultGossipSubRouter(h host.Host) *GossipSubRouter {
 	params := DefaultGossipSubParams()
 	rt := &GossipSubRouter{
-		peers:           make(map[peer.ID]protocol.ID),
-		mesh:            make(map[string]map[peer.ID]struct{}),
-		fanout:          make(map[string]map[peer.ID]struct{}),
-		lastpub:         make(map[string]int64),
-		gossip:          make(map[peer.ID][]*pb.ControlIHave),
-		control:         make(map[peer.ID]*pb.ControlMessage),
-		backoff:         make(map[string]map[peer.ID]time.Time),
-		peerhave:        make(map[peer.ID]int),
-		peerdontwant:    make(map[peer.ID]int),
-		unwanted:        make(map[peer.ID]map[checksum]int),
-		iasked:          make(map[peer.ID]int),
-		outbound:        make(map[peer.ID]bool),
-		connect:         make(chan connectInfo, params.MaxPendingConnections),
-		cab:             pstoremem.NewAddrBook(),
-		mcache:          NewMessageCache(params.HistoryGossip, params.HistoryLength),
-		protos:          GossipSubDefaultProtocols,
-		feature:         GossipSubDefaultFeatures,
-		tagTracer:       newTagTracer(h.ConnManager()),
-		params:          params,
-		reducePXRecords: defaultPXRecordReducer,
+		peers:                       make(map[peer.ID]protocol.ID),
+		mesh:                        make(map[string]map[peer.ID]struct{}),
+		fanout:                      make(map[string]map[peer.ID]struct{}),
+		lastpub:                     make(map[string]int64),
+		gossip:                      make(map[peer.ID][]*pb.ControlIHave),
+		control:                     make(map[peer.ID]*pb.ControlMessage),
+		backoff:                     make(map[string]map[peer.ID]time.Time),
+		peerhave:                    make(map[peer.ID]int),
+		peerdontwant:                make(map[peer.ID]int),
+		unwanted:                    make(map[peer.ID]map[checksum]int),
+		iasked:                      make(map[peer.ID]int),
+		outbound:                    make(map[peer.ID]bool),
+		connect:                     make(chan connectInfo, params.MaxPendingConnections),
+		cab:                         pstoremem.NewAddrBook(),
+		mcache:                      NewMessageCache(params.HistoryGossip, params.HistoryLength),
+		protos:                      GossipSubDefaultProtocols,
+		feature:                     GossipSubDefaultFeatures,
+		tagTracer:                   newTagTracer(h.ConnManager()),
+		params:                      params,
+		reducePXRecords:             defaultPXRecordReducer,
+		spreadPropagation:           NewSpreadPropagation(nil),
+		spreadRelayDuplicateCounter: make(map[spreadDuplicateKey]int),
 	}
 
 	rt.extensions = newExtensionsState(PeerExtensions{}, func(p peer.ID) {
@@ -361,6 +363,35 @@ func DefaultGossipSubParams() GossipSubParams {
 		IDontWantMessageThreshold: GossipSubIDontWantMessageThreshold,
 		IDontWantMessageTTL:       GossipSubIDontWantMessageTTL,
 		SlowHeartbeatWarning:      0.1,
+	}
+}
+
+// WithProtocolChoice is a gossipsub router option that selects the forwarding
+// strategy. The default is GOSSIPSUB; pass SPREAD to enable SPREAD selection
+// for messages marked with msg.Spread.
+func WithProtocolChoice(choice GossipProtocolChoice) Option {
+	return func(p *PubSub) error {
+		// If p can be casted to GossipSub, set the protocol choice on the router.
+		gs, ok := p.rt.(*GossipSubRouter)
+		if !ok {
+			return fmt.Errorf("cannot set protocol choice since pubsub router is not gossipsub")
+		}
+		gs.gossipProtocolChoice = choice
+		return nil
+	}
+}
+
+// WithSpreadPropagationConfig is a gossipsub router option that sets the SPREAD
+// peer-selection parameters (intra/inter-cluster fanout and probabilities).
+// Unset or invalid fields fall back to the package defaults.
+func WithSpreadPropagationConfig(cfg *SpreadConfig) Option {
+	return func(ps *PubSub) error {
+		gs, ok := ps.rt.(*GossipSubRouter)
+		if !ok {
+			return fmt.Errorf("pubsub router is not gossipsub")
+		}
+		gs.spreadPropagation = NewSpreadPropagation(cfg)
+		return nil
 	}
 }
 
@@ -650,6 +681,14 @@ type GossipSubRouter struct {
 	// number of heartbeats since the beginning of time; this allows us to amortize some resource
 	// clean up -- eg backoff clean up.
 	heartbeatTicks uint64
+
+	// GossipProtocolChoice
+	gossipProtocolChoice GossipProtocolChoice
+
+	// SPREAD propagation selector.
+	spreadPropagation *SpreadPropagation
+	// Per-(topic, message ID) duplicate SPREAD re-propagation counters.
+	spreadRelayDuplicateCounter map[spreadDuplicateKey]int
 }
 
 var _ BatchPublisher = &GossipSubRouter{}
@@ -657,6 +696,11 @@ var _ BatchPublisher = &GossipSubRouter{}
 type connectInfo struct {
 	p   peer.ID
 	spr *record.Envelope
+}
+
+type spreadDuplicateKey struct {
+	topic string
+	msgID string
 }
 
 func (gs *GossipSubRouter) Protocols() []protocol.ID {
@@ -1349,6 +1393,54 @@ func (gs *GossipSubRouter) Publish(msg *Message) {
 	}
 }
 
+func (gs *GossipSubRouter) canRelaySeenSpreadDuplicate(msg *Message) bool {
+	if msg == nil || !msg.Spread {
+		return false
+	}
+	if gs.spreadPropagation == nil || gs.extensions == nil || !gs.extensions.myExtensions.Spread {
+		return false
+	}
+	return gs.spreadPropagation.config.DuplicateRepropagation > 0
+}
+
+func (gs *GossipSubRouter) hasSpreadDuplicateRelayBudget(topic, msgID string) bool {
+	maxRelays := gs.spreadPropagation.config.DuplicateRepropagation
+	if maxRelays <= 0 {
+		return false
+	}
+
+	key := spreadDuplicateKey{topic: topic, msgID: msgID}
+	return gs.spreadRelayDuplicateCounter[key] < maxRelays
+}
+
+func (gs *GossipSubRouter) consumeSpreadDuplicateRelayBudget(topic, msgID string) bool {
+	maxRelays := gs.spreadPropagation.config.DuplicateRepropagation
+	if maxRelays <= 0 {
+		return false
+	}
+
+	key := spreadDuplicateKey{topic: topic, msgID: msgID}
+	used := gs.spreadRelayDuplicateCounter[key]
+	if used >= maxRelays {
+		return false
+	}
+
+	gs.spreadRelayDuplicateCounter[key] = used + 1
+	return true
+}
+
+func (gs *GossipSubRouter) cleanupSpreadDuplicateRelayBudget() {
+	if len(gs.spreadRelayDuplicateCounter) == 0 {
+		return
+	}
+	for key := range gs.spreadRelayDuplicateCounter {
+		if gs.p.seenMessage(key.msgID) {
+			continue
+		}
+		delete(gs.spreadRelayDuplicateCounter, key)
+	}
+}
+
 func (gs *GossipSubRouter) rpcs(msg *Message) iter.Seq2[peer.ID, *RPC] {
 	return func(yield func(peer.ID, *RPC) bool) {
 		gs.mcache.Put(msg)
@@ -1405,7 +1497,40 @@ func (gs *GossipSubRouter) rpcs(msg *Message) iter.Seq2[peer.ID, *RPC] {
 			}
 		}
 
+		// If this message was marked as SPREAD and SPREAD mode is enabled on this router,
+		// override the default selection with the SPREAD-selected peers.
+		if gs.gossipProtocolChoice == SPREAD && msg.Spread {
+			useAngular := false
+			if gs.spreadPropagation != nil && gs.spreadPropagation.config != nil {
+				useAngular = gs.spreadPropagation.config.UseAngularInterPeers
+			}
+			clusterPeers, interClusterPeers := gs.extensions.spreadState.GetPropagationPeers(topic, gs.p.host.ID(), useAngular)
+			if gs.spreadPropagation == nil {
+				gs.spreadPropagation = NewSpreadPropagation(nil)
+			}
+			selected := gs.spreadPropagation.GetPeersForPropagation(from, clusterPeers, interClusterPeers)
+
+			spreadTosend := make(map[peer.ID]struct{}, len(selected))
+			for _, p := range selected {
+				if p == from || p == peer.ID(msg.GetFrom()) {
+					continue
+				}
+				spreadTosend[p] = struct{}{}
+			}
+
+			if len(spreadTosend) > 0 {
+				tosend = spreadTosend
+			}
+		}
+
 		out := rpcWithMessages(msg.Message)
+		// Mark the message as a SPREAD message if the router is configured to use
+		// SPREAD and the message explicitly requests it. The marker names the
+		// entries of out.Publish it applies to, which here is the single message
+		// this RPC carries.
+		if gs.gossipProtocolChoice == SPREAD && msg.Spread {
+			out.Spread = &pb.SpreadExtension{PublishIndices: []uint32{0}}
+		}
 		for pid := range tosend {
 			if pid == from || pid == peer.ID(msg.GetFrom()) {
 				continue
@@ -1909,6 +2034,7 @@ func (gs *GossipSubRouter) heartbeat() {
 
 	// advance the message history window
 	gs.mcache.Shift()
+	gs.cleanupSpreadDuplicateRelayBudget()
 
 	gs.extensions.Heartbeat()
 }

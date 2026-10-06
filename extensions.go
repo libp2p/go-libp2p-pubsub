@@ -6,6 +6,7 @@ import (
 
 	"github.com/libp2p/go-libp2p-pubsub/partialmessages"
 	pubsub_pb "github.com/libp2p/go-libp2p-pubsub/pb"
+	"github.com/libp2p/go-libp2p-pubsub/vivaldi"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/core/protocol"
 )
@@ -13,6 +14,7 @@ import (
 type PeerExtensions struct {
 	TestExtension   bool
 	PartialMessages bool
+	Spread          bool
 }
 
 type TestExtensionConfig struct {
@@ -44,6 +46,7 @@ func peerExtensionsFromRPC(rpc *RPC) PeerExtensions {
 	if hasPeerExtensions(rpc) {
 		out.TestExtension = rpc.Control.Extensions.GetTestExtension()
 		out.PartialMessages = rpc.Control.Extensions.GetPartialMessages()
+		out.Spread = rpc.Control.Extensions.GetSpread()
 	}
 	return out
 }
@@ -66,6 +69,15 @@ func (pe *PeerExtensions) ExtendRPC(rpc *RPC) *RPC {
 			rpc.Control.Extensions = &pubsub_pb.ControlExtensions{}
 		}
 		rpc.Control.Extensions.PartialMessages = &pe.PartialMessages
+	}
+	if pe.Spread {
+		if rpc.Control == nil {
+			rpc.Control = &pubsub_pb.ControlMessage{}
+		}
+		if rpc.Control.Extensions == nil {
+			rpc.Control.Extensions = &pubsub_pb.ControlExtensions{}
+		}
+		rpc.Control.Extensions.Spread = &pe.Spread
 	}
 	return rpc
 }
@@ -91,6 +103,7 @@ type extensionsState struct {
 	testExtension     *testExtension
 
 	partialMessagesExtension partialMessageInterface
+	spreadState              *SpreadState
 }
 
 func newExtensionsState(myExtensions PeerExtensions, reportMisbehavior func(peer.ID), sendRPC func(peer.ID, *RPC, bool)) *extensionsState {
@@ -101,6 +114,7 @@ func newExtensionsState(myExtensions PeerExtensions, reportMisbehavior func(peer
 		reportMisbehavior: reportMisbehavior,
 		sendRPC:           sendRPC,
 		testExtension:     nil,
+		spreadState:       NewSpreadState(),
 	}
 }
 
@@ -168,12 +182,19 @@ func (es *extensionsState) extensionsOnNewOutboundStream(id peer.ID) {
 	if es.myExtensions.TestExtension && es.peerExtensions[id].TestExtension {
 		es.testExtension.OnNewOutboundStream(id)
 	}
+
+	if es.myExtensions.Spread && es.peerExtensions[id].Spread {
+		es.spreadState.AddPeer(id)
+	}
 }
 
 // extensionsOnClosedOutboundStream is always called after extensionsOnNewOutboundStream.
 func (es *extensionsState) extensionsOnClosedOutboundStream(id peer.ID) {
 	if es.myExtensions.PartialMessages && es.peerExtensions[id].PartialMessages {
 		es.partialMessagesExtension.OnClosedOutboundStream(id)
+	}
+	if es.myExtensions.Spread && es.peerExtensions[id].Spread {
+		es.spreadState.RemovePeer(id)
 	}
 }
 
@@ -186,6 +207,18 @@ func (es *extensionsState) extensionsHandleRPC(rpc *RPC) error {
 		err := es.partialMessagesExtension.HandleRPC(rpc.from, rpc.Partial)
 		if err != nil {
 			return err
+		}
+	}
+
+	// Update SPREAD topic membership when peers announce subscriptions
+	if es.myExtensions.Spread && es.peerExtensions[rpc.from].Spread && rpc.Subscriptions != nil {
+		for _, sub := range rpc.GetSubscriptions() {
+			topic := sub.GetTopicid()
+			if sub.GetSubscribe() {
+				es.spreadState.AddPeerTopic(topic, rpc.from)
+			} else {
+				es.spreadState.RemovePeerTopic(topic, rpc.from)
+			}
 		}
 	}
 
@@ -251,6 +284,41 @@ func PublishPartial[PeerState any](ps *PubSub, topic string, groupID []byte, pub
 		return ps.ctx.Err()
 	case r := <-resp:
 		return r
+	}
+}
+
+// WithVivaldi wires a Vivaldi service into the spread extension and starts
+// the runner. Passing a nil service disables Vivaldi.
+func WithVivaldi(vsvc *vivaldi.Service, cfg *VivaldiConfig) Option {
+	return func(ps *PubSub) error {
+		gs, ok := ps.rt.(*GossipSubRouter)
+		if !ok {
+			return errors.New("pubsub router is not gossipsub")
+		}
+		if gs.extensions == nil || gs.extensions.spreadState == nil {
+			return errors.New("spread extension state not initialized")
+		}
+		gs.extensions.spreadState.ConfigureVivaldi(vsvc, cfg)
+		// Start runner if service is provided
+		if vsvc != nil {
+			gs.extensions.spreadState.StartVivaldiRunner()
+		}
+		return nil
+	}
+}
+
+// WithSpreadClusteringConfig configures spread clustering behaviour.
+func WithSpreadClusteringConfig(cfg *SpreadClusteringConfig) Option {
+	return func(ps *PubSub) error {
+		gs, ok := ps.rt.(*GossipSubRouter)
+		if !ok {
+			return errors.New("pubsub router is not gossipsub")
+		}
+		if gs.extensions == nil || gs.extensions.spreadState == nil {
+			return errors.New("spread extension state not initialized")
+		}
+		gs.extensions.spreadState.ConfigureClustering(cfg)
+		return nil
 	}
 }
 

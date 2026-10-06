@@ -32,6 +32,9 @@ message RPC {
   // bytes
   optional TestExtension testExtension = 6492434;
 
+  // SPREAD extension: advertises that a peer supports SPREAD propagation
+  optional SpreadExtension spread = 6492435;
+
 }
 
 message Message {
@@ -85,6 +88,8 @@ message ControlExtensions {
   // Experimental extensions must use field numbers larger than 0x200000 to be
   // encoded with 4 bytes
   optional bool testExtension = 6492434;
+
+  optional bool spread = 6492435;
 }
 
 message PeerInfo {
@@ -103,4 +108,12 @@ message PartialMessagesExtension {
 
   // An encoded representation of the parts a peer has and wants.
   optional bytes partsMetadata = 4;
+}
+
+message SpreadExtension {
+  // Zero-based indices into RPC.publish identifying the messages in this RPC
+  // that are being disseminated via SPREAD. A receiving peer applies SPREAD
+  // selection when propagating those messages further. Absent or empty means
+  // no message in this RPC is a SPREAD message.
+  repeated uint32 publishIndices = 1;
 }

@@ -3343,6 +3343,7 @@ func TestGossipsubIdontwantReceive(t *testing.T) {
 
 type mockRawTracer struct {
 	onRecvRPC func(*RPC)
+	onSendRPC func(*RPC, peer.ID)
 }
 
 func (m *mockRawTracer) RecvRPC(rpc *RPC) {
@@ -3361,12 +3362,206 @@ func (m *mockRawTracer) Leave(topic string)                               {}
 func (m *mockRawTracer) Prune(p peer.ID, topic string)                    {}
 func (m *mockRawTracer) RejectMessage(msg *Message, reason string)        {}
 func (m *mockRawTracer) OnClosedOutboundStream(p peer.ID)                 {}
-func (m *mockRawTracer) SendRPC(rpc *RPC, p peer.ID)                      {}
-func (m *mockRawTracer) ThrottlePeer(p peer.ID)                           {}
-func (m *mockRawTracer) UndeliverableMessage(msg *Message)                {}
-func (m *mockRawTracer) ValidateMessage(msg *Message)                     {}
+func (m *mockRawTracer) SendRPC(rpc *RPC, p peer.ID) {
+	if m.onSendRPC != nil {
+		m.onSendRPC(rpc, p)
+	}
+}
+func (m *mockRawTracer) ThrottlePeer(p peer.ID)            {}
+func (m *mockRawTracer) UndeliverableMessage(msg *Message) {}
+func (m *mockRawTracer) ValidateMessage(msg *Message)      {}
 
 var _ RawTracer = &mockRawTracer{}
+
+func withSpreadExtensionAdvertiseForTests() Option {
+	return func(ps *PubSub) error {
+		gs, ok := ps.rt.(*GossipSubRouter)
+		if !ok {
+			return fmt.Errorf("pubsub router is not gossipsub")
+		}
+		gs.extensions.myExtensions.Spread = true
+		return nil
+	}
+}
+
+func publishWithSpreadForTests(ctx context.Context, topic *Topic, data []byte) error {
+	msg, err := topic.validate(ctx, data)
+	if err != nil {
+		return err
+	}
+	msg.Spread = true
+	return topic.p.val.sendMsgBlocking(msg)
+}
+
+func TestGossipsubSpreadDuplicateRepropagationBudget(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	hosts := getDefaultHosts(t, 6)
+	sourceIdx := []int{0, 1, 2, 3}
+	middleIdx := 4
+	sinkIdx := 5
+
+	topicName := "spread-duplicate-repropagation"
+	payload := []byte("same-payload")
+	hashMsgID := func(pmsg *pb.Message) string {
+		sum := sha256.Sum256(pmsg.GetData())
+		return string(sum[:])
+	}
+
+	var sendsFromMiddleToLast atomic.Int32
+	middleTracer := &mockRawTracer{
+		onSendRPC: func(rpc *RPC, p peer.ID) {
+			if p != hosts[sinkIdx].ID() || len(rpc.GetPublish()) == 0 {
+				return
+			}
+			for _, msg := range rpc.GetPublish() {
+				if msg.GetTopic() == topicName && bytes.Equal(msg.GetData(), payload) {
+					sendsFromMiddleToLast.Add(1)
+				}
+			}
+		},
+	}
+
+	commonOpts := []Option{
+		WithMessageIdFn(hashMsgID),
+		WithProtocolChoice(SPREAD),
+		WithSpreadPropagationConfig(&SpreadConfig{
+			IntraFanout:            1,
+			InterFanout:            0,
+			IntraRho:               1,
+			InterProb:              0,
+			DuplicateRepropagation: 2,
+		}),
+		withSpreadExtensionAdvertiseForTests(),
+	}
+
+	psubs := make([]*PubSub, len(hosts))
+	for i := range hosts {
+		opts := append([]Option{}, commonOpts...)
+		if i == middleIdx {
+			opts = append(opts, WithRawTracer(middleTracer))
+		}
+		psubs[i] = getGossipsub(ctx, hosts[i], opts...)
+	}
+
+	for _, idx := range sourceIdx {
+		connect(t, hosts[idx], hosts[middleIdx])
+	}
+	connect(t, hosts[middleIdx], hosts[sinkIdx])
+
+	topics := make([]*Topic, 0, len(psubs))
+	for _, ps := range psubs {
+		topic, err := ps.Join(topicName)
+		if err != nil {
+			t.Fatal(err)
+		}
+		topics = append(topics, topic)
+	}
+
+	for i, topic := range topics {
+		if i == 0 || i == 1 || i == 2 || i == 3 {
+			continue
+		}
+		sub, err := topic.Subscribe()
+		if err != nil {
+			t.Fatal(err)
+		}
+		go func(sub *Subscription) {
+			for {
+				_, err := sub.Next(ctx)
+				if err != nil {
+					return
+				}
+			}
+		}(sub)
+	}
+
+	time.Sleep(2 * time.Second)
+
+	for _, idx := range sourceIdx {
+		if err := publishWithSpreadForTests(ctx, topics[idx], payload); err != nil {
+			t.Fatal(err)
+		}
+		time.Sleep(200 * time.Millisecond)
+	}
+
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		if sendsFromMiddleToLast.Load() >= 3 {
+			break
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+
+	if got := sendsFromMiddleToLast.Load(); got != 3 {
+		t.Fatalf("expected middle peer to relay 3 times (1 initial + 2 duplicate repropagations), got %d", got)
+	}
+}
+
+// TestGossipsubSpreadSelectionDelivers checks that when SPREAD selection is
+// active (InterProb=1, InterFanout=1) a published spread message is forwarded
+// using the SPREAD-selected peer set and reaches the subscriber. With a single
+// eligible inter peer the selection is deterministic, so this exercises the
+// SPREAD override path end to end (publish -> SPREAD selection -> wire ->
+// receive) rather than the gossipsub fallback path.
+func TestGossipsubSpreadSelectionDelivers(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	hosts := getDefaultHosts(t, 2)
+	connect(t, hosts[0], hosts[1])
+
+	topicName := "spread-selection-delivers"
+	payload := []byte("spread-hello")
+
+	opts := []Option{
+		WithProtocolChoice(SPREAD),
+		WithSpreadPropagationConfig(&SpreadConfig{
+			IntraFanout: 1,
+			InterFanout: 1,
+			IntraRho:    1,
+			InterProb:   1,
+		}),
+		withSpreadExtensionAdvertiseForTests(),
+	}
+
+	psubs := make([]*PubSub, len(hosts))
+	for i := range hosts {
+		psubs[i] = getGossipsub(ctx, hosts[i], opts...)
+	}
+
+	topics := make([]*Topic, len(psubs))
+	for i, ps := range psubs {
+		topic, err := ps.Join(topicName)
+		if err != nil {
+			t.Fatal(err)
+		}
+		topics[i] = topic
+	}
+
+	sub, err := topics[1].Subscribe()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Give subscriptions and SPREAD extension advertisements time to propagate.
+	time.Sleep(2 * time.Second)
+
+	if err := publishWithSpreadForTests(ctx, topics[0], payload); err != nil {
+		t.Fatal(err)
+	}
+
+	recvCtx, recvCancel := context.WithTimeout(ctx, 5*time.Second)
+	defer recvCancel()
+	got, err := sub.Next(recvCtx)
+	if err != nil {
+		t.Fatalf("subscriber did not receive the spread message: %v", err)
+	}
+	if !bytes.Equal(got.GetData(), payload) {
+		t.Fatalf("unexpected payload: got %q want %q", got.GetData(), payload)
+	}
+}
 
 func TestGossipsubNoIDONTWANTToMessageSender(t *testing.T) {
 	synctestTest(t, func(t *testing.T) {
