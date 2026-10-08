@@ -12,6 +12,7 @@ import (
 	"sort"
 	"time"
 
+	"github.com/libp2p/go-libp2p-pubsub/internal/peercomm"
 	pb "github.com/libp2p/go-libp2p-pubsub/pb"
 
 	"github.com/libp2p/go-libp2p/core/event"
@@ -1534,7 +1535,7 @@ func (gs *GossipSubRouter) sendPrune(p peer.ID, topic string, isUnsubscribe bool
 }
 
 func (gs *GossipSubRouter) sendRPC(p peer.ID, out *RPC, urgent bool) {
-	q, ok := gs.p.peers[p]
+	q, ok := gs.p.peerComm.Lookup(p)
 	if !ok {
 		// No queue to send to this peer. Nothing to do.
 		gs.doDropRPC(out, p, "No send queue for peer. Can't send RPC")
@@ -1602,13 +1603,8 @@ func (gs *GossipSubRouter) doDropRPC(rpc *RPC, p peer.ID, reason string) {
 	}
 }
 
-func (gs *GossipSubRouter) doSendRPC(rpc *RPC, p peer.ID, q *rpcQueue, urgent bool) {
-	var err error
-	if urgent {
-		err = q.UrgentPush(rpc, false)
-	} else {
-		err = q.Push(rpc, false)
-	}
+func (gs *GossipSubRouter) doSendRPC(rpc *RPC, p peer.ID, q *peercomm.Actor, urgent bool) {
+	err := q.Send(&rpc.RPC, urgent)
 	if err != nil {
 		gs.doDropRPC(rpc, p, "queue full")
 		return

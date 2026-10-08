@@ -1,17 +1,20 @@
 package pubsub
 
 import (
+	"bytes"
 	"context"
 	"runtime"
 	"testing"
 	"testing/synctest"
 	"time"
 
+	"github.com/libp2p/go-libp2p-pubsub/internal/peercomm"
 	pb "github.com/libp2p/go-libp2p-pubsub/pb"
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/x/simlibp2p"
 	"github.com/marcopolo/simnet"
+	"google.golang.org/protobuf/encoding/protowire"
 )
 
 // synctestTest wraps synctest.Test with GOMAXPROCS(1) to work around a Go
@@ -23,6 +26,28 @@ func synctestTest(t *testing.T, f func(t *testing.T)) {
 		t.Cleanup(func() { runtime.GOMAXPROCS(prev) })
 	}
 	synctest.Test(t, f)
+}
+
+func TestWrapInboundRPCPreservesMetadataAndCopiesProto(t *testing.T) {
+	topic := "topic"
+	source := &pb.RPC{Subscriptions: []*pb.RPC_SubOpts{{Topicid: &topic}}}
+	unknown := protowire.AppendTag(nil, 100, protowire.BytesType)
+	unknown = protowire.AppendBytes(unknown, []byte("extension"))
+	source.ProtoReflect().SetUnknown(unknown)
+
+	from := peer.ID("peer-a")
+	wrapped := wrapInboundRPC(source, from, peercomm.TransportTopic)
+	if wrapped.from != from || wrapped.transport != peercomm.TransportTopic {
+		t.Fatalf("metadata = (%q, %v), want (%q, %v)", wrapped.from, wrapped.transport, from, peercomm.TransportTopic)
+	}
+	if wrapped.Subscriptions[0].GetTopicid() != topic || !bytes.Equal(wrapped.ProtoReflect().GetUnknown(), unknown) {
+		t.Fatal("protobuf fields were not preserved")
+	}
+	source.Subscriptions[0].Topicid = nil
+	source.ProtoReflect().SetUnknown(nil)
+	if wrapped.Subscriptions[0].GetTopicid() != topic || !bytes.Equal(wrapped.ProtoReflect().GetUnknown(), unknown) {
+		t.Fatal("wrapped RPC shares mutable protobuf state with source")
+	}
 }
 
 func TestClearPeerFromTopicsStateRemovesEmptyTopicMap(t *testing.T) {
