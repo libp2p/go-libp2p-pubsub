@@ -240,6 +240,7 @@ func (p *PubSub) handleSendingMessages(ctx context.Context, s network.Stream, ou
 			return err
 		}
 		p.rpcLogger.Debug("sent", "peer", s.Conn().RemotePeer(), "rpc", rpc)
+		p.tracer.SendRPCCompleted(rpc, s.Conn().RemotePeer())
 		return nil
 	}
 

@@ -50,13 +50,22 @@ type RawTracer interface {
 	ThrottlePeer(p peer.ID)
 	// RecvRPC is invoked when an incoming RPC is received.
 	RecvRPC(rpc *RPC)
-	// SendRPC is invoked when a RPC is sent.
+	// SendRPC is invoked when an RPC is added to a peer's outbound queue.
+	// SendRPCCompletedTracer reports when the RPC is written to the stream.
 	SendRPC(rpc *RPC, p peer.ID)
 	// DropRPC is invoked when an outbound RPC is dropped, typically because of a queue full.
 	DropRPC(rpc *RPC, p peer.ID)
 	// UndeliverableMessage is invoked when the consumer of Subscribe is not reading messages fast enough and
 	// the pressure release mechanism trigger, dropping messages.
 	UndeliverableMessage(msg *Message)
+}
+
+// SendRPCCompletedTracer is an optional RawTracer extension.
+type SendRPCCompletedTracer interface {
+	// SendRPCCompleted is invoked when an RPC is written to a peer's stream. It
+	// runs on the peer's writer goroutine, so calls for different peers can be
+	// concurrent.
+	SendRPCCompleted(rpc *RPC, p peer.ID)
 }
 
 // pubsub tracer details
@@ -293,6 +302,35 @@ func (t *pubsubTracer) SendRPC(rpc *RPC, p peer.ID) {
 		PeerID:    []byte(t.pid),
 		Timestamp: &now,
 		SendRPC: &pb.TraceEvent_SendRPC{
+			SendTo: []byte(p),
+			Meta:   t.traceRPCMeta(rpc),
+		},
+	}
+
+	t.tracer.Trace(evt)
+}
+
+func (t *pubsubTracer) SendRPCCompleted(rpc *RPC, p peer.ID) {
+	if t == nil {
+		return
+	}
+
+	for _, tr := range t.raw {
+		if tr, ok := tr.(SendRPCCompletedTracer); ok {
+			tr.SendRPCCompleted(rpc, p)
+		}
+	}
+
+	if t.tracer == nil {
+		return
+	}
+
+	now := time.Now().UnixNano()
+	evt := &pb.TraceEvent{
+		Type:      pb.TraceEvent_SEND_RPC_COMPLETED.Enum(),
+		PeerID:    []byte(t.pid),
+		Timestamp: &now,
+		SendRPCCompleted: &pb.TraceEvent_SendRPCCompleted{
 			SendTo: []byte(p),
 			Meta:   t.traceRPCMeta(rpc),
 		},

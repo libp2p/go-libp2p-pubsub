@@ -118,7 +118,7 @@ func testWithTracer(t *testing.T, tracer EventTracer) {
 }
 
 type traceStats struct {
-	publish, reject, duplicate, deliver, add, remove, recv, send, drop, join, leave, graft, prune int
+	publish, reject, duplicate, deliver, add, remove, recv, send, sendCompleted, drop, join, leave, graft, prune int
 }
 
 func (t *traceStats) process(evt *pb.TraceEvent) {
@@ -140,6 +140,8 @@ func (t *traceStats) process(evt *pb.TraceEvent) {
 		t.recv++
 	case pb.TraceEvent_SEND_RPC:
 		t.send++
+	case pb.TraceEvent_SEND_RPC_COMPLETED:
+		t.sendCompleted++
 	case pb.TraceEvent_DROP_RPC:
 		t.drop++
 	case pb.TraceEvent_JOIN:
@@ -173,6 +175,9 @@ func (ts *traceStats) check(t *testing.T) {
 		t.Fatal("expected non-zero count")
 	}
 	if ts.send == 0 {
+		t.Fatal("expected non-zero count")
+	}
+	if ts.sendCompleted == 0 {
 		t.Fatal("expected non-zero count")
 	}
 	if ts.join == 0 {
@@ -323,5 +328,55 @@ func TestRemoteTracer(t *testing.T) {
 		time.Sleep(2 * time.Second)
 
 		mrt.check(t)
+	})
+}
+
+type sendCompletedTracer struct {
+	mockRawTracer
+	mu        sync.Mutex
+	published map[peer.ID]int
+}
+
+func (t *sendCompletedTracer) SendRPCCompleted(rpc *RPC, p peer.ID) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.published[p] += len(rpc.GetPublish())
+}
+
+func TestSendRPCCompletedTracer(t *testing.T) {
+	synctestTest(t, func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+
+		hosts := getDefaultHosts(t, 2)
+		tracer := &sendCompletedTracer{published: make(map[peer.ID]int)}
+		psubs := []*PubSub{
+			getGossipsub(ctx, hosts[0], WithRawTracer(tracer)),
+			getGossipsub(ctx, hosts[1]),
+		}
+		var subs []*Subscription
+		for _, ps := range psubs {
+			sub, err := ps.Subscribe("test")
+			if err != nil {
+				t.Fatal(err)
+			}
+			subs = append(subs, sub)
+		}
+		connect(t, hosts[0], hosts[1])
+		time.Sleep(2 * time.Second)
+
+		if err := psubs[0].Publish("test", []byte("message")); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := subs[1].Next(ctx); err != nil {
+			t.Fatal(err)
+		}
+		time.Sleep(time.Second)
+
+		tracer.mu.Lock()
+		defer tracer.mu.Unlock()
+		if got := tracer.published[hosts[1].ID()]; got != 1 {
+			t.Fatalf("SendRPCCompleted saw %d published messages, want 1", got)
+		}
 	})
 }
