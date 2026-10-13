@@ -186,7 +186,11 @@ func (p *PubSub) handleNewPeer(ctx context.Context, pid peer.ID, outgoing *rpcQu
 
 	firstMessage := make(chan *RPC, 1)
 	sCtx, cancel := context.WithCancel(ctx)
-	go p.handleSendingMessages(sCtx, s, outgoing, firstMessage)
+	go func() {
+		// sCtx stays registered with ctx until cancelled; release it with the writer that uses it.
+		defer cancel()
+		p.handleSendingMessages(sCtx, s, outgoing, firstMessage)
+	}()
 	go p.handlePeerDead(s)
 	select {
 	case p.newPeerStream <- peerOutgoingStream{Stream: s, FirstMessage: firstMessage, Cancel: cancel}:
