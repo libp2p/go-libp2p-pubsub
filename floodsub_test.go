@@ -742,6 +742,71 @@ func TestPeerDisconnect(t *testing.T) {
 	})
 }
 
+// childCountingContext counts the child contexts currently derived from it.
+// It hides its parent's cancelCtx identity (Value returns nil), so Go registers
+// each child through AfterFunc and calls the returned stop when the child is
+// cancelled: live is the number of children not yet cancelled.
+type childCountingContext struct {
+	context.Context
+	mu   sync.Mutex
+	live int
+}
+
+func (c *childCountingContext) Value(any) any { return nil }
+
+func (c *childCountingContext) AfterFunc(f func()) func() bool {
+	c.mu.Lock()
+	c.live++
+	c.mu.Unlock()
+	stop := context.AfterFunc(c.Context, f)
+	return func() bool {
+		stopped := stop()
+		if stopped {
+			c.mu.Lock()
+			c.live--
+			c.mu.Unlock()
+		}
+		return stopped
+	}
+}
+
+func (c *childCountingContext) liveChildren() int {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.live
+}
+
+func TestPeerDisconnectReleasesWriterContext(t *testing.T) {
+	synctestTest(t, func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+
+		hosts := getDefaultHosts(t, 2)
+		parent := &childCountingContext{Context: ctx}
+		ps := getPubsub(parent, hosts[0])
+		getPubsub(ctx, hosts[1])
+
+		before := parent.liveChildren()
+		connect(t, hosts[0], hosts[1])
+		time.Sleep(time.Millisecond * 300)
+
+		assertPeerList(t, ps.ListPeers(""), hosts[1].ID())
+		if got := parent.liveChildren(); got <= before {
+			t.Fatalf("live child contexts with a peer connected = %d, want more than %d", got, before)
+		}
+
+		for _, c := range hosts[1].Network().ConnsToPeer(hosts[0].ID()) {
+			c.Close()
+		}
+		time.Sleep(time.Millisecond * 300)
+
+		assertPeerList(t, ps.ListPeers(""))
+		if got := parent.liveChildren(); got != before {
+			t.Fatalf("live child contexts after the peer disconnected = %d, want %d", got, before)
+		}
+	})
+}
+
 func assertPeerList(t *testing.T, peers []peer.ID, expected ...peer.ID) {
 	sort.Sort(peer.IDSlice(peers))
 	sort.Sort(peer.IDSlice(expected))
