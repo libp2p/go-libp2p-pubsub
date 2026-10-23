@@ -3362,6 +3362,7 @@ func (m *mockRawTracer) Prune(p peer.ID, topic string)                    {}
 func (m *mockRawTracer) RejectMessage(msg *Message, reason string)        {}
 func (m *mockRawTracer) OnClosedOutboundStream(p peer.ID)                 {}
 func (m *mockRawTracer) SendRPC(rpc *RPC, p peer.ID)                      {}
+func (m *mockRawTracer) SendRPCCompleted(*RPC, peer.ID, time.Duration)    {}
 func (m *mockRawTracer) ThrottlePeer(p peer.ID)                           {}
 func (m *mockRawTracer) UndeliverableMessage(msg *Message)                {}
 func (m *mockRawTracer) ValidateMessage(msg *Message)                     {}
