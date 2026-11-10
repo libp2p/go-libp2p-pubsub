@@ -2,11 +2,14 @@ package pubsub
 
 import (
 	"context"
+	"fmt"
+	"slices"
 	"sync"
 	"testing"
 	"time"
 
 	pb "github.com/libp2p/go-libp2p-pubsub/pb"
+	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/core/protocol"
@@ -250,4 +253,232 @@ func TestNoLeakFromDisconnectedPeer(t *testing.T) {
 		}
 		<-checkDone
 	})
+}
+
+// A peer announces its subscriptions on its own stream to us. When our stream
+// to it is reset while the connection stays up, we open a new one, and the
+// peer must keep counting as subscribed: its stream to us is still open and it
+// will not announce its subscriptions again.
+func TestGossipsubKeepsSubscriptionsWhenOutboundStreamIsReset(t *testing.T) {
+	for _, flood := range []bool{true, false} {
+		t.Run(fmt.Sprintf("flood publish %v", flood), func(t *testing.T) {
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			hosts, psubs, topics, subs := subscribedGossipsubPair(t, ctx, WithFloodPublish(flood))
+
+			reset := resetGossipsubWriter(t, hosts[0], hosts[1])
+			waitUntil(t, "host 0 never reopened its stream to host 1", func() bool {
+				s := gossipsubWriter(hosts[0], hosts[1])
+				return s != nil && s != reset
+			})
+			if !slices.Contains(psubs[0].ListPeers(subscriptionTestTopic), hosts[1].ID()) {
+				t.Fatal("host 0 no longer counts host 1 as subscribed after reopening its stream")
+			}
+			expectDelivery(t, ctx, topics[0], subs[1])
+		})
+	}
+}
+
+// When we cannot open a new stream to such a peer at first, and manage to
+// later, for example after identify runs on a new connection, the peer must
+// count as subscribed again: it still will not repeat its subscriptions. This
+// covers a respawned writer whose stream fails to open.
+func TestGossipsubKeepsSubscriptionsWhenOutboundStreamReopensLater(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	hosts, psubs, topics, subs := subscribedGossipsubPair(t, ctx)
+
+	// Host 1 keeps its stream to host 0 but refuses new gossipsub streams.
+	var removed []protocol.ID
+	for _, id := range hosts[1].Mux().Protocols() {
+		if slices.Contains(GossipSubDefaultProtocols, id) {
+			hosts[1].RemoveStreamHandler(id)
+			removed = append(removed, id)
+		}
+	}
+	resetGossipsubWriter(t, hosts[0], hosts[1])
+	waitUntil(t, "host 0 kept a writer to host 1 although no stream could open", func() bool {
+		return !hasWriter(psubs[0], hosts[1].ID())
+	})
+	if enoughPeers(psubs[0], subscriptionTestTopic, 1) {
+		t.Fatal("host 1 counts towards enough peers although host 0 has no stream to it")
+	}
+
+	for _, id := range removed {
+		hosts[1].SetStreamHandler(id, psubs[1].handleNewStream)
+	}
+	// What identify on a new connection, or an identify push, does.
+	psubs[0].notifyNewPeer(hosts[1].ID())
+	waitUntil(t, "host 0 never reopened its stream to host 1", func() bool {
+		return gossipsubWriter(hosts[0], hosts[1]) != nil
+	})
+	waitUntil(t, "host 0 does not count host 1 as subscribed after reopening its stream", func() bool {
+		return slices.Contains(psubs[0].ListPeers(subscriptionTestTopic), hosts[1].ID())
+	})
+	expectDelivery(t, ctx, topics[0], subs[1])
+}
+
+// When the dead-peer backoff gives up on a still-connected peer, the peer
+// keeps its subscriptions, and a writer opened later finds it subscribed.
+func TestGossipsubKeepsSubscriptionsWhenBackoffGivesUp(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	hosts, psubs, topics, subs := subscribedGossipsubPair(t, ctx)
+
+	for i := 0; hasWriter(psubs[0], hosts[1].ID()); i++ {
+		if i > MaxBackoffAttempts {
+			t.Fatalf("host 0 still respawns its writer after %d resets", i)
+		}
+		reset := resetGossipsubWriter(t, hosts[0], hosts[1])
+		waitUntil(t, "host 0 neither reopened nor gave up on its stream to host 1", func() bool {
+			s := gossipsubWriter(hosts[0], hosts[1])
+			return (s != nil && s != reset) || !hasWriter(psubs[0], hosts[1].ID())
+		})
+	}
+	if !inTopic(psubs[0], subscriptionTestTopic, hosts[1].ID()) {
+		t.Fatal("host 0 dropped host 1's subscriptions when its backoff gave up")
+	}
+	if enoughPeers(psubs[0], subscriptionTestTopic, 1) {
+		t.Fatal("host 1 counts towards enough peers although host 0 has no stream to it")
+	}
+
+	psubs[0].notifyNewPeer(hosts[1].ID())
+	waitUntil(t, "host 0 does not count host 1 as subscribed after reopening its stream", func() bool {
+		return slices.Contains(psubs[0].ListPeers(subscriptionTestTopic), hosts[1].ID())
+	})
+	expectDelivery(t, ctx, topics[0], subs[1])
+}
+
+// Blacklisting a subscribed peer clears its subscriptions also when we have no
+// stream to it.
+func TestGossipsubBlacklistClearsSubscriptionsOfPeerWithoutWriter(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	hosts, psubs, _, _ := subscribedGossipsubPair(t, ctx)
+
+	for _, id := range hosts[1].Mux().Protocols() {
+		if slices.Contains(GossipSubDefaultProtocols, id) {
+			hosts[1].RemoveStreamHandler(id)
+		}
+	}
+	resetGossipsubWriter(t, hosts[0], hosts[1])
+	waitUntil(t, "host 0 kept a writer to host 1 although no stream could open", func() bool {
+		return !hasWriter(psubs[0], hosts[1].ID())
+	})
+
+	psubs[0].BlacklistPeer(hosts[1].ID())
+	waitUntil(t, "host 0 keeps a blacklisted peer subscribed", func() bool {
+		return !inTopic(psubs[0], subscriptionTestTopic, hosts[1].ID())
+	})
+}
+
+const subscriptionTestTopic = "subscriptions"
+
+// onProcessLoop runs f on ps's event loop, where its state may be read.
+func onProcessLoop[T any](ps *PubSub, f func() T) T {
+	res := make(chan T, 1)
+	ps.eval <- func() { res <- f() }
+	return <-res
+}
+
+func hasWriter(ps *PubSub, p peer.ID) bool {
+	return onProcessLoop(ps, func() bool { _, ok := ps.peers[p]; return ok })
+}
+
+func inTopic(ps *PubSub, topic string, p peer.ID) bool {
+	return onProcessLoop(ps, func() bool { _, ok := ps.topics[topic][p]; return ok })
+}
+
+func enoughPeers(ps *PubSub, topic string, suggested int) bool {
+	return onProcessLoop(ps, func() bool { return ps.rt.EnoughPeers(topic, suggested) })
+}
+
+func subscribedGossipsubPair(t *testing.T, ctx context.Context, opts ...Option) ([]host.Host, []*PubSub, []*Topic, []*Subscription) {
+	t.Helper()
+	hosts := getDefaultHosts(t, 2)
+	psubs := getGossipsubs(ctx, hosts, opts...)
+	connect(t, hosts[0], hosts[1])
+
+	var topics []*Topic
+	var subs []*Subscription
+	for _, ps := range psubs {
+		tp, err := ps.Join(subscriptionTestTopic)
+		if err != nil {
+			t.Fatal(err)
+		}
+		sub, err := tp.Subscribe()
+		if err != nil {
+			t.Fatal(err)
+		}
+		topics = append(topics, tp)
+		subs = append(subs, sub)
+	}
+	waitUntil(t, "the hosts never saw each other's subscriptions", func() bool {
+		return slices.Contains(psubs[0].ListPeers(subscriptionTestTopic), hosts[1].ID()) &&
+			slices.Contains(psubs[1].ListPeers(subscriptionTestTopic), hosts[0].ID())
+	})
+	return hosts, psubs, topics, subs
+}
+
+func waitUntil(t *testing.T, failure string, cond func() bool) {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for !cond() {
+		if time.Now().After(deadline) {
+			t.Fatal(failure)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+}
+
+// gossipsubWriter returns from's outbound gossipsub stream to to, or nil.
+func gossipsubWriter(from, to host.Host) network.Stream {
+	for _, c := range from.Network().ConnsToPeer(to.ID()) {
+		for _, s := range c.GetStreams() {
+			if slices.Contains(GossipSubDefaultProtocols, s.Protocol()) && s.Stat().Direction == network.DirOutbound {
+				return s
+			}
+		}
+	}
+	return nil
+}
+
+func resetGossipsubWriter(t *testing.T, from, to host.Host) network.Stream {
+	t.Helper()
+	s := gossipsubWriter(from, to)
+	if s == nil {
+		t.Fatal("no outbound gossipsub stream to reset")
+	}
+	s.Reset()
+	return s
+}
+
+// expectDelivery publishes on from until sub receives a message. Without flood
+// publish the router adds the peer back to its mesh at its next heartbeat, so
+// a message published right away can miss it.
+func expectDelivery(t *testing.T, ctx context.Context, from *Topic, sub *Subscription) {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	go func() {
+		tick := time.NewTicker(200 * time.Millisecond)
+		defer tick.Stop()
+		for {
+			select {
+			case <-tick.C:
+				from.Publish(ctx, []byte("after reset"))
+			case <-ctx.Done():
+				return
+			}
+		}
+	}()
+	for {
+		msg, err := sub.Next(ctx)
+		if err != nil {
+			t.Fatalf("no message arrived after the reset: %v", err)
+		}
+		if string(msg.Data) == "after reset" {
+			return
+		}
+	}
 }
