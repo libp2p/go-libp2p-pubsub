@@ -822,9 +822,10 @@ func (gs *GossipSubRouter) EnoughPeers(topic string, suggested int) bool {
 	}
 
 	fsPeers, gsPeers := 0, 0
-	// floodsub peers
+	// floodsub peers; a subscribed peer we have no stream to is not counted
 	for p := range tmap {
-		if !gs.feature(GossipSubFeatureMesh, gs.peers[p]) {
+		proto, ok := gs.peers[p]
+		if ok && !gs.feature(GossipSubFeatureMesh, proto) {
 			fsPeers++
 		}
 	}
@@ -1380,9 +1381,10 @@ func (gs *GossipSubRouter) rpcs(msg *Message) iter.Seq2[peer.ID, *RPC] {
 				}
 			}
 
-			// floodsub peers
+			// floodsub peers; a subscribed peer we have no stream to is skipped
 			for p := range tmap {
-				if !gs.feature(GossipSubFeatureMesh, gs.peers[p]) && gs.score.Score(p) >= gs.publishThreshold {
+				proto, ok := gs.peers[p]
+				if ok && !gs.feature(GossipSubFeatureMesh, proto) && gs.score.Score(p) >= gs.publishThreshold {
 					tosend[p] = struct{}{}
 				}
 			}
