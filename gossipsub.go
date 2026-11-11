@@ -81,6 +81,8 @@ var (
 	GossipSubIWantFollowupTime                = 3 * time.Second
 	GossipSubIDontWantMessageThreshold        = 1024 // 1KB
 	GossipSubIDontWantMessageTTL              = 3    // 3 heartbeats
+
+	GossipSubMaxIWantsPerMessageID = 10
 )
 
 type checksum struct {
@@ -246,6 +248,14 @@ type GossipSubParams struct {
 
 	// IDONTWANT is cleared when it's older than the TTL.
 	IDontWantMessageTTL int
+
+	// MaxIWantsPerMessageID is the maximum number of IWANT requests kept
+	// outstanding per message ID at once, spread across distinct peers. It
+	// bounds how many logically-live requests a single message can have, and so
+	// how many duplicate deliveries it tends to draw. An outstanding request
+	// expires IWantFollowupTime after it was sent, which frees a slot and lets
+	// the message be requested again without waiting for a heartbeat boundary.
+	MaxIWantsPerMessageID int
 }
 
 func (params *GossipSubParams) validate() error {
@@ -255,6 +265,14 @@ func (params *GossipSubParams) validate() error {
 
 	if !(params.Dscore <= params.Dhi) {
 		return fmt.Errorf("param Dscore=%d must be lower than or equal to  Dhi=%d", params.Dscore, params.Dhi)
+	}
+
+	if params.MaxIWantsPerMessageID <= 0 {
+		return fmt.Errorf("param MaxIWantsPerMessageID=%d must be positive", params.MaxIWantsPerMessageID)
+	}
+
+	if params.IWantFollowupTime <= 0 {
+		return fmt.Errorf("param IWantFollowupTime=%s must be positive", params.IWantFollowupTime)
 	}
 
 	// Bootstrappers set D=D_lo=D_hi=D_out=0
@@ -314,6 +332,8 @@ func DefaultGossipSubRouter(h host.Host) *GossipSubRouter {
 		tagTracer:       newTagTracer(h.ConnManager()),
 		params:          params,
 		reducePXRecords: defaultPXRecordReducer,
+		// outstanding IWANTs per message ID, by peer and send time.
+		outstandingIWants: make(map[string]iwantLedger),
 	}
 
 	rt.extensions = newExtensionsState(PeerExtensions{}, func(p peer.ID) {
@@ -361,6 +381,8 @@ func DefaultGossipSubParams() GossipSubParams {
 		IDontWantMessageThreshold: GossipSubIDontWantMessageThreshold,
 		IDontWantMessageTTL:       GossipSubIDontWantMessageTTL,
 		SlowHeartbeatWarning:      0.1,
+
+		MaxIWantsPerMessageID: GossipSubMaxIWantsPerMessageID,
 	}
 }
 
@@ -606,6 +628,10 @@ type GossipSubRouter struct {
 	backoff      map[string]map[peer.ID]time.Time // prune backoff
 	connect      chan connectInfo                 // px connection requests
 	cab          peerstore.AddrBook
+
+	// outstanding IWANTs per message ID, by peer and send time. Bounds how
+	// many distinct peers we ask for a given message at once.
+	outstandingIWants map[string]iwantLedger
 
 	protos  []protocol.ID
 	feature GossipSubFeatureTest
@@ -876,11 +902,12 @@ func (gs *GossipSubRouter) AcceptFrom(p peer.ID) AcceptStatus {
 func (gs *GossipSubRouter) Preprocess(from peer.ID, msgs []*Message) {
 	tmids := make(map[string][]string)
 	for _, msg := range msgs {
+		mid := gs.p.idGen.ID(msg)
 		if len(msg.GetData()) < gs.params.IDontWantMessageThreshold {
 			continue
 		}
 		topic := msg.GetTopic()
-		tmids[topic] = append(tmids[topic], gs.p.idGen.ID(msg))
+		tmids[topic] = append(tmids[topic], mid)
 	}
 	for topic, mids := range tmids {
 		if len(mids) == 0 {
@@ -954,6 +981,7 @@ func (gs *GossipSubRouter) handleIHave(p peer.ID, ctl *pb.ControlMessage) []*pb.
 		return nil
 	}
 
+	now := time.Now()
 	iwant := make(map[string]struct{})
 	for _, ihave := range ctl.GetIhave() {
 		topic := ihave.GetTopicID()
@@ -977,6 +1005,12 @@ func (gs *GossipSubRouter) handleIHave(p peer.ID, ctl *pb.ControlMessage) []*pb.
 			if gs.p.seenMessage(mid) {
 				continue
 			}
+
+			if !gs.canRequestIWant(mid, p, now) {
+				gs.logger.Debug("IHAVE: ignoring IHAVE; too many inflight IWANTs or peer already asked", "message", mid, "peer", p)
+				continue
+			}
+
 			iwant[mid] = struct{}{}
 		}
 	}
@@ -1003,6 +1037,12 @@ func (gs *GossipSubRouter) handleIHave(p peer.ID, ctl *pb.ControlMessage) []*pb.
 	// truncate to the messages we are actually asking for and update the iasked counter
 	iwantlst = iwantlst[:iask]
 	gs.iasked[p] += iask
+
+	// record the asks only for the messages we are actually sending, so a
+	// request dropped by truncation leaves no phantom entry in the ledger
+	for _, mid := range iwantlst {
+		gs.recordIWant(mid, p, now)
+	}
 
 	gs.gossipTracer.AddPromise(p, iwantlst)
 
@@ -1332,6 +1372,7 @@ func (gs *GossipSubRouter) connector() {
 func (gs *GossipSubRouter) PublishBatch(messages []*Message, opts *BatchPublishOptions) {
 	strategy := opts.Strategy
 	for _, msg := range messages {
+		gs.fulfillIWant(msg)
 		msgID := gs.p.idGen.ID(msg)
 		for p, rpc := range gs.rpcs(msg) {
 			strategy.AddRPC(p, msgID, rpc)
@@ -1344,6 +1385,7 @@ func (gs *GossipSubRouter) PublishBatch(messages []*Message, opts *BatchPublishO
 }
 
 func (gs *GossipSubRouter) Publish(msg *Message) {
+	gs.fulfillIWant(msg)
 	for p, rpc := range gs.rpcs(msg) {
 		gs.sendRPC(p, rpc, false)
 	}
@@ -1662,6 +1704,9 @@ func (gs *GossipSubRouter) heartbeat() {
 	toprune := make(map[peer.ID][]string)
 	noPX := make(map[peer.ID]bool)
 
+	// drop expired outstanding IWANTs so their slots free up
+	gs.pruneOutstandingIWants()
+
 	// clean up expired backoffs
 	gs.clearBackoff()
 
@@ -1911,6 +1956,62 @@ func (gs *GossipSubRouter) heartbeat() {
 	gs.mcache.Shift()
 
 	gs.extensions.Heartbeat()
+}
+
+// iwantLedger records, per peer, when we sent that peer an IWANT for a message
+// ID. An entry older than IWantFollowupTime has expired: it no longer counts
+// against MaxIWantsPerMessageID and the peer may be asked again.
+type iwantLedger map[peer.ID]time.Time
+
+// expireAsks drops asks whose follow-up time has passed, freeing their slots.
+func (gs *GossipSubRouter) expireAsks(ledger iwantLedger, now time.Time) {
+	for ap, at := range ledger {
+		if now.Sub(at) >= gs.params.IWantFollowupTime {
+			delete(ledger, ap)
+		}
+	}
+}
+
+// canRequestIWant reports whether an IWANT for mid may be sent to p, expiring
+// stale asks first. It does not record the request; recordIWant does that once
+// the message survives per-peer truncation, so a request dropped by truncation
+// leaves no phantom entry in the ledger.
+func (gs *GossipSubRouter) canRequestIWant(mid string, p peer.ID, now time.Time) bool {
+	ledger := gs.outstandingIWants[mid]
+	if ledger == nil {
+		return true
+	}
+	gs.expireAsks(ledger, now)
+	if _, asked := ledger[p]; asked {
+		return false
+	}
+	return len(ledger) < gs.params.MaxIWantsPerMessageID
+}
+
+// recordIWant notes that an IWANT for mid was sent to p at now.
+func (gs *GossipSubRouter) recordIWant(mid string, p peer.ID, now time.Time) {
+	ledger := gs.outstandingIWants[mid]
+	if ledger == nil {
+		ledger = make(iwantLedger)
+		gs.outstandingIWants[mid] = ledger
+	}
+	ledger[p] = now
+}
+
+// fulfillIWant clears any outstanding IWANTs for a message once it has been
+// received and validated.
+func (gs *GossipSubRouter) fulfillIWant(msg *Message) {
+	delete(gs.outstandingIWants, gs.p.idGen.ID(msg))
+}
+
+func (gs *GossipSubRouter) pruneOutstandingIWants() {
+	now := time.Now()
+	for mid, ledger := range gs.outstandingIWants {
+		gs.expireAsks(ledger, now)
+		if len(ledger) == 0 {
+			delete(gs.outstandingIWants, mid)
+		}
+	}
 }
 
 func (gs *GossipSubRouter) clearIHaveCounters() {
