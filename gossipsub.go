@@ -424,6 +424,28 @@ func WithFloodPublish(floodPublish bool) Option {
 	}
 }
 
+// WithMessagePriority is a gossipsub router option that queues messages sent
+// through Publish, locally originated or forwarded, for which priority returns
+// true ahead of the normal traffic already queued for each peer. Messages
+// published with PublishBatch always use the normal queue. Prioritised messages
+// still count towards the outbound queue size limit, and prioritising heavy
+// traffic can starve the normal queue. The function runs on the router's event
+// loop, so it must be fast and must not block or call PubSub or Topic methods
+// that wait on the event loop. When this option is not set, all messages use the
+// normal queue.
+func WithMessagePriority(priority func(*Message) bool) Option {
+	return func(ps *PubSub) error {
+		gs, ok := ps.rt.(*GossipSubRouter)
+		if !ok {
+			return fmt.Errorf("pubsub router is not gossipsub")
+		}
+
+		gs.messagePriority = priority
+
+		return nil
+	}
+}
+
 // WithPeerExchange is a gossipsub router option that enables Peer eXchange on PRUNE.
 // This should generally be enabled in bootstrappers and well connected/trusted nodes
 // used for bootstrapping.
@@ -646,6 +668,10 @@ type GossipSubRouter struct {
 
 	// whether to use flood publishing
 	floodPublish bool
+
+	// reports whether a published or forwarded message is sent ahead of the
+	// normal traffic; nil means no message is prioritised
+	messagePriority func(*Message) bool
 
 	// number of heartbeats since the beginning of time; this allows us to amortize some resource
 	// clean up -- eg backoff clean up.
@@ -1344,8 +1370,9 @@ func (gs *GossipSubRouter) PublishBatch(messages []*Message, opts *BatchPublishO
 }
 
 func (gs *GossipSubRouter) Publish(msg *Message) {
+	urgent := gs.messagePriority != nil && gs.messagePriority(msg)
 	for p, rpc := range gs.rpcs(msg) {
-		gs.sendRPC(p, rpc, false)
+		gs.sendRPC(p, rpc, urgent)
 	}
 }
 
@@ -1554,6 +1581,9 @@ func (gs *GossipSubRouter) sendRPC(p peer.ID, out *RPC, urgent bool) {
 		delete(gs.gossip, p)
 	}
 
+	publishFirst := urgent && len(out.Publish) > 0
+	controlUrgent := urgent && !publishFirst
+
 	controlSize := proto.Size(&controlMessage.RPC)
 	dropIfOversized := func(rpc *RPC) bool {
 		if !rpc.exceedsSizeLimits(gs.p.maxMessageSize, gs.p.maxControlMessageSize) {
@@ -1564,31 +1594,42 @@ func (gs *GossipSubRouter) sendRPC(p peer.ID, out *RPC, urgent bool) {
 		gs.doDropRPC(rpc, p, fmt.Sprintf("Dropping oversized RPC. Size: %d, limit: %d. Control size: %d, control limit: %d", size, gs.p.maxMessageSize, controlSize, gs.p.maxControlMessageSize))
 		return true
 	}
-	if controlSize > 0 {
-		if !controlMessage.exceedsSizeLimits(gs.p.maxMessageSize, gs.p.maxControlMessageSize) {
-			gs.doSendRPC(&controlMessage, p, q, urgent)
-		} else {
-			for rpc := range controlMessage.split(gs.p.maxMessageSize, gs.p.maxControlMessageSize) {
-				if dropIfOversized(rpc) {
-					continue
+	sendControl := func() {
+		if controlSize > 0 {
+			if !controlMessage.exceedsSizeLimits(gs.p.maxMessageSize, gs.p.maxControlMessageSize) {
+				gs.doSendRPC(&controlMessage, p, q, controlUrgent)
+			} else {
+				for rpc := range controlMessage.split(gs.p.maxMessageSize, gs.p.maxControlMessageSize) {
+					if dropIfOversized(rpc) {
+						continue
+					}
+					gs.doSendRPC(rpc, p, q, controlUrgent)
 				}
-				gs.doSendRPC(rpc, p, q, urgent)
 			}
 		}
 	}
+	sendOut := func() {
+		// If we're below the max message size, go ahead and send
+		if !out.exceedsSizeLimits(gs.p.maxMessageSize, gs.p.maxControlMessageSize) {
+			gs.doSendRPC(out, p, q, urgent)
+			return
+		}
 
-	// If we're below the max message size, go ahead and send
-	if !out.exceedsSizeLimits(gs.p.maxMessageSize, gs.p.maxControlMessageSize) {
-		gs.doSendRPC(out, p, q, urgent)
-		return
+		// Potentially split the RPC into multiple RPCs that are below the max message size
+		for rpc := range out.split(gs.p.maxMessageSize, gs.p.maxControlMessageSize) {
+			if dropIfOversized(rpc) {
+				continue
+			}
+			gs.doSendRPC(rpc, p, q, urgent)
+		}
 	}
 
-	// Potentially split the RPC into multiple RPCs that are below the max message size
-	for rpc := range out.split(gs.p.maxMessageSize, gs.p.maxControlMessageSize) {
-		if dropIfOversized(rpc) {
-			continue
-		}
-		gs.doSendRPC(rpc, p, q, urgent)
+	if publishFirst {
+		sendOut()
+		sendControl()
+	} else {
+		sendControl()
+		sendOut()
 	}
 }
 
