@@ -64,6 +64,13 @@ func newRpcQueue(maxSize int) *rpcQueue {
 	return q
 }
 
+// Len returns the number of RPCs currently queued.
+func (q *rpcQueue) Len() int {
+	q.queueMu.Lock()
+	defer q.queueMu.Unlock()
+	return q.queue.Len()
+}
+
 func (q *rpcQueue) Push(rpc *RPC, block bool) error {
 	return q.push(rpc, false, block)
 }
