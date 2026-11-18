@@ -79,18 +79,39 @@ func TestMaxSubscriptionsPerPeer(t *testing.T) {
 	}
 }
 
-func TestMaxSubscriptionsPerPeerDefault(t *testing.T) {
-	hosts := getDefaultHosts(t, 4)
+func TestMaxTopicLength(t *testing.T) {
+	pid := peer.ID("p")
+	ps := &PubSub{
+		rt:             &FloodSubRouter{},
+		topics:         make(map[string]map[peer.ID]peerTopicState),
+		peerSubCounts:  make(map[peer.ID]int),
+		myTopics:       make(map[string]*Topic),
+		maxTopicLength: 8,
+	}
+	ps.handleIncomingRPC(subRPC(pid, true, "12345678", "123456789"))
+	if _, ok := ps.topics["12345678"][pid]; !ok {
+		t.Fatal("topic at the limit was dropped")
+	}
+	if _, ok := ps.topics["123456789"]; ok {
+		t.Fatal("topic over the limit was tracked")
+	}
+	if ps.peerSubCounts[pid] != 1 {
+		t.Fatalf("count = %d, want 1", ps.peerSubCounts[pid])
+	}
+}
+
+func TestSubscriptionLimitDefaults(t *testing.T) {
+	hosts := getDefaultHosts(t, 5)
 	allow := NewAllowlistSubscriptionFilter("a")
 	for _, tc := range []struct {
-		name string
-		opts []Option
-		want int
+		name              string
+		opts              []Option
+		wantSubs, wantLen int
 	}{
-		{"no filter", nil, DefaultMaxSubscriptionsPerPeer},
-		{"filter set", []Option{WithSubscriptionFilter(allow)}, 0},
-		{"filter + explicit", []Option{WithSubscriptionFilter(allow), WithMaxSubscriptionsPerPeer(500)}, 500},
-		{"explicit zero", []Option{WithMaxSubscriptionsPerPeer(0)}, 0},
+		{"no filter", nil, DefaultMaxSubscriptionsPerPeer, DefaultMaxTopicLength},
+		{"filter set", []Option{WithSubscriptionFilter(allow)}, 0, 0},
+		{"filter + explicit", []Option{WithSubscriptionFilter(allow), WithMaxSubscriptionsPerPeer(500), WithMaxTopicLength(256)}, 500, 256},
+		{"explicit zero", []Option{WithMaxSubscriptionsPerPeer(0), WithMaxTopicLength(0)}, 0, 0},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			h := hosts[0]
@@ -99,12 +120,14 @@ func TestMaxSubscriptionsPerPeerDefault(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if ps.maxSubscriptionsPerPeer != tc.want {
-				t.Fatalf("maxSubscriptionsPerPeer = %d, want %d", ps.maxSubscriptionsPerPeer, tc.want)
+			if ps.maxSubscriptionsPerPeer != tc.wantSubs || ps.maxTopicLength != tc.wantLen {
+				t.Fatalf("limits = (%d, %d), want (%d, %d)", ps.maxSubscriptionsPerPeer, ps.maxTopicLength, tc.wantSubs, tc.wantLen)
 			}
 		})
 	}
-	if _, err := NewFloodSub(context.Background(), getDefaultHosts(t, 1)[0], WithMaxSubscriptionsPerPeer(-1)); err == nil {
-		t.Fatal("negative limit accepted")
+	for _, opt := range []Option{WithMaxSubscriptionsPerPeer(-1), WithMaxTopicLength(-1)} {
+		if _, err := NewFloodSub(context.Background(), hosts[0], opt); err == nil {
+			t.Fatal("negative limit accepted")
+		}
 	}
 }

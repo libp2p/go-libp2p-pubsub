@@ -33,6 +33,8 @@ const (
 	DefaultMaxControlMessageSize = 512 << 10
 	// DefaultMaxSubscriptionsPerPeer bounds the distinct topics tracked for one peer.
 	DefaultMaxSubscriptionsPerPeer = 100
+	// DefaultMaxTopicLength bounds the topic name length accepted in a peer's subscription.
+	DefaultMaxTopicLength = 1024
 )
 
 var (
@@ -97,6 +99,10 @@ type PubSub struct {
 	// maxSubscriptionsPerPeer bounds the topics tracked for each remote peer.
 	// A value of zero disables the bound.
 	maxSubscriptionsPerPeer int
+
+	// maxTopicLength bounds the topic name length accepted in incoming
+	// subscriptions. A value of zero disables the bound.
+	maxTopicLength int
 
 	// size of the outbound message channel that we maintain for each peer
 	peerOutboundQueueSize int
@@ -638,6 +644,7 @@ func NewPubSub(ctx context.Context, h host.Host, rt PubSubRouter, opts ...Option
 		maxMessageSize:          DefaultMaxMessageSize,
 		maxControlMessageSize:   DefaultMaxControlMessageSize,
 		maxSubscriptionsPerPeer: -1, // unset; resolved after options
+		maxTopicLength:          -1, // unset; resolved after options
 		peerOutboundQueueSize:   32,
 		signID:                  h.ID(),
 		signKey:                 nil,
@@ -685,14 +692,19 @@ func NewPubSub(ctx context.Context, h host.Host, rt PubSubRouter, opts ...Option
 		}
 	}
 
-	// The default cap only protects nodes without a subscription filter. A node
+	// The default caps only protect nodes without a subscription filter. A node
 	// with a filter already chose its topic set (Ethereum PeerDAS peers can
-	// legitimately exceed 100), so it gets a cap only via WithMaxSubscriptionsPerPeer.
+	// legitimately exceed 100), so it gets caps only via the explicit options.
 	if ps.maxSubscriptionsPerPeer < 0 {
+		ps.maxSubscriptionsPerPeer = 0
 		if ps.subFilter == nil {
 			ps.maxSubscriptionsPerPeer = DefaultMaxSubscriptionsPerPeer
-		} else {
-			ps.maxSubscriptionsPerPeer = 0
+		}
+	}
+	if ps.maxTopicLength < 0 {
+		ps.maxTopicLength = 0
+		if ps.subFilter == nil {
+			ps.maxTopicLength = DefaultMaxTopicLength
 		}
 	}
 
@@ -951,6 +963,20 @@ func WithMaxSubscriptionsPerPeer(maxSubscriptionsPerPeer int) Option {
 			return fmt.Errorf("maximum subscriptions per peer must be non-negative: %d", maxSubscriptionsPerPeer)
 		}
 		ps.maxSubscriptionsPerPeer = maxSubscriptionsPerPeer
+		return nil
+	}
+}
+
+// WithMaxTopicLength sets the maximum topic name length, in bytes, accepted in a
+// peer's subscription. Longer subscriptions are ignored. Without this option the
+// limit is DefaultMaxTopicLength when no subscription filter is set, and disabled
+// otherwise. Set the limit to zero to disable it.
+func WithMaxTopicLength(maxTopicLength int) Option {
+	return func(ps *PubSub) error {
+		if maxTopicLength < 0 {
+			return fmt.Errorf("maximum topic length must be non-negative: %d", maxTopicLength)
+		}
+		ps.maxTopicLength = maxTopicLength
 		return nil
 	}
 }
@@ -1553,6 +1579,9 @@ func (p *PubSub) handleIncomingRPC(rpc *RPC) {
 		t := subopt.GetTopicid()
 
 		if subopt.GetSubscribe() {
+			if p.maxTopicLength > 0 && len(t) > p.maxTopicLength {
+				continue
+			}
 			tmap, topicExists := p.topics[t]
 			_, seenBefore := tmap[rpc.from]
 			if !seenBefore && p.maxSubscriptionsPerPeer > 0 && p.peerSubCounts[rpc.from] >= p.maxSubscriptionsPerPeer {
