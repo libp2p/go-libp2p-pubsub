@@ -31,6 +31,10 @@ const (
 	DefaultMaxMessageSize = 1 << 20
 	// DefaultMaxControlMessageSize is 512KiB.
 	DefaultMaxControlMessageSize = 512 << 10
+	// DefaultMaxSubscriptionsPerPeer bounds the distinct topics tracked for one peer.
+	DefaultMaxSubscriptionsPerPeer = 100
+	// DefaultMaxTopicLength bounds the topic name length accepted in a peer's subscription.
+	DefaultMaxTopicLength = 1024
 )
 
 var (
@@ -91,6 +95,14 @@ type PubSub struct {
 
 	// maxControlMessageSize is the maximum size for control messages.
 	maxControlMessageSize int
+
+	// maxSubscriptionsPerPeer bounds the topics tracked for each remote peer.
+	// A value of zero disables the bound.
+	maxSubscriptionsPerPeer int
+
+	// maxTopicLength bounds the topic name length accepted in incoming
+	// subscriptions. A value of zero disables the bound.
+	maxTopicLength int
 
 	// size of the outbound message channel that we maintain for each peer
 	peerOutboundQueueSize int
@@ -153,6 +165,8 @@ type PubSub struct {
 
 	// topics tracks which topics each of our peers are subscribed to
 	topics map[string]map[peer.ID]peerTopicState
+	// peerSubCounts tracks the number of distinct topic memberships in topics per peer.
+	peerSubCounts map[peer.ID]int
 
 	// sendMsg handles messages that have been validated
 	sendMsg chan *Message
@@ -620,58 +634,77 @@ func NewPubSub(ctx context.Context, h host.Host, rt PubSubRouter, opts ...Option
 	log := gologshim.Logger("pubsub").With(slog.Attr{Key: "id", Value: slog.StringValue(h.ID().String())})
 
 	ps := &PubSub{
-		host:                  h,
-		ctx:                   ctx,
-		rt:                    rt,
-		logger:                log,
-		val:                   newValidation(),
-		peerFilter:            DefaultPeerFilter,
-		disc:                  &discover{},
-		maxMessageSize:        DefaultMaxMessageSize,
-		maxControlMessageSize: DefaultMaxControlMessageSize,
-		peerOutboundQueueSize: 32,
-		signID:                h.ID(),
-		signKey:               nil,
-		signPolicy:            StrictSign,
-		incoming:              make(chan incomingUnion, 32),
-		newPeers:              make(chan struct{}, 1),
-		newPeersPend:          make(map[peer.ID]struct{}),
-		newPeerStream:         make(chan peerOutgoingStream),
-		newPeerError:          make(chan peer.ID),
-		peerDead:              make(chan struct{}, 1),
-		peerDeadPend:          make(map[peer.ID]struct{}),
-		deadPeerBackoff:       newBackoff(ctx, 1000, BackoffCleanupInterval, MaxBackoffAttempts),
-		cancelCh:              make(chan *Subscription),
-		getPeers:              make(chan *listPeerReq),
-		addSub:                make(chan *addSubReq),
-		addRelay:              make(chan *addRelayReq),
-		rmRelay:               make(chan string),
-		addTopic:              make(chan *addTopicReq),
-		rmTopic:               make(chan *rmTopicReq),
-		getTopics:             make(chan *topicReq),
-		sendMsg:               make(chan *Message, 32),
-		sendMessageBatch:      make(chan messageBatchAndPublishOptions, 1),
-		addVal:                make(chan *addValReq),
-		rmVal:                 make(chan *rmValReq),
-		eval:                  make(chan func()),
-		myTopics:              make(map[string]*Topic),
-		mySubs:                make(map[string]map[*Subscription]struct{}),
-		myRelays:              make(map[string]int),
-		topics:                make(map[string]map[peer.ID]peerTopicState),
-		peers:                 make(map[peer.ID]*rpcQueue),
-		inboundStreams:        make(map[peer.ID]inboundHandler),
-		blacklist:             NewMapBlacklist(),
-		blacklistPeer:         make(chan peer.ID),
-		seenMsgTTL:            TimeCacheDuration,
-		seenMsgStrategy:       TimeCacheStrategy,
-		idGen:                 newMsgIdGenerator(),
-		counter:               uint64(time.Now().UnixNano()),
+		host:                    h,
+		ctx:                     ctx,
+		rt:                      rt,
+		logger:                  log,
+		val:                     newValidation(),
+		peerFilter:              DefaultPeerFilter,
+		disc:                    &discover{},
+		maxMessageSize:          DefaultMaxMessageSize,
+		maxControlMessageSize:   DefaultMaxControlMessageSize,
+		maxSubscriptionsPerPeer: -1, // unset; resolved after options
+		maxTopicLength:          -1, // unset; resolved after options
+		peerOutboundQueueSize:   32,
+		signID:                  h.ID(),
+		signKey:                 nil,
+		signPolicy:              StrictSign,
+		incoming:                make(chan incomingUnion, 32),
+		newPeers:                make(chan struct{}, 1),
+		newPeersPend:            make(map[peer.ID]struct{}),
+		newPeerStream:           make(chan peerOutgoingStream),
+		newPeerError:            make(chan peer.ID),
+		peerDead:                make(chan struct{}, 1),
+		peerDeadPend:            make(map[peer.ID]struct{}),
+		deadPeerBackoff:         newBackoff(ctx, 1000, BackoffCleanupInterval, MaxBackoffAttempts),
+		cancelCh:                make(chan *Subscription),
+		getPeers:                make(chan *listPeerReq),
+		addSub:                  make(chan *addSubReq),
+		addRelay:                make(chan *addRelayReq),
+		rmRelay:                 make(chan string),
+		addTopic:                make(chan *addTopicReq),
+		rmTopic:                 make(chan *rmTopicReq),
+		getTopics:               make(chan *topicReq),
+		sendMsg:                 make(chan *Message, 32),
+		sendMessageBatch:        make(chan messageBatchAndPublishOptions, 1),
+		addVal:                  make(chan *addValReq),
+		rmVal:                   make(chan *rmValReq),
+		eval:                    make(chan func()),
+		myTopics:                make(map[string]*Topic),
+		mySubs:                  make(map[string]map[*Subscription]struct{}),
+		myRelays:                make(map[string]int),
+		topics:                  make(map[string]map[peer.ID]peerTopicState),
+		peerSubCounts:           make(map[peer.ID]int),
+		peers:                   make(map[peer.ID]*rpcQueue),
+		inboundStreams:          make(map[peer.ID]inboundHandler),
+		blacklist:               NewMapBlacklist(),
+		blacklistPeer:           make(chan peer.ID),
+		seenMsgTTL:              TimeCacheDuration,
+		seenMsgStrategy:         TimeCacheStrategy,
+		idGen:                   newMsgIdGenerator(),
+		counter:                 uint64(time.Now().UnixNano()),
 	}
 
 	for _, opt := range opts {
 		err := opt(ps)
 		if err != nil {
 			return nil, err
+		}
+	}
+
+	// The default caps only protect nodes without a subscription filter. A node
+	// with a filter already chose its topic set (Ethereum PeerDAS peers can
+	// legitimately exceed 100), so it gets caps only via the explicit options.
+	if ps.maxSubscriptionsPerPeer < 0 {
+		ps.maxSubscriptionsPerPeer = 0
+		if ps.subFilter == nil {
+			ps.maxSubscriptionsPerPeer = DefaultMaxSubscriptionsPerPeer
+		}
+	}
+	if ps.maxTopicLength < 0 {
+		ps.maxTopicLength = 0
+		if ps.subFilter == nil {
+			ps.maxTopicLength = DefaultMaxTopicLength
 		}
 	}
 
@@ -920,6 +953,34 @@ func WithMaxControlMessageSize(maxControlMessageSize int) Option {
 	}
 }
 
+// WithMaxSubscriptionsPerPeer sets the maximum number of distinct topics tracked for one peer.
+// Subscriptions beyond the limit are ignored. Without this option the limit is
+// DefaultMaxSubscriptionsPerPeer when no subscription filter is set, and disabled
+// otherwise. Set the limit to zero to disable it.
+func WithMaxSubscriptionsPerPeer(maxSubscriptionsPerPeer int) Option {
+	return func(ps *PubSub) error {
+		if maxSubscriptionsPerPeer < 0 {
+			return fmt.Errorf("maximum subscriptions per peer must be non-negative: %d", maxSubscriptionsPerPeer)
+		}
+		ps.maxSubscriptionsPerPeer = maxSubscriptionsPerPeer
+		return nil
+	}
+}
+
+// WithMaxTopicLength sets the maximum topic name length, in bytes, accepted in a
+// peer's subscription. Longer subscriptions are ignored. Without this option the
+// limit is DefaultMaxTopicLength when no subscription filter is set, and disabled
+// otherwise. Set the limit to zero to disable it.
+func WithMaxTopicLength(maxTopicLength int) Option {
+	return func(ps *PubSub) error {
+		if maxTopicLength < 0 {
+			return fmt.Errorf("maximum topic length must be non-negative: %d", maxTopicLength)
+		}
+		ps.maxTopicLength = maxTopicLength
+		return nil
+	}
+}
+
 // WithProtocolMatchFn sets a custom matching function for protocol selection to
 // be used by the protocol handler on the Host's Mux. Should be combined with
 // WithGossipSubProtocols feature function for checking if certain protocol features
@@ -1138,6 +1199,7 @@ func (p *PubSub) clearPeerFromTopicsState(pid peer.ID) {
 			p.notifyLeave(t, pid)
 		}
 	}
+	delete(p.peerSubCounts, pid)
 }
 
 func (p *PubSub) handleDeadPeers() {
@@ -1517,8 +1579,15 @@ func (p *PubSub) handleIncomingRPC(rpc *RPC) {
 		t := subopt.GetTopicid()
 
 		if subopt.GetSubscribe() {
-			tmap, ok := p.topics[t]
-			if !ok {
+			if p.maxTopicLength > 0 && len(t) > p.maxTopicLength {
+				continue
+			}
+			tmap, topicExists := p.topics[t]
+			_, seenBefore := tmap[rpc.from]
+			if !seenBefore && p.maxSubscriptionsPerPeer > 0 && p.peerSubCounts[rpc.from] >= p.maxSubscriptionsPerPeer {
+				continue
+			}
+			if !topicExists {
 				tmap = make(map[peer.ID]peerTopicState)
 				p.topics[t] = tmap
 			}
@@ -1528,9 +1597,9 @@ func (p *PubSub) handleIncomingRPC(rpc *RPC) {
 				// If the peer requested partial, they support it by default
 				supportsPartial: subopt.GetRequestsPartial() || subopt.GetSupportsSendingPartial(),
 			}
-			_, seenBefore := tmap[rpc.from]
 			tmap[rpc.from] = pts
 			if !seenBefore {
+				p.peerSubCounts[rpc.from]++
 				if topic, ok := p.myTopics[t]; ok {
 					peer := rpc.from
 					topic.sendNotification(PeerEvent{PeerJoin, peer})
@@ -1543,6 +1612,11 @@ func (p *PubSub) handleIncomingRPC(rpc *RPC) {
 			}
 			if _, ok := tmap[rpc.from]; ok {
 				delete(tmap, rpc.from)
+				if count := p.peerSubCounts[rpc.from]; count <= 1 {
+					delete(p.peerSubCounts, rpc.from)
+				} else {
+					p.peerSubCounts[rpc.from] = count - 1
+				}
 				if len(tmap) == 0 {
 					delete(p.topics, t)
 				}
